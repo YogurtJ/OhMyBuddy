@@ -81,7 +81,6 @@
             const levels = model?.thinkingLevels || [];
             controls.thinkingWrap.hidden = !levels.length;
             if (levels.length && controls.thinking.dataset.for !== controls.model.value) fillThinking(levels, controls.thinking.value);
-            controls.quietTimes.hidden = !controls.quiet.checked;
         }
 
         function fillThinking(levels, selected) {
@@ -116,9 +115,6 @@
             if (JSON.stringify(model) !== JSON.stringify(current.model ?? null)) patch.model = model;
             const preset = controls.presets.find(input => input.checked)?.value;
             if (preset && preset !== current.permissions.preset) patch.permissions = { preset };
-            const quiet = controls.quiet.checked ? { start: controls.quietStart.value, end: controls.quietEnd.value } : null;
-            if (quiet && (!/^\d{2}:\d{2}$/.test(quiet.start) || !/^\d{2}:\d{2}$/.test(quiet.end) || quiet.start === quiet.end)) return null;
-            if (JSON.stringify(quiet) !== JSON.stringify(current.notify?.quietHours ?? null)) patch.notify = { quietHours: quiet };
             if (Object.keys(patch).length) out.bot = patch;
             return out;
         }
@@ -166,14 +162,7 @@
             }
             const honesty = el('p', 'pi-bot-sheet-note', translateUi("这是 {0} 的做事习惯，不是安全隔离：它能使用这台电脑上的工具。密码、密钥这类东西它一律不碰。", bot.name));
 
-            const quietHours = current.notify?.quietHours ?? null;
-            const quiet = el('input'); quiet.type = 'checkbox'; quiet.checked = Boolean(quietHours);
-            const quietToggle = el('label', 'pi-bot-sheet-check'); quietToggle.append(quiet, el('span', null, translateUi("安静时段不主动找你")));
-            const quietStart = el('input'); quietStart.type = 'time'; quietStart.value = quietHours?.start || '23:00';
-            const quietEnd = el('input'); quietEnd.type = 'time'; quietEnd.value = quietHours?.end || '08:00';
-            const quietTimes = el('div', 'pi-bot-sheet-row is-times');
-            quietTimes.append(field(translateUi("从"), quietStart), field(translateUi("到"), quietEnd));
-            const quietNote = el('p', 'pi-bot-sheet-note', translateUi("只管 {0} 自己发起的消息；你设的定时提醒照常送达。", bot.name));
+            // Quiet hours join this sheet once Bots can start conversations on their own (M4).
 
             const memory = button('pi-bot-sheet-link'); memory.append(icon('fa-book-open'), el('span', null, translateUi("记忆和关于你")), icon('fa-chevron-right'));
             memory.addEventListener('click', () => { sheet.close(); options.onMemory?.(); });
@@ -184,14 +173,13 @@
                 sheet.close(); await options.onRestart?.();
             });
 
-            controls = { name, avatar, job, soul, model, thinking, thinkingWrap, presets, quiet, quietStart, quietEnd, quietTimes };
+            controls = { name, avatar, job, soul, model, thinking, thinkingWrap, presets };
             body.replaceChildren(
                 section(translateUi("名字和样子"), identity),
                 section(translateUi("主要帮你做什么"), job),
                 section(translateUi("性格"), soul),
                 section(translateUi("用哪个模型"), field(null, model, modelHint), thinkingWrap),
                 section(translateUi("做事方式"), presetList, honesty),
-                section(translateUi("安静时段"), quietToggle, quietTimes, quietNote),
                 section(translateUi("更多"), memory, restart));
             const levels = data.models?.models.find(item => modelKey(item) === model.value)?.thinkingLevels || [];
             if (levels.length) fillThinking(levels, current.model?.thinking || '');
@@ -206,7 +194,7 @@
             event.preventDefault();
             if (saving || !controls) return;
             const pending = changes();
-            if (!pending) { status.dataset.tone = 'error'; status.textContent = translateUi("名字不能为空，安静时段的开始和结束要不同。"); return; }
+            if (!pending) { status.dataset.tone = 'error'; status.textContent = translateUi("名字不能为空"); return; }
             if (!Object.keys(pending).length) return;
             saving = true; refreshState(); status.textContent = translateUi("正在保存…"); delete status.dataset.tone;
             try {

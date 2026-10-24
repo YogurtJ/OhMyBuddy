@@ -240,8 +240,6 @@ const messages = [
                 await sheet.locator('select').first().selectOption({ label: 'Large' });
                 await sheet.locator('select').nth(1).selectOption({ label: '高' });
                 await sheet.locator('.pi-bot-sheet-preset', { hasText: '稳妥' }).click();
-                await sheet.locator('.pi-bot-sheet-check input').uncheck();
-                assert.equal(await sheet.locator('.pi-bot-sheet-row.is-times').isVisible(), false);
                 if (evidence) { await page.waitForTimeout(250); await page.screenshot({ path: path.join(evidence, `bot-settings-${width}.png`) }); }
                 await sheet.locator('.pi-bot-sheet-save').click();
                 await page.waitForFunction(() => /别处改过/.test(document.querySelector('.pi-bot-sheet-status')?.textContent || ''));
@@ -249,7 +247,7 @@ const messages = [
                 assert.equal(await sheet.locator('.pi-bot-sheet-preset input:checked').evaluate(input => input.value), 'balanced', 'the edits stay');
                 await sheet.locator('.pi-bot-sheet-save').click();
                 await page.locator('.pi-bot-sheet').waitFor({ state: 'detached', timeout: 8000 });
-                const expected = { bot: { model: { provider: 'fixture', id: 'large', thinking: 'high' }, permissions: { preset: 'balanced' }, notify: { quietHours: null } } };
+                const expected = { bot: { model: { provider: 'fixture', id: 'large', thinking: 'high' }, permissions: { preset: 'balanced' } } };
                 assert.deepEqual(patchBodies.map(body => body.changes), [expected, expected]);
                 assert.equal(preset, 'balanced');
 
