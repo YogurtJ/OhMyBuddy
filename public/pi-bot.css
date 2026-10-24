@@ -1,0 +1,150 @@
+/* Bot mode: the chat panel without workbench concepts. Everything here is scoped to
+   #chat-tab.pi-bot-mode so Pi Agent and assistant conversations are unaffected. */
+
+/* ---- hide workbench controls ------------------------------------------------------- */
+#chat-tab.pi-bot-mode #pi-session-pane > :not(#pi-bot-pane),
+#chat-tab.pi-bot-mode .pi-project-button,
+#chat-tab.pi-bot-mode #pi-mobile-summary,
+#chat-tab.pi-bot-mode .pi-runtime-controls,
+#chat-tab.pi-bot-mode #pi-connection-banner,
+#chat-tab.pi-bot-mode #pi-mobile-composer-summary,
+#chat-tab.pi-bot-mode #pi-mobile-context-trigger,
+#chat-tab.pi-bot-mode #pi-delivery-toggle,
+#chat-tab.pi-bot-mode #pi-delivery-choices,
+#chat-tab.pi-bot-mode #pi-composer-identity,
+#chat-tab.pi-bot-mode #pi-attachment-limit,
+#chat-tab.pi-bot-mode #pi-toggle-sessions,
+#chat-tab.pi-bot-mode .pi-composer-models,
+#chat-tab.pi-bot-mode .pi-tool-rail,
+#chat-tab.pi-bot-mode .pi-inspector,
+#chat-tab.pi-bot-mode #pi-inspector-split,
+#chat-tab.pi-bot-mode #pi-composer-status,
+#chat-tab.pi-bot-mode.pi-bot-welcome .pi-composer-wrap,
+#chat-tab.pi-bot-mode.pi-bot-welcome .pi-session-pane,
+#chat-tab.pi-bot-mode.pi-bot-welcome [data-split-key="agent-sessions"],
+#chat-tab.pi-bot-mode.pi-bot-welcome #pi-bot-header,
+#chat-tab.pi-bot-mode .pi-message.assistant > header > span:not(.pi-bot-face) { display: none !important; }
+#chat-tab:not(.pi-bot-mode) #pi-bot-pane,
+#chat-tab:not(.pi-bot-mode) #pi-bot-header { display: none !important; }
+
+/* ---- workspace navigation ----------------------------------------------------------- */
+/* .nav-btn sets display, which would otherwise override the hidden attribute. */
+#workspace-bot-toggle[hidden] { display: none !important; }
+/* Phones: one more route keeps every bottom-bar cell the same width. */
+@media (max-width: 680px) {
+    .nav-menu:has(#workspace-bot-toggle:not([hidden])) { flex-grow: 4; }
+}
+
+/* ---- session pane: rail + windows ---------------------------------------------------- */
+#pi-bot-pane { display: flex; flex: 1; min-height: 0; height: 100%; }
+#pi-bot-pane[hidden] { display: none; }
+.pi-bot-rail {
+    flex: 0 0 60px; display: flex; flex-direction: column; align-items: center; gap: 10px;
+    padding: 14px 0; border-right: 1px solid var(--line); background: var(--surface-0); overflow-y: auto;
+}
+.pi-bot-rail-item, .pi-bot-rail-add {
+    position: relative; width: 42px; height: 42px; padding: 0; display: grid; place-items: center;
+    border: 0; border-radius: 14px; background: transparent; color: var(--text-muted); cursor: pointer;
+    transition: border-radius 140ms ease, background 140ms ease, transform 140ms ease;
+}
+.pi-bot-rail-item:hover { background: var(--surface-2); border-radius: 12px; }
+.pi-bot-rail-item[aria-current="true"]::before {
+    content: ""; position: absolute; left: -9px; top: 9px; bottom: 9px; width: 4px; border-radius: 0 4px 4px 0; background: var(--primary, var(--green));
+}
+.pi-bot-rail-item.is-disabled { opacity: .45; }
+.pi-bot-rail-add { border: 1px dashed var(--line-strong); font-size: .85rem; }
+.pi-bot-rail-add:hover:not(:disabled) { color: var(--primary, var(--green)); border-color: color-mix(in srgb, var(--primary, var(--green)) 55%, var(--line)); background: color-mix(in srgb, var(--primary, var(--green)) 10%, transparent); }
+.pi-bot-rail-add:disabled { cursor: progress; }
+.pi-bot-rail-item:focus-visible, .pi-bot-rail-add:focus-visible, .pi-bot-window:focus-visible,
+.pi-bot-settings:focus-visible, .pi-bot-menu:focus-visible, .pi-bot-primary:focus-visible {
+    outline: 2px solid var(--primary, var(--green)); outline-offset: 2px;
+}
+
+.pi-bot-side { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--surface-sidebar, var(--surface-1)); }
+.pi-bot-side-head { display: flex; align-items: center; gap: 12px; padding: 18px 14px 14px; }
+.pi-bot-side-copy { min-width: 0; display: grid; gap: 3px; }
+.pi-bot-side-copy strong { color: var(--text-main); font-size: .98rem; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-bot-side-copy span { color: var(--text-muted); font-size: .78rem; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pi-bot-windows { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: 2px; padding: 4px 8px; }
+.pi-bot-section { margin: 14px 8px 4px; color: var(--text-soft, var(--text-muted)); font-size: .72rem; font-weight: 600; }
+.pi-bot-window {
+    display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 8px 10px;
+    border: 0; border-radius: 9px; background: transparent; color: var(--text-muted); font-size: .86rem; text-align: left; cursor: pointer;
+}
+.pi-bot-window:hover { background: var(--pv-nav-hover, var(--surface-2)); color: var(--text-main); }
+.pi-bot-window[aria-current="page"] { background: var(--surface-3); color: var(--text-main); font-weight: 600; }
+.pi-bot-window-mark { width: 22px; display: grid; place-items: center; font-size: .95rem; }
+.pi-bot-window-mark i { font-size: .82rem; color: var(--primary, var(--green)); }
+.pi-bot-window-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-bot-side-foot { padding: 10px 8px 12px; border-top: 1px solid var(--line); }
+.pi-bot-settings {
+    display: flex; align-items: center; gap: 10px; width: 100%; min-height: 38px; padding: 8px 10px;
+    border: 0; border-radius: 9px; background: transparent; color: var(--text-muted); font-size: .82rem; text-align: left; cursor: pointer;
+}
+.pi-bot-settings:hover { background: var(--pv-nav-hover, var(--surface-2)); color: var(--text-main); }
+.pi-bot-settings span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-bot-side-state { padding: 22px 16px; color: var(--text-muted); font-size: .84rem; display: grid; gap: 10px; justify-items: start; }
+.pi-bot-link { border: 0; background: none; padding: 0; color: var(--primary, var(--green)); font: inherit; cursor: pointer; }
+
+/* ---- faces ---------------------------------------------------------------------------- */
+.pi-bot-face {
+    flex: 0 0 auto; display: inline-grid; place-items: center; overflow: hidden; line-height: 1;
+    border-radius: 32%; background: color-mix(in srgb, var(--primary, var(--green)) 13%, var(--surface-2)); user-select: none;
+}
+.pi-bot-face img { width: 100%; height: 100%; object-fit: cover; }
+.pi-bot-face.is-xs { width: 22px; height: 22px; font-size: .8rem; }
+.pi-bot-face.is-sm { width: 32px; height: 32px; font-size: 1.05rem; }
+.pi-bot-face.is-md { width: 40px; height: 40px; font-size: 1.3rem; }
+.pi-bot-face.is-lg { width: 46px; height: 46px; font-size: 1.5rem; }
+.pi-bot-face.is-xl { width: 76px; height: 76px; font-size: 2.6rem; border-radius: 28%; }
+
+/* ---- header in the command bar ------------------------------------------------------ */
+#pi-bot-header { display: flex; align-items: center; gap: 10px; min-width: 0; }
+#pi-bot-header[hidden] { display: none; }
+.pi-bot-menu {
+    display: none; width: 40px; height: 40px; place-items: center; border: 0; border-radius: 10px;
+    background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.pi-bot-who { min-width: 0; display: grid; gap: 2px; }
+.pi-bot-who strong { color: var(--text-main); font-size: .95rem; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-bot-status { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: .74rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pi-bot-status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); flex: 0 0 auto; }
+.pi-bot-status[data-state="connected"] .pi-bot-status-dot { background: var(--green); }
+.pi-bot-status[data-state="working"] .pi-bot-status-dot { background: var(--green); animation: pi-bot-pulse 1.2s ease-in-out infinite; }
+.pi-bot-status[data-state="waiting"] .pi-bot-status-dot { background: var(--amber); }
+.pi-bot-status[data-state="offline"] .pi-bot-status-dot,
+.pi-bot-status[data-state="error"] .pi-bot-status-dot { background: var(--danger); }
+@keyframes pi-bot-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .pi-bot-status-dot { animation: none !important; } }
+
+/* ---- replies carry the Bot's face and name ------------------------------------------ */
+#chat-tab.pi-bot-mode .pi-message.assistant > header { display: flex; align-items: center; gap: 8px; }
+
+/* ---- empty and welcome states ------------------------------------------------------- */
+.pi-bot-empty {
+    min-height: 100%; display: grid; place-content: center; justify-items: center; gap: 12px;
+    padding: 48px 24px; text-align: center; color: var(--text-muted);
+}
+.pi-bot-empty h2 { margin: 6px 0 0; color: var(--text-main); font-size: 1.35rem; font-weight: 650; }
+.pi-bot-empty p { margin: 0; max-width: 420px; line-height: 1.6; font-size: .92rem; }
+.pi-bot-empty.is-welcome .pi-bot-face { animation: pi-bot-float 3.2s ease-in-out infinite; }
+@keyframes pi-bot-float { 50% { transform: translateY(-4px); } }
+@media (prefers-reduced-motion: reduce) { .pi-bot-empty .pi-bot-face { animation: none; } }
+.pi-bot-primary {
+    margin-top: 10px; min-width: 148px; min-height: 44px; padding: 0 22px; border: 0; border-radius: 12px;
+    background: var(--primary, var(--green)); color: var(--primary-contrast, #fff); font-size: .95rem; font-weight: 650; cursor: pointer;
+    transition: transform 120ms ease, filter 120ms ease;
+}
+.pi-bot-primary:hover:not(:disabled) { background: var(--primary-hover, var(--primary, var(--green))); }
+.pi-bot-primary:active:not(:disabled) { transform: translateY(1px); }
+.pi-bot-primary:disabled { opacity: .6; cursor: progress; }
+
+/* ---- phones: the pane is a drawer opened from the header --------------------------- */
+@media (max-width: 900px) {
+    #chat-tab.pi-bot-mode .pi-command-left { width: auto; flex: 1; min-width: 0; }
+    .pi-bot-menu { display: inline-grid; }
+    #chat-tab.pi-bot-mode .pi-session-pane { width: min(340px, 88vw); }
+    .pi-bot-rail { flex-basis: 64px; }
+    .pi-bot-rail-item, .pi-bot-rail-add { width: 46px; height: 46px; }
+    .pi-bot-window, .pi-bot-settings { min-height: 46px; font-size: .92rem; }
+}

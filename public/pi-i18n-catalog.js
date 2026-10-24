@@ -10255,5 +10255,34 @@
         ['请等待消息投递完成；文件未上传，文字或名称已保留', 'Wait for message delivery. Files were not uploaded; text or filenames were preserved.'],
         ['请先打开会话；文件未上传，文字或名称已保留', 'Open a session first. Files were not uploaded; text or filenames were preserved.']
     );
+    // Bot mode.
+    rows.push(
+        ["正在连接…", "Connecting…"],
+        ["在线", "Online"],
+        ["正在忙…", "Working on it…"],
+        ["等你确认", "Waiting for you"],
+        ["暂时连不上", "Can't connect right now"],
+        ["这个 Bot 已停用，请在设置中重新启用", "This Bot is turned off. Turn it back on in settings."],
+        ["主聊天暂时无法准备好，请稍后重试", "The main chat isn't ready yet. Try again in a moment."],
+        ["Bot 列表刚刚有变化，请再试一次", "Your Bots just changed. Please try again."],
+        ["给 {0} 发消息", "Message {0}"],
+        ["我的 Bot", "My Bots"],
+        ["正在创建…", "Creating…"],
+        ["新建 Bot", "New Bot"],
+        ["还在互相认识", "Still getting to know you"],
+        ["你的私人助理", "Your personal assistant"],
+        ["聊天", "Chats"],
+        ["主聊天", "Main chat"],
+        ["话题", "Topics"],
+        ["{0} 的设置", "{0}'s settings"],
+        ["我的 Bot 与聊天", "My Bots and chats"],
+        ["认识你的 Bot", "Meet your Bot"],
+        ["一个一直在的私人助理：记得你说过的话，帮你查、记、写、提醒。先花两三分钟互相认识一下。", "A personal assistant that's always here: it remembers what you've said and helps you look things up, take notes, write and remember. Let's spend two or three minutes getting to know each other."],
+        ["开始", "Get started"],
+        ["想聊什么都可以直接说。", "Say anything you like."],
+        ["这个 Bot 聊天已接续到新的会话文件，正在打开", "This Bot chat continues in a new session file. Opening it now."],
+        ["设置里选的模型暂时用不了，这次先用当前模型回复", "The model chosen in settings isn't available right now, so this reply uses the current model."],
+        ["Bot 设置的模型 {0} 暂时不可用，已沿用当前模型", "The Bot's model {0} is unavailable; the current model was kept."]
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

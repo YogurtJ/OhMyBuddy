@@ -300,7 +300,8 @@ class BotService extends EventEmitter {
             read.validate();
             if (session.path !== window.current.sessionPath || binding?.profileId !== profileId || binding.windowId !== windowId
                 || binding.generation !== window.current.generation) fail('Window conversation does not match its native marker', 409);
-            return { window: publicWindow(window), session: { cwd: session.cwd || window.cwd, id: session.id, path: session.path } };
+            // The same row shape as the session list, so the chat page opens it like any session.
+            return { window: publicWindow(window), session: { ...session, cwd: session.cwd || window.cwd } };
         });
     }
 

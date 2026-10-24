@@ -150,9 +150,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Bot mode presentation (pi-bot.js); created once the chat controllers exist.
+    let botUi = null;
     const state = {
         token: sessionStorage.getItem('pi.web.token') || '',
         assistantMode: window.PiWorkspaceRoute?.current().tab === 'assistant',
+        botMode: window.PiWorkspaceRoute?.current().tab === 'bot',
+        bot: null,
+        botReturnCwd: null,
+        windowRotation: null,
         assistantSupported: false,
         assistantProfiles: [],
         profileInventory: [],
@@ -787,6 +793,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function setConnection(kind, text) {
         elements.connectionBanner.dataset.state = kind;
         elements.connectionText.textContent = text;
+        if (state.botMode && (kind === 'connecting' || kind === 'error')) botUi?.status(kind === 'connecting' ? 'connecting' : 'offline');
         // Only the loading placeholder follows connection phases. Reconnecting
         // an already visible transcript must not replace the reader's content.
         const loading = elements.transcript.querySelector('.pi-transcript-loading');
@@ -838,6 +845,8 @@ document.addEventListener('DOMContentLoaded', () => {
             detail = state.model ? `${state.model.provider}/${state.model.id}` : 'Pi Agent';
         }
         elements.agentStateDot.dataset.state = kind;
+        if (state.botMode) botUi?.status(!state.connected ? (kind === 'connecting' ? 'connecting' : 'offline')
+            : kind === 'waiting' ? 'waiting' : kind === 'working' ? 'working' : 'connected');
         elements.agentState.textContent = title;
         elements.agentDetail.textContent = detail;
         elements.agentState.parentElement.title = [...labels, detail].join('\n');
@@ -994,14 +1003,15 @@ document.addEventListener('DOMContentLoaded', () => {
             void discovery.catch(() => {}); // The fallback below still observes failures.
             let restored = false;
             const savedProject = localStorage.getItem('pi.web.cwd');
-            if (!state.assistantMode && transfer.movesEnabled && initialParams?.get('cwd') && initialParams?.get('sessionId')) {
+            $('workspace-bot-toggle').hidden = status.bots !== true;
+            if (!state.assistantMode && !state.botMode && transfer.movesEnabled && initialParams?.get('cwd') && initialParams?.get('sessionId')) {
                 const result = await apiFetch('/api/pi/sessions/' + encodeURIComponent(initialParams.get('sessionId')) + '/resolve?cwd=' + encodeURIComponent(initialParams.get('cwd')));
-                if (selectionEpoch === state.projectSelectionEpoch && !state.assistantMode) {
+                if (selectionEpoch === state.projectSelectionEpoch && !state.assistantMode && !state.botMode) {
                     await navigateToSession(result.session);
                     restored = true;
                 }
             }
-            if (!restored && !state.assistantMode && state.projectIdentity && savedProject) {
+            if (!restored && !state.assistantMode && !state.botMode && state.projectIdentity && savedProject) {
                 const preferenceRevision = state.projectPreferenceRevision;
                 try {
                     const [resolved, activity] = await Promise.all([
@@ -1012,16 +1022,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         && !activity.hiddenProjects.includes(resolved.cwd)
                         && !state.hiddenProjects.includes(resolved.cwd)
                         && preferenceRevision === state.projectPreferenceRevision
-                        && selectionEpoch === state.projectSelectionEpoch && !state.assistantMode) {
+                        && selectionEpoch === state.projectSelectionEpoch && !state.assistantMode && !state.botMode) {
                         state.projectAliases.set(savedProject, resolved.cwd);
                         await selectProject(resolved.cwd, { restoreSession: true, passive: true });
                         restored = true;
                     }
                 } catch { /* Missing validation falls back to the authoritative project list. */ }
             }
-            if (!restored && !state.assistantMode) {
+            if (!restored && !state.assistantMode && !state.botMode) {
                 await discovery;
-                if (selectionEpoch === state.projectSelectionEpoch && !state.assistantMode) {
+                if (selectionEpoch === state.projectSelectionEpoch && !state.assistantMode && !state.botMode) {
                     const preferred = state.projectAliases.get(savedProject) || savedProject;
                     const visibleProjects = orderedProjects();
                     const project = visibleProjects.find(item => item.cwd === preferred) || visibleProjects[0];
@@ -1031,6 +1041,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             state.activityEnabled = true;
             void refreshActivity();
+            if (state.botMode && botUi) void botUi.activate(window.PiWorkspaceRoute?.current().params || new URLSearchParams());
             if (state.assistantMode) {
                 if (initialAssistant) {
                     await initialAssistant;
@@ -1520,12 +1531,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function beginConversationNavigation() {
-        return { selectionEpoch: ++state.projectSelectionEpoch, navigationEpoch: state.navigationEpoch, assistantMode: state.assistantMode };
+        return { selectionEpoch: ++state.projectSelectionEpoch, navigationEpoch: state.navigationEpoch, assistantMode: state.assistantMode, botMode: state.botMode };
     }
 
     function isCurrentNavigation(navigation, cwd) {
         return navigation.selectionEpoch === state.projectSelectionEpoch && navigation.navigationEpoch === state.navigationEpoch
-            && navigation.assistantMode === state.assistantMode && (cwd === undefined || cwd === state.cwd);
+            && navigation.assistantMode === state.assistantMode && navigation.botMode === state.botMode && (cwd === undefined || cwd === state.cwd);
     }
 
     async function navigateToSession(session, navigation = beginConversationNavigation()) {
@@ -1999,6 +2010,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderSessions() {
+        if (state.botMode) return;
         if (state.assistantMode) return renderAssistantSessions();
         const anchor = captureSessionListAnchor();
         const focused = elements.sessionList.contains(document.activeElement) ? document.activeElement : null;
@@ -2448,6 +2460,38 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Resolve a Bot window to its current generation on the server, then open it like any
+    // session. The Bot workspace becomes the current cwd without touching the Pi Agent
+    // project list or its saved project.
+    async function openBotWindow({ profileId, windowId }) {
+        if (!state.botMode) return false;
+        const navigation = beginConversationNavigation();
+        const resolved = await apiFetch(`/api/pi/bots/${encodeURIComponent(profileId)}/windows/${encodeURIComponent(windowId)}/session`);
+        if (!isCurrentNavigation(navigation) || !state.botMode) return false;
+        const session = resolved.session;
+        state.bot = { profileId, windowId, generation: resolved.window.generation };
+        if (state.cwd !== session.cwd) {
+            disconnectSocket(true);
+            state.cwd = session.cwd; state.session = null; state.sessions = [];
+            clearSessionView();
+        }
+        return openSession(session, navigation);
+    }
+
+    async function windowRotated() {
+        const target = state.windowRotation; state.windowRotation = null;
+        if (!target) { setConnection('error', translateUi("连接已断开")); return; }
+        try {
+            if (state.botMode && state.bot?.profileId === target.profileId && state.bot?.windowId === target.windowId) {
+                await openBotWindow(target);
+                return;
+            }
+            const resolved = await apiFetch(`/api/pi/bots/${encodeURIComponent(target.profileId)}/windows/${encodeURIComponent(target.windowId)}/session`);
+            toast(translateUi("这个 Bot 聊天已接续到新的会话文件，正在打开"), 'info');
+            await window.PiChatNavigation.openSession({ cwd: resolved.session.cwd, sessionId: resolved.session.id });
+        } catch (error) { toast(error.message, 'error'); }
+    }
+
     async function openSession(session, navigation = beginConversationNavigation()) {
         if (!session || !isCurrentNavigation(navigation)) return false;
         if (!session.cwd || session.cwd !== state.cwd) throw new Error(translateUi('会话不属于当前项目，请重新选择'));
@@ -2481,9 +2525,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         renderSessions();
         updateSessionMeta();
-        const routeTab = state.assistantMode ? 'assistant' : 'chat';
-        const routeParams = state.assistantMode ? { profileId: state.assistantProfileId, projectId: state.assistantProjectId, sessionId: session.id } : { cwd: state.cwd, sessionId: session.id };
-        if (['chat', 'assistant'].includes(window.PiWorkspaceRoute?.current().tab)) window.PiWorkspaceRoute.navigate(routeTab, routeParams);
+        const routeTab = state.botMode ? 'bot' : state.assistantMode ? 'assistant' : 'chat';
+        // A Bot window is addressed by Bot and window, never by its current session file.
+        const routeParams = state.botMode ? { profileId: state.bot?.profileId, windowId: state.bot?.windowId }
+            : state.assistantMode ? { profileId: state.assistantProfileId, projectId: state.assistantProjectId, sessionId: session.id } : { cwd: state.cwd, sessionId: session.id };
+        if (['chat', 'assistant', 'bot'].includes(window.PiWorkspaceRoute?.current().tab)) window.PiWorkspaceRoute.navigate(routeTab, routeParams, state.botMode);
         else window.PiWorkspaceRoute?.rememberConversation(routeTab, routeParams);
         navigation.navigationEpoch = state.navigationEpoch;
         elements.input.disabled = true;
@@ -2567,6 +2613,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (generation !== state.socketGeneration) return resolve(false);
                 if (event.code === 4006) { finishRuntimeExit(Boolean(state.session?.ephemeral)); resolve(false); return; }
                 if (event.code === 4005) { resolve(false); return; }
+                if (event.code === 4007) {
+                    state.connected = false; nativeControls.disconnected(); rejectPending(new Error(event.reason || 'Window rotated'));
+                    resolve(false); void windowRotated(); return;
+                }
                 if (event.code === 4004) {
                     forgetDeletedSession(session, session.cwd || state.cwd);
                     resolve(false); return;
@@ -2978,8 +3028,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (role === 'user') article._piUserMessage = message;
         if (role === 'assistant') article._piAssistantMessage = message;
         const header = document.createElement('header');
-        const title = role === 'user' ? translateUi("你") : role === 'assistant' ? 'Pi' : translateUi("系统");
-        const model = role === 'assistant' && message.model ? `<span>${escapeHtml(message.model)}</span>` : '';
+        const botIdentity = role === 'assistant' && state.botMode ? botUi?.identity() : null;
+        const title = role === 'user' ? translateUi("你") : role === 'assistant' ? (botIdentity ? escapeHtml(botIdentity.name) : 'Pi') : translateUi("系统");
+        const model = role === 'assistant' && message.model && !botIdentity ? `<span>${escapeHtml(message.model)}</span>` : '';
         if (isChannelTurn) {
             const strong = document.createElement('strong'); strong.textContent = translateUi("你");
             const badge = document.createElement('span'); badge.className = 'pi-channel-badge';
@@ -2989,6 +3040,7 @@ document.addEventListener('DOMContentLoaded', () => {
             header.append(strong, badge);
         } else {
             header.innerHTML = `<strong>${title}</strong>${model}`;
+            if (botIdentity) header.prepend(botUi.face('xs'));
         }
         if (role === 'assistant' && message.pivaneSpeed) {
             const speed = document.createElement('span'); speed.className = 'pi-message-speed';
@@ -3357,6 +3409,12 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.transcript.innerHTML = transcriptLoadingMarkup(elements.connectionText.textContent || translateUi("正在连接 Pi Agent"), 'boot');
             return;
         }
+        if (state.botMode) {
+            const node = botUi?.emptyState(Boolean(state.session));
+            if (node) { elements.transcript.replaceChildren(node); return; }
+            // Never flash the Pi Agent start page while the Bot list is still loading.
+            if (!state.session) { elements.transcript.innerHTML = transcriptLoadingMarkup(translateUi("正在读取…")); return; }
+        }
         const extension = state.session?.assistant?.kind === 'extensions';
         const root = document.createElement('div'); root.className = 'pi-empty-state session-ready pi-start';
         const hero = document.createElement('header'); hero.className = 'pi-start-hero';
@@ -3478,6 +3536,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             case 'gateway_session_classified':
                 sessionClassified(event.session);
+                break;
+            case 'gateway_window_rotated':
+                state.windowRotation = { profileId: event.profileId, windowId: event.windowId };
+                elements.input.disabled = true; elements.sendButton.disabled = true;
+                break;
+            case 'gateway_bot_notice':
+                if (event.notice === 'model_unavailable') toast(state.botMode ? translateUi("设置里选的模型暂时用不了，这次先用当前模型回复")
+                    : translateUi("Bot 设置的模型 {0} 暂时不可用，已沿用当前模型", `${event.provider}/${event.id}`), 'error', 7000);
                 break;
             case 'gateway_session_moving':
                 state.connected = false; nativeControls.disconnected(); workflows.update();
@@ -5147,9 +5213,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const routeKey = location.hash || '#/chat';
         const previousTab = /^#\/([^?]+)/.exec(state.routeKey || '')?.[1];
         if (routeKey !== state.routeKey) { state.routeKey = routeKey; state.navigationEpoch++; }
-        if (tab !== 'chat' && tab !== 'assistant') { state.assistantEpoch++; return; }
-        const wasAssistant = state.assistantMode;
-        if (wasAssistant !== (tab === 'assistant')) clearConversationForWorkspaceSwitch();
+        if (tab !== 'chat' && tab !== 'assistant' && tab !== 'bot') { state.assistantEpoch++; return; }
+        const wasAssistant = state.assistantMode, wasBot = state.botMode;
+        const previousMode = wasBot ? 'bot' : wasAssistant ? 'assistant' : 'chat';
+        if (previousMode !== tab) clearConversationForWorkspaceSwitch();
+        if (tab === 'bot' && !wasBot) state.botReturnCwd = state.cwd;
+        state.botMode = tab === 'bot';
+        $('chat-tab').classList.toggle('pi-bot-mode', state.botMode);
+        if (state.botMode) {
+            state.assistantMode = false; state.assistantEpoch++;
+            $('pi-assistant-switcher').hidden = true;
+            if (accessBootstrapped && botUi?.wants(params)) void botUi.activate(params);
+            return;
+        }
+        if (wasBot) { botUi?.deactivate(); state.bot = null; }
         state.assistantMode = tab === 'assistant';
         $('pi-assistant-switcher').hidden = !state.assistantMode;
         elements.sessionFilters.hidden = state.assistantMode;
@@ -5170,6 +5247,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } else {
             state.assistantEpoch++; renderSessions();
+            // Back from a Bot: return to the Pi Agent project that was open before.
+            if (wasBot && accessBootstrapped && !params.get('cwd') && state.botReturnCwd && state.botReturnCwd !== state.cwd) {
+                void selectProject(state.botReturnCwd, { restoreSession: true, passive: true }).catch(error => toast(error.message, 'error'));
+            }
             // The startup replay runs before bootstrap(), which restores the session itself;
             // opening here as well would race it and touch controllers not created yet.
             if (accessBootstrapped && params.get('cwd') && params.get('sessionId') && (state.session?.id !== params.get('sessionId') || state.cwd !== params.get('cwd'))) {
@@ -5185,8 +5266,20 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
+    botUi = window.PiBot?.create({ api: apiFetch, toast, open: openBotWindow, pane: $('pi-bot-pane'), header: $('pi-bot-header'), input: elements.input,
+        onChange: kind => {
+            // A new name or face shows in the open conversation's replies at once.
+            if (kind === 'identity' && state.botMode && elements.transcript.querySelector(':scope > .pi-bot-empty')) renderEmptySession();
+            if (kind === 'identity' && state.botMode) elements.transcript.querySelectorAll('.pi-message.assistant > header').forEach(header => {
+                const identity = botUi.identity(); if (!identity) return;
+                header.querySelector(':scope > .pi-bot-face')?.replaceWith(botUi.face('xs'));
+                const name = header.querySelector(':scope > strong'); if (name) name.textContent = identity.name;
+            });
+            if (kind === 'empty' && state.botMode) { disconnectSocket(true); state.session = null; clearSessionView(); }
+        } });
+    window.addEventListener('workspace:agent-profiles-changed', () => { void botUi?.refresh(); });
     const route = window.PiWorkspaceRoute?.current();
-    if (route?.tab === 'assistant' || route?.tab === 'chat') window.dispatchEvent(new CustomEvent('workspace:tabchanged', { detail: route }));
+    if (route?.tab === 'assistant' || route?.tab === 'chat' || route?.tab === 'bot') window.dispatchEvent(new CustomEvent('workspace:tabchanged', { detail: route }));
     window.PiChatNavigation = Object.freeze({
         async openSession({ cwd, sessionId, draft }) {
             if (!cwd || !sessionId) throw new Error(translateUi('会话地址无效'));

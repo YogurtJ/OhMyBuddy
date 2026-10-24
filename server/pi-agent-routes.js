@@ -692,9 +692,10 @@ function createPiAgentGateway(options = {}) {
             sessionClassificationListeners.add(sessionClassification);
             const windowRotation = event => {
                 if (event.from.sessionPath !== workerSessionPath) return;
+                // 4007: the page must open the window's new generation, never reconnect to this one.
                 safeSend(socket, { type: 'gateway_window_rotated', profileId: event.profileId, windowId: event.windowId,
-                    generation: event.to.generation }, { code: 1012, reason: 'Window rotated' });
-                socket.close(1012, 'Window rotated');
+                    generation: event.to.generation }, { code: 4007, reason: 'Window rotated' });
+                socket.close(4007, 'Window rotated');
             };
             windowRotationListeners.add(windowRotation);
             const sessionRemoval = event => {
