@@ -10310,7 +10310,14 @@
         ["更早的聊天 · {0} 条", "Earlier conversation · {0} messages"],
         ["更早的聊天", "Earlier conversation"],
         ["再往前看", "Show even earlier"],
-        ["更早的聊天只能在这里回看", "Earlier conversation can only be read here"]
+        ["更早的聊天只能在这里回看", "Earlier conversation can only be read here"],
+        ["嗨，我是新来的伙伴，还没有名字。", "Hi, I'm your new companion. I don't have a name yet."],
+        ["{0} 已经知道你的这些事，要我也记住吗？不想让我知道的可以取消勾选。", "{0} already knows these things about you. Shall I remember them too? Untick anything you'd rather I didn't know."],
+        ["从哪个 Bot", "From which Bot"],
+        ["记住这 {0} 条", "Remember these {0}"],
+        ["不用，重新认识", "No, let's start fresh"],
+        ["内容刚刚有变化，请再选一次", "This just changed. Please choose again."],
+        ["谢谢，这些我都记下了。我还没有名字，再花两三分钟互相认识一下？随时可以说“先跳过”。", "Thanks, I've noted all that. I still don't have a name. Two or three more minutes to get acquainted? Say “Skip for now” any time."]
     );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

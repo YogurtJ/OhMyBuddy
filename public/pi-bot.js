@@ -167,6 +167,83 @@
             } finally { this.busy = false; this.onChange?.('identity'); }
         }
 
+        // ---- what other Bots already know (D-013) --------------------------------------
+        // A later Bot first offers to keep what another Bot knows about the user. Entries are
+        // shown verbatim and ticked by default; only the ticked ones are copied.
+        knownOffer(bot) {
+            const known = this.known;
+            if (!known || known.botId !== bot.id) { void this.loadKnown(bot.id); return 'loading'; }
+            if (known.status === 'loading') return 'loading';
+            if (known.status !== 'ready' || !known.sources.length) return null;
+            const source = known.sources.find(item => item.profileId === known.sourceId) || known.sources[0];
+            const nodes = [el('p', null, translateUi("嗨，我是新来的伙伴，还没有名字。")),
+                el('p', null, translateUi("{0} 已经知道你的这些事，要我也记住吗？不想让我知道的可以取消勾选。", source.name))];
+            if (known.sources.length > 1) {
+                const pick = el('div', 'pi-bot-known-sources'); pick.setAttribute('role', 'group'); pick.setAttribute('aria-label', translateUi("从哪个 Bot"));
+                for (const item of known.sources) {
+                    const choice = button('pi-bot-known-source'); choice.dataset.botAction = 'known-source'; choice.dataset.profileId = item.profileId;
+                    choice.setAttribute('aria-pressed', String(item.profileId === source.profileId));
+                    choice.append(face({ ...item, id: item.profileId }, 'xs'), el('span', null, item.name));
+                    pick.append(choice);
+                }
+                nodes.push(pick);
+            }
+            const list = el('ul', 'pi-bot-known-list');
+            for (const entry of source.entries) {
+                const row = el('li'), label = el('label'), box = document.createElement('input');
+                box.type = 'checkbox'; box.checked = !known.unchecked.has(`${source.profileId}\u0000${entry}`);
+                box.dataset.knownEntry = entry; box.dataset.profileId = source.profileId;
+                label.append(box, el('span', null, entry)); row.append(label); list.append(row);
+            }
+            const chosen = source.entries.filter(entry => !known.unchecked.has(`${source.profileId}\u0000${entry}`)).length;
+            const actions = el('div', 'pi-bot-greeting-actions');
+            const yes = button('pi-bot-primary'); yes.dataset.botAction = 'known-copy';
+            yes.textContent = translateUi("记住这 {0} 条", chosen); yes.disabled = Boolean(this.busy) || !chosen;
+            const no = button('pi-bot-chip'); no.dataset.botAction = 'known-decline'; no.textContent = translateUi("不用，重新认识");
+            no.disabled = Boolean(this.busy);
+            actions.append(yes, no);
+            nodes.push(list, actions);
+            return nodes;
+        }
+
+        async loadKnown(botId) {
+            this.known = { botId, status: 'loading', sources: [], sourceId: null, unchecked: new Set() };
+            try {
+                const data = await this.api(`/api/pi/bots/${encodeURIComponent(botId)}/about-sources`);
+                if (this.known?.botId !== botId) return;
+                Object.assign(this.known, { status: 'ready', sources: Array.isArray(data.sources) ? data.sources : [], sourceId: data.sources?.[0]?.profileId ?? null });
+            } catch { if (this.known?.botId === botId) this.known.status = 'error'; }
+            // Without the notes the usual greeting shows; the offer is optional.
+            this.onChange?.('identity');
+        }
+
+        knownToggle(box) {
+            const known = this.known, key = `${box.dataset.profileId}\u0000${box.dataset.knownEntry}`;
+            if (!known) return;
+            if (box.checked) known.unchecked.delete(key); else known.unchecked.add(key);
+            const source = known.sources.find(item => item.profileId === box.dataset.profileId);
+            const chosen = source ? source.entries.filter(entry => !known.unchecked.has(`${source.profileId}\u0000${entry}`)).length : 0;
+            const yes = box.closest('.pi-bot-greeting')?.querySelector('[data-bot-action="known-copy"]');
+            if (yes) { yes.textContent = translateUi("记住这 {0} 条", chosen); yes.disabled = Boolean(this.busy) || !chosen; }
+        }
+
+        async knownAction(action) {
+            const bot = this.bot(), known = this.known;
+            if (!bot || this.busy || known?.botId !== bot.id || known.status !== 'ready') return;
+            const source = known.sources.find(item => item.profileId === known.sourceId) || known.sources[0];
+            const entries = action === 'copy' && source ? source.entries.filter(entry => !known.unchecked.has(`${source.profileId}\u0000${entry}`)) : [];
+            if (action === 'copy' && !entries.length) return;
+            this.busy = true; this.onChange?.('identity');
+            try {
+                await this.api(`/api/pi/bots/${encodeURIComponent(bot.id)}/about`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action, ...(action === 'copy' ? { fromProfileId: source.profileId, entries } : {}), expectedRevision: this.revision }) });
+                await this.refresh();
+            } catch (error) {
+                if (error.status === 409) { await this.load().catch(() => {}); this.known = null; }
+                this.toast(error.status === 409 ? translateUi("内容刚刚有变化，请再选一次") : error.message, 'error');
+            } finally { this.busy = false; this.onChange?.('identity'); }
+        }
+
         click(event) {
             const target = event.target.closest('[data-bot-action]');
             if (!target) return;
@@ -176,6 +253,9 @@
             else if (action === 'create') void this.create();
             else if (action === 'greet-yes') void this.onboarding('start');
             else if (action === 'greet-skip') void this.onboarding('skip');
+            else if (action === 'known-copy') void this.knownAction('copy');
+            else if (action === 'known-decline') void this.knownAction('decline');
+            else if (action === 'known-source' && this.known) { this.known.sourceId = target.dataset.profileId; this.onChange?.('identity'); }
             else if (action === 'retry') void this.activate(new URLSearchParams(this.profileId ? { profileId: this.profileId } : {}));
             else if (action === 'settings') {
                 if (window.innerWidth <= 900) document.getElementById('pi-session-pane')?.classList.remove('open');
@@ -301,16 +381,27 @@
                 root.classList.add('is-greeting');
                 const bubble = el('div', 'pi-bot-greeting');
                 const head = el('div', 'pi-bot-greeting-head'); head.append(face(bot, 'sm'), el('strong', null, bot.name));
-                bubble.append(head, el('p', null, bot.bot.onboarding.firstBot
+                bubble.append(head);
+                root.append(bubble);
+                root.addEventListener('click', event => this.click(event));
+                const steps = bot.bot.onboarding.steps || {};
+                const offer = !bot.bot.onboarding.firstBot && !steps.known ? this.knownOffer(bot) : null;
+                if (offer === 'loading') { bubble.append(el('p', 'pi-bot-greeting-wait', '…')); bubble.setAttribute('aria-busy', 'true'); return root; }
+                if (offer) {
+                    bubble.classList.add('is-known');
+                    bubble.append(...offer);
+                    root.addEventListener('change', event => { if (event.target.matches?.('input[data-known-entry]')) this.knownToggle(event.target); });
+                    return root;
+                }
+                bubble.append(el('p', null, bot.bot.onboarding.firstBot
                     ? translateUi("嗨，我是你的新伙伴，还没有名字。想花两三分钟认识你，也让你认识我。随时可以说“先跳过”。")
-                    : translateUi("嗨，我是新来的伙伴，还没有名字。花两三分钟互相认识一下？随时可以说“先跳过”。")));
+                    : steps.known === 'done' ? translateUi("谢谢，这些我都记下了。我还没有名字，再花两三分钟互相认识一下？随时可以说“先跳过”。")
+                        : translateUi("嗨，我是新来的伙伴，还没有名字。花两三分钟互相认识一下？随时可以说“先跳过”。")));
                 const chips = el('div', 'pi-bot-greeting-actions');
                 const yes = button('pi-bot-primary'); yes.dataset.botAction = 'greet-yes'; yes.textContent = translateUi("好呀");
                 const skip = button('pi-bot-chip'); skip.dataset.botAction = 'greet-skip'; skip.textContent = translateUi("先跳过");
                 yes.disabled = skip.disabled = Boolean(this.busy);
                 chips.append(yes, skip); bubble.append(chips);
-                root.append(bubble);
-                root.addEventListener('click', event => this.click(event));
                 return root;
             }
             root.append(face(bot, 'xl'), el('h2', null, bot.name));

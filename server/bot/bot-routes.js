@@ -12,6 +12,8 @@ function mountBotRoutes(router, { bots }) {
     router.patch('/bots/:id', route(req => bots.update(req.params.id, req.body)));
     router.post('/bots/:id/setup', route(req => bots.setup(req.params.id, req.body)));
     router.post('/bots/:id/onboarding', route(req => bots.onboarding(req.params.id, req.body)));
+    router.get('/bots/:id/about-sources', route(req => bots.aboutSources(req.params.id)));
+    router.post('/bots/:id/about', route(req => bots.about(req.params.id, req.body)));
     router.post('/bots/:id/main-window', route(req => bots.ensureMainWindow(req.params.id)));
     router.get('/bots/:id/windows/:windowId/session', route(req => bots.resolve(req.params.id, req.params.windowId)));
     router.get('/bots/:id/windows/:windowId/generations', route(req => bots.generations(req.params.id, req.params.windowId)));

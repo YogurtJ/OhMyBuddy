@@ -408,6 +408,68 @@ class BotService extends EventEmitter {
         });
     }
 
+    // What the user's other Bots already know about them (their about-you notes), offered
+    // when a new Bot is being set up. Read-only.
+    async aboutSources(profileId) {
+        const { state } = await this.profiles.state();
+        if (!state.profiles.some(profile => profile.id === profileId && settings.isBot(profile) && profile.trashedAt === undefined)) fail('Bot not found', 404);
+        if (!this.documents) return { sources: [] };
+        const others = state.profiles.filter(profile => profile.id !== profileId && settings.isBot(profile) && profile.trashedAt === undefined)
+            .sort((a, b) => settings.readBot(a).order - settings.readBot(b).order);
+        const sources = [];
+        for (const profile of others) {
+            try {
+                const document = await this.documents.run(profile.id, 'user', false);
+                const entries = document.status === 'ready' ? setup.userEntries(document.content) : [];
+                if (entries.length) sources.push({ profileId: profile.id, name: profile.name, avatar: profile.avatar ?? null, entries });
+            } catch { /* an unreadable Bot simply is not offered */ }
+        }
+        return { sources };
+    }
+
+    // Copy the about-you entries the user ticked from another Bot (D-013), or record that they
+    // declined. Entries must still be present in the source, so nothing else can be passed off as copied.
+    about(profileId, input = {}) {
+        return this.profiles.reserve(async () => {
+            if (!object(input) || typeof input.expectedRevision !== 'string' || !['copy', 'decline'].includes(input.action)) fail('Invalid about-you change');
+            const { state, revision } = await this.profiles.state();
+            if (revision !== input.expectedRevision) fail('Settings just changed, please try again', 409);
+            const target = state.profiles.find(profile => profile.id === profileId);
+            if (!settings.isBot(target) || target.trashedAt !== undefined) fail('Bot not found', 404);
+            let added = [];
+            if (input.action === 'copy') {
+                const source = state.profiles.find(profile => profile.id === input.fromProfileId);
+                if (!source || source.id === profileId || !settings.isBot(source) || source.trashedAt !== undefined) fail('Source Bot not found', 404);
+                if (!Array.isArray(input.entries) || !input.entries.length || input.entries.length > 200
+                    || input.entries.some(entry => typeof entry !== 'string')) fail('Choose what to copy');
+                if (!this.documents) fail('About-you notes are unavailable', 409);
+                const from = await this.documents.run(source.id, 'user', false);
+                const known = new Set(from.status === 'ready' ? setup.userEntries(from.content) : []);
+                if (input.entries.some(entry => !known.has(entry))) fail('Those notes just changed, please choose again', 409);
+                const document = await this.documents.run(profileId, 'user', false);
+                if (document.status !== 'ready') fail('About-you notes are unavailable', 409);
+                const next = setup.appendUserEntries(document.content, [...new Set(input.entries)]);
+                if (next.added.length) {
+                    const written = await this.documents.run(profileId, 'user', true, { content: next.content,
+                        expectedRevision: document.revision, expectedProfileRevision: document.profileRevision });
+                    if (written.documentSaved !== true) fail(written.error || 'About-you notes were not saved', 409);
+                }
+                added = next.added;
+            }
+            const now = new Date().toISOString();
+            const saved = await this.profiles.mutate(revision, current => {
+                const index = current.profiles.findIndex(profile => profile.id === profileId);
+                const previous = current.profiles[index], bot = settings.readBot(previous);
+                const onboarding = { ...bot.onboarding, steps: { ...bot.onboarding.steps, known: input.action === 'copy' ? 'done' : 'skipped' } };
+                const nextBot = settings.normalizeBot({ ...bot, onboarding });
+                current.profiles[index] = { ...previous, bot: { ...previous.bot, ...nextBot }, updatedAt: now };
+                return { bot: { id: previous.id, name: previous.name, avatar: previous.avatar ?? null, bot: this.publicBot(nextBot) } };
+            });
+            this.emit('botChanged', { profileId });
+            return { ok: true, revision: saved.revision, bot: saved.bot, added };
+        });
+    }
+
     // Onboarding without a model call: start (greeting → interview), skip, or start over.
     onboarding(profileId, input = {}) {
         return this.profiles.reserve(async () => {

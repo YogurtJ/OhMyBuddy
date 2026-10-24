@@ -41,12 +41,15 @@ function onboardingGuidance(bot, window) {
     const onboarding = bot?.onboarding;
     if (!onboarding || !['greeting', 'interview'].includes(onboarding.phase) || window?.kind === 'topic') return '';
     const remaining = INTERVIEW_STEPS.filter(([id]) => !onboarding.steps?.[id]);
+    const known = onboarding.steps?.known === 'done';
     return [
         'Getting to know each other (you were just created):',
         '- Keep it to two or three minutes. One short question per message, warm and natural. The user may skip any step or stop at any time; then move on or wrap up.',
         '- Save each answer with bot_setup_propose as soon as you have it; the user confirms each card.',
         ...(remaining.length ? ['- Steps still to do, in this order:', ...remaining.map(([, text], index) => `  ${index + 1}. ${text}`)] : []),
-        '- Then ask one or two light questions about them (what keeps them busy, anything you should keep in mind) and save the answers as about-user facts.',
+        ...(known ? ['- The user let you keep what another of their Bots knows about them (your about-user notes). Do not ask again what those notes already answer, including how to address them.'] : []),
+        known ? '- Then, only if your notes leave a gap that matters for your job, ask one light question about it and save the answer as an about-user fact.'
+            : '- Then ask one or two light questions about them (what keeps them busy, anything you should keep in mind) and save the answers as about-user facts.',
         '- Then explain in one or two lines how you work: most things you simply do; deleting things, sending messages to others or spending money you ask first; you will gradually remember their habits, and they can see and edit that in your settings.',
         '- Finish with bot_setup_propose finish=true (with the last change or alone), then suggest three concrete things you could do right now, based on what you learned.'
     ].join('\n');
@@ -85,4 +88,4 @@ function botPreamble({ name, bot, cwd, window }) {
     return lines.join('\n');
 }
 
-module.exports = { botPreamble, PRESET_GUIDANCE };
+module.exports = { botPreamble, onboardingGuidance, PRESET_GUIDANCE };

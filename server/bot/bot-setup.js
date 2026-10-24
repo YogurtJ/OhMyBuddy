@@ -78,11 +78,16 @@ function confirmedChanges(proposal, changes) {
 }
 
 // About-you entries appended to USER.md, skipping ones already present.
+// USER.md holds one fact per entry, separated by a line with only §.
+function userEntries(content) {
+    return typeof content === 'string' && content ? content.split('\n§\n').map(part => part.trim()).filter(Boolean) : [];
+}
+
 function appendUserEntries(content, items) {
-    const parts = content ? content.split('\n§\n').map(part => part.trim()).filter(Boolean) : [];
+    const parts = userEntries(content);
     const known = new Set(parts);
     const added = items.filter(item => !known.has(item));
     return { content: [...parts, ...added].join('\n§\n'), added };
 }
 
-module.exports = { SETUP_TOOL, SETUP_TITLE, SAVE, DECLINE, FIELDS, LIMITS, normalizeProposal, pendingProposal, confirmedChanges, appendUserEntries };
+module.exports = { SETUP_TOOL, SETUP_TITLE, SAVE, DECLINE, FIELDS, LIMITS, normalizeProposal, pendingProposal, confirmedChanges, userEntries, appendUserEntries };
