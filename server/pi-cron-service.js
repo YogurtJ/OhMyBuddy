@@ -54,8 +54,8 @@ function validateJob(input, now) {
         misfire: { policy: misfire.policy, graceMinutes: misfire.graceMinutes }, execution, budget: limits(input.budget) };
 }
 class CronService {
-    constructor({ store, supervisor, profiles, catalog, isSuspended = () => false, now = Date.now, filename, captureChannelNotify, onChannelNotify }) {
-        Object.assign(this, { store, supervisor, profiles, catalog, isSuspended, now, filename, captureChannelNotify, onChannelNotify });
+    constructor({ store, supervisor, profiles, catalog, bots = null, isSuspended = () => false, now = Date.now, filename, captureChannelNotify, onChannelNotify }) {
+        Object.assign(this, { store, supervisor, profiles, catalog, bots, isSuspended, now, filename, captureChannelNotify, onChannelNotify });
         this.stopping = false; this.running = null; this.mutating = null; this.notifying = null; this.db = null; this.error = null;
         this.ready = this.initialize();
         this.timer = setInterval(() => { void this.tick(); }, 1000); this.timer.unref?.();
@@ -95,14 +95,21 @@ class CronService {
             channelNotifications: this.db.channelNotificationSummary(),
             capabilities: { maxJobs: 100, maxRuns: 10000, budgetDay: 'UTC', cost: 'estimated', maxConcurrent: 2 }, serverTime: now };
     }
-    async target(target) {
-        let ref = target;
-        if (target.kind === 'profile') {
-            const profile = await this.profiles.getProfile(target.profileId);
-            if (!profile?.enabled) fail('Target profile is unavailable');
-            ref = this.db.home(target.profileId);
-            if (!ref?.sessionId || ref.status !== 'ready') fail('Choose or create the profile main thread first');
+    // A profile's main thread. For a Bot it is its main chat window, resolved to the window's
+    // current native generation every time (it changes when the window rotates).
+    async homeRef(profileId) {
+        const profile = await this.profiles.getProfile(profileId);
+        if (!profile?.enabled) fail('Target profile is unavailable');
+        if (this.bots && require('./bot/bot-settings').readBot(profile)) {
+            const resolved = await this.bots.mainSession(profileId);
+            return { cwd: resolved.cwd, sessionId: resolved.id, status: 'ready', bot: true };
         }
+        const ref = this.db.home(profileId);
+        if (!ref?.sessionId || ref.status !== 'ready') fail('Choose or create the profile main thread first');
+        return ref;
+    }
+    async target(target) {
+        const ref = target.kind === 'profile' ? await this.homeRef(target.profileId) : target;
         const session = await this.store.getSession(ref.cwd, ref.sessionId);
         if (session.assistant || session.profileAuthoring) fail('Management threads cannot receive scheduled tasks');
         if (session.agentProfile && !session.agentProfile.available) fail('Target profile is disabled or unavailable');
@@ -265,11 +272,18 @@ class CronService {
             if (now - run.scheduledAt > grace) { this.db.saveRun({ ...run, status: 'skipped', reason: 'expired', completedAt: now }); return; }
             const session = await this.target(job.target);
             if (!this.supervisor.isSessionIdle(session.path)) return;
-            const worker = await this.supervisor.getWorker({ cwd: session.cwd, sessionId: session.id, sessionPath: session.path });
+            let worker = await this.supervisor.getWorker({ cwd: session.cwd, sessionId: session.id, sessionPath: session.path });
             if (session.agentProfile) {
                 const profile = await this.profiles.getProfile(session.agentProfile.id);
-                if (!worker.loadedAgentProfileConfirmed || worker.loadedAgentProfileId !== profile?.id
-                    || worker.loadedAgentProfileRevision !== require('./pi-profile-registry').profileRevision(profile)) fail('Reopen the idle target thread to load its saved profile');
+                const current = () => worker.loadedAgentProfileConfirmed && worker.loadedAgentProfileId === profile?.id
+                    && worker.loadedAgentProfileRevision === require('./pi-profile-registry').profileRevision(profile);
+                // A Bot is edited from its own chat, so its idle window reopens with the saved profile
+                // instead of waiting for someone to reopen it by hand.
+                if (!current() && worker.loadedBot && this.supervisor.isSessionIdle(session.path)) {
+                    await this.supervisor.stopSession(session.path);
+                    worker = await this.supervisor.getWorker({ cwd: session.cwd, sessionId: session.id, sessionPath: session.path });
+                }
+                if (!current()) fail('Reopen the idle target thread to load its saved profile');
             }
             await worker.exclusive(async (_rpc, runtime) => {
                 if (this.stopping || this.isSuspended() || this.mutating || this.db.run(run.id)?.status !== 'waiting') return;
@@ -290,7 +304,7 @@ class CronService {
                 }
                 if (this.stopping || this.isSuspended() || this.mutating || this.db.run(run.id)?.status !== 'waiting') return;
                 if (job.target.kind === 'profile') {
-                    const home = this.db.home(job.target.profileId);
+                    const home = await this.homeRef(job.target.profileId).catch(() => null);
                     if (home?.status !== 'ready' || home.sessionId !== session.id || home.cwd !== session.cwd) return;
                 }
                 run = { ...run, status: 'dispatching', target: { cwd: session.cwd, sessionId: session.id, name: session.name },

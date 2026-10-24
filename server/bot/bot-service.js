@@ -316,6 +316,14 @@ class BotService extends EventEmitter {
         return window;
     }
 
+    // The current session of a Bot's main chat (scheduled tasks and channels address it).
+    async mainSession(profileId) {
+        const { state } = await this.windows.read(profileId);
+        const main = state.windows.find(item => item.kind === 'main' && item.current);
+        if (!main) fail('This Bot has no main chat yet', 409);
+        return (await this.resolve(profileId, main.id)).session;
+    }
+
     async generations(profileId, windowId) {
         const window = await this.windowRecord(profileId, windowId);
         return { window: publicWindow(window), generations: history.generationList(window) };
