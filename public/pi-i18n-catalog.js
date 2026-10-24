@@ -10345,7 +10345,12 @@
         ["设置刚刚在别处改过。你的修改还在，检查后再保存一次。", "These settings just changed elsewhere. Your edits are still here; check them and save again."],
         ["保存失败", "Couldn't save"],
         ["我们重新认识一下吧", "Let's get acquainted again"],
-        ["名字不能为空", "The name can't be empty"]
+        ["名字不能为空", "The name can't be empty"],
+        ["还没有可用的聊天模型。Bot 要接入一个模型才能和你说话。", "There's no chat model yet. A Bot needs one before it can talk to you."],
+        ["接入模型", "Set up a model"],
+        ["{0} 用的模型现在登录失效了。请在“供应商与模型”里重新登录。", "The model {0} uses is signed out. Sign in again under Providers and models."],
+        ["{0} 选的模型现在用不了。可以在 {0} 的设置里换一个。", "The model {0} picked isn't available right now. Choose another in {0}'s settings."],
+        ["还没有可用的聊天模型。{0} 要接入一个模型才能回复你。", "There's no chat model yet. {0} needs one before it can reply."]
     );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

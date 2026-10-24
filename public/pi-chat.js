@@ -2866,6 +2866,15 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.modelRefresh.disabled = !state.connected || busy || Boolean(state.modelRefreshOp);
         elements.modelChoose.disabled = !state.connected || busy || Boolean(state.modelRefreshOp) || !state.models.length;
         elements.modelGuidance.hidden = !state.connected || (ready && !state.modelRefreshError);
+        // A Bot speaks plainly: no catalog refresh or per-session picker, just what is missing.
+        elements.modelRefresh.hidden = elements.modelChoose.hidden = state.botMode;
+        if (state.botMode && !state.modelRefreshOp) {
+            const name = botUi?.identity()?.name || 'Bot';
+            elements.modelGuidanceText.textContent = state.modelAuthError ? translateUi("{0} 用的模型现在登录失效了。请在“供应商与模型”里重新登录。", name)
+                : state.models.length ? translateUi("{0} 选的模型现在用不了。可以在 {0} 的设置里换一个。", name)
+                    : translateUi("还没有可用的聊天模型。{0} 要接入一个模型才能回复你。", name);
+            return;
+        }
         elements.modelGuidanceText.textContent = state.modelRefreshOp ? (state.modelRefreshOp.kind === 'selection' ? translateUi("正在切换本会话的模型…") : translateUi("正在更新当前会话的可用模型…")) : state.modelRefreshError
             || (state.modelAuthError ? translateUi("当前模型的认证不可用。请重新登录供应商，或选择其他已接入模型。")
                 : state.models.length ? translateUi("请选择本会话使用的模型。设置中的默认模型不会自动替换已打开会话的模型。")
