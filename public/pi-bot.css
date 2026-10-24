@@ -202,3 +202,12 @@
     .pi-bot-setup-field > span { padding-top: 0; }
     .pi-bot-setup-field input, .pi-bot-setup-field textarea { font-size: 16px; }
 }
+
+/* ---- one lifelong conversation: compaction and generations stay invisible ----------- */
+#chat-tab.pi-bot-mode .pi-summary-notice.compactionSummary,
+#chat-tab.pi-bot-mode .pi-archive-turn.is-summary { display: none !important; }
+#pi-bot-history[hidden], #chat-tab:not(.pi-bot-mode) #pi-bot-history { display: none !important; }
+.pi-bot-empty.is-continuing { min-height: 0; padding: 0; }
+/* With earlier conversation above, the current part only takes the room it needs, so the
+   latest earlier messages sit right above the composer. */
+#chat-tab.pi-bot-mode #pi-bot-history:not([hidden]) ~ .pi-transcript-content { min-height: 0; height: auto; }

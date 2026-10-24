@@ -10305,7 +10305,12 @@
         ["没有要保存的内容，可以选“先不改”", "Nothing to save. Choose “Not now” instead."],
         ["设置刚刚有变化，请再点一次保存", "Settings just changed. Press Save once more."],
         ["输入框里还有草稿，先发送或清空它", "There's a draft in the message box. Send or clear it first."],
-        ["完成互相认识", "Finish getting acquainted"]
+        ["完成互相认识", "Finish getting acquainted"],
+        ["更早的聊天 · {0}", "Earlier conversation · {0}"],
+        ["更早的聊天 · {0} 条", "Earlier conversation · {0} messages"],
+        ["更早的聊天", "Earlier conversation"],
+        ["再往前看", "Show even earlier"],
+        ["更早的聊天只能在这里回看", "Earlier conversation can only be read here"]
     );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

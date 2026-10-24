@@ -29,7 +29,7 @@ const messages = [
             const context = await browser.newContext({ viewport: { width, height: 860 } });
             const page = await context.newPage(), errors = [], opened = [];
             let bots = [], revision = 'r0', generation = 0, sessionId = 'gen-0', socket = null, phase = 'greeting', name = '新伙伴', face = '🦊';
-            let history = [], prompts = [], responses = [], setupBodies = [];
+            let history = [], prompts = [], responses = [], setupBodies = [], historyReads = [];
             const bot = () => ({ id: BOT, name, description: '', avatar: { kind: 'emoji', value: face }, enabled: true, profileRevision: 'p',
                 bot: { version: 1, enabled: true, order: 0, job: '', model: null, permissions: { preset: 'free', rules: 0 },
                     notify: { quietHours: { start: '23:00', end: '08:00' }, dailyProactiveLimit: 5 },
@@ -60,6 +60,19 @@ const messages = [
                     name = body.changes.name ?? name; face = body.changes.avatar ?? face; revision = `r${Date.now()}`; bots = [bot()];
                     return route.fulfill({ json: { ok: true, revision, bot: { id: BOT, name, avatar: bots[0].avatar, bot: bots[0].bot }, saved: body.changes,
                         user: { added: body.changes.aboutUser || [], documentSaved: true } } });
+                }
+                if (pathname === `/api/pi/bots/${BOT}/windows/${MAIN}/generations`) {
+                    return route.fulfill({ json: { window: bot().windows[0], generations: Array.from({ length: generation + 1 }, (_, index) => ({ generation: index,
+                        startedAt: '2026-10-20T00:00:00Z', endedAt: index === generation ? null : '2026-10-24T00:00:00Z', reason: index ? 'size' : 'initial', current: index === generation })) } });
+                }
+                if (pathname === `/api/pi/bots/${BOT}/windows/${MAIN}/history`) {
+                    const view = url.searchParams.get('view'), revision = 'a'.repeat(64), timestamp = '2026-10-24T06:02:00Z';
+                    historyReads.push([url.searchParams.get('generation'), view]);
+                    if (view === 'index') return route.fulfill({ json: { generation: 0, revision, total: 1, offset: 0, hasMore: false, pageSize: 100, continues: false, compactionId: null,
+                        turns: [{ index: 0, kind: 'user', entryId: 'e1', timestamp, title: '周六去杭州要带伞吗', images: 0, tools: 0, reply: { entryId: 'e2', excerpt: '大概率小雨' } }] } });
+                    return route.fulfill({ json: { generation: 0, revision, total: 1, start: 0, end: 1, turns: [{ index: 0, kind: 'user', entryId: 'e1', timestamp,
+                        text: '周六去杭州要带伞吗', textTruncated: false, images: 0, reply: { entryId: 'e2', timestamp, model: 'm', stopReason: 'stop', errorMessage: '',
+                            text: '大概率小雨，带把折叠伞就好。', truncated: false }, process: { steps: 0, tools: 0, errors: 0, startedAt: timestamp, endedAt: timestamp } }] } });
                 }
                 if (pathname === `/api/pi/bots/${BOT}/windows/${MAIN}/session`) {
                     bots = [bot()];
@@ -164,7 +177,16 @@ const messages = [
                 await page.waitForTimeout(2200); // past the ordinary reconnect delay
                 assert.deepEqual(opened, ['gen-0', 'gen-0', 'gen-1']);
                 assert.ok((await page.evaluate(() => location.hash)).includes(`windowId=${MAIN}`), 'the route names the window, not the session');
-                assert.equal(await page.locator('.pi-bot-empty h2').textContent(), '小狸');
+                // The earlier generation continues above, read from the server, without a hero in between.
+                await page.locator('#pi-bot-history .pi-bot-history-generation .pi-archive-head-text').waitFor({ timeout: 8000 });
+                assert.match(await page.locator('#pi-bot-history .pi-archive-head-text').textContent(), /更早的聊天/);
+                assert.equal(await page.locator('.pi-bot-empty.is-continuing').count(), 1);
+                await page.locator('#pi-bot-history .pi-archive-load').click();
+                await page.locator('#pi-bot-history .pi-archive-reply').waitFor({ timeout: 8000 });
+                assert.match(await page.locator('#pi-bot-history').innerText(), /周六去杭州要带伞吗[\s\S]*大概率小雨/);
+                assert.deepEqual(historyReads, [['0', 'index'], ['0', 'turns']]);
+                assert.equal(await page.locator('#pi-bot-history .pi-message.assistant > header > strong').first().textContent(), '小狸');
+                if (evidence) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(evidence, `bot-history-${width}.png`) }); }
 
                 // 4. Leaving Bot mode restores the Pi Agent controls.
                 await page.evaluate(() => window.PiWorkspaceRoute.navigate('chat'));
