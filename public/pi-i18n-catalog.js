@@ -10284,5 +10284,28 @@
         ["设置里选的模型暂时用不了，这次先用当前模型回复", "The model chosen in settings isn't available right now, so this reply uses the current model."],
         ["Bot 设置的模型 {0} 暂时不可用，已沿用当前模型", "The Bot's model {0} is unavailable; the current model was kept."]
     );
+    rows.push(
+        ["请先打开 Bot 的聊天", "Open the Bot's chat first"],
+        ["关于你的内容这次没记下：{0}", "Notes about you weren't saved this time: {0}"],
+        ["好呀", "Sure"],
+        ["设置刚刚有变化，请再试一次", "Settings just changed. Please try again."],
+        ["嗨，我是你的新伙伴，还没有名字。想花两三分钟认识你，也让你认识我。随时可以说“先跳过”。", "Hi, I'm your new buddy and I don't have a name yet. I'd love two or three minutes to get to know you, and for you to get to know me. You can say “skip” anytime."],
+        ["嗨，我是新来的伙伴，还没有名字。花两三分钟互相认识一下？随时可以说“先跳过”。", "Hi, I'm new here and don't have a name yet. Shall we take two or three minutes to get to know each other? You can say “skip” anytime."],
+        ["先跳过", "Skip for now"],
+        ["我们接着刚才的认识聊吧，直接说就好。", "Let's pick up where we left off getting to know each other. Just say anything."],
+        ["名字", "Name"],
+        ["头像", "Face"],
+        ["主要帮你做", "Mainly helps with"],
+        ["性格", "Personality"],
+        ["请你确认设置", "Please confirm"],
+        ["我们算是认识啦", "Nice to meet you properly"],
+        ["这样设置可以吗？", "Does this look right?"],
+        ["记住关于你的", "Remember about you"],
+        ["先不改", "Not now"],
+        ["没有要保存的内容，可以选“先不改”", "Nothing to save. Choose “Not now” instead."],
+        ["设置刚刚有变化，请再点一次保存", "Settings just changed. Press Save once more."],
+        ["输入框里还有草稿，先发送或清空它", "There's a draft in the message box. Send or clear it first."],
+        ["完成互相认识", "Finish getting acquainted"]
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

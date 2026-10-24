@@ -43,7 +43,8 @@
         else if (name === 'ask_user_question') {
             const count = Array.isArray(args.questions) ? args.questions.length : 0;
             title = count > 1 ? t('向你提问 · {0} 个问题', count) : t('向你提问');
-        } else if (name === 'deliver_files') title = text(args.title, 160) ? t('交付文件 · {0}', args.title) : t('交付文件');
+        } else if (name === 'bot_setup_propose') title = args.finish === true ? t('完成互相认识') : t('请你确认设置')
+        else if (name === 'deliver_files') title = text(args.title, 160) ? t('交付文件 · {0}', args.title) : t('交付文件');
         else if (name === 'agent_message') {
             const peer = text(result?.details?.to?.name, 160) || (text(args.to, 160) ? `${args.to.slice(0, 8)}…` : '');
             title = args.action === 'threads' ? t('查看可联系的线程') : args.action === 'status' ? t('查看消息投递状态')

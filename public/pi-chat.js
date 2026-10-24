@@ -538,6 +538,20 @@ document.addEventListener('DOMContentLoaded', () => {
         changed: () => renderPendingBanner()
     });
     document.querySelector('.pi-composer-wrap > .pi-composer')?.before(userQuestions.element);
+    // Bot setup proposals are confirmed on an editable card in Bot mode; elsewhere the
+    // generic request dialog remains, which cannot save anything by itself.
+    const botSetup = window.PiBot?.setupCards({
+        enabled: () => state.botMode,
+        calls: () => [...state.toolRows].reverse()
+            .filter(([, row]) => row.dataset.toolName === 'bot_setup_propose' && !row._piResult && row._piToolArgs && typeof row._piToolArgs === 'object')
+            .map(([id, row]) => ({ id, args: row._piToolArgs })),
+        respond: payload => sendExtensionResponse(payload),
+        save: (toolCallId, changes) => botUi.saveSetup(toolCallId, changes),
+        face: () => botUi?.face('sm') || document.createElement('span'),
+        changed: () => renderPendingBanner()
+    });
+    if (botSetup) document.querySelector('.pi-composer-wrap > .pi-composer')?.before(botSetup.element);
+    const panelOwns = event => userQuestions.owns(event) || Boolean(botSetup?.owns(event));
     const questionReceipts = window.PiUserQuestion.receipts();
     const resultCards = message => [deliveryCards.render(message), questionReceipts.render(message)].filter(Boolean);
     const turnEdits = new window.PiTurnEdits({
@@ -3989,6 +4003,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderPendingUi() {
         userQuestions.sync(state.pendingUi, state.connected);
+        botSetup?.sync(state.pendingUi, state.connected);
         renderPendingBanner();
         renderActivityBadges();
         setStreaming(state.streaming);
@@ -3996,15 +4011,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Questions shown in their own panel are not repeated in the confirmation banner.
     function renderPendingBanner() {
-        const others = [...state.pendingUi.values()].filter(event => !userQuestions.owns(event)).length;
+        const others = [...state.pendingUi.values()].filter(event => !panelOwns(event)).length;
         $('pi-pending-ui-banner').classList.toggle('hidden', !others || !state.connected);
         $('pi-pending-ui-count').textContent = translateUi("{0} 项等待确认", others);
     }
 
     function openPendingRequest() {
         if (!isViewingSession() || !state.pendingUi.size) return;
-        const event = [...state.pendingUi.values()].find(item => !userQuestions.owns(item));
-        if (!event) { userQuestions.focus(); return; }
+        const event = [...state.pendingUi.values()].find(item => !panelOwns(item));
+        if (!event) { if ([...state.pendingUi.values()].some(item => userQuestions.owns(item))) userQuestions.focus(); return; }
         state.shownUiId = event.id;
         elements.requestTitle.textContent = event.title || translateUi("等待确认");
         elements.requestFields.replaceChildren();
@@ -4058,7 +4073,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state.pendingUi.set(event.id, event);
         renderPendingUi();
         void refreshActivity();
-        if (isViewingSession() && !elements.requestDialog.open && !userQuestions.owns(event)) openPendingRequest();
+        if (isViewingSession() && !elements.requestDialog.open && !panelOwns(event)) openPendingRequest();
     }
 
     async function reconcileSession() {
@@ -5266,7 +5281,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
-    botUi = window.PiBot?.create({ api: apiFetch, toast, open: openBotWindow, pane: $('pi-bot-pane'), header: $('pi-bot-header'), input: elements.input,
+    // Bot greeting chips speak through the normal composer path, never over a draft.
+    const botSay = text => {
+        if (elements.input.value.trim() || state.attachmentFiles.length) { toast(translateUi("输入框里还有草稿，先发送或清空它"), 'info'); return; }
+        elements.input.value = text; autoResizeInput(); void sendMessage();
+    };
+    botUi = window.PiBot?.create({ api: apiFetch, toast, open: openBotWindow, say: botSay, pane: $('pi-bot-pane'), header: $('pi-bot-header'), input: elements.input,
         onChange: kind => {
             // A new name or face shows in the open conversation's replies at once.
             if (kind === 'identity' && state.botMode && elements.transcript.querySelector(':scope > .pi-bot-empty')) renderEmptySession();
