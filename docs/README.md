@@ -52,6 +52,7 @@
 | Pi 原生 MCP、Codemode 和旧适配器迁移 | [原生 MCP](MCP.md) |
 | 内置子 Agent、记忆组件与旧安装兼容 | [内置能力包](BUNDLED_CAPABILITIES.md) |
 | 助手身份与档案记忆 | [助手档案](AGENT_PROFILES.md) · [记忆契约导航](PROFILE_MEMORY.md#read-by-task) |
+| 有名字和性格的私人助理（未发布） | [Bot 模式](BOT_MODE.md) |
 
 ## 媒体
 

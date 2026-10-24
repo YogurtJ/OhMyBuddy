@@ -50,6 +50,12 @@ pi-subagents 通过受管扩展报告后台活动，Supervisor 用它阻止过�
 
 档案知识的 HTTP、工具与学习写入共用唯一 `ProfileKnowledgeService`；后台学习引用已核实原生条目，派生 SQLite 索引可以重建。细节见[辅助工作实现](RUNTIME.md#辅助工作与扩展)、[档案设计](AGENT_PROFILES.md)、[记忆契约](../PROFILE_MEMORY.md)与[依赖适配](DEPENDENCIES.md)。
 
+## Bot 模式（未发布）
+
+Bot 是带 `bot` 段的助手档案；“窗口”（目前只有主聊天）是永久逻辑容器，指向一串原生会话“代”。窗口索引 `<agentDir>/pivane-bots/<profileId>/windows.json` 只是路由缓存，可从每代开头的原生标记 `pivane-bot-window {profileId,windowId,generation,predecessor{sessionId,lastEntryId}}` 重建；Pi 原生 JSONL 仍是唯一聊天事实。换代在 Supervisor 会话编辑预占内进行：日志预备 → 停止空闲 worker → 核对旧代并写新代（模型、思考、隐藏交接消息、标记最后写入）→ CAS 提交索引。恢复只采用标记代数、前任会话与前任最后条目都匹配的新代，否则放弃，不重放回合；已受理的工作留在原代。
+
+Bot 身份在 worker 内作为独立提示词段 `pivane_bot` 注入（不用 `customPrompt`，以免丢掉原生工具与规则段），每轮刷新 SOUL 并按 Bot 设置对齐模型。窗口上下文只对核实过标记、档案、工作目录和当前代的会话生效。浏览器的 `#/bot` 复用聊天面板：`pi-chat.js` 的 botMode 打开窗口当前代，`pi-bot.js` 负责 Bot 栏、问候和较早代只读回看，`pi-bot-settings.js` 负责设置窗口。设计与取舍见维护工作区的 Bot 模式设计文档（不随发行包），用户行为见 [Bot 模式](../BOT_MODE.md)。
+
 ## 外部消息渠道
 
 渠道服务拥有账号连接、固定线程绑定、待发送意图和投递回执；原生会话保存正文与轮次事实。发送前重验允许用户、绑定和原生分支，网络不确定与运行中重启均不自动重放。定时、微信和普通线程结果分别沿用对应轮次的去重凭据；模型输出完成不代表微信已收到。
