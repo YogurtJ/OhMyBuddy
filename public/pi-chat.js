@@ -2653,7 +2653,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             state.intentionalClose = true;
                             elements.transcript.replaceChildren(); appendEventNotice('error', error.message);
                             const actions = document.createElement('div'); actions.className = 'pi-startup-actions';
-                            for (const [label, action] of [[translateUi("重试连接"), () => void connectSocket(session).catch(() => {})], [translateUi("管理扩展"), () => window.dispatchEvent(new CustomEvent('workspace:open-settings', { detail: { tab: 'packages' } }))]]) {
+                            for (const [label, action] of [[translateUi("重试连接"), () => state.botMode && state.bot ? scheduleReconnect(0) : void connectSocket(session).catch(() => {})], [translateUi("管理扩展"), () => window.dispatchEvent(new CustomEvent('workspace:open-settings', { detail: { tab: 'packages' } }))]]) {
                                 const button = document.createElement('button'); button.type = 'button'; button.textContent = label; button.addEventListener('click', action); actions.append(button);
                             }
                             elements.transcript.append(actions);

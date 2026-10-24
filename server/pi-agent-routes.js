@@ -227,18 +227,26 @@ function createPiAgentGateway(options = {}) {
     // same guards as an explicit restart, so open pages reconnect to the replacement. Anything
     // the user is still waiting on (queue recoveries, drafts, side chats, delayed sends) keeps the
     // old runtime: the run is refused instead of changing it silently.
-    const reloadBotWorker = source => source.exclusive(async () => {
-        const refuse = () => { throw new Error('Reopen the idle target thread to load its saved profile'); };
-        if (!supervisor.isSessionIdle(source.sessionPath)) throw new Error('Target thread became busy');
-        if (settingsService.mutating || nativeService.busy || settingsService.loginService?.busy) refuse();
-        if (source.controls?.recoveries?.length || source.controls?.drafts?.length) refuse();
-        if ([...sideChat.connections].some(c => c.reference.source?.cwd === source.cwd && c.reference.source?.sessionId === source.sessionId)
-            || [...sideChat.parents.values()].some(p => p.preparing && p.source?.cwd === source.cwd && p.source?.sessionId === source.sessionId)) refuse();
-        if (deferred.list(source.cwd, source.sessionId).some(job => ['scheduled', 'waiting'].includes(job.status))) refuse();
-        settingsService.mutating = true;
-        try { return await supervisor.restartWorker(source); }
-        finally { settingsService.mutating = false; }
-    });
+    // Passing conditions answer SESSION_BUSY, so the scheduler tries again within the task's
+    // grace period; queue recoveries and drafts need the user, so the run fails instead.
+    const reloadBotWorker = source => {
+        const busy = () => Object.assign(new Error('Target thread became busy'), { code: 'SESSION_BUSY' });
+        // Session-level admission happens before the worker's own reservation: inside it the
+        // worker counts as occupied by this very operation.
+        if (!supervisor.isSessionIdle(source.sessionPath)) return Promise.reject(busy());
+        // exclusive() refuses an active, pending or scheduled runtime and confirms idleness with it.
+        return source.exclusive(async () => {
+            if (source.retainsBackgroundWork() || supervisor.getActiveWorker(source.sessionPath) !== source) throw busy();
+            if (settingsService.mutating || nativeService.busy || settingsService.loginService?.busy) throw busy();
+            if ([...sideChat.connections].some(c => c.reference.source?.cwd === source.cwd && c.reference.source?.sessionId === source.sessionId)
+                || [...sideChat.parents.values()].some(p => p.preparing && p.source?.cwd === source.cwd && p.source?.sessionId === source.sessionId)) throw busy();
+            if (deferred.list(source.cwd, source.sessionId).some(job => ['scheduled', 'waiting'].includes(job.status))) throw busy();
+            if (source.controls?.recoveries?.length || source.controls?.drafts?.length) throw new Error('Reopen the idle target thread to load its saved profile');
+            settingsService.mutating = true;
+            try { return await supervisor.restartWorker(source); }
+            finally { settingsService.mutating = false; }
+        });
+    };
     const cron = new (require('./pi-cron-service').CronService)({ store, supervisor, profiles, bots, reloadBotWorker,
         catalog: cwd => agentThreads.catalog(cwd), isSuspended: () => maintenance.locked || maintenance.referenceLocked || Boolean(store.sessionMoves?.running), filename: options.cronFilePath });
     require('./pi-cron-service').mountCron(router, cron);
@@ -1185,7 +1193,7 @@ function createPiAgentGateway(options = {}) {
         await stoppingThreads;
         await Promise.all([stoppingChannels, stoppingFileRoots, stoppingDeferred, stoppingTitles, stoppingAuxiliaryModels, stoppingMoves, stoppingTranscription, stoppingDocuments]);
         await cron.dispose();
-    }, store, supervisor, channels, cron, deferred, sideChat, titles, auxiliaryModels, learning, knowledgeService, agentThreads, sessionMoves, transcription, documents, artifacts };
+    }, store, supervisor, bots, channels, cron, deferred, sideChat, titles, auxiliaryModels, learning, knowledgeService, agentThreads, sessionMoves, transcription, documents, artifacts };
 }
 
 module.exports = { createPiAgentGateway };

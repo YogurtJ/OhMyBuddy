@@ -272,9 +272,10 @@ class BotService extends EventEmitter {
     // marker names the current generation as predecessor at the exact leaf the current
     // generation still has; otherwise the journal is cleared and the successor file is
     // left untouched (it never becomes current).
-    // Caller holds the profile reservation. The predecessor session is reserved (its idle
-    // worker stopped) while the native evidence is read and the decision committed, so no
-    // turn can land on the predecessor in between.
+    // Caller holds the profile reservation. The predecessor session is reserved while the
+    // native evidence is read and the decision committed, so no turn can land on it in
+    // between. Its runtime is only stopped when the successor is going to be adopted; pages
+    // attached to it are told to reconnect first. An abandoned recovery leaves it running.
     async recoverRotationLocked(profileId, windowId) {
         const { state } = await this.windows.read(profileId);
         const window = state.windows.find(item => item.id === windowId);
@@ -283,7 +284,11 @@ class BotService extends EventEmitter {
         const path = window.current.sessionPath;
         try {
             return await this.supervisor.withSessionEdit(path, async worker => {
-                if (worker) await this.supervisor.stopSession(path);
+                if (worker && await this.adoptableSuccessor(profileId, windowId, window)) {
+                    worker._broadcast({ type: 'gateway_reconnect' });
+                    await this.supervisor.stopSession(path);
+                }
+                // Settlement reads the evidence again; with the runtime still running it only clears.
                 return this.settleRotationLocked(profileId, windowId, window);
             });
         } catch (error) {
@@ -295,14 +300,21 @@ class BotService extends EventEmitter {
         }
     }
 
-    async settleRotationLocked(profileId, windowId, window, { adopt = true } = {}) {
+    // The successor a prepared rotation may adopt: its marker names the current generation
+    // as predecessor at the exact leaf the current generation still has.
+    async adoptableSuccessor(profileId, windowId, window) {
         const rotation = window.rotation;
         const markers = await this.nativeMarkers(profileId, window.cwd);
         const current = markers.find(marker => marker.windowId === windowId && marker.sessionId === window.current?.sessionId);
         const successor = markers.find(marker => marker.windowId === windowId && marker.generation === rotation.toGeneration
             && marker.predecessor?.sessionId === rotation.fromSessionId);
-        if (adopt && successor && current && current.generation === rotation.toGeneration - 1 && successor.predecessor.lastEntryId === current.leafId
-            && !this.supervisor?.getActiveWorker(window.current.sessionPath)) {
+        return successor && current && current.generation === rotation.toGeneration - 1 && successor.predecessor.lastEntryId === current.leafId ? successor : null;
+    }
+
+    async settleRotationLocked(profileId, windowId, window, { adopt = true } = {}) {
+        const rotation = window.rotation;
+        const successor = adopt ? await this.adoptableSuccessor(profileId, windowId, window) : null;
+        if (successor && !this.supervisor?.getActiveWorker(window.current.sessionPath)) {
             const committed = await this.commitRotationLocked(profileId, windowId, rotation.requestId, window.current,
                 { sessionId: successor.sessionId, sessionPath: successor.path });
             this.emit('windowRotated', { profileId, windowId, from: window.current, to: committed.current });
@@ -353,7 +365,8 @@ class BotService extends EventEmitter {
     // Whether an opened session is the window's current generation (Bot-mode admission).
     async assertCurrentWindowSession(profileId, windowId, session) {
         const window = await this.windowRecord(profileId, windowId);
-        if (window.rotation || !window.current || window.current.sessionId !== session.id || window.current.sessionPath !== session.path)
+        if (window.rotation) fail(MOVING, 409, 'BOT_WINDOW_ROTATING');
+        if (!window.current || window.current.sessionId !== session.id || window.current.sessionPath !== session.path)
             fail('这段聊天已经换到新的记录文件', 409, 'BOT_WINDOW_STALE');
         return window;
     }
