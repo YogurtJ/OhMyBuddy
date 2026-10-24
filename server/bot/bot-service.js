@@ -308,6 +308,21 @@ class BotService extends EventEmitter {
         });
     }
 
+    // Worker environment for a verified Bot window session, or null for every other session.
+    // manager: the store's verified read of the exact file the worker will open.
+    async windowContext(manager, { cwd, sessionId, sessionPath }) {
+        const binding = readWindowBinding(manager);
+        if (!binding) return null;
+        const profile = (await this.profiles.state()).state.profiles.find(item => item.id === binding.profileId);
+        const bot = settings.readBot(profile);
+        if (!settings.isBot(profile) || bot.workspace !== cwd) return null;
+        const { state } = await this.windows.read(binding.profileId);
+        const window = state.windows.find(item => item.id === binding.windowId);
+        if (!window || window.cwd !== cwd || window.current?.sessionId !== sessionId || window.current.sessionPath !== sessionPath
+            || window.current.generation !== binding.generation) return null;
+        return { version: 1, profileId: binding.profileId, windowId: binding.windowId, sessionId, cwd, sessionPath };
+    }
+
     update(profileId, input = {}) {
         return this.profiles.reserve(async () => {
             if (!object(input) || typeof input.expectedRevision !== 'string' || !object(input.changes)) fail('Invalid bot change');

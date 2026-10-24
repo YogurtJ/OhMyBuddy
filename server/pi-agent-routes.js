@@ -171,7 +171,11 @@ function createPiAgentGateway(options = {}) {
         read.validate();
         const memoryEnvironment = await profileMemory.environment(context);
         read.validate();
+        // Bot windows: `bots` is constructed below; workers start only after routes are mounted.
+        const botContext = context ? await bots.windowContext(read.manager(), { cwd, sessionId, sessionPath }) : null;
+        read.validate();
         return { ...env, PIVANE_AGENT_PROFILE_CONTEXT: context ? JSON.stringify(context) : undefined,
+            PIVANE_BOT_CONTEXT: botContext ? JSON.stringify(botContext) : undefined,
             PIVANE_ASSISTANT_PROJECT_CONTEXT: projectContext ? JSON.stringify(projectContext) : undefined,
             PIVANE_PROFILE_AUTHORING_CONTEXT: undefined, ...authoringEnvironment, ...memoryEnvironment };
     });
