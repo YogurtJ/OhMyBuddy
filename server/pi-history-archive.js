@@ -71,17 +71,20 @@ function hasText(entry, check) {
 function toolsOf(entry) { return blocks(entry.message?.content).filter(block => block?.type === 'toolCall'); }
 const failed = message => Boolean(message.errorMessage || ['error', 'aborted'].includes(message.stopReason));
 const bashError = message => Boolean(message.cancelled || (message.exitCode != null && message.exitCode !== 0));
-function historyArchive(manager, raw) {
+// whole: project the entire current branch instead of the pre-compaction prefix. Used for
+// a Bot window's earlier generations, which no worker serves and which are not written to.
+function historyArchive(manager, raw, { whole = false } = {}) {
     const began = Date.now(), check = () => { if (Date.now() - began > 1500) throw error('压缩前记录查询超过时间预算', 'HISTORY_LIMIT'); };
     const input = validateArchiveRequest(raw), entries = manager.getEntries();
     if (entries.length > 50000) throw error('会话超过 50000 条原生记录', 'HISTORY_LIMIT');
     const path = manager.getBranch(); check();
     let ci = -1;
     for (let i = 0; i < path.length; i++) { check(); if (path[i].type === 'compaction') ci = i; }
-    const compaction = path[ci];
+    const compaction = whole ? null : path[ci];
     const ki = compaction ? path.findIndex((entry, i) => i < ci && entry.id === compaction.firstKeptEntryId) : -1;
-    const cut = ki >= 0 ? ki : Math.max(0, ci);
-    const revision = createHash('sha256').update(JSON.stringify(compaction ? ['archive-v1', manager.getSessionId(), compaction.id, path[cut].id, cut] : ['archive-v1', manager.getSessionId(), null])).digest('hex');
+    const cut = whole ? path.length : ki >= 0 ? ki : Math.max(0, ci);
+    const revision = createHash('sha256').update(JSON.stringify(whole ? ['archive-whole-v1', manager.getSessionId(), path.at(-1)?.id ?? null, cut]
+        : compaction ? ['archive-v1', manager.getSessionId(), compaction.id, path[cut].id, cut] : ['archive-v1', manager.getSessionId(), null])).digest('hex');
     if (input.revision !== undefined && input.revision !== revision) throw error('压缩前记录已变化，请重新加载', 'HISTORY_STALE');
     const turns = []; let current = null, orphans = 0;
     for (let i = 0; i < cut; i++) {

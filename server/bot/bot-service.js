@@ -12,6 +12,7 @@ const settings = require('./bot-settings');
 const { BotWindowRegistry } = require('./bot-window-registry');
 const { WINDOW_ENTRY, windowMarker, readWindowBinding } = require('./bot-window-state');
 const { HANDOFF_MESSAGE, buildHandoff } = require('./bot-handoff');
+const history = require('./bot-history');
 const { EventEmitter } = require('node:events');
 
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
@@ -292,13 +293,8 @@ class BotService extends EventEmitter {
 
     // Resolves a window to its current generation and proves the native marker.
     async resolve(profileId, windowId) {
-        const { bot } = await this.bot(profileId);
-        if (typeof windowId !== 'string' || !UUID.test(windowId)) fail('Invalid window ID');
-        const { state } = await this.windows.read(profileId);
-        const window = state.windows.find(item => item.id === windowId);
-        if (!window) fail('Window not found', 404);
+        const window = await this.windowRecord(profileId, windowId);
         if (!window.current) fail('Window has no conversation yet', 409);
-        if (window.cwd !== bot.workspace) fail('Window workspace does not match its Bot', 409);
         return this.store.withSessionRead(window.cwd, window.current.sessionId, (session, read) => {
             const binding = readWindowBinding(read.manager());
             read.validate();
@@ -306,6 +302,26 @@ class BotService extends EventEmitter {
                 || binding.generation !== window.current.generation) fail('Window conversation does not match its native marker', 409);
             return { window: publicWindow(window), session: { cwd: session.cwd || window.cwd, id: session.id, path: session.path } };
         });
+    }
+
+    async windowRecord(profileId, windowId) {
+        const { bot } = await this.bot(profileId);
+        if (typeof windowId !== 'string' || !UUID.test(windowId)) fail('Invalid window ID');
+        const window = (await this.windows.read(profileId)).state.windows.find(item => item.id === windowId);
+        if (!window) fail('Window not found', 404);
+        if (window.cwd !== bot.workspace) fail('Window workspace does not match its Bot', 409);
+        return window;
+    }
+
+    async generations(profileId, windowId) {
+        const window = await this.windowRecord(profileId, windowId);
+        return { window: publicWindow(window), generations: history.generationList(window) };
+    }
+
+    async history(profileId, windowId, query) {
+        const { generation, input } = history.historyRequest(query);
+        const window = await this.windowRecord(profileId, windowId);
+        return history.generationHistory({ store: this.store, profileId, window, generation, input });
     }
 
     // Worker environment for a verified Bot window session, or null for every other session.

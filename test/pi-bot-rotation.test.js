@@ -215,3 +215,41 @@ test('Bot window workers get a verified identity section that follows edits with
     assert.equal(botSection(context, manager, session.cwd, agentDir), null);
     assert.deepEqual(await run(), { assistant_profile_soul: 'stale personality' });
 });
+
+test('earlier generations are paged read-only from verified native files', { timeout: 60000 }, async t => {
+    const { profiles, supervisor, bots } = services();
+    t.after(() => supervisor.dispose());
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+    const created = await bots.create({ expectedRevision: (await profiles.state()).revision });
+    const botId = created.bot.id, windowId = created.window.id;
+    const first = (await bots.resolve(botId, windowId)).session;
+    await talk(first.path, 3, 'early');
+    // A native compaction inside the generation is part of its whole branch.
+    const manager = SessionManager.open(first.path);
+    manager.appendCompaction('Summary of early talk', manager.getBranch()[2].id, 1000);
+    await talk(first.path, 2, 'later');
+    await bots.rotate(botId, windowId, { expectedGeneration: 0 });
+    await talk((await bots.resolve(botId, windowId)).session.path, 1, 'now');
+
+    const listed = await bots.generations(botId, windowId);
+    assert.deepEqual(listed.generations.map(item => [item.generation, item.current, item.reason]), [[0, false, 'initial'], [1, true, 'manual']]);
+    assert.ok(listed.generations[0].endedAt && !listed.generations[1].endedAt);
+    assert.equal(JSON.stringify(listed).includes(first.path), false, 'no paths leave the server');
+
+    const before = fs.readFileSync(first.path);
+    const index = await bots.history(botId, windowId, { generation: '0' });
+    assert.equal(index.generation, 0);
+    const kinds = index.turns.map(turn => turn.kind);
+    assert.deepEqual(kinds, ['user', 'user', 'user', 'summary', 'user', 'user']);
+    assert.equal(index.turns[0].title, 'early question 0');
+    assert.equal(index.turns.at(-1).reply.excerpt, 'later answer 1');
+    const turns = await bots.history(botId, windowId, { generation: '0', view: 'turns', start: '4', end: '6', revision: index.revision });
+    assert.deepEqual(turns.turns.map(turn => turn.text), ['later question 0', 'later question 1']);
+    assert.ok(fs.readFileSync(first.path).equals(before), 'reading history never writes');
+
+    await assert.rejects(bots.history(botId, windowId, { generation: '1' }), /live view/);
+    await assert.rejects(bots.history(botId, windowId, { generation: '7' }), /not found/);
+    await assert.rejects(bots.history(botId, windowId, { generation: '0', view: 'turns', start: '0', end: '2', revision: 'f'.repeat(64) }), /变化/);
+    await assert.rejects(bots.history(botId, windowId, { generation: '-1' }), /Invalid generation/);
+    await assert.rejects(bots.history(botId, windowId, { generation: '0', offset: 'x' }), /Invalid history position/);
+});
