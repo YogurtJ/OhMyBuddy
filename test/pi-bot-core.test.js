@@ -140,3 +140,23 @@ test('bots are profiles with a private workspace and a native-marked main window
     assert.deepEqual((await call('GET', '/bots')).data.bots.map(bot => bot.id), [botId]);
     assert.equal((await call('GET', `/bots/${secondId}/windows/${secondMain.id}/session`)).status, 404);
 });
+
+test('Bot bridge records stay private: loaded state is recorded and model problems become a clean notice', () => {
+    const { AgentWorker } = require('../server/pi-agent-supervisor');
+    const worker = new AgentWorker({ cwd: os.tmpdir(), sessionId: 'synthetic-session', sessionPath: path.join(os.tmpdir(), 'synthetic.jsonl') });
+    const seen = [];
+    worker.subscribers.add(event => seen.push(event));
+    const id = '11111111-2222-3333-4444-555555555555';
+    const notify = (value, sessionId = 'synthetic-session') => worker._handleEvent({ type: 'extension_ui_request', method: 'notify',
+        message: JSON.stringify({ pivaneBot: value, sessionId }) });
+    notify({ event: 'loaded', profileId: id, windowId: id, generation: 2 });
+    assert.deepEqual(worker.loadedBot, { profileId: id, windowId: id, generation: 2 });
+    notify({ event: 'loaded', profileId: null }, 'foreign-session');
+    assert.deepEqual(worker.loadedBot, { profileId: id, windowId: id, generation: 2 }, 'records for another session are ignored');
+    notify({ event: 'model', status: 'unavailable', provider: 'fixture', id: 'gone' });
+    notify({ event: 'model', status: 'unavailable', provider: 'x'.repeat(201), id: 'gone' });
+    notify({ event: 'loaded', profileId: null });
+    assert.equal(worker.loadedBot, null);
+    assert.deepEqual(seen.map(({ webRuntimeId, webSequence, ...event }) => event),
+        [{ type: 'gateway_bot_notice', notice: 'model_unavailable', provider: 'fixture', id: 'gone' }]);
+});

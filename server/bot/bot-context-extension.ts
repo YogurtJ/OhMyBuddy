@@ -39,25 +39,53 @@ export function botSection(context: any, manager: any, cwd: string, agentDir: st
         if (!profile?.enabled || profile.trashedAt !== undefined || !bot?.enabled || bot.workspace !== context.cwd) return null;
         const window = readWindowRecord(agentDir, context.profileId, context.windowId);
         if (!window || window.current?.sessionId !== context.sessionId) return null;
-        return { binding, soul: typeof profile.soul === 'string' ? profile.soul : '',
+        return { binding, model: bot.model, soul: typeof profile.soul === 'string' ? profile.soul : '',
             text: botPreamble({ name: profile.name, bot, cwd: context.cwd, window }) };
     } catch { return null; }
+}
+
+// Aligns the run with the Bot's chosen model (null = keep the session's model). Only
+// writes a model/thinking change when it differs. An unavailable model leaves the current
+// one in place and tells the page once per desired model.
+export async function alignModel(pi: any, ctx: any, desired: any, notify: (value: any) => void, reported: Set<string>) {
+    if (!desired) return 'unchanged';
+    const key = `${desired.provider}/${desired.id}`;
+    const current = ctx.model;
+    if (!current || current.provider !== desired.provider || current.id !== desired.id) {
+        const model = ctx.modelRegistry?.find(desired.provider, desired.id);
+        let ok = false;
+        try { ok = Boolean(model) && await pi.setModel(model); } catch { ok = false; }
+        if (!ok) {
+            if (!reported.has(key)) { reported.add(key); notify({ event: 'model', status: 'unavailable', provider: desired.provider, id: desired.id }); }
+            return 'unavailable';
+        }
+    }
+    reported.delete(key);
+    if (desired.thinking && pi.getThinkingLevel() !== desired.thinking) pi.setThinkingLevel(desired.thinking);
+    return 'aligned';
 }
 
 export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) {
     const context = parseBotContext(process.env.PIVANE_BOT_CONTEXT);
     if (!context) return;
     const managed = (ctx: any) => ctx.mode === 'rpc' && Boolean(process.env.PI_WEB_NAVIGATION_TOKEN);
-    pi.on('session_start', (_event, ctx: any) => {
+    const reported = new Set<string>();
+    // Private bridge record: the Supervisor consumes it and never shows it as a notification.
+    const notifier = (ctx: any) => (value: any) => ctx.ui.notify(JSON.stringify({ pivaneBot: value, sessionId: ctx.sessionManager.getSessionId() }));
+    pi.on('session_start', async (_event, ctx: any) => {
         if (!managed(ctx)) return;
         const loaded = botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir());
-        ctx.ui.notify(JSON.stringify({ pivaneBotLoaded: loaded ? { profileId: context.profileId, windowId: context.windowId,
-            generation: loaded.binding.generation } : null, sessionId: ctx.sessionManager.getSessionId() }));
+        const notify = notifier(ctx);
+        notify(loaded ? { event: 'loaded', profileId: context.profileId, windowId: context.windowId, generation: loaded.binding.generation }
+            : { event: 'loaded', profileId: null });
+        // Align at open so the page shows the Bot's model before the first message.
+        if (loaded) await alignModel(pi, ctx, loaded.model, notify, reported);
     });
-    pi.on('before_agent_start', (event: any, ctx: any) => {
+    pi.on('before_agent_start', async (event: any, ctx: any) => {
         if (!managed(ctx)) return;
         const loaded = botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir());
         if (!loaded) return;
+        await alignModel(pi, ctx, loaded.model, notifier(ctx), reported);
         setPromptSection(event, BOT_SECTION, loaded.text, { wrapForced: true });
         // The profile runtime keeps the personality loaded at worker start; a Bot's personality
         // can change mid-conversation (onboarding, settings), so the current one replaces it.
