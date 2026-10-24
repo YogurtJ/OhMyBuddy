@@ -154,6 +154,10 @@ class ChannelsService {
                 && (customTypeIs(e, 'pivane-extension-assistant') || customTypeIs(e, 'pivane-profile-authoring')))) {
                 throw fail('管理助手线程不能绑定外部聊天');
             }
+            // A binding names one session file; a Bot chat moves to new files over time, so it
+            // needs a window-addressed binding (not yet available) to keep one conversation.
+            if (read.manager().getEntries().some(e => e.type === 'custom' && e.customType === 'pivane-bot-window'))
+                throw fail('Bot 聊天暂不支持绑定外部聊天；后续版本会提供按 Bot 连接微信');
             read.validate();
             // The caller's synchronous commit shares this validated file snapshot.
             return commit(session, bindingBoundary(read.manager()));

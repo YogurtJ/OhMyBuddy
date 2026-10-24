@@ -156,6 +156,7 @@ class PiSessionMoves {
                 add('线程有任务回执或线程间消息关系，首版暂不支持移动');
             if (entry.type === 'custom' && ['pivane-assistant-project', 'pivane-profile-authoring', 'pivane-extension-assistant'].includes(entry.customType))
                 add('助手项目、档案编辑和扩展助手线程暂不支持移动');
+            if (entry.type === 'custom' && entry.customType === 'pivane-bot-window') add('Bot 聊天的会话属于它的窗口，不能移动');
             if (entry.type === 'custom' && entry.customType === 'pivane-agent-profile' && entry.data?.sessionId === session.id && entry.data.profileId)
                 add('线程绑定了助手档案与记忆来源，首版暂不支持移动');
         }

@@ -221,7 +221,7 @@ function createPiAgentGateway(options = {}) {
     const agentThreads = require('./pi-agent-threads').mountAgentThreads(router, { store, supervisor, settingsService, access,
         isSuspended: () => maintenance.locked || maintenance.referenceLocked || Boolean(store.sessionMoves?.running) });
 
-    const cron = new (require('./pi-cron-service').CronService)({ store, supervisor, profiles,
+    const cron = new (require('./pi-cron-service').CronService)({ store, supervisor, profiles, bots,
         catalog: cwd => agentThreads.catalog(cwd), isSuspended: () => maintenance.locked || maintenance.referenceLocked || Boolean(store.sessionMoves?.running), filename: options.cronFilePath });
     require('./pi-cron-service').mountCron(router, cron);
     const channels = new (require('./channels/service').ChannelsService)({ store, supervisor,

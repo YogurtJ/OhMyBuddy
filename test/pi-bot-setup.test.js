@@ -161,3 +161,27 @@ test('the setup tool reports only what the Bot page actually saved', { timeout: 
 });
 
 async function services2(store, profiles, supervisor, documents) { return new BotService({ store, profiles, supervisor, documents }); }
+
+test('a Bot profile target resolves to its main chat, following rotation', { timeout: 60000 }, async t => {
+    const { CronService } = require('../server/pi-cron-service');
+    const store = new PiSessionStore();
+    const profiles = new PiProfileRegistry(store);
+    store.profiles = profiles;
+    const supervisor = new PiAgentSupervisor();
+    const bots = new BotService({ store, profiles, supervisor });
+    const cron = new CronService({ store, supervisor, profiles, bots, catalog: async () => ({ models: [] }),
+        filename: path.join(root, 'cron-bot.sqlite') });
+    t.after(async () => { await cron.stop?.(); supervisor.dispose(); });
+    await cron.ready;
+    const created = await bots.create({ expectedRevision: (await profiles.state()).revision });
+    const botId = created.bot.id, windowId = created.window.id;
+    const first = (await bots.resolve(botId, windowId)).session;
+    assert.deepEqual(await cron.homeRef(botId), { cwd: first.cwd, sessionId: first.id, status: 'ready', bot: true });
+    assert.equal((await cron.target({ kind: 'profile', profileId: botId })).id, first.id);
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+    SessionManager.open(first.path).appendMessage({ role: 'user', content: 'hello', timestamp: Date.now() });
+    await bots.rotate(botId, windowId, { expectedGeneration: 0 });
+    const second = (await bots.resolve(botId, windowId)).session;
+    assert.notEqual(second.id, first.id);
+    assert.equal((await cron.target({ kind: 'profile', profileId: botId })).id, second.id, 'new runs go to the current generation');
+});
