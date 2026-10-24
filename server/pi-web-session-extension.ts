@@ -24,6 +24,7 @@ import { promptFromEntry, validateMessage } from './pi-message-payload.js';
 import { navigateSession } from './pi-session-navigation.js';
 import { buildSessionContext, getAgentDir, type ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { registerAgentProfile } from './pi-profile-runtime.js';
+import { registerBotContext } from './bot/bot-context-extension.ts';
 import { registerProfileMemory } from './profile-memory/extension.ts';
 import { registerAssistantProject } from './pi-assistant-project-runtime.js';
 import { registerProfileAuthoring } from './pi-profile-authoring-extension.ts';
@@ -58,6 +59,7 @@ export default async function (pi: ExtensionAPI) {
     registerMediaChat(pi);
     registerSubagentHost(pi);
     registerAgentProfile(pi, getAgentDir);
+    registerBotContext(pi, getAgentDir);
     registerAssistantProject(pi, getAgentDir);
     registerProfileAuthoring(pi, getAgentDir);
     await registerProfileMemory(pi);

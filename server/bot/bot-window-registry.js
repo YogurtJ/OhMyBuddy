@@ -77,4 +77,13 @@ class BotWindowRegistry {
     }
 }
 
-module.exports = { BotWindowRegistry, validWindow, validState, KINDS, ROTATION_REASONS, MAX_WINDOWS };
+// Synchronous, read-only lookup for worker extensions (title/focus may change between runs).
+function readWindowRecord(agentDir, profileId, windowId) {
+    if (typeof profileId !== 'string' || !UUID.test(profileId)) return null;
+    const file = safeFile(agentDir, ['pivane-bots', profileId, 'windows.json']);
+    const { state } = new PrivateJsonDocument({ root: path.dirname(file), name: 'windows.json', label: 'Bot windows',
+        validate: value => validState(value, profileId), empty: () => ({ version: 1, profileId, windows: [] }) }).read();
+    return state.windows.find(item => item.id === windowId) ?? null;
+}
+
+module.exports = { BotWindowRegistry, readWindowRecord, validWindow, validState, KINDS, ROTATION_REASONS, MAX_WINDOWS };
