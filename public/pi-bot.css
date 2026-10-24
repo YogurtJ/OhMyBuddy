@@ -302,3 +302,11 @@
     .pi-bot-sheet input[type="text"], .pi-bot-sheet textarea, .pi-bot-sheet select { font-size: 16px; }
     .pi-bot-sheet-status { font-size: .78rem; }
 }
+
+/* ---- no chat model yet ---------------------------------------------------------------- */
+.pi-bot-needs-model {
+    display: flex; align-items: flex-start; gap: 10px; max-width: 420px; padding: 10px 12px; border: 1px solid var(--line);
+    border-radius: 12px; background: var(--surface-1, var(--surface)); text-align: left;
+}
+.pi-bot-needs-model > i { margin-top: 4px; color: var(--primary, var(--green)); }
+.pi-bot-empty .pi-bot-needs-model p, .pi-bot-greeting .pi-bot-needs-model p { margin: 0; font-size: .9rem; line-height: 1.6; color: var(--text-main); }

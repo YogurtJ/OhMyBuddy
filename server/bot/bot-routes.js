@@ -8,6 +8,7 @@ function mountBotRoutes(router, { bots }) {
         catch (error) { res.status(error.status || error.statusCode || 400).json({ error: error.message, code: error.code }); }
     };
     router.get('/bots', route(() => bots.list()));
+    router.get('/bots/readiness', route(() => bots.readiness()));
     router.post('/bots', route(req => bots.create(req.body)));
     router.get('/bots/:id/settings', route(req => bots.settings(req.params.id)));
     router.patch('/bots/:id', route(req => bots.update(req.params.id, req.body)));

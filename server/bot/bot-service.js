@@ -517,6 +517,15 @@ class BotService extends EventEmitter {
         });
     }
 
+    // Whether a Bot could talk at all: the number of usable chat models (null when unknown).
+    async readiness() {
+        if (!this.catalog) return { models: null };
+        try {
+            const catalog = await this.catalog(this.store.defaultProject());
+            return { models: catalog.models.length };
+        } catch (error) { return { models: null, error: error.message }; }
+    }
+
     // Everything the Bot settings sheet edits, plus the models it can choose from. The model
     // list is best effort: without it the current choice still shows and can be kept.
     async settings(profileId) {

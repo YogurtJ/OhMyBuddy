@@ -41,6 +41,23 @@
             pane.hidden = true; header.hidden = true;
             pane.addEventListener('click', event => this.click(event));
             header.addEventListener('click', event => this.click(event));
+            // Number of usable chat models; undefined until known, null when it cannot be read.
+            this.models = undefined;
+            window.addEventListener('workspace:models-changed', () => { if (this.active) void this.checkModels(); });
+        }
+
+        async checkModels() {
+            try { this.models = (await this.api('/api/pi/bots/readiness')).models ?? null; } catch { this.models = null; }
+            if (this.active) this.onChange?.('identity');
+        }
+
+        // Only when there is certainly no model: a Bot cannot talk without one.
+        needsModel() {
+            if (this.models !== 0) return null;
+            const note = el('div', 'pi-bot-needs-model');
+            note.append(icon('fa-plug'), el('p', null, translateUi("还没有可用的聊天模型。Bot 要接入一个模型才能和你说话。")));
+            const setup = button('pi-bot-primary'); setup.dataset.botAction = 'models'; setup.textContent = translateUi("接入模型");
+            return [note, setup];
         }
 
         bot() { return this.bots.find(item => item.id === this.profileId) || null; }
@@ -70,6 +87,7 @@
             this.active = true; this.error = null;
             this.pane.hidden = false; this.header.hidden = false;
             this.render();
+            void this.checkModels();
             try {
                 await this.load();
                 if (epoch !== this.epoch) return;
@@ -255,6 +273,7 @@
             else if (action === 'create') void this.create();
             else if (action === 'greet-yes') void this.onboarding('start');
             else if (action === 'greet-skip') void this.onboarding('skip');
+            else if (action === 'models') window.dispatchEvent(new CustomEvent('workspace:open-settings', { detail: { tab: 'providers' } }));
             else if (action === 'known-copy') void this.knownAction('copy');
             else if (action === 'known-decline') void this.knownAction('decline');
             else if (action === 'known-source' && this.known) { this.known.sourceId = target.dataset.profileId; this.onChange?.('identity'); }
@@ -384,9 +403,13 @@
                 root.append(el('span', 'pi-bot-face is-xl', DEFAULT_FACE));
                 root.append(el('h2', null, translateUi("认识你的 Bot")));
                 root.append(el('p', null, translateUi("一个一直在的私人助理：记得你说过的话，帮你查、记、写、提醒。先花两三分钟互相认识一下。")));
-                const start = button('pi-bot-primary'); start.dataset.botAction = 'create'; start.disabled = this.creating;
-                start.append(el('span', null, this.creating ? translateUi("正在创建…") : translateUi("开始")));
-                root.append(start);
+                const missing = this.needsModel();
+                if (missing) root.append(...missing);
+                else {
+                    const start = button('pi-bot-primary'); start.dataset.botAction = 'create'; start.disabled = this.creating;
+                    start.append(el('span', null, this.creating ? translateUi("正在创建…") : translateUi("开始")));
+                    root.append(start);
+                }
                 root.addEventListener('click', event => this.click(event));
                 return root;
             }
@@ -415,6 +438,12 @@
                     ? translateUi("嗨，我是你的新伙伴，还没有名字。想花两三分钟认识你，也让你认识我。随时可以说“先跳过”。")
                     : steps.known === 'done' ? translateUi("谢谢，这些我都记下了。我还没有名字，再花两三分钟互相认识一下？随时可以说“先跳过”。")
                         : translateUi("嗨，我是新来的伙伴，还没有名字。花两三分钟互相认识一下？随时可以说“先跳过”。")));
+                const missing = this.needsModel();
+                if (missing) {
+                    const actions = el('div', 'pi-bot-greeting-actions'); actions.append(missing[1]);
+                    bubble.append(missing[0], actions);
+                    return root;
+                }
                 const chips = el('div', 'pi-bot-greeting-actions');
                 const yes = button('pi-bot-primary'); yes.dataset.botAction = 'greet-yes'; yes.textContent = translateUi("好呀");
                 const skip = button('pi-bot-chip'); skip.dataset.botAction = 'greet-skip'; skip.textContent = translateUi("先跳过");

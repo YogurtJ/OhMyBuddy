@@ -31,6 +31,7 @@ const messages = [
             const page = await context.newPage(), errors = [], opened = [];
             let bots = [], revision = 'r0', generation = 0, sessionId = 'gen-0', socket = null, phase = 'greeting', name = '新伙伴', face = '🦊';
             let history = [], prompts = [], responses = [], setupBodies = [], historyReads = [], second = false, known2 = undefined, aboutBodies = [];
+            let modelCount = 0;
             let patchBodies = [], settingsReads = 0, model = null, preset = 'free', quietHours = { start: '23:00', end: '08:00' };
             const bot = () => ({ id: BOT, name, description: '', avatar: { kind: 'emoji', value: face }, enabled: true, profileRevision: 'p',
                 bot: { version: 1, enabled: true, order: 0, job: '', model, permissions: { preset, rules: 0 },
@@ -48,6 +49,7 @@ const messages = [
             await page.route('**/api/**', async route => {
                 const url = new URL(route.request().url()), pathname = url.pathname, method = route.request().method();
                 if (pathname === '/api/pi/status') return route.fulfill({ json: { ok: true, bots: true, agentProfiles: true, projectRoots: ['/fixture'], defaultProject: geek } });
+                if (pathname === '/api/pi/bots/readiness') return route.fulfill({ json: { models: modelCount } });
                 if (pathname === '/api/pi/bots' && method === 'GET') return route.fulfill({ json: { version: 1, revision, bots } });
                 if (pathname === '/api/pi/bots' && method === 'POST') {
                     assert.equal(JSON.parse(route.request().postData()).expectedRevision, revision);
@@ -149,6 +151,13 @@ const messages = [
                 await page.goto(`${base}#/bot`, { waitUntil: 'domcontentloaded' });
                 await page.locator('.pi-bot-empty.is-welcome').waitFor({ timeout: 8000 });
                 assert.match(await page.locator('.pi-bot-empty h2').textContent(), /认识你的 Bot/);
+                // Without any chat model the page asks for one instead of starting.
+                await page.locator('.pi-bot-empty [data-bot-action="models"]').waitFor({ timeout: 8000 });
+                assert.equal(await page.locator('.pi-bot-empty [data-bot-action="create"]').count(), 0);
+                if (evidence) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(evidence, `bot-no-model-${width}.png`) }); }
+                modelCount = 1;
+                await page.evaluate(() => window.dispatchEvent(new CustomEvent('workspace:models-changed')));
+                await page.locator('.pi-bot-empty [data-bot-action="create"]').waitFor({ timeout: 8000 });
                 for (const selector of ['#pi-project-button', '.pi-runtime-controls', '#pi-connection-banner', '#pi-session-list'])
                     assert.equal(await page.locator(selector).isVisible(), false, `${selector} hidden in Bot mode`);
                 assert.equal(await page.locator('.pi-start').count(), 0, 'the Pi Agent start page never shows');

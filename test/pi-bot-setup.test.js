@@ -253,7 +253,9 @@ test('the settings sheet reads identity, personality and the model list, and sav
     assert.equal(after.bot.bot.notify.quietHours, null);
     await assert.rejects(bots.update(id, { expectedRevision: read.revision, changes: { name: 'x' } }), /changed|revision/i, 'a stale sheet cannot overwrite');
 
+    assert.deepEqual(await bots.readiness(), { models: 2 });
     const failing = new BotService({ store, profiles, supervisor, catalog: async () => { throw new Error('catalog offline'); } });
+    assert.deepEqual(await failing.readiness(), { models: null, error: 'catalog offline' }, 'unknown is not "no model"');
     const partial = await failing.settings(id);
     assert.equal(partial.models, null);
     assert.equal(partial.modelsError, 'catalog offline');
