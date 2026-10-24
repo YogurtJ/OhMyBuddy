@@ -58,6 +58,7 @@
     <!-- Sidebar line icons: 24px grid, drawn with the current text colour (styles in pi-sidebar.css). -->
     <svg class="pv-icon-sprite" width="0" height="0" aria-hidden="true" focusable="false">
         <symbol id="pv-icon-chat" viewBox="0 0 24 24"><path d="M6.5 4.5h11a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3h-5.2L8 20.6v-3.1H6.5a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3Z"/><path d="m8.5 9 2.2 2-2.2 2"/><path d="M13 13h2.8"/></symbol>
+        <symbol id="pv-icon-bot" viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12.5" rx="4.5"/><path d="M12 7V4.2"/><circle cx="12" cy="3.6" r=".9"/><path d="M9.2 12.4v1.2M14.8 12.4v1.2"/><path d="M9.8 16.4c1.3.8 3.1.8 4.4 0"/></symbol>
         <symbol id="pv-icon-assistant" viewBox="0 0 24 24"><path d="M15.5 9.5V7a2.5 2.5 0 0 0-2.5-2.5H6A2.5 2.5 0 0 0 3.5 7v4.5A2.5 2.5 0 0 0 6 14h.5v2.5l2.8-2.5"/><path d="M11.5 9.5h7a2 2 0 0 1 2 2v4.3a2 2 0 0 1-2 2h-.3v2.4l-2.8-2.4h-3.9a2 2 0 0 1-2-2v-4.3a2 2 0 0 1 2-2Z"/></symbol>
         <symbol id="pv-icon-cron" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M8 3v4M16 3v4M3.5 10h17"/><path d="m9 15 2 2 4-4"/></symbol>
         <symbol id="pv-icon-artifacts" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1.6"/><path d="M4.8 9v8.5a2.5 2.5 0 0 0 2.5 2.5h9.4a2.5 2.5 0 0 0 2.5-2.5V9"/><path d="M10 13h4"/></symbol>
@@ -86,6 +87,7 @@
 
             <nav class="nav-menu" aria-label="工作区" data-i18n-aria-label="s1317">
                 <span class="workspace-nav-heading"><!--i18n:s2547-->工作</span>
+                <button class="nav-btn" id="workspace-bot-toggle" data-tab="bot" type="button" title="Bot" hidden><svg class="pv-icon" aria-hidden="true" focusable="false"><use href="#pv-icon-bot"/></svg><span>Bot</span></button>
                 <button class="nav-btn active" data-tab="chat" title="Pi Agent">
                     <svg class="pv-icon" aria-hidden="true" focusable="false"><use href="#pv-icon-chat"/></svg><span>Pi Agent</span>
                 </button>
@@ -146,6 +148,7 @@
         <main class="content-area tab-content active pi-agent-page" id="chat-tab">
             <header class="pi-command-bar">
                 <div class="pi-command-left">
+                    <div id="pi-bot-header" hidden></div>
                     <button id="pi-toggle-sessions" class="icon-btn pi-mobile-only" type="button" title="会话列表" aria-label="会话列表" data-i18n-title="s1332" data-i18n-aria-label="s1332">
                         <i class="fa-solid fa-bars"></i>
                     </button>
@@ -193,6 +196,7 @@
 
             <div class="pi-workbench">
                 <aside id="pi-session-pane" class="pi-session-pane">
+                    <div id="pi-bot-pane" hidden></div>
                     <div id="pi-assistant-switcher" class="pi-assistant-switcher" hidden>
                         <div class="pi-assistant-switcher-head"><label for="pi-assistant-profile"><!--i18n:s2550-->助手档案</label><button id="pi-assistant-add-project" class="icon-btn subtle" type="button" title="新建项目" aria-label="新建项目" data-i18n-title="s2564" data-i18n-aria-label="s2564"><i class="fa-solid fa-folder-plus"></i></button></div>
                         <div class="pi-assistant-profile-row"><span id="pi-assistant-avatar" class="pi-identity-avatar" aria-hidden="true"></span><select id="pi-assistant-profile" aria-label="选择助手档案" data-i18n-aria-label="s2551"></select></div>
@@ -1043,6 +1047,8 @@
     <script src="pi-request-stats.js"></script>
     <link rel="stylesheet" href="pi-transcript-activity.css">
     <script src="pi-transcript-activity.js"></script>
+    <link rel="stylesheet" href="pi-bot.css">
+    <script src="pi-bot.js"></script>
     <script src="pi-chat.js?v=pi120-selection-1"></script>
     <script>
         // Registered after every module's DOMContentLoaded handler: fade the boot cover once the
