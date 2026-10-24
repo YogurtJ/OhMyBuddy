@@ -258,12 +258,11 @@
 .pi-bot-sheet-section:last-child { border-bottom: 0; }
 .pi-bot-sheet-section h3 { margin: 0; font-size: .8rem; font-weight: 600; letter-spacing: .02em; color: var(--text-muted); }
 .pi-bot-sheet-row { display: grid; grid-template-columns: 76px 1fr; gap: 12px; }
-.pi-bot-sheet-row.is-times { grid-template-columns: repeat(2, minmax(0, 160px)); }
 .pi-bot-sheet-row[hidden], .pi-bot-sheet-field[hidden] { display: none; }
 .pi-bot-sheet-field { display: grid; gap: 6px; min-width: 0; }
 .pi-bot-sheet-label { font-size: .82rem; color: var(--text-muted); }
 .pi-bot-sheet-hint, .pi-bot-sheet-note { margin: 0; font-size: .8rem; line-height: 1.55; color: var(--text-muted); }
-.pi-bot-sheet input[type="text"], .pi-bot-sheet input[type="time"], .pi-bot-sheet textarea, .pi-bot-sheet select {
+.pi-bot-sheet input[type="text"], .pi-bot-sheet textarea, .pi-bot-sheet select {
     width: 100%; min-height: 40px; padding: 8px 11px; border: 1px solid var(--line-strong); border-radius: 10px;
     background: var(--surface-1, var(--surface)); color: var(--text-main); font: inherit; font-size: .92rem; line-height: 1.5;
 }
@@ -276,10 +275,9 @@
     display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer;
 }
 .pi-bot-sheet-preset:has(input:checked) { border-color: var(--primary, var(--green)); background: var(--surface-1, var(--surface)); }
-.pi-bot-sheet-preset input, .pi-bot-sheet-check input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--primary, var(--green)); }
+.pi-bot-sheet-preset input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--primary, var(--green)); }
 .pi-bot-sheet-preset-copy { display: grid; gap: 2px; font-size: .86rem; line-height: 1.5; color: var(--text-muted); }
 .pi-bot-sheet-preset-copy strong { font-size: .92rem; color: var(--text-main); }
-.pi-bot-sheet-check { display: flex; gap: 10px; align-items: center; font-size: .92rem; cursor: pointer; }
 .pi-bot-sheet-link {
     display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0 4px; border: 0; border-radius: 10px;
     background: transparent; color: var(--text-main); font: inherit; font-size: .92rem; text-align: left; cursor: pointer;
@@ -301,6 +299,6 @@
     .pi-bot-sheet-form { max-height: 100dvh; }
     .pi-bot-sheet-head { padding-top: max(12px, env(safe-area-inset-top)); }
     .pi-bot-sheet-foot { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
-    .pi-bot-sheet input[type="text"], .pi-bot-sheet input[type="time"], .pi-bot-sheet textarea, .pi-bot-sheet select { font-size: 16px; }
+    .pi-bot-sheet input[type="text"], .pi-bot-sheet textarea, .pi-bot-sheet select { font-size: 16px; }
     .pi-bot-sheet-status { font-size: .78rem; }
 }

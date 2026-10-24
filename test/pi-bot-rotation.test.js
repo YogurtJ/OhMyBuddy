@@ -133,6 +133,14 @@ test('windows rotate to new native generations with continuity, journal recovery
     await talk(adoptedPath, 1, 'late');
     assert.deepEqual(await profiles.reserve(() => bots.recoverRotationLocked(botId, windowId)), { recovered: true, committed: false });
     assert.equal((await bots.resolve(botId, windowId)).session.id, successor.id);
+    // A successor whose seed was cut off before its window marker is never adopted either.
+    const journal3 = await bots.windows.read(botId);
+    await bots.windows.mutate(botId, journal3.revision, s => { s.windows[0].rotation = { state: 'prepared', requestId: randomUUID(), toGeneration: 13,
+        fromSessionId: s.windows[0].current.sessionId, reason: 'size', preparedAt: new Date().toISOString() }; return {}; });
+    await store.createSession(window.cwd, '', { agentProfileId: botId, initializeSession: manager =>
+        manager.appendCustomMessageEntry(HANDOFF_MESSAGE, 'partial seed', false, { version: 1, fromSessionId: successor.id, fromGeneration: 12 }) });
+    assert.deepEqual(await profiles.reserve(() => bots.recoverRotationLocked(botId, windowId)), { recovered: true, committed: false });
+    assert.equal((await bots.resolve(botId, windowId)).session.id, successor.id);
     // The next real rotation proceeds normally after the abandoned attempt.
     const after = await bots.rotate(botId, windowId, { expectedGeneration: 12 });
     assert.equal(after.window.generation, 13);

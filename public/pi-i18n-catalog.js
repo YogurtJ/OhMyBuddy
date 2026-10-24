@@ -10334,10 +10334,6 @@
         ["只影响 {0}，不改其他 Bot 和 Pi Agent。", "Only affects {0}, not your other Bots or Pi Agent."],
         ["暂时读不到模型列表，现在的选择会保留。", "The model list can't be read right now; the current choice is kept."],
         ["这是 {0} 的做事习惯，不是安全隔离：它能使用这台电脑上的工具。密码、密钥这类东西它一律不碰。", "This is how {0} chooses to work, not a security sandbox: it can use the tools on this computer. It never touches passwords, keys and the like."],
-        ["安静时段不主动找你", "Don't reach out during quiet hours"],
-        ["从", "From"],
-        ["到", "To"],
-        ["只管 {0} 自己发起的消息；你设的定时提醒照常送达。", "Only applies to messages {0} starts on its own; reminders you scheduled still arrive."],
         ["记忆和关于你", "Memory and about you"],
         ["重新互相认识", "Get acquainted again"],
         ["再点一次确认：在主聊天里重新认识", "Tap again to confirm: start over in the main chat"],
@@ -10345,12 +10341,11 @@
         ["主要帮你做什么", "What it mainly helps with"],
         ["用哪个模型", "Model"],
         ["做事方式", "How it works"],
-        ["安静时段", "Quiet hours"],
         ["更多", "More"],
-        ["名字不能为空，安静时段的开始和结束要不同。", "The name can't be empty, and quiet hours need different start and end times."],
         ["设置刚刚在别处改过。你的修改还在，检查后再保存一次。", "These settings just changed elsewhere. Your edits are still here; check them and save again."],
         ["保存失败", "Couldn't save"],
-        ["我们重新认识一下吧", "Let's get acquainted again"]
+        ["我们重新认识一下吧", "Let's get acquainted again"],
+        ["名字不能为空", "The name can't be empty"]
     );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();
