@@ -10347,7 +10347,6 @@
         ["我们重新认识一下吧", "Let's get acquainted again"],
         ["名字不能为空", "The name can't be empty"],
         ["还没有可用的聊天模型。Bot 要接入一个模型才能和你说话。", "There's no chat model yet. A Bot needs one before it can talk to you."],
-        ["接入模型", "Set up a model"],
         ["{0} 用的模型现在登录失效了。请在“供应商与模型”里重新登录。", "The model {0} uses is signed out. Sign in again under Providers and models."],
         ["{0} 选的模型现在用不了。可以在 {0} 的设置里换一个。", "The model {0} picked isn't available right now. Choose another in {0}'s settings."],
         ["还没有可用的聊天模型。{0} 要接入一个模型才能回复你。", "There's no chat model yet. {0} needs one before it can reply."]
