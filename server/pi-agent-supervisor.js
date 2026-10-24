@@ -75,6 +75,7 @@ class AgentWorker extends EventEmitter {
         this.loadedAssistantProjectId = null;
         this.loadedAssistantProjectRevision = null;
         this.loadedAssistantProjectConfirmed = false;
+        this.loadedBot = null;
         this.autoTitleEligible = false;
         this.titleResults = new Map();
         this.titleGeneration = false;
@@ -825,6 +826,19 @@ class AgentWorker extends EventEmitter {
                     }
                     return;
                 }
+                if (result && Object.hasOwn(result, 'pivaneBot')) {
+                    const value = result.pivaneBot;
+                    if (this.managed && !this.noSession && result.sessionId === this.sessionId && value && typeof value === 'object') {
+                        const id = /^[a-f0-9-]{36}$/;
+                        if (value.event === 'loaded') this.loadedBot = typeof value.profileId === 'string' && id.test(value.profileId)
+                            && typeof value.windowId === 'string' && id.test(value.windowId) && Number.isSafeInteger(value.generation)
+                            ? { profileId: value.profileId, windowId: value.windowId, generation: value.generation } : null;
+                        else if (value.event === 'model' && value.status === 'unavailable' && typeof value.provider === 'string'
+                            && value.provider.length <= 200 && typeof value.id === 'string' && value.id.length <= 300)
+                            this._broadcast({ type: 'gateway_bot_notice', notice: 'model_unavailable', provider: value.provider, id: value.id });
+                    }
+                    return; // Private bridge record; never a browser notification.
+                }
                 if (result && Object.hasOwn(result, 'pivaneCron')) {
                     const state = result.pivaneCron;
                     if (state?.sessionId === this.sessionId) {
@@ -1297,4 +1311,4 @@ class PiAgentSupervisor extends EventEmitter {
     }
 }
 
-module.exports = { PiAgentSupervisor };
+module.exports = { PiAgentSupervisor, AgentWorker };

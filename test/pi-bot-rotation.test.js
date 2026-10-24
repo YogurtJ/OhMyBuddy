@@ -159,7 +159,7 @@ test('Bot window workers get a verified identity section that follows edits with
     const jitiPath = process.env.PIVANE_TEST_PI_JITI;
     if (!jitiPath) return;
     const file = path.join(__dirname, '../server/bot/bot-context-extension.ts');
-    const { botSection, registerBotContext, BOT_SECTION } = require(jitiPath).createJiti(file)(file);
+    const { botSection, registerBotContext, alignModel, BOT_SECTION } = require(jitiPath).createJiti(file)(file);
     const prior = { context: process.env.PIVANE_BOT_CONTEXT, token: process.env.PI_WEB_NAVIGATION_TOKEN };
     t.after(() => {
         for (const [key, name] of [['context', 'PIVANE_BOT_CONTEXT'], ['token', 'PI_WEB_NAVIGATION_TOKEN']])
@@ -167,32 +167,51 @@ test('Bot window workers get a verified identity section that follows edits with
     });
     process.env.PIVANE_BOT_CONTEXT = JSON.stringify(context);
     process.env.PI_WEB_NAVIGATION_TOKEN = 'synthetic-navigation';
-    const handlers = new Map(), notices = [];
-    registerBotContext({ on(name, fn) { handlers.set(name, fn); } }, () => agentDir);
-    const ctx = { mode: 'rpc', cwd: session.cwd, sessionManager: manager, ui: { notify: text => notices.push(JSON.parse(text)) } };
-    handlers.get('session_start')({}, ctx);
-    assert.deepEqual(notices[0].pivaneBotLoaded, { profileId: botId, windowId, generation: 0 });
-    const run = () => {
+    const handlers = new Map(), notices = [], calls = [];
+    const models = { 'fixture/small': { provider: 'fixture', id: 'small' }, 'fixture/big': { provider: 'fixture', id: 'big' },
+        'nokey/x': { provider: 'nokey', id: 'x' } };
+    let thinking = 'medium';
+    const pi = { on(name, fn) { handlers.set(name, fn); },
+        async setModel(model) { calls.push(['model', model.id]); if (model.provider === 'nokey') return false; ctx.model = model; return true; },
+        getThinkingLevel: () => thinking, setThinkingLevel(level) { calls.push(['thinking', level]); thinking = level; } };
+    registerBotContext(pi, () => agentDir);
+    const ctx = { mode: 'rpc', cwd: session.cwd, sessionManager: manager, model: models['fixture/small'],
+        modelRegistry: { find: (provider, id) => models[`${provider}/${id}`] }, ui: { notify: text => notices.push(JSON.parse(text)) } };
+    await handlers.get('session_start')({}, ctx);
+    assert.deepEqual(notices[0], { pivaneBot: { event: 'loaded', profileId: botId, windowId, generation: 0 }, sessionId: session.id });
+    assert.deepEqual(calls, [], 'no model is chosen for the Bot: the session keeps its model');
+    const run = async () => {
         const event = { systemPromptOptions: { sections: { assistant_profile_soul: 'stale personality' } } };
-        handlers.get('before_agent_start')(event, ctx);
+        await handlers.get('before_agent_start')(event, ctx);
         return event.systemPromptOptions.sections;
     };
-    let sections = run();
+    let sections = await run();
     assert.match(sections[BOT_SECTION], /You are 新伙伴|You are New buddy/);
     assert.match(sections[BOT_SECTION], /main chat/);
-    assert.match(sections[BOT_SECTION], /Act on routine, reversible work/);
+    assert.match(sections[BOT_SECTION], /Hands-off mode/);
+    assert.match(sections[BOT_SECTION], /Never read, reveal or send passwords/);
     assert.equal(sections.assistant_profile_soul, undefined, 'an empty personality removes the stale one');
     await bots.update(botId, { expectedRevision: (await profiles.state()).revision, changes: { name: 'Momo', soul: 'Warm and playful.',
-        bot: { job: 'Plan my week', permissions: { preset: 'ask' } } } });
-    sections = run();
+        bot: { job: 'Plan my week', permissions: { preset: 'ask' }, model: { provider: 'fixture', id: 'big', thinking: 'high' } } } });
+    sections = await run();
+    assert.deepEqual(calls, [['model', 'big'], ['thinking', 'high']], 'the Bot model applies to this run');
+    await run();
+    assert.equal(calls.length, 2, 'an aligned model writes nothing');
     assert.match(sections[BOT_SECTION], /You are Momo, .* Your main job: Plan my week/);
     assert.match(sections[BOT_SECTION], /wait for the user's go-ahead/);
     assert.equal(sections.assistant_profile_soul, 'Warm and playful.');
+    // An unavailable model keeps the current one and is reported once.
+    const reported = new Set(), sent = [];
+    assert.equal(await alignModel(pi, ctx, { provider: 'nokey', id: 'x' }, value => sent.push(value), reported), 'unavailable');
+    assert.equal(await alignModel(pi, ctx, { provider: 'missing', id: 'y' }, value => sent.push(value), reported), 'unavailable');
+    assert.equal(await alignModel(pi, ctx, { provider: 'nokey', id: 'x' }, value => sent.push(value), reported), 'unavailable');
+    assert.deepEqual(sent.map(item => `${item.provider}/${item.id}`), ['nokey/x', 'missing/y']);
+    assert.equal(ctx.model.id, 'big');
     // A different session in the same worker process is not treated as the Bot window.
     assert.equal(botSection(context, { ...manager, getSessionId: () => 'foreign', getCwd: () => session.cwd, getSessionFile: () => session.path },
         session.cwd, agentDir), null);
     // After rotation, the old generation's context no longer resolves.
     await bots.rotate(botId, windowId, { expectedGeneration: 0 });
     assert.equal(botSection(context, manager, session.cwd, agentDir), null);
-    assert.deepEqual(run(), { assistant_profile_soul: 'stale personality' });
+    assert.deepEqual(await run(), { assistant_profile_soul: 'stale personality' });
 });
