@@ -152,7 +152,9 @@ test('a scheduled task reopens a stale Bot main chat through the guarded restart
         schedule: { kind: 'cron', expression: '30 10 * * *', timeZone: 'Asia/Shanghai' }, model: { provider: 'fixture', modelId: 'scheduled', thinkingLevel: 'off' },
         budget: { maxRunsPerDay: 3, maxTokensPerDay: 200000, maxCostPerDay: null } });
     const submitted = await service.action(job.id, { action: 'run', revision: job.revision, requestId: randomUUID() });
-    const result = await deadline(async () => { await service.tick(); const run = service.db.run(submitted.id); return !['waiting', 'dispatching', 'running'].includes(run.status) && run; });
+    // 'uncertain' can be passing: reconciliation may read the session while the turn is still
+    // writing it, and applies the finished result on a later tick. Wait for an outcome.
+    const result = await deadline(async () => { await service.tick(); const run = service.db.run(submitted.id); return ['completed', 'silent', 'skipped', 'stopped', 'error', 'failed'].includes(run.status) && run; });
     assert.equal(result.status, 'completed', result.reason);
     assert.equal(page.closed(), 1012, 'the open page was told to reconnect to the replacement');
     const replacement = gateway.supervisor.getActiveWorker(main.path);
