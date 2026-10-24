@@ -9,6 +9,7 @@ function mountBotRoutes(router, { bots }) {
     };
     router.get('/bots', route(() => bots.list()));
     router.post('/bots', route(req => bots.create(req.body)));
+    router.get('/bots/:id/settings', route(req => bots.settings(req.params.id)));
     router.patch('/bots/:id', route(req => bots.update(req.params.id, req.body)));
     router.post('/bots/:id/setup', route(req => bots.setup(req.params.id, req.body)));
     router.post('/bots/:id/onboarding', route(req => bots.onboarding(req.params.id, req.body)));
