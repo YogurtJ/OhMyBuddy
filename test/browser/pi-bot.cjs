@@ -31,9 +31,10 @@ const messages = [
             const page = await context.newPage(), errors = [], opened = [];
             let bots = [], revision = 'r0', generation = 0, sessionId = 'gen-0', socket = null, phase = 'greeting', name = '新伙伴', face = '🦊';
             let history = [], prompts = [], responses = [], setupBodies = [], historyReads = [], second = false, known2 = undefined, aboutBodies = [];
+            let patchBodies = [], settingsReads = 0, model = null, preset = 'free', quietHours = { start: '23:00', end: '08:00' };
             const bot = () => ({ id: BOT, name, description: '', avatar: { kind: 'emoji', value: face }, enabled: true, profileRevision: 'p',
-                bot: { version: 1, enabled: true, order: 0, job: '', model: null, permissions: { preset: 'free', rules: 0 },
-                    notify: { quietHours: { start: '23:00', end: '08:00' }, dailyProactiveLimit: 5 },
+                bot: { version: 1, enabled: true, order: 0, job: '', model, permissions: { preset, rules: 0 },
+                    notify: { quietHours, dailyProactiveLimit: 5 },
                     onboarding: { version: 1, phase, firstBot: true, steps: {}, startedAt: null, completedAt: null }, createdAt: '2026-10-24T00:00:00Z' },
                 windowsRevision: 'w', windows: [{ id: MAIN, kind: 'main', title: '主聊天', emoji: '💬', focus: '', createdAt: '2026-10-24T00:00:00Z',
                     updatedAt: '2026-10-24T00:00:00Z', archivedAt: null, generation, sessionId, generations: generation + 1 }] });
@@ -81,6 +82,24 @@ const messages = [
                     return route.fulfill({ json: { generation: 0, revision, total: 1, start: 0, end: 1, turns: [{ index: 0, kind: 'user', entryId: 'e1', timestamp,
                         text: '周六去杭州要带伞吗', textTruncated: false, images: 0, reply: { entryId: 'e2', timestamp, model: 'm', stopReason: 'stop', errorMessage: '',
                             text: '大概率小雨，带把折叠伞就好。', truncated: false }, process: { steps: 0, tools: 0, errors: 0, startedAt: timestamp, endedAt: timestamp } }] } });
+                }
+                if (pathname === `/api/pi/bots/${BOT}/settings`) {
+                    settingsReads++;
+                    return route.fulfill({ json: { revision, bot: { id: BOT, name, avatar: { kind: 'emoji', value: face }, soul: '温柔耐心，说话简短。', bot: bot().bot },
+                        models: { defaults: { provider: 'fixture', modelId: 'small', thinkingLevel: 'medium' }, models: [
+                            { provider: 'fixture', id: 'small', name: 'Small', thinkingLevels: [] },
+                            { provider: 'fixture', id: 'large', name: 'Large', thinkingLevels: ['low', 'high'] }] } } });
+                }
+                if (pathname === `/api/pi/bots/${BOT}` && method === 'PATCH') {
+                    const body = JSON.parse(route.request().postData());
+                    patchBodies.push(body);
+                    // The first save meets a change made elsewhere.
+                    if (patchBodies.length === 1) { revision = `r${Date.now()}`; return route.fulfill({ status: 409, json: { error: 'Profiles changed' } }); }
+                    assert.equal(body.expectedRevision, revision);
+                    model = body.changes.bot?.model ?? model; preset = body.changes.bot?.permissions?.preset ?? preset;
+                    if (body.changes.bot?.notify) quietHours = body.changes.bot.notify.quietHours;
+                    revision = `r${Date.now()}`; bots = list();
+                    return route.fulfill({ json: { ok: true, revision, bot: { id: BOT, name, avatar: bots[0].avatar, bot: bots[0].bot } } });
                 }
                 if (pathname === `/api/pi/bots/${BOT2}/about-sources`) return route.fulfill({ json: { sources: [{ profileId: BOT, name, avatar: { kind: 'emoji', value: face },
                     entries: ['叫我小王', '在准备考研', '周末不安排工作，消息可以晚点回，除非是家里人或者特别着急的事情'] }] } });
@@ -205,7 +224,36 @@ const messages = [
                 assert.equal(await page.locator('#pi-bot-history .pi-message.assistant > header > strong').first().textContent(), '小狸');
                 if (evidence) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(evidence, `bot-history-${width}.png`) }); }
 
-                // 4. A second Bot first offers to keep what 小狸 knows; only ticked notes are copied.
+                // 4. Settings: one sheet; only what changed is saved, and a conflict keeps the edits.
+                if (width < 700) {
+                    await page.locator('#pi-bot-header .pi-bot-menu').click();
+                    await page.locator('#pi-session-pane.open .pi-bot-settings').waitFor();
+                }
+                await page.locator('.pi-bot-settings').click();
+                await page.locator('.pi-bot-sheet[open] select').first().waitFor({ timeout: 8000 });
+                const sheet = page.locator('.pi-bot-sheet[open]');
+                assert.equal(await sheet.locator('h2').textContent(), '小狸 的设置');
+                if (evidence) { await page.waitForTimeout(250); await page.screenshot({ path: path.join(evidence, `bot-settings-open-${width}.png`) }); }
+                assert.equal(await sheet.locator('textarea').nth(1).inputValue(), '温柔耐心，说话简短。');
+                assert.equal(await sheet.locator('.pi-bot-sheet-save').isDisabled(), true, 'nothing to save yet');
+                assert.equal(await sheet.locator('select').first().locator('option').first().textContent(), '跟随默认（Small）');
+                await sheet.locator('select').first().selectOption({ label: 'Large' });
+                await sheet.locator('select').nth(1).selectOption({ label: '高' });
+                await sheet.locator('.pi-bot-sheet-preset', { hasText: '稳妥' }).click();
+                await sheet.locator('.pi-bot-sheet-check input').uncheck();
+                assert.equal(await sheet.locator('.pi-bot-sheet-row.is-times').isVisible(), false);
+                if (evidence) { await page.waitForTimeout(250); await page.screenshot({ path: path.join(evidence, `bot-settings-${width}.png`) }); }
+                await sheet.locator('.pi-bot-sheet-save').click();
+                await page.waitForFunction(() => /别处改过/.test(document.querySelector('.pi-bot-sheet-status')?.textContent || ''));
+                assert.equal(settingsReads, 2, 'the conflict rereads the saved settings');
+                assert.equal(await sheet.locator('.pi-bot-sheet-preset input:checked').evaluate(input => input.value), 'balanced', 'the edits stay');
+                await sheet.locator('.pi-bot-sheet-save').click();
+                await page.locator('.pi-bot-sheet').waitFor({ state: 'detached', timeout: 8000 });
+                const expected = { bot: { model: { provider: 'fixture', id: 'large', thinking: 'high' }, permissions: { preset: 'balanced' }, notify: { quietHours: null } } };
+                assert.deepEqual(patchBodies.map(body => body.changes), [expected, expected]);
+                assert.equal(preset, 'balanced');
+
+                // 5. A second Bot first offers to keep what 小狸 knows; only ticked notes are copied.
                 if (width < 700) {
                     await page.locator('#pi-bot-header .pi-bot-menu').click();
                     await page.locator('#pi-session-pane.open .pi-bot-rail-add').waitFor();
@@ -224,7 +272,7 @@ const messages = [
                     [['copy', BOT, ['叫我小王', '周末不安排工作，消息可以晚点回，除非是家里人或者特别着急的事情']]]);
                 assert.equal(await page.locator('.pi-bot-greeting [data-bot-action="greet-yes"]').isVisible(), true);
 
-                // 5. Leaving Bot mode restores the Pi Agent controls.
+                // 6. Leaving Bot mode restores the Pi Agent controls.
                 await page.evaluate(() => window.PiWorkspaceRoute.navigate('chat'));
                 await page.waitForFunction(() => !document.querySelector('#chat-tab').classList.contains('pi-bot-mode'));
                 assert.equal(await page.locator('#pi-bot-pane').isVisible(), false);

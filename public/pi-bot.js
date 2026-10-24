@@ -161,9 +161,11 @@
                     body: JSON.stringify({ action, expectedRevision: this.revision }) });
                 await this.refresh();
                 if (action === 'start') this.say?.(translateUi("好呀"));
+                return true;
             } catch (error) {
                 if (error.status === 409) await this.load().catch(() => {});
                 this.toast(error.status === 409 ? translateUi("设置刚刚有变化，请再试一次") : error.message, 'error');
+                return false;
             } finally { this.busy = false; this.onChange?.('identity'); }
         }
 
@@ -259,8 +261,24 @@
             else if (action === 'retry') void this.activate(new URLSearchParams(this.profileId ? { profileId: this.profileId } : {}));
             else if (action === 'settings') {
                 if (window.innerWidth <= 900) document.getElementById('pi-session-pane')?.classList.remove('open');
-                window.PiWorkspaceRoute?.navigate('profiles', { profileId: this.profileId });
+                this.openSettings();
             } else if (action === 'menu') document.getElementById('pi-session-pane')?.classList.toggle('open');
+        }
+
+        openSettings() {
+            const profileId = this.profileId;
+            if (!profileId || !window.PiBotSettings) { window.PiWorkspaceRoute?.navigate('profiles', { profileId }); return; }
+            void window.PiBotSettings.open({ api: this.api, toast: this.toast, profileId, face,
+                onSaved: async () => { await this.refresh(); },
+                // Memory, about-you notes and learning keep living on the identity page.
+                onMemory: () => window.PiWorkspaceRoute?.navigate('profiles', { profileId }),
+                // Getting acquainted again happens in the main chat; the Bot starts once asked.
+                onRestart: async () => {
+                    const main = this.bot()?.windows.find(item => item.kind === 'main');
+                    if (!await this.onboarding('restart')) return;
+                    if (main && main.id !== this.windowId) this.go(profileId, main.id);
+                    else this.say?.(translateUi("我们重新认识一下吧"));
+                } });
         }
 
         // ---- status --------------------------------------------------------------------

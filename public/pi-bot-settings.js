@@ -1,0 +1,239 @@
+(() => {
+    // The Bot settings sheet: everything that makes one Bot who it is, in plain words.
+    // It saves only what changed, against the revision it was opened at; when something
+    // changed elsewhere it rereads, keeps the user's edits and asks to save again.
+    const translateUi = globalThis.PiI18n?.t || ((text, ...values) => text.replace(/\{(\d+)\}/g, (_, index) => values[index] ?? `{${index}}`));
+    const el = (tag, className, text) => { const n = document.createElement(tag); if (className) n.className = className; if (text != null) n.textContent = text; return n; };
+    const icon = name => { const i = el('i', `fa-solid ${name}`); i.setAttribute('aria-hidden', 'true'); return i; };
+    const button = (className, text) => { const b = el('button', className, text); b.type = 'button'; return b; };
+    const LIMITS = { name: 40, avatar: 16, job: 500, soul: 6000 };
+    const PRESETS = [
+        ['free', () => translateUi("放手"), () => translateUi("大部分事直接办好。删东西、改工作目录以外的文件、对外发消息、花钱多的事会先问你。")],
+        ['balanced', () => translateUi("稳妥"), () => translateUi("查资料、记东西、在工作目录里写文件直接做；运行命令前也先问你。")],
+        ['ask', () => translateUi("每次都问"), () => translateUi("除了看和回答，动手做任何事前都先说一声，等你同意。")]
+    ];
+    const THINKING = { off: () => translateUi("不启用"), minimal: () => translateUi("极简"), low: () => translateUi("低"), medium: () => translateUi("中"),
+        high: () => translateUi("高"), xhigh: () => translateUi("极高"), max: () => translateUi("最大") };
+    const modelKey = model => model ? `${model.provider}\u0000${model.id}` : '';
+
+    let dialog = null;
+
+    function field(label, control, hint) {
+        const wrap = el('label', 'pi-bot-sheet-field');
+        if (label) wrap.append(el('span', 'pi-bot-sheet-label', label));
+        wrap.append(control);
+        if (hint) wrap.append(el('span', 'pi-bot-sheet-hint', hint));
+        return wrap;
+    }
+
+    function section(title, ...children) {
+        const node = el('section', 'pi-bot-sheet-section');
+        node.append(el('h3', null, title), ...children);
+        return node;
+    }
+
+    // open({ api, toast, profileId, face, onSaved, onMemory, onRestart })
+    async function open(options) {
+        dialog?.close();
+        dialog = el('dialog', 'pi-bot-sheet');
+        dialog.setAttribute('aria-labelledby', 'pi-bot-sheet-title');
+        const form = el('form', 'pi-bot-sheet-form'); form.method = 'dialog'; form.noValidate = true;
+        const head = el('header', 'pi-bot-sheet-head');
+        const title = el('h2', null, translateUi("设置")); title.id = 'pi-bot-sheet-title';
+        const close = button('pi-bot-sheet-close'); close.setAttribute('aria-label', translateUi("关闭")); close.title = translateUi("关闭"); close.append(icon('fa-xmark'));
+        head.append(el('span', 'pi-bot-sheet-face'), title, close);
+        const body = el('div', 'pi-bot-sheet-body');
+        body.append(el('p', 'pi-bot-sheet-state', translateUi("正在读取…")));
+        const foot = el('footer', 'pi-bot-sheet-foot');
+        const status = el('p', 'pi-bot-sheet-status'); status.setAttribute('role', 'status');
+        const cancel = button('pi-bot-chip', translateUi("取消"));
+        const save = el('button', 'pi-bot-primary pi-bot-sheet-save', translateUi("保存")); save.type = 'submit'; save.disabled = true;
+        foot.append(status, cancel, save);
+        form.append(head, body, foot);
+        dialog.append(form);
+        document.body.append(dialog);
+        const sheet = dialog;
+        let data = null, controls = null, saving = false, warnedClose = false;
+
+        const dirty = () => controls ? changes() : null;
+        const tryClose = () => {
+            const pending = dirty();
+            if (pending && Object.keys(pending).length && !warnedClose) {
+                warnedClose = true; status.dataset.tone = 'warn';
+                status.textContent = translateUi("还有修改没保存。再关一次就放弃这些修改。");
+                return;
+            }
+            sheet.close();
+        };
+        close.addEventListener('click', tryClose);
+        cancel.addEventListener('click', tryClose);
+        sheet.addEventListener('cancel', event => { event.preventDefault(); tryClose(); });
+        sheet.addEventListener('close', () => { sheet.remove(); if (dialog === sheet) dialog = null; });
+        sheet.addEventListener('input', () => { warnedClose = false; status.textContent = ''; delete status.dataset.tone; refreshState(); });
+        sheet.addEventListener('change', () => refreshState());
+        sheet.showModal();
+
+        function refreshState() {
+            if (!controls) return;
+            const pending = changes();
+            save.disabled = saving || !pending || !Object.keys(pending).length;
+            const model = controls.model.value ? data.models?.models.find(item => modelKey(item) === controls.model.value) : null;
+            const levels = model?.thinkingLevels || [];
+            controls.thinkingWrap.hidden = !levels.length;
+            if (levels.length && controls.thinking.dataset.for !== controls.model.value) fillThinking(levels, controls.thinking.value);
+            controls.quietTimes.hidden = !controls.quiet.checked;
+        }
+
+        function fillThinking(levels, selected) {
+            const select = controls.thinking;
+            select.replaceChildren(new Option(translateUi("跟随默认"), ''));
+            for (const level of levels) select.append(new Option(THINKING[level]?.() || level, level));
+            select.value = levels.includes(selected) ? selected : '';
+            select.dataset.for = controls.model.value;
+        }
+
+        // Fields the user changed, against the latest saved settings; null on invalid input.
+        function changes() {
+            const bot = data.bot, current = bot.bot, out = {}, patch = {};
+            const name = controls.name.value.trim();
+            if (!name || name.length > LIMITS.name) return null;
+            if (name !== bot.name) out.name = name;
+            const avatar = controls.avatar.value.trim();
+            if (avatar.length > LIMITS.avatar) return null;
+            if (avatar && !(bot.avatar?.kind === 'emoji' && bot.avatar.value === avatar)) out.avatar = { kind: 'emoji', value: avatar };
+            const soul = controls.soul.value.trim();
+            if (soul !== (bot.soul || '').trim()) out.soul = soul;
+            const job = controls.job.value.trim();
+            if (job !== current.job) patch.job = job;
+            const selected = controls.model.value, item = selected ? data.models?.models.find(entry => modelKey(entry) === selected) : null;
+            let model = null;
+            // A current model that is not listed right now stays exactly as saved.
+            if (selected && !item) model = selected === modelKey(current.model) ? { ...current.model } : null;
+            else if (item) {
+                model = { provider: item.provider, id: item.id };
+                if (!controls.thinkingWrap.hidden && controls.thinking.value) model.thinking = controls.thinking.value;
+            }
+            if (JSON.stringify(model) !== JSON.stringify(current.model ?? null)) patch.model = model;
+            const preset = controls.presets.find(input => input.checked)?.value;
+            if (preset && preset !== current.permissions.preset) patch.permissions = { preset };
+            const quiet = controls.quiet.checked ? { start: controls.quietStart.value, end: controls.quietEnd.value } : null;
+            if (quiet && (!/^\d{2}:\d{2}$/.test(quiet.start) || !/^\d{2}:\d{2}$/.test(quiet.end) || quiet.start === quiet.end)) return null;
+            if (JSON.stringify(quiet) !== JSON.stringify(current.notify?.quietHours ?? null)) patch.notify = { quietHours: quiet };
+            if (Object.keys(patch).length) out.bot = patch;
+            return out;
+        }
+
+        function render() {
+            const bot = data.bot, current = bot.bot;
+            title.textContent = translateUi("{0} 的设置", bot.name);
+            head.querySelector('.pi-bot-sheet-face').replaceWith(Object.assign(options.face(bot, 'md'), { className: 'pi-bot-face is-md pi-bot-sheet-face' }));
+            const name = el('input'); name.type = 'text'; name.maxLength = LIMITS.name; name.value = bot.name; name.required = true; name.autocomplete = 'off';
+            const avatar = el('input'); avatar.type = 'text'; avatar.maxLength = LIMITS.avatar; avatar.className = 'pi-bot-sheet-emoji';
+            avatar.value = bot.avatar?.kind === 'emoji' ? bot.avatar.value : ''; avatar.autocomplete = 'off';
+            avatar.placeholder = bot.avatar?.kind === 'image' ? translateUi("图片") : '🙂';
+            const identity = el('div', 'pi-bot-sheet-row');
+            identity.append(field(translateUi("头像"), avatar), field(translateUi("名字"), name));
+            const job = el('textarea'); job.rows = 2; job.maxLength = LIMITS.job; job.value = current.job;
+            job.placeholder = translateUi("比如：帮我安排生活琐事、陪我练英语");
+            const soul = el('textarea'); soul.rows = 5; soul.maxLength = LIMITS.soul; soul.value = bot.soul || '';
+            soul.placeholder = translateUi("比如：说话简短直接，偶尔开个玩笑。");
+
+            const model = el('select');
+            const defaults = data.models?.defaults, defaultModel = defaults && data.models.models.find(item => item.provider === defaults.provider && item.id === defaults.modelId);
+            model.append(new Option(defaultModel ? translateUi("跟随默认（{0}）", defaultModel.name || defaultModel.id) : translateUi("跟随默认"), ''));
+            const groups = new Map();
+            for (const item of data.models?.models || []) {
+                if (!groups.has(item.provider)) { const group = el('optgroup'); group.label = item.provider; groups.set(item.provider, group); model.append(group); }
+                groups.get(item.provider).append(new Option(item.name || item.id, modelKey(item)));
+            }
+            if (current.model && !data.models?.models.some(item => modelKey(item) === modelKey(current.model)))
+                model.append(new Option(translateUi("{0}（现在不可用）", current.model.id), modelKey(current.model)));
+            model.value = modelKey(current.model);
+            model.setAttribute('aria-label', translateUi("用哪个模型"));
+            const thinking = el('select');
+            const thinkingWrap = field(translateUi("思考程度"), thinking);
+            const modelHint = data.models ? translateUi("只影响 {0}，不改其他 Bot 和 Pi Agent。", bot.name)
+                : translateUi("暂时读不到模型列表，现在的选择会保留。");
+
+            const presets = [];
+            const presetList = el('div', 'pi-bot-sheet-presets'); presetList.setAttribute('role', 'radiogroup');
+            for (const [value, label, text] of PRESETS) {
+                const option = el('label', 'pi-bot-sheet-preset');
+                const input = el('input'); input.type = 'radio'; input.name = 'pi-bot-preset'; input.value = value; input.checked = current.permissions.preset === value;
+                const copy = el('span', 'pi-bot-sheet-preset-copy');
+                copy.append(el('strong', null, label()), el('span', null, text()));
+                option.append(input, copy); presetList.append(option); presets.push(input);
+            }
+            const honesty = el('p', 'pi-bot-sheet-note', translateUi("这是 {0} 的做事习惯，不是安全隔离：它能使用这台电脑上的工具。密码、密钥这类东西它一律不碰。", bot.name));
+
+            const quietHours = current.notify?.quietHours ?? null;
+            const quiet = el('input'); quiet.type = 'checkbox'; quiet.checked = Boolean(quietHours);
+            const quietToggle = el('label', 'pi-bot-sheet-check'); quietToggle.append(quiet, el('span', null, translateUi("安静时段不主动找你")));
+            const quietStart = el('input'); quietStart.type = 'time'; quietStart.value = quietHours?.start || '23:00';
+            const quietEnd = el('input'); quietEnd.type = 'time'; quietEnd.value = quietHours?.end || '08:00';
+            const quietTimes = el('div', 'pi-bot-sheet-row is-times');
+            quietTimes.append(field(translateUi("从"), quietStart), field(translateUi("到"), quietEnd));
+            const quietNote = el('p', 'pi-bot-sheet-note', translateUi("只管 {0} 自己发起的消息；你设的定时提醒照常送达。", bot.name));
+
+            const memory = button('pi-bot-sheet-link'); memory.append(icon('fa-book-open'), el('span', null, translateUi("记忆和关于你")), icon('fa-chevron-right'));
+            memory.addEventListener('click', () => { sheet.close(); options.onMemory?.(); });
+            const restart = button('pi-bot-sheet-link'); restart.append(icon('fa-rotate-left'), el('span', null, translateUi("重新互相认识")), icon('fa-chevron-right'));
+            let restartArmed = false;
+            restart.addEventListener('click', async () => {
+                if (!restartArmed) { restartArmed = true; restart.querySelector('span').textContent = translateUi("再点一次确认：在主聊天里重新认识"); return; }
+                sheet.close(); await options.onRestart?.();
+            });
+
+            controls = { name, avatar, job, soul, model, thinking, thinkingWrap, presets, quiet, quietStart, quietEnd, quietTimes };
+            body.replaceChildren(
+                section(translateUi("名字和样子"), identity),
+                section(translateUi("主要帮你做什么"), job),
+                section(translateUi("性格"), soul),
+                section(translateUi("用哪个模型"), field(null, model, modelHint), thinkingWrap),
+                section(translateUi("做事方式"), presetList, honesty),
+                section(translateUi("安静时段"), quietToggle, quietTimes, quietNote),
+                section(translateUi("更多"), memory, restart));
+            const levels = data.models?.models.find(item => modelKey(item) === model.value)?.thinkingLevels || [];
+            if (levels.length) fillThinking(levels, current.model?.thinking || '');
+            refreshState();
+        }
+
+        async function load() {
+            data = await options.api(`/api/pi/bots/${encodeURIComponent(options.profileId)}/settings`);
+        }
+
+        form.addEventListener('submit', async event => {
+            event.preventDefault();
+            if (saving || !controls) return;
+            const pending = changes();
+            if (!pending) { status.dataset.tone = 'error'; status.textContent = translateUi("名字不能为空，安静时段的开始和结束要不同。"); return; }
+            if (!Object.keys(pending).length) return;
+            saving = true; refreshState(); status.textContent = translateUi("正在保存…"); delete status.dataset.tone;
+            try {
+                await options.api(`/api/pi/bots/${encodeURIComponent(options.profileId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ expectedRevision: data.revision, changes: pending }) });
+                sheet.close();
+                options.toast?.(translateUi("已保存"), 'success');
+                await options.onSaved?.();
+            } catch (error) {
+                if (error.status === 409) {
+                    // Reread the saved settings; the form keeps what the user typed.
+                    try { await load(); } catch {}
+                    status.dataset.tone = 'warn';
+                    status.textContent = translateUi("设置刚刚在别处改过。你的修改还在，检查后再保存一次。");
+                } else { status.dataset.tone = 'error'; status.textContent = error.message || translateUi("保存失败"); }
+            } finally { saving = false; refreshState(); }
+        });
+
+        try { await load(); if (sheet.open) render(); }
+        catch (error) {
+            const retry = button('pi-bot-link', translateUi("重试"));
+            retry.addEventListener('click', () => { sheet.close(); void open(options); });
+            const state = el('div', 'pi-bot-sheet-state'); state.append(el('p', null, error.message || translateUi("读取失败")), retry);
+            body.replaceChildren(state);
+        }
+        return sheet;
+    }
+
+    window.PiBotSettings = Object.freeze({ open });
+})();

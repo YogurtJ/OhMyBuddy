@@ -221,3 +221,40 @@ test('a new Bot can be told what another Bot knows about the user, only what was
     assert.equal(result.bot.bot.onboarding.steps.known, 'skipped');
     assert.equal((await documents.run(declined, 'user', false)).content, '');
 });
+
+test('the settings sheet reads identity, personality and the model list, and saves in one change', { timeout: 60000 }, async t => {
+    const store = new PiSessionStore();
+    const profiles = new PiProfileRegistry(store);
+    store.profiles = profiles;
+    const supervisor = new PiAgentSupervisor();
+    t.after(() => supervisor.dispose());
+    const asked = [];
+    const catalog = async cwd => { asked.push(cwd); return { defaults: { provider: 'fixture', modelId: 'small', thinkingLevel: 'medium' },
+        models: [{ provider: 'fixture', modelId: 'small', name: 'Small', thinkingLevels: ['off', 'low'] }, { provider: 'fixture', modelId: 'large', name: 'Large', thinkingLevels: [] }] }; };
+    const bots = new BotService({ store, profiles, supervisor, catalog });
+    const id = (await bots.create({ expectedRevision: (await profiles.state()).revision })).bot.id;
+    const read = await bots.settings(id);
+    assert.equal(read.bot.soul, '');
+    assert.deepEqual(read.models.models.map(model => model.id), ['small', 'large']);
+    assert.equal(read.models.defaults.modelId, 'small');
+    assert.equal(asked.length, 1);
+    assert.match(asked[0], /PivaneBots[\\/]bot-/, 'models are listed for the Bot workspace');
+
+    const events = [];
+    bots.on('botChanged', event => events.push(event));
+    await bots.update(id, { expectedRevision: read.revision, changes: { name: '阿福', soul: '说话简短。', avatar: { kind: 'emoji', value: '🐼' },
+        bot: { job: '记账', model: { provider: 'fixture', id: 'large' }, permissions: { preset: 'balanced' }, notify: { quietHours: null } } } });
+    assert.deepEqual(events, [{ profileId: id }]);
+    const after = await bots.settings(id);
+    assert.equal(after.bot.name, '阿福');
+    assert.equal(after.bot.soul, '说话简短。');
+    assert.deepEqual(after.bot.bot.model, { provider: 'fixture', id: 'large' });
+    assert.equal(after.bot.bot.permissions.preset, 'balanced');
+    assert.equal(after.bot.bot.notify.quietHours, null);
+    await assert.rejects(bots.update(id, { expectedRevision: read.revision, changes: { name: 'x' } }), /changed|revision/i, 'a stale sheet cannot overwrite');
+
+    const failing = new BotService({ store, profiles, supervisor, catalog: async () => { throw new Error('catalog offline'); } });
+    const partial = await failing.settings(id);
+    assert.equal(partial.models, null);
+    assert.equal(partial.modelsError, 'catalog offline');
+});

@@ -31,12 +31,13 @@ function publicWindow(window) {
 }
 
 class BotService extends EventEmitter {
-    constructor({ store, profiles, supervisor, getAgentDir, documents = null }) {
+    constructor({ store, profiles, supervisor, getAgentDir, documents = null, catalog = null }) {
         super();
         this.store = store;
         this.profiles = profiles;
         this.supervisor = supervisor;
         this.documents = documents;
+        this.catalog = catalog;
         this.getAgentDir = getAgentDir || (async () => fs.realpathSync.native((await getSdk()).getAgentDir()));
         this.windows = new BotWindowRegistry({ getAgentDir: this.getAgentDir });
     }
@@ -512,8 +513,27 @@ class BotService extends EventEmitter {
                 state.profiles[index] = record;
                 return { ok: true, bot: { id: record.id, name: record.name, avatar: record.avatar ?? null, bot: this.publicBot(nextBot) },
                     profileRevision: profileRevision(record) };
-            });
+            }).then(result => { this.emit('botChanged', { profileId }); return result; });
         });
+    }
+
+    // Everything the Bot settings sheet edits, plus the models it can choose from. The model
+    // list is best effort: without it the current choice still shows and can be kept.
+    async settings(profileId) {
+        const { state, revision } = await this.profiles.state();
+        const profile = state.profiles.find(item => item.id === profileId);
+        const bot = settings.readBot(profile);
+        if (!bot || profile.trashedAt !== undefined) fail('Bot not found', 404);
+        let models = null, modelsError = null;
+        if (this.catalog) {
+            try {
+                const catalog = await this.catalog(bot.workspace);
+                models = { defaults: catalog.defaults, models: catalog.models.map(model => ({ provider: model.provider, id: model.modelId,
+                    name: model.name, thinkingLevels: model.thinkingLevels })) };
+            } catch (error) { modelsError = error.message; }
+        }
+        return { revision, bot: { id: profile.id, name: profile.name, avatar: profile.avatar ?? null, soul: profile.soul, bot: this.publicBot(bot) },
+            models, ...(modelsError ? { modelsError } : {}) };
     }
 }
 

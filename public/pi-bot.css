@@ -233,3 +233,74 @@
 .pi-bot-known-list label:hover { background: var(--pv-nav-hover, var(--surface-3)); }
 .pi-bot-known-list input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--primary, var(--green)); }
 .pi-bot-known-list input:not(:checked) + span { color: var(--text-muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); }
+
+/* ---- Bot settings sheet: a centred sheet on desktop, full screen on phones ----------- */
+.pi-bot-sheet {
+    width: min(580px, calc(100vw - 32px)); max-height: min(88dvh, 860px); margin: auto; padding: 0; overflow: hidden;
+    border: 1px solid var(--line-strong); border-radius: 16px; background: var(--surface-2); color: var(--text-main);
+    box-shadow: 0 22px 70px rgb(0 0 0 / .28);
+}
+.pi-bot-sheet[open] { display: flex; }
+.pi-bot-sheet::backdrop { background: rgb(10 14 20 / .42); }
+.pi-bot-sheet-form { display: flex; flex-direction: column; width: 100%; min-height: 0; max-height: inherit; }
+.pi-bot-sheet-head {
+    display: flex; align-items: center; gap: 10px; padding: 14px 14px 12px 18px; border-bottom: 1px solid var(--line);
+}
+.pi-bot-sheet-head h2 { flex: 1; min-width: 0; margin: 0; font-size: 1.02rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-bot-sheet-close {
+    display: inline-grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 10px; background: transparent;
+    color: var(--text-muted); cursor: pointer;
+}
+.pi-bot-sheet-close:hover { background: var(--pv-nav-hover, var(--surface-3)); color: var(--text-main); }
+.pi-bot-sheet-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 18px 18px; }
+.pi-bot-sheet-state { display: grid; justify-items: start; gap: 8px; margin: 18px 0; color: var(--text-muted); }
+.pi-bot-sheet-section { display: grid; gap: 10px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.pi-bot-sheet-section:last-child { border-bottom: 0; }
+.pi-bot-sheet-section h3 { margin: 0; font-size: .8rem; font-weight: 600; letter-spacing: .02em; color: var(--text-muted); }
+.pi-bot-sheet-row { display: grid; grid-template-columns: 76px 1fr; gap: 12px; }
+.pi-bot-sheet-row.is-times { grid-template-columns: repeat(2, minmax(0, 160px)); }
+.pi-bot-sheet-row[hidden], .pi-bot-sheet-field[hidden] { display: none; }
+.pi-bot-sheet-field { display: grid; gap: 6px; min-width: 0; }
+.pi-bot-sheet-label { font-size: .82rem; color: var(--text-muted); }
+.pi-bot-sheet-hint, .pi-bot-sheet-note { margin: 0; font-size: .8rem; line-height: 1.55; color: var(--text-muted); }
+.pi-bot-sheet input[type="text"], .pi-bot-sheet input[type="time"], .pi-bot-sheet textarea, .pi-bot-sheet select {
+    width: 100%; min-height: 40px; padding: 8px 11px; border: 1px solid var(--line-strong); border-radius: 10px;
+    background: var(--surface-1, var(--surface)); color: var(--text-main); font: inherit; font-size: .92rem; line-height: 1.5;
+}
+.pi-bot-sheet textarea { resize: vertical; min-height: 64px; }
+.pi-bot-sheet input.pi-bot-sheet-emoji[type="text"] { text-align: center; font-size: 1.45rem; padding: 2px 4px; line-height: 1.2; }
+.pi-bot-sheet input:focus-visible, .pi-bot-sheet textarea:focus-visible, .pi-bot-sheet select:focus-visible,
+.pi-bot-sheet-link:focus-visible, .pi-bot-sheet-close:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
+.pi-bot-sheet-presets { display: grid; gap: 8px; }
+.pi-bot-sheet-preset {
+    display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer;
+}
+.pi-bot-sheet-preset:has(input:checked) { border-color: var(--primary, var(--green)); background: var(--surface-1, var(--surface)); }
+.pi-bot-sheet-preset input, .pi-bot-sheet-check input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--primary, var(--green)); }
+.pi-bot-sheet-preset-copy { display: grid; gap: 2px; font-size: .86rem; line-height: 1.5; color: var(--text-muted); }
+.pi-bot-sheet-preset-copy strong { font-size: .92rem; color: var(--text-main); }
+.pi-bot-sheet-check { display: flex; gap: 10px; align-items: center; font-size: .92rem; cursor: pointer; }
+.pi-bot-sheet-link {
+    display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0 4px; border: 0; border-radius: 10px;
+    background: transparent; color: var(--text-main); font: inherit; font-size: .92rem; text-align: left; cursor: pointer;
+}
+.pi-bot-sheet-link > span { flex: 1; }
+.pi-bot-sheet-link > i { width: 18px; text-align: center; color: var(--text-muted); }
+.pi-bot-sheet-link:hover { background: var(--pv-nav-hover, var(--surface-3)); }
+.pi-bot-sheet-foot {
+    display: flex; align-items: center; gap: 8px; padding: 12px 14px 12px 18px; border-top: 1px solid var(--line); background: var(--surface-2);
+}
+.pi-bot-sheet-status { flex: 1; min-width: 0; margin: 0; font-size: .82rem; line-height: 1.45; color: var(--text-muted); }
+.pi-bot-sheet-status[data-tone="warn"] { color: var(--warning, #b7791f); }
+.pi-bot-sheet-status[data-tone="error"] { color: var(--danger, #c0392b); }
+.pi-bot-sheet-foot .pi-bot-primary { margin-top: 0; min-width: 88px; min-height: 40px; }
+.pi-bot-sheet-foot .pi-bot-primary:disabled { cursor: default; }
+
+@media (max-width: 600px) {
+    .pi-bot-sheet { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; }
+    .pi-bot-sheet-form { max-height: 100dvh; }
+    .pi-bot-sheet-head { padding-top: max(12px, env(safe-area-inset-top)); }
+    .pi-bot-sheet-foot { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+    .pi-bot-sheet input[type="text"], .pi-bot-sheet input[type="time"], .pi-bot-sheet textarea, .pi-bot-sheet select { font-size: 16px; }
+    .pi-bot-sheet-status { font-size: .78rem; }
+}
