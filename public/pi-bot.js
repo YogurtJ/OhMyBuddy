@@ -110,8 +110,15 @@
                 localStorage.setItem(LAST_KEY, bot.id);
                 this.render(); this.onChange?.('identity');
                 await this.open({ profileId: bot.id, windowId });
+                this.rotationRetries = 0;
             } catch (error) {
                 if (epoch !== this.epoch) return;
+                // The chat is moving to a new conversation file; that settles in moments.
+                if (error.code === 'BOT_WINDOW_ROTATING' && (this.rotationRetries = (this.rotationRetries || 0) + 1) <= 5) {
+                    setTimeout(() => { if (epoch === this.epoch) void this.activate(params); }, 1500);
+                    return;
+                }
+                this.rotationRetries = 0;
                 this.error = error.message; this.render();
                 this.toast(error.message, 'error');
             }
@@ -592,6 +599,7 @@
         function addOlder(target) {
             const record = generations[archives.length];
             if (!record) return;
+            const mine = epoch;
             const container = el('section', 'pi-transcript-archive pi-bot-history-generation'); container.hidden = true;
             scroll.preserve(() => { host.prepend(container); host.hidden = false; });
             const base = `/api/pi/bots/${encodeURIComponent(target.profileId)}/windows/${encodeURIComponent(target.windowId)}/history?`;
@@ -600,6 +608,9 @@
                 request: (_type, input) => api(base + new URLSearchParams({ generation: String(record.generation), ...query(input) }))
                     .catch(error => { throw Object.assign(error, { errorCode: error.code }); }),
                 anchor: () => `bot-generation:${target.windowId}:${record.generation}`,
+                // A generation without any turns (rotated before anyone spoke) hides itself; go
+                // straight on to the one before it so older conversation stays reachable.
+                onIndex: count => { if (!count && mine === epoch && instance === archives.at(-1)) addOlder(target); },
                 labels: () => ({
                     head: () => translateUi("更早的聊天 · {0}", range(record)),
                     note: () => '',

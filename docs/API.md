@@ -256,16 +256,18 @@
 - `GET /bots/:id/settings` → `{revision,bot:{id,name,avatar,soul,bot},models:null|{defaults,models:[{provider,id,name,thinkingLevels}]},modelsError?}`；模型目录按该 Bot 工作目录读取，失败时 `models:null`。
 - `PATCH /bots/:id` `{expectedRevision,changes:{name?,description?,soul?,avatar?,bot?}}`；`bot` 只接受 `job`、`model`（null 为跟随默认）、`permissions:{preset}`、`notify`、`order`。图片头像需先经头像接口上传。
 - `POST /bots/:id/main-window` 幂等补建或采用已有原生标记的主聊天。
-- `GET /bots/:id/windows/:windowId/session` 解析窗口当前一代并返回 `{window,session}`（会话行同 `/sessions`）；网页据此打开原生会话。
+- `GET /bots/:id/windows/:windowId/session` 解析窗口当前一代并返回 `{window,session}`（会话行同 `/sessions`）；网页据此打开原生会话。窗口有中断的换代记录时先在档案预占和旧会话编辑预占内按原生证据完成恢复，再返回；正在换代时返回 409 `code:'BOT_WINDOW_ROTATING'`。
 - `GET /bots/:id/windows/:windowId/generations` → `{window,generations:[{generation,startedAt,endedAt,reason,current}]}`。
 - `GET /bots/:id/windows/:windowId/history?generation=N&view=index|turns&…` 只读分页较早一代，参数与返回同历史归档接口；服务端核对该代的原生窗口标记，不启动 worker。
-- `POST /bots/:id/windows/:windowId/rotate` `{expectedGeneration}` 维护入口：手动换代。服务端在会话编辑预占内停止空闲 worker、写入新一代（初始条目：模型、思考程度、隐藏交接消息 `pivane-bot-handoff`、窗口标记 `pivane-bot-window`），再提交窗口索引；代数不符 409。中断后按原生标记的 `predecessor{sessionId,lastEntryId}` 恢复或放弃。打开中的连接收到 `gateway_window_rotated {profileId,windowId,generation}` 后以 4007 关闭，网页重新解析窗口。
+- `POST /bots/:id/windows/:windowId/rotate` `{expectedGeneration}` 维护入口：手动换代。`expectedGeneration` 必填（非负整数，缺失或无效返回 400），与当前代数不符返回 409，重复的旧请求不会再次换代。服务端在会话编辑预占内停止空闲 worker、写入新一代（初始条目：模型、思考程度、隐藏交接消息 `pivane-bot-handoff`、窗口标记 `pivane-bot-window`），再提交窗口索引；代数不符 409。中断后按原生标记的 `predecessor{sessionId,lastEntryId}` 恢复或放弃。打开中的连接收到 `gateway_window_rotated {profileId,windowId,generation}` 后以 4007 关闭，网页重新解析窗口。
 - `POST /bots/:id/onboarding` `{expectedRevision,action:'start'|'skip'|'restart'}`。
 - `POST /bots/:id/setup` `{expectedRevision,windowId,toolCallId,changes?}` 保存模型 `bot_setup_propose` 提出的设置卡：该调用必须仍在窗口当前一代中等待回答，`changes` 只能包含卡上提出的字段（null 表示不保存该字段）；返回 `{ok,revision,bot,saved,user?:{added,documentSaved,error?}}`。“关于你”条目经档案文档服务去重追加。
 - `GET /bots/:id/about-sources` → `{sources:[{profileId,name,avatar,entries}]}`，列出其他 Bot 的“关于你”条目。
 - `POST /bots/:id/about` `{expectedRevision,action:'copy'|'decline',fromProfileId?,entries?}`；copy 的条目必须仍存在于来源（否则 409），去重追加到本 Bot，记录 `onboarding.steps.known`。
 
-WebSocket 另有 `gateway_bot_notice {notice:'model_unavailable',provider,id}`：Bot 指定的模型不可用，本轮继续使用当前模型。Bot 窗口会话不能移动或绑定消息渠道；以 Bot 档案为目标的定时任务进入主聊天当前一代。
+WebSocket `open_session` 可带 `botWindow:{profileId,windowId}`（Bot 页面打开和重连时都带）：服务端在启动 worker 前和订阅后各核对一次，只接受该窗口当前一代；否则返回失败响应 `errorCode:'BOT_WINDOW_STALE'`（已换代）或 `'BOT_WINDOW_ROTATING'`（正在换代），网页重新解析窗口。不带 `botWindow` 时按普通原生会话打开（Pi Agent 页面）。另有 `gateway_bot_notice {notice:'model_unavailable',provider,id}`：Bot 指定的模型不可用，本轮继续使用当前模型。
+
+Bot 窗口会话不能移动或绑定消息渠道。以 Bot 档案为目标的定时任务进入主聊天当前一代，运行期间使用任务准入和计价时选定的模型；`GET /cron` 的 `homes` 中 Bot 的主线程按主聊天当前一代派生（`bot:true`），`PUT /cron/homes/:profileId` 对 Bot 返回 409，不保存也不创建会话。
 
 ### Agent 任务线程
 

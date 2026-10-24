@@ -8,6 +8,7 @@ import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { readRegistry } from '../pi-profile-registry.js';
 import { safeFile } from '../pi-native-service.js';
 import { setPromptSection } from '../pi-hook-prompt.js';
+import { lastRun } from '../pi-cron-runtime.js';
 import { readWindowBinding } from './bot-window-state.js';
 import { readWindowRecord } from './bot-window-registry.js';
 import { readBot } from './bot-settings.js';
@@ -66,6 +67,13 @@ export async function alignModel(pi: any, ctx: any, desired: any, notify: (value
     reported.delete(key);
     if (desired.thinking && pi.getThinkingLevel() !== desired.thinking) pi.setThinkingLevel(desired.thinking);
     return 'aligned';
+}
+
+// Same rule as the scheduler runtime: a run stays active until it is finished or reviewed,
+// and only then is its original model restored.
+export function scheduledRunActive(manager: any) {
+    const run = lastRun(manager);
+    return Boolean(run && !['completed', 'silent', 'skipped', 'error', 'stopped'].includes(run.status));
 }
 
 // What the user can see as this Bot right now, for reporting what a setup card saved.
@@ -152,7 +160,8 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
         if (!managed(ctx)) return;
         const loaded = botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir());
         if (!loaded) return;
-        await alignModel(pi, ctx, loaded.model, notifier(ctx), reported);
+        // A scheduled run was admitted and priced with the model it selected; it keeps it.
+        if (!scheduledRunActive(ctx.sessionManager)) await alignModel(pi, ctx, loaded.model, notifier(ctx), reported);
         setPromptSection(event, BOT_SECTION, loaded.text, { wrapForced: true });
         // The profile runtime keeps the personality loaded at worker start; a Bot's personality
         // can change mid-conversation (onboarding, settings), so the current one replaces it.

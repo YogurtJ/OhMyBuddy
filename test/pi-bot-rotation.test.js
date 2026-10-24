@@ -98,6 +98,18 @@ test('windows rotate to new native generations with continuity, journal recovery
     assert.match(lastHandoff, /gen10 answer 0/);
     assert.ok(lastHandoff.length < 40000);
 
+    // The caller's observed generation is required; a missing or stale one changes nothing.
+    const indexBefore = JSON.stringify((await bots.windows.read(botId)).state);
+    for (const input of [{}, { expectedGeneration: null }, { expectedGeneration: -1 }, { expectedGeneration: '11' }])
+        await assert.rejects(bots.rotate(botId, windowId, input), /Expected generation is required/);
+    await assert.rejects(bots.rotate(botId, windowId, { expectedGeneration: 10 }), /changed/);
+    assert.equal(JSON.stringify((await bots.windows.read(botId)).state), indexBefore);
+    // Bot-mode admission: only the current generation may be opened as this window.
+    const currentSession = (await bots.resolve(botId, windowId)).session;
+    const old = window.generations[5];
+    await assert.rejects(bots.assertCurrentWindowSession(botId, windowId, { id: old.sessionId, path: old.sessionPath }), error => error.code === 'BOT_WINDOW_STALE');
+    await bots.assertCurrentWindowSession(botId, windowId, { id: currentSession.id, path: currentSession.path });
+
     // Interrupted rotation without a successor: the journal is cleared, routing unchanged.
     const before = await bots.windows.read(botId);
     await bots.windows.mutate(botId, before.revision, s => { s.windows[0].rotation = { state: 'prepared', requestId: randomUUID(), toGeneration: 12,
@@ -115,10 +127,25 @@ test('windows rotate to new native generations with continuity, journal recovery
     const successor = await store.createSession(window.cwd, '', { agentProfileId: botId, initializeSession: manager =>
         manager.appendCustomEntry(WINDOW_ENTRY, windowMarker({ sessionId: manager.getSessionId(), profileId: botId, windowId, kind: 'main', generation: 12,
             predecessor: { sessionId: window.current.sessionId, lastEntryId: currentLeaf } })) });
+    // While another edit holds the predecessor (no worker), opening waits: the window is moving.
+    supervisor.withSessionEdit = async () => { throw Object.assign(new Error('editing'), { status: 409 }); };
+    await assert.rejects(bots.resolve(botId, windowId), error => error.status === 409 && error.code === 'BOT_WINDOW_ROTATING');
+    assert.ok((await bots.windows.read(botId)).state.windows[0].rotation, 'the journal waits for a later open');
+    // A busy predecessor stays the conversation: the journal is cleared, the successor is not adopted.
+    supervisor.getActiveWorker = () => ({ busy: true });
+    assert.equal((await bots.resolve(botId, windowId)).session.id, window.current.sessionId);
+    assert.equal((await bots.windows.read(botId)).state.windows[0].rotation, null);
+    delete supervisor.withSessionEdit; delete supervisor.getActiveWorker;
+    const rearmed = await bots.windows.read(botId);
+    await bots.windows.mutate(botId, rearmed.revision, s => { s.windows[0].rotation = { state: 'prepared', requestId: randomUUID(), toGeneration: 12,
+        fromSessionId: s.windows[0].current.sessionId, reason: 'size', preparedAt: new Date().toISOString() }; return {}; });
     const events = [];
     bots.on('windowRotated', event => events.push(event));
-    assert.deepEqual(await profiles.reserve(() => bots.recoverRotationLocked(botId, windowId)), { recovered: true, committed: true });
-    assert.equal((await bots.resolve(botId, windowId)).session.id, successor.id);
+    // Nothing but the ordinary open path: it settles the journal before handing out a session.
+    const reopened = new BotService({ store, profiles, supervisor });
+    reopened.on('windowRotated', event => events.push(event));
+    assert.equal((await reopened.resolve(botId, windowId)).session.id, successor.id);
+    assert.equal((await bots.windows.read(botId)).state.windows[0].rotation, null);
     assert.equal(events.length, 1); assert.equal(events[0].to.generation, 12);
 
     // A successor written before the predecessor advanced is not adopted (that turn would be lost).
@@ -205,6 +232,19 @@ test('Bot window workers get a verified identity section that follows edits with
     assert.deepEqual(calls, [['model', 'big'], ['thinking', 'high']], 'the Bot model applies to this run');
     await run();
     assert.equal(calls.length, 2, 'an aligned model writes nothing');
+    // A scheduled run was priced with the model it selected; the Bot model does not replace it.
+    const runId = 'a'.repeat(64);
+    manager.appendCustomEntry('pivane-cron-run', { version: 1, runId, sessionId: manager.getSessionId(), status: 'running', model: { provider: 'fixture', modelId: 'small' } });
+    ctx.model = models['fixture/small']; thinking = 'low';
+    await run();
+    assert.equal(calls.length, 2, 'no alignment during a scheduled run');
+    assert.equal(ctx.model.id, 'small'); assert.equal(thinking, 'low');
+    manager.appendCustomEntry('pivane-cron-run', { version: 1, runId, sessionId: manager.getSessionId(), status: 'settled' });
+    await run();
+    assert.equal(calls.length, 2, 'a settled run is still active until it is finished or reviewed');
+    manager.appendCustomEntry('pivane-cron-run', { version: 1, runId, sessionId: manager.getSessionId(), status: 'completed' });
+    await run();
+    assert.deepEqual(calls.slice(2), [['model', 'big'], ['thinking', 'high']], 'alignment resumes once the run is over');
     assert.match(sections[BOT_SECTION], /You are Momo, .* Your main job: Plan my week/);
     assert.match(sections[BOT_SECTION], /wait for the user's go-ahead/);
     assert.equal(sections.assistant_profile_soul, 'Warm and playful.');
