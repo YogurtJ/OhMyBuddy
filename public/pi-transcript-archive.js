@@ -19,8 +19,9 @@
     class PiTranscriptArchive {
         // anchor(): optional identity of a fixed record (e.g. an earlier Bot window generation) used
         // instead of the live compaction notice. labels(): optional replacement head texts.
-        constructor({ scroller, content, container, track, request, context, render, scroll, openEntry, toast, onChange, anchor, labels }) {
-            Object.assign(this, { scroller, content, container, request, context, render, scroll, openEntry, toast, onChange, anchor, labels });
+        // onIndex(count): optional, told how many turns each adopted index has.
+        constructor({ scroller, content, container, track, request, context, render, scroll, openEntry, toast, onChange, anchor, labels, onIndex }) {
+            Object.assign(this, { scroller, content, container, request, context, render, scroll, openEntry, toast, onChange, anchor, labels, onIndex });
             this.enabled = false; this.key = null; this.identity = null; this.generation = null; this.sequence = 0;
             this.items = []; this.slots = []; this.entries = new Map(); this.revision = null;
             this.state = 'idle'; this.armed = false; this.queue = Promise.resolve(); this.busy = null; this.failed = null;
@@ -134,6 +135,7 @@
                 this.container.hidden = !items.length;
             });
             if (had || items.length) this.onChange?.();
+            this.onIndex?.(items.length);
         }
 
         paintHead() { this.scroll.preserve(() => this.fillHead()); }

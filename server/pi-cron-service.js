@@ -54,8 +54,8 @@ function validateJob(input, now) {
         misfire: { policy: misfire.policy, graceMinutes: misfire.graceMinutes }, execution, budget: limits(input.budget) };
 }
 class CronService {
-    constructor({ store, supervisor, profiles, catalog, bots = null, isSuspended = () => false, now = Date.now, filename, captureChannelNotify, onChannelNotify }) {
-        Object.assign(this, { store, supervisor, profiles, catalog, bots, isSuspended, now, filename, captureChannelNotify, onChannelNotify });
+    constructor({ store, supervisor, profiles, catalog, bots = null, reloadBotWorker = null, isSuspended = () => false, now = Date.now, filename, captureChannelNotify, onChannelNotify }) {
+        Object.assign(this, { store, supervisor, profiles, catalog, bots, reloadBotWorker, isSuspended, now, filename, captureChannelNotify, onChannelNotify });
         this.stopping = false; this.running = null; this.mutating = null; this.notifying = null; this.db = null; this.error = null;
         this.ready = this.initialize();
         this.timer = setInterval(() => { void this.tick(); }, 1000); this.timer.unref?.();
@@ -91,9 +91,22 @@ class CronService {
         await this.ready; this.healthy();
         const now = this.now(), day = new Date(now).toISOString().slice(0, 10);
         return { schedulerError: this.lastError || null, jobs: this.db.jobs().filter(job => !job.deleted).map(job => ({ ...job, today: this.db.usage(day, job.id),
-            lastRun: this.db.runs(job.id)[0] || null })), homes: this.db.homes(), limits: this.db.limits(), today: this.db.usage(day),
+            lastRun: this.db.runs(job.id)[0] || null })), homes: await this.homesView(), limits: this.db.limits(), today: this.db.usage(day),
             channelNotifications: this.db.channelNotificationSummary(),
             capabilities: { maxJobs: 100, maxRuns: 10000, budgetDay: 'UTC', cost: 'estimated', maxConcurrent: 2 }, serverTime: now };
+    }
+    // Saved homes, with each Bot's home shown as its main chat (derived, never stored).
+    async homesView() {
+        const homes = this.db.homes();
+        if (!this.bots) return homes;
+        const { readBot } = require('./bot/bot-settings');
+        const bots = (await this.profiles.state()).state.profiles.filter(profile => readBot(profile) && profile.trashedAt === undefined);
+        const ids = new Set(bots.map(profile => profile.id)), derived = [];
+        for (const profile of bots) {
+            const ref = await this.bots.mainWindowRef(profile.id).catch(() => null);
+            if (ref) derived.push({ profileId: profile.id, status: 'ready', cwd: ref.cwd, sessionId: ref.sessionId, name: profile.name, revision: 0, bot: true });
+        }
+        return [...homes.filter(home => !ids.has(home.profileId)), ...derived];
     }
     // A profile's main thread. For a Bot it is its main chat window, resolved to the window's
     // current native generation every time (it changes when the window rotates).
@@ -144,6 +157,7 @@ class CronService {
         return this.reserve(() => this.profiles.reserve(async () => {
             const profile = await this.profiles.getProfile(profileId);
             if (!profile?.enabled) fail('Profile is unavailable');
+            if (this.bots && require('./bot/bot-settings').readBot(profile)) fail('Bot 的主线程就是它的主聊天，不能在这里更改', 409);
             const previous = this.db.home(profileId);
             const requestHash = hash([input.cwd, input.sessionId ?? null, input.create === true]);
             if ((previous?.revision || 0) !== input.revision) {
@@ -279,10 +293,9 @@ class CronService {
                     && worker.loadedAgentProfileRevision === require('./pi-profile-registry').profileRevision(profile);
                 // A Bot is edited from its own chat, so its idle window reopens with the saved profile
                 // instead of waiting for someone to reopen it by hand.
-                if (!current() && worker.loadedBot && this.supervisor.isSessionIdle(session.path)) {
-                    await this.supervisor.stopSession(session.path);
-                    worker = await this.supervisor.getWorker({ cwd: session.cwd, sessionId: session.id, sessionPath: session.path });
-                }
+                // reloadBotWorker is the guarded explicit-restart path: open pages reconnect.
+                if (!current() && worker.loadedBot && this.reloadBotWorker && this.supervisor.isSessionIdle(session.path))
+                    worker = await this.reloadBotWorker(worker);
                 if (!current()) fail('Reopen the idle target thread to load its saved profile');
             }
             await worker.exclusive(async (_rpc, runtime) => {

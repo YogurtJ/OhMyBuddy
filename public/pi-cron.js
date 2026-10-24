@@ -153,7 +153,8 @@
             }
             card.append(grid);
             const ref = job.target.kind === 'profile' ? snapshot.homes.find(home => home.profileId === job.target.profileId) : job.target;
-            if (ref?.sessionId) card.append(button('打开目标线程', 'fa-arrow-up-right-from-square', () => openThread(ref)));
+            if (ref?.bot === true) card.append(openBotHome(ref));
+            else if (ref?.sessionId) card.append(button('打开目标线程', 'fa-arrow-up-right-from-square', () => openThread(ref)));
             detail.append(card);
             const prompt = node('div', 'cron-card'); prompt.append(node('h3', '', t('任务内容')), node('pre', 'cron-prompt', job.prompt)); detail.append(prompt);
             const history = node('div', 'cron-card'); history.append(node('h3', '', t('运行记录')), node('p', '', t('正在读取…')));
@@ -190,6 +191,9 @@
             return t(reasons[value] || value);
         }
         function openThread(ref) { window.PiWorkspaceRoute.navigate('chat', { cwd: ref.cwd, sessionId: ref.sessionId }); }
+        // A Bot's main thread is its main chat: shown, opened on the Bot page, never replaced here.
+        const BOT_HOME = 'Bot 的主线程就是它的主聊天，定时任务会进入它当前的聊天。';
+        const openBotHome = home => button('打开主聊天', 'fa-arrow-up-right-from-square', () => window.PiWorkspaceRoute.navigate('bot', { profileId: home.profileId }));
         async function action(b, job, kind, extra = {}) {
             const requestId = kind === 'run' ? (runRequest?.jobId === job.id ? runRequest.id : randomId()) : undefined;
             if (kind === 'run') runRequest = { jobId: job.id, id: requestId };
@@ -216,6 +220,9 @@
             async function destinations() {
                 const v = ++sessionsEpoch, isProfile = kind.value === 'profile', home = snapshot.homes.find(h => h.profileId === profile.value);
                 profile.parentElement.hidden = !isProfile; targetActions.replaceChildren();
+                const botHome = isProfile && home?.bot === true;
+                cwd.parentElement.hidden = sessions.parentElement.hidden = botHome;
+                if (botHome) { targetStatus.textContent = t(BOT_HOME); targetActions.append(openBotHome(home)); return; }
                 targetStatus.textContent = isProfile ? home?.status === 'ready' ? `${t('当前主线程')}：${home.name || home.sessionId}` : t('尚未设置主线程。可指定已有线程，或在这个目录创建。') : '';
                 try {
                     const data = await api(`/api/pi/sessions?cwd=${encodeURIComponent(cwd.value)}`);
@@ -333,6 +340,8 @@
             let generation = 0, requestId = randomId();
             async function render(resetDirectory = false) {
                 const version = ++generation, id = profile.value, home = snapshot.homes.find(h => h.profileId === id);
+                cwd.parentElement.hidden = sessions.parentElement.hidden = home?.bot === true;
+                if (home?.bot === true) { status.textContent = t(BOT_HOME); controls.replaceChildren(openBotHome(home)); return; }
                 if (resetDirectory || !cwd.value) cwd.value = home?.cwd || currentCwd() || projects[0]?.cwd || '';
                 status.textContent = home?.status === 'ready' ? `${t('当前主线程')}：${home.name || home.sessionId}` : t('尚未设置主线程。可指定已有线程，或在这个目录创建。');
                 controls.replaceChildren(); sessions.replaceChildren();

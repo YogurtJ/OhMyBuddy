@@ -209,3 +209,40 @@ test('a busy or background worker is never replaced because a reply is missing',
     assert.equal(alive(detached.client.child.pid), true);
     assert.equal(pids(log).length, 2, 'no replacement process was started');
 });
+
+test('a scheduled run reopens a stale idle Bot worker through the guarded restart, so open pages reconnect', async t => {
+    const { CronService } = require('../server/pi-cron-service');
+    const { profileRevision } = require('../server/pi-profile-registry');
+    const supervisor = new PiAgentSupervisor({ startupTimeoutMs: 10000 });
+    t.after(() => supervisor.dispose());
+    const target = session(), profile = { id: 'bot-1', enabled: true, name: 'Momo' };
+    const cron = (reloadBotWorker, saved) => Object.assign(Object.create(CronService.prototype), {
+        supervisor, reloadBotWorker, now: Date.now, isSuspended: () => false, stopping: false, mutating: null,
+        profiles: { getProfile: async () => profile },
+        target: async () => ({ cwd: target.cwd, id: target.sessionId, path: target.sessionPath, agentProfile: { id: profile.id } }),
+        db: { saveRun: run => saved.push(run), run: () => ({ status: 'cancelled' }) } });
+    const run = { id: 'run-1', job: { misfire: { policy: 'skip' }, target: {} }, scheduledAt: Date.now() };
+
+    const first = await supervisor.getWorker(target);
+    first.loadedBot = { profileId: profile.id };
+    const events = []; first.subscribe(event => events.push(event.type));
+    // Without the guarded path nothing is replaced underneath the open page.
+    const refused = [];
+    await cron(null, refused).dispatch(run);
+    assert.match(refused[0].reason, /Reopen the idle target thread/);
+    assert.equal(supervisor.workers.get(target.sessionPath), first);
+
+    const saved = [], reloads = [];
+    await cron(async source => {
+        reloads.push(source);
+        const next = await source.exclusive(() => supervisor.restartWorker(source));
+        return Object.assign(next, { loadedAgentProfileConfirmed: true, loadedAgentProfileId: profile.id, loadedAgentProfileRevision: profileRevision(profile) });
+    }, saved).dispatch(run);
+    assert.deepEqual(reloads, [first]);
+    assert.ok(events.includes('gateway_reconnect'), 'open pages are told to reconnect to the replacement');
+    assert.equal(first.disposed, true);
+    const replacement = supervisor.workers.get(target.sessionPath);
+    assert.notEqual(replacement, first);
+    assert.equal(replacement.loadedAgentProfileId, profile.id);
+    assert.deepEqual(saved, [], 'the reopened worker passed the profile check');
+});

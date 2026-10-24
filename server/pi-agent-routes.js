@@ -223,7 +223,23 @@ function createPiAgentGateway(options = {}) {
     const agentThreads = require('./pi-agent-threads').mountAgentThreads(router, { store, supervisor, settingsService, access,
         isSuspended: () => maintenance.locked || maintenance.referenceLocked || Boolean(store.sessionMoves?.running) });
 
-    const cron = new (require('./pi-cron-service').CronService)({ store, supervisor, profiles, bots,
+    // A scheduled run found an idle Bot window still on its previous settings. Reopen it with the
+    // same guards as an explicit restart, so open pages reconnect to the replacement. Anything
+    // the user is still waiting on (queue recoveries, drafts, side chats, delayed sends) keeps the
+    // old runtime: the run is refused instead of changing it silently.
+    const reloadBotWorker = source => source.exclusive(async () => {
+        const refuse = () => { throw new Error('Reopen the idle target thread to load its saved profile'); };
+        if (!supervisor.isSessionIdle(source.sessionPath)) throw new Error('Target thread became busy');
+        if (settingsService.mutating || nativeService.busy || settingsService.loginService?.busy) refuse();
+        if (source.controls?.recoveries?.length || source.controls?.drafts?.length) refuse();
+        if ([...sideChat.connections].some(c => c.reference.source?.cwd === source.cwd && c.reference.source?.sessionId === source.sessionId)
+            || [...sideChat.parents.values()].some(p => p.preparing && p.source?.cwd === source.cwd && p.source?.sessionId === source.sessionId)) refuse();
+        if (deferred.list(source.cwd, source.sessionId).some(job => ['scheduled', 'waiting'].includes(job.status))) refuse();
+        settingsService.mutating = true;
+        try { return await supervisor.restartWorker(source); }
+        finally { settingsService.mutating = false; }
+    });
+    const cron = new (require('./pi-cron-service').CronService)({ store, supervisor, profiles, bots, reloadBotWorker,
         catalog: cwd => agentThreads.catalog(cwd), isSuspended: () => maintenance.locked || maintenance.referenceLocked || Boolean(store.sessionMoves?.running), filename: options.cronFilePath });
     require('./pi-cron-service').mountCron(router, cron);
     const channels = new (require('./channels/service').ChannelsService)({ store, supervisor,
@@ -876,8 +892,14 @@ function createPiAgentGateway(options = {}) {
                                 ephemeral: true
                             };
                         } else {
+                            // Bot mode names its window: only the window's current generation may be
+                            // opened there (the Pi Agent page can still open any native session).
+                            const botWindow = message.botWindow;
+                            if (botWindow !== undefined && (!botWindow || typeof botWindow.profileId !== 'string' || typeof botWindow.windowId !== 'string'))
+                                throw new Error('Invalid Bot window');
                             await store.withSessionRead(message.cwd, message.sessionId, async prepared => {
                                 session = prepared;
+                                if (botWindow) await bots.assertCurrentWindowSession(botWindow.profileId, botWindow.windowId, session);
                                 source = await supervisor.getWorker({ cwd: session.cwd, sessionPath: session.path, sessionId: session.id });
                             });
                         }
@@ -892,6 +914,9 @@ function createPiAgentGateway(options = {}) {
                                 safeSend(socket, event, closing); socket.close(closing.code, closing.reason);
                             } else safeSend(socket, event);
                         });
+                        // Rechecked once subscribed: a rotation committed before the subscription
+                        // existed would otherwise leave this socket on the retired generation.
+                        if (message.botWindow) await bots.assertCurrentWindowSession(message.botWindow.profileId, message.botWindow.windowId, session);
                         const snapshot = await buildSnapshot(session, source);
                         if (socketClosed) { await releaseCurrentWorker(false); return; }
                         safeSend(socket, {

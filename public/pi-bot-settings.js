@@ -53,7 +53,19 @@
         dialog.append(form);
         document.body.append(dialog);
         const sheet = dialog;
-        let data = null, controls = null, saving = false, warnedClose = false;
+        let data = null, controls = null, saving = false, warnedClose = false, initial = null;
+        // What the form shows, field by field; compared with `initial` to know what the user edited.
+        const formValues = () => controls ? { name: controls.name.value, avatar: controls.avatar.value, job: controls.job.value, soul: controls.soul.value,
+            model: controls.model.value, thinking: controls.thinkingWrap.hidden ? '' : controls.thinking.value,
+            preset: controls.presets.find(input => input.checked)?.value || '' } : null;
+        function applyValues(values) {
+            for (const key of ['name', 'avatar', 'job', 'soul']) if (values[key] !== undefined) controls[key].value = values[key];
+            if (values.model !== undefined && [...controls.model.options].some(option => option.value === values.model)) controls.model.value = values.model;
+            const levels = data.models?.models.find(item => modelKey(item) === controls.model.value)?.thinkingLevels || [];
+            controls.thinkingWrap.hidden = !levels.length;
+            if (levels.length) fillThinking(levels, values.thinking ?? controls.thinking.value);
+            if (values.preset !== undefined) for (const input of controls.presets) input.checked = input.value === values.preset;
+        }
 
         const dirty = () => controls ? changes() : null;
         const tryClose = () => {
@@ -182,7 +194,9 @@
                 section(translateUi("做事方式"), presetList, honesty),
                 section(translateUi("更多"), memory, restart));
             const levels = data.models?.models.find(item => modelKey(item) === model.value)?.thinkingLevels || [];
+            thinkingWrap.hidden = !levels.length;
             if (levels.length) fillThinking(levels, current.model?.thinking || '');
+            initial = formValues();
             refreshState();
         }
 
@@ -205,8 +219,10 @@
                 await options.onSaved?.();
             } catch (error) {
                 if (error.status === 409) {
-                    // Reread the saved settings; the form keeps what the user typed.
-                    try { await load(); } catch {}
+                    // Reread the saved settings and show them, then put back only the fields this
+                    // user edited: anything they did not touch follows the newer saved value.
+                    const now = formValues(), edited = Object.fromEntries(Object.entries(now).filter(([key, value]) => value !== initial[key]));
+                    try { await load(); render(); applyValues(edited); } catch {}
                     status.dataset.tone = 'warn';
                     status.textContent = translateUi("设置刚刚在别处改过。你的修改还在，检查后再保存一次。");
                 } else { status.dataset.tone = 'error'; status.textContent = error.message || translateUi("保存失败"); }

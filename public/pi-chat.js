@@ -2504,6 +2504,28 @@ document.addEventListener('DOMContentLoaded', () => {
         return openSession(session, navigation);
     }
 
+    // Reconnect the open conversation. A Bot window is resolved again on the server every
+    // time, because it may have moved to a new generation while this page was offline.
+    function scheduleReconnect(delay = 1800) {
+        clearTimeout(state.reconnectTimer);
+        const attempt = state.reconnectAttempt = (state.reconnectAttempt || 0) + 1;
+        state.reconnectTimer = setTimeout(() => {
+            if (state.botMode && state.bot) {
+                const target = { profileId: state.bot.profileId, windowId: state.bot.windowId };
+                apiFetch(`/api/pi/bots/${encodeURIComponent(target.profileId)}/windows/${encodeURIComponent(target.windowId)}/session`).then(resolved => {
+                    if (!state.botMode || state.bot?.windowId !== target.windowId || state.connected) return;
+                    // Same generation: an ordinary reconnect. Otherwise open the window's new one.
+                    if (resolved.session.id === state.session?.id && resolved.session.cwd === state.session?.cwd) return connectSocket(state.session);
+                    return openBotWindow(target);
+                }).catch(error => {
+                    if (!state.botMode || state.connected || state.bot?.windowId !== target.windowId) return;
+                    setConnection('error', error.code === 'BOT_WINDOW_ROTATING' ? translateUi("正在打开最新的聊天") : translateUi("连接中断，正在重连"));
+                    if (attempt === state.reconnectAttempt) scheduleReconnect(Math.min(15000, Math.max(1800, delay * 2)));
+                });
+            } else connectSocket(state.session).catch(() => {});
+        }, delay);
+    }
+
     async function windowRotated() {
         const target = state.windowRotation; state.windowRotation = null;
         if (!target) { setConnection('error', translateUi("连接已断开")); return; }
@@ -2600,10 +2622,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     const openCommand = session.ephemeral ? 'open_ephemeral' : 'open_session';
                     const payload = { token: state.token, cwd: state.cwd };
                     if (!session.ephemeral) payload.sessionId = session.id;
+                    // A Bot window may only open its current generation; the server checks it.
+                    const botTarget = state.botMode && state.bot && !session.ephemeral ? state.bot : null;
+                    if (botTarget) payload.botWindow = { profileId: botTarget.profileId, windowId: botTarget.windowId };
                     setConnection('connecting', translateUi("正在加载 Pi session"));
                     const snapshot = await requestRpc(openCommand, payload, 180000);
                     if (generation !== state.socketGeneration) return resolve(false);
-                    state.connected = true;
+                    state.connected = true; state.reconnectAttempt = 0;
                     applySnapshot(snapshot);
                     const buffered = state.bootstrapEvents || []; state.bootstrapEvents = null;
                     const live = snapshot.messages?.webLive;
@@ -2616,6 +2641,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     resolve(true);
                 } catch (error) {
                     if (generation !== state.socketGeneration || state.socket !== socket) return resolve(false);
+                    if (['BOT_WINDOW_STALE', 'BOT_WINDOW_ROTATING'].includes(error.errorCode) && state.botMode && state.bot) {
+                        // The window moved on: open its current generation instead of this one.
+                        state.intentionalClose = true; socket.close(4000, 'Bot window moved');
+                        setConnection('connecting', translateUi("正在打开最新的聊天"));
+                        scheduleReconnect(error.errorCode === 'BOT_WINDOW_ROTATING' || (state.reconnectAttempt || 0) > 2 ? 1500 : 0);
+                        resolve(false); return;
+                    }
                     if (generation === state.socketGeneration && state.socket === socket) {
                         if (['STARTUP_UI_UNSUPPORTED', 'RPC_STARTUP_FAILED'].includes(error.errorCode)) {
                             state.intentionalClose = true;
@@ -2669,8 +2701,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 if (!state.intentionalClose && state.session && !state.session.ephemeral) {
                     setConnection('error', translateUi("连接中断，正在重连"));
-                    clearTimeout(state.reconnectTimer);
-                    state.reconnectTimer = setTimeout(() => connectSocket(state.session).catch(() => {}), 1800);
+                    scheduleReconnect(1800);
                 } else if (state.session?.ephemeral) {
                     setConnection('idle', translateUi("临时会话已结束"));
                     elements.input.disabled = true;
@@ -5620,7 +5651,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('workspace:access-ready', () => {
         state.token = '';
         if (!accessBootstrapped) void bootstrap();
-        else if (state.session && !state.session.ephemeral && !state.connected) void connectSocket(state.session).catch(() => {});
+        else if (state.session && !state.session.ephemeral && !state.connected) scheduleReconnect(0);
     });
     window.addEventListener('beforeunload', () => { sideChat.disposeAll(); disconnectSocket(true); });
     // Deliberate same-tab reloads (switching the interface language) keep unsent text drafts and

@@ -20,6 +20,8 @@ async function check(browser, base, width, language, scenario = 'normal') {
         }).observe(document.body, { subtree: true, childList: true }));
     });
     const jobs = [], homes = [], now = Date.now();
+    // A Bot's home is derived from its main chat and cannot be replaced.
+    const botHome = { profileId: 'bot-momo', status: 'ready', cwd, sessionId: 'bot-gen-1', name: 'Momo', revision: 0, bot: true };
     const limits = { maxRunsPerDay: 40, maxTokensPerDay: 400000, maxCostPerDay: null };
     await page.route('**/api/**', route => {
         const req = route.request(), url = new URL(req.url()), body = req.postDataJSON();
@@ -27,11 +29,12 @@ async function check(browser, base, width, language, scenario = 'normal') {
         if (req.method() !== 'GET') writes.push({ path: url.pathname, body });
         if (url.pathname === '/api/pi/status') return send({ ok: true, scheduledTasks: true, projectRoots: ['/synthetic'] });
         if (url.pathname === '/api/pi/projects') return new Promise(resolve => setTimeout(() => { send({ projects: [{ cwd, name: 'Assistant', sessionCount: 1 }], roots: ['/synthetic'] }); resolve(); }, scenario === 'slow' ? 1800 : 0));
-        if (url.pathname === '/api/pi/profiles') return send({ profiles: [{ id: profileId, name: 'Assistant <img src=x onerror=alert(1)>', enabled: true }] });
+        if (url.pathname === '/api/pi/profiles') return send({ profiles: [{ id: profileId, name: 'Assistant <img src=x onerror=alert(1)>', enabled: true },
+            { id: 'bot-momo', name: 'Momo', enabled: true }] });
         if (url.pathname === '/api/pi/sessions') return send({ sessions: url.searchParams.get('cwd') === cwd
             ? [{ id: sessionId, cwd, name: 'Main conversation', agentProfile: { id: profileId } }] : [] });
         if (url.pathname === '/api/pi/activity') return send({ runtimes: [], replyNotices: [] });
-        if (url.pathname === '/api/pi/cron') return new Promise(resolve => setTimeout(() => { send({ jobs, homes, limits, today: { runs: 0, tokens: 0, cost: 0 }, channelNotifications: { pending: 2, failed: 1, lastError: 'channel-admission-pending' } }); resolve(); }, scenario === 'slow' ? 350 : 0));
+        if (url.pathname === '/api/pi/cron') return new Promise(resolve => setTimeout(() => { send({ jobs, homes: [...homes, botHome], limits, today: { runs: 0, tokens: 0, cost: 0 }, channelNotifications: { pending: 2, failed: 1, lastError: 'channel-admission-pending' } }); resolve(); }, scenario === 'slow' ? 350 : 0));
         if (url.pathname === '/api/pi/cron/preview') return send({ times: Array.from({ length: 5 }, (_, i) => now + (i + 1) * 86400000) });
         if (url.pathname === '/api/pi/cron/jobs') { jobs.push({ ...body, revision: 1, nextAt: now + 86400000 }); return send(jobs.at(-1)); }
         if (url.pathname === `/api/pi/cron/homes/${profileId}`) {
@@ -89,6 +92,14 @@ async function check(browser, base, width, language, scenario = 'normal') {
     assert.equal(homes[0].sessionId, sessionId);
     assert.equal(homes[0].cwd, cwd);
     await page.screenshot({ path: `/tmp/pivane-cron-main-${width}-${language}.png`, fullPage: true });
+    const writesBefore = writes.length;
+    await page.getByLabel(zh ? '助手身份' : 'Assistant profiles', { exact: true }).selectOption('bot-momo');
+    await page.getByRole('button', { name: zh ? '打开主聊天' : 'Open main chat', exact: true }).waitFor();
+    assert.match(await page.locator('.cron-form .cron-muted').last().textContent(), zh ? /Bot 的主线程就是它的主聊天/ : /A Bot's main thread is its main chat/);
+    assert.equal(await page.getByRole('button', { name: zh ? '设为主线程' : 'Set as main thread', exact: true }).count(), 0);
+    assert.equal(await page.getByRole('button', { name: zh ? '创建主线程' : 'Create main thread', exact: true }).count(), 0);
+    assert.equal(await page.getByLabel(zh ? '工作目录' : 'Working directory', { exact: false }).isVisible(), false);
+    assert.equal(writes.length, writesBefore, 'nothing is written for a Bot home');
     assert.deepEqual(errors, []);
     assert.equal(writes.filter(w => w.path === '/api/pi/cron/jobs').length, 1);
     await context.close();

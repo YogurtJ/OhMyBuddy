@@ -16,7 +16,8 @@ const history = require('./bot-history');
 const setup = require('./bot-setup');
 const { EventEmitter } = require('node:events');
 
-const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
+const MOVING = '这段聊天正在换到新的记录文件，请稍后再试';
+const fail = (message, status = 400, code) => { throw Object.assign(new Error(message), { status, ...(code ? { code } : {}) }); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const UUID = /^[a-f0-9-]{36}$/;
 const WORKSPACE_PARENT = 'PivaneBots';
@@ -200,7 +201,8 @@ class BotService extends EventEmitter {
     // old generation; recovery decides only from native evidence and never replays turns.
     async rotateLocked(profileId, windowId, { reason = 'manual', expectedGeneration } = {}) {
         if (!['size', 'entries', 'age', 'manual'].includes(reason)) fail('Invalid rotation reason');
-        if (expectedGeneration !== undefined && !Number.isSafeInteger(expectedGeneration)) fail('Invalid expected generation');
+        // The generation the caller saw is required, so a repeated or stale request never rotates again.
+        if (!Number.isSafeInteger(expectedGeneration) || expectedGeneration < 0) fail('Expected generation is required');
         const { bot } = await this.bot(profileId);
         await this.recoverRotationLocked(profileId, windowId);
         const { state, revision } = await this.windows.read(profileId);
@@ -208,7 +210,7 @@ class BotService extends EventEmitter {
         if (!window) fail('Window not found', 404);
         if (!window.current) fail('Window has no conversation yet', 409);
         if (window.cwd !== bot.workspace) fail('Window workspace does not match its Bot', 409);
-        if (expectedGeneration !== undefined && window.current.generation !== expectedGeneration) fail('Window changed; reload before rotating', 409);
+        if (window.current.generation !== expectedGeneration) fail('Window changed; reload before rotating', 409);
         const from = { ...window.current }, toGeneration = from.generation + 1, requestId = randomUUID();
         const preparedAt = new Date().toISOString();
         await this.windows.mutate(profileId, revision, windowState => {
@@ -270,22 +272,43 @@ class BotService extends EventEmitter {
     // marker names the current generation as predecessor at the exact leaf the current
     // generation still has; otherwise the journal is cleared and the successor file is
     // left untouched (it never becomes current).
+    // Caller holds the profile reservation. The predecessor session is reserved (its idle
+    // worker stopped) while the native evidence is read and the decision committed, so no
+    // turn can land on the predecessor in between.
     async recoverRotationLocked(profileId, windowId) {
-        const { state, revision } = await this.windows.read(profileId);
+        const { state } = await this.windows.read(profileId);
         const window = state.windows.find(item => item.id === windowId);
         if (!window?.rotation) return { recovered: false };
+        if (!window.current?.sessionPath || !this.supervisor) return this.settleRotationLocked(profileId, windowId, window);
+        const path = window.current.sessionPath;
+        try {
+            return await this.supervisor.withSessionEdit(path, async worker => {
+                if (worker) await this.supervisor.stopSession(path);
+                return this.settleRotationLocked(profileId, windowId, window);
+            });
+        } catch (error) {
+            // A busy predecessor keeps being the window's conversation. Clearing the journal is
+            // safe without the reservation; adopting the successor is not, so it is never done here.
+            if (error.status === 409 && this.supervisor.getActiveWorker(path))
+                return this.settleRotationLocked(profileId, windowId, window, { adopt: false });
+            throw error;
+        }
+    }
+
+    async settleRotationLocked(profileId, windowId, window, { adopt = true } = {}) {
         const rotation = window.rotation;
         const markers = await this.nativeMarkers(profileId, window.cwd);
         const current = markers.find(marker => marker.windowId === windowId && marker.sessionId === window.current?.sessionId);
         const successor = markers.find(marker => marker.windowId === windowId && marker.generation === rotation.toGeneration
             && marker.predecessor?.sessionId === rotation.fromSessionId);
-        if (successor && current && current.generation === rotation.toGeneration - 1 && successor.predecessor.lastEntryId === current.leafId
+        if (adopt && successor && current && current.generation === rotation.toGeneration - 1 && successor.predecessor.lastEntryId === current.leafId
             && !this.supervisor?.getActiveWorker(window.current.sessionPath)) {
             const committed = await this.commitRotationLocked(profileId, windowId, rotation.requestId, window.current,
                 { sessionId: successor.sessionId, sessionPath: successor.path });
             this.emit('windowRotated', { profileId, windowId, from: window.current, to: committed.current });
             return { recovered: true, committed: true };
         }
+        const { revision } = await this.windows.read(profileId);
         await this.windows.mutate(profileId, revision, windowState => {
             const item = windowState.windows.find(entry => entry.id === windowId);
             if (item?.rotation?.requestId === rotation.requestId) { item.rotation = null; item.updatedAt = new Date().toISOString(); }
@@ -294,9 +317,19 @@ class BotService extends EventEmitter {
         return { recovered: true, committed: false };
     }
 
-    // Resolves a window to its current generation and proves the native marker.
+    // Resolves a window to its current generation and proves the native marker. An
+    // interrupted rotation is settled first, before anyone can open the predecessor again.
     async resolve(profileId, windowId) {
-        const window = await this.windowRecord(profileId, windowId);
+        let window = await this.windowRecord(profileId, windowId);
+        if (window.rotation) {
+            try { await this.profiles.reserve(() => this.recoverRotationLocked(profileId, windowId)); }
+            catch (error) {
+                if (error.status === 409) fail(MOVING, 409, 'BOT_WINDOW_ROTATING');
+                throw error;
+            }
+            window = await this.windowRecord(profileId, windowId);
+            if (window.rotation) fail(MOVING, 409, 'BOT_WINDOW_ROTATING');
+        }
         if (!window.current) fail('Window has no conversation yet', 409);
         return this.store.withSessionRead(window.cwd, window.current.sessionId, (session, read) => {
             const binding = readWindowBinding(read.manager());
@@ -315,6 +348,22 @@ class BotService extends EventEmitter {
         if (!window) fail('Window not found', 404);
         if (window.cwd !== bot.workspace) fail('Window workspace does not match its Bot', 409);
         return window;
+    }
+
+    // Whether an opened session is the window's current generation (Bot-mode admission).
+    async assertCurrentWindowSession(profileId, windowId, session) {
+        const window = await this.windowRecord(profileId, windowId);
+        if (window.rotation || !window.current || window.current.sessionId !== session.id || window.current.sessionPath !== session.path)
+            fail('这段聊天已经换到新的记录文件', 409, 'BOT_WINDOW_STALE');
+        return window;
+    }
+
+    // Display-only reference to a Bot's main chat for the scheduler overview. Execution
+    // always goes through mainSession(), which verifies the native marker.
+    async mainWindowRef(profileId) {
+        const { state } = await this.windows.read(profileId);
+        const main = state.windows.find(item => item.kind === 'main' && item.current);
+        return main ? { cwd: main.cwd, sessionId: main.current.sessionId, generation: main.current.generation } : null;
     }
 
     // The current session of a Bot's main chat (scheduled tasks and channels address it).

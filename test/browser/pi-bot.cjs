@@ -32,7 +32,8 @@ const messages = [
             let bots = [], revision = 'r0', generation = 0, sessionId = 'gen-0', socket = null, phase = 'greeting', name = '新伙伴', face = '🦊';
             let history = [], prompts = [], responses = [], setupBodies = [], historyReads = [], second = false, known2 = undefined, aboutBodies = [];
             let modelCount = 0;
-            let patchBodies = [], settingsReads = 0, model = null, preset = 'free', quietHours = { start: '23:00', end: '08:00' };
+            let patchBodies = [], settingsReads = 0, model = null, preset = 'free', quietHours = { start: '23:00', end: '08:00' }, soul = '温柔耐心，说话简短。';
+            const botOpens = []; let lagging = null;
             const bot = () => ({ id: BOT, name, description: '', avatar: { kind: 'emoji', value: face }, enabled: true, profileRevision: 'p',
                 bot: { version: 1, enabled: true, order: 0, job: '', model, permissions: { preset, rules: 0 },
                     notify: { quietHours, dailyProactiveLimit: 5 },
@@ -79,6 +80,9 @@ const messages = [
                 if (pathname === `/api/pi/bots/${BOT}/windows/${MAIN}/history`) {
                     const view = url.searchParams.get('view'), revision = 'a'.repeat(64), timestamp = '2026-10-24T06:02:00Z';
                     historyReads.push([url.searchParams.get('generation'), view]);
+                    const asked = Number(url.searchParams.get('generation'));
+                    if (asked !== 0) return route.fulfill({ json: { generation: asked, revision: String(asked).repeat(64), total: 0, offset: 0, hasMore: false,
+                        pageSize: 100, continues: false, compactionId: null, turns: [] } });
                     if (view === 'index') return route.fulfill({ json: { generation: 0, revision, total: 1, offset: 0, hasMore: false, pageSize: 100, continues: false, compactionId: null,
                         turns: [{ index: 0, kind: 'user', entryId: 'e1', timestamp, title: '周六去杭州要带伞吗', images: 0, tools: 0, reply: { entryId: 'e2', excerpt: '大概率小雨' } }] } });
                     return route.fulfill({ json: { generation: 0, revision, total: 1, start: 0, end: 1, turns: [{ index: 0, kind: 'user', entryId: 'e1', timestamp,
@@ -87,7 +91,7 @@ const messages = [
                 }
                 if (pathname === `/api/pi/bots/${BOT}/settings`) {
                     settingsReads++;
-                    return route.fulfill({ json: { revision, bot: { id: BOT, name, avatar: { kind: 'emoji', value: face }, soul: '温柔耐心，说话简短。', bot: bot().bot },
+                    return route.fulfill({ json: { revision, bot: { id: BOT, name, avatar: { kind: 'emoji', value: face }, soul, bot: bot().bot },
                         models: { defaults: { provider: 'fixture', modelId: 'small', thinkingLevel: 'medium' }, models: [
                             { provider: 'fixture', id: 'small', name: 'Small', thinkingLevels: [] },
                             { provider: 'fixture', id: 'large', name: 'Large', thinkingLevels: ['low', 'high'] }] } } });
@@ -95,8 +99,8 @@ const messages = [
                 if (pathname === `/api/pi/bots/${BOT}` && method === 'PATCH') {
                     const body = JSON.parse(route.request().postData());
                     patchBodies.push(body);
-                    // The first save meets a change made elsewhere.
-                    if (patchBodies.length === 1) { revision = `r${Date.now()}`; return route.fulfill({ status: 409, json: { error: 'Profiles changed' } }); }
+                    // The first save meets a change made elsewhere: another device changed the personality.
+                    if (patchBodies.length === 1) { revision = `r${Date.now()}`; soul = '活泼一点，多用表情。'; return route.fulfill({ status: 409, json: { error: 'Profiles changed' } }); }
                     assert.equal(body.expectedRevision, revision);
                     model = body.changes.bot?.model ?? model; preset = body.changes.bot?.permissions?.preset ?? preset;
                     if (body.changes.bot?.notify) quietHours = body.changes.bot.notify.quietHours;
@@ -113,6 +117,8 @@ const messages = [
                 }
                 if (pathname === `/api/pi/bots/${BOT2}/windows/${MAIN2}/session`) return route.fulfill({ json: { window: bot2().windows[0], session: { ...row('b2-gen-0'), messageCount: 0 } } });
                 if (pathname === `/api/pi/bots/${BOT}/windows/${MAIN}/session`) {
+                    // A resolve that lands just before the window moves on again.
+                    if (lagging) { const answer = lagging; lagging = null; return route.fulfill({ json: { window: { ...bot().windows[0], sessionId: answer }, session: row(answer) } }); }
                     bots = list();
                     return route.fulfill({ json: { window: bots[0].windows[0], session: row(sessionId) } });
                 }
@@ -129,6 +135,14 @@ const messages = [
                     if (command.type === 'extension_ui_response') { responses.push(command); return; }
                     const state = { model: { provider: 'fixture', id: 'fixture-model', name: 'Fixture' }, isStreaming: false, thinkingLevel: 'off' };
                     let data = {};
+                    if (command.type === 'open_session' && command.botWindow) {
+                        botOpens.push([command.sessionId, command.botWindow.windowId]);
+                        const current = command.botWindow.profileId === BOT2 ? 'b2-gen-0' : sessionId;
+                        if (command.sessionId !== current) {
+                            ws.send(JSON.stringify({ type: 'response', id: command.id, command: command.type, success: false, error: 'This chat has moved to a new conversation file', errorCode: 'BOT_WINDOW_STALE' }));
+                            return;
+                        }
+                    }
                     if (command.type === 'open_session') {
                         opened.push(command.sessionId);
                         data = { session: row(command.sessionId), state, messages: { messages: command.sessionId === 'gen-0' ? history : [] }, stats: {},
@@ -233,6 +247,32 @@ const messages = [
                 assert.equal(await page.locator('#pi-bot-history .pi-message.assistant > header > strong').first().textContent(), '小狸');
                 if (evidence) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(evidence, `bot-history-${width}.png`) }); }
 
+                // 3b. The window moves on while the page is offline (no rotation notice), and the
+                // generation it skipped has no turns: an ordinary reconnect resolves the window
+                // again and opens the new generation, and history steps past the empty one.
+                generation = 2; sessionId = 'gen-2'; historyReads = [];
+                await socket.close({ code: 1011, reason: 'Connection lost' });
+                await page.waitForFunction(() => document.querySelector('#pi-bot-history .pi-archive-head-text') && document.querySelector('#pi-bot-header .pi-bot-status')?.dataset.state === 'connected', null, { timeout: 15000 });
+                await page.waitForTimeout(400);
+                assert.deepEqual(opened, ['gen-0', 'gen-0', 'gen-1', 'gen-2'], 'the retired generation is never reopened');
+                assert.ok(botOpens.every(([id]) => id.startsWith('gen-')) && botOpens.length === opened.length, 'every Bot open names its window');
+                assert.deepEqual(historyReads.filter(([, view]) => view === 'index'), [['1', 'index'], ['0', 'index']], 'the empty generation is skipped');
+                assert.match(await page.locator('#pi-bot-history .pi-bot-history-generation:not([hidden]) .pi-archive-head-text').first().textContent(), /更早的聊天/);
+                // A runtime restart (1012) on the same generation is a plain reconnect.
+                await socket.close({ code: 1012, reason: 'Session runtime changed' });
+                for (let i = 0; i < 100 && opened.length < 5; i++) await page.waitForTimeout(100);
+                assert.deepEqual(opened.slice(3), ['gen-2', 'gen-2']);
+                // The window moves on between resolving and opening: the server refuses the stale
+                // open and the page resolves again, skipping two empty generations in history.
+                generation = 4; sessionId = 'gen-4'; lagging = 'gen-2'; historyReads = [];
+                await socket.close({ code: 1011, reason: 'Connection lost' });
+                for (let i = 0; i < 150 && opened.at(-1) !== 'gen-4'; i++) await page.waitForTimeout(100);
+                assert.deepEqual(opened.slice(5), ['gen-4']);
+                assert.deepEqual(botOpens.slice(-4).map(([id]) => id), ['gen-2', 'gen-2', 'gen-2', 'gen-4'], 'the stale open was refused, then the current one opened');
+                await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-status')?.dataset.state === 'connected', null, { timeout: 15000 });
+                for (let i = 0; i < 50 && historyReads.length < 4; i++) await page.waitForTimeout(100);
+                assert.deepEqual(historyReads.filter(([, view]) => view === 'index').map(([g]) => g), ['3', '2', '1', '0']);
+
                 // 4. Settings: one sheet; only what changed is saved, and a conflict keeps the edits.
                 if (width < 700) {
                     await page.locator('#pi-bot-header .pi-bot-menu').click();
@@ -254,6 +294,8 @@ const messages = [
                 await page.waitForFunction(() => /别处改过/.test(document.querySelector('.pi-bot-sheet-status')?.textContent || ''));
                 assert.equal(settingsReads, 2, 'the conflict rereads the saved settings');
                 assert.equal(await sheet.locator('.pi-bot-sheet-preset input:checked').evaluate(input => input.value), 'balanced', 'the edits stay');
+                assert.equal(await sheet.locator('select').first().evaluate(select => select.selectedOptions[0].textContent), 'Large');
+                assert.equal(await sheet.locator('textarea').nth(1).inputValue(), '活泼一点，多用表情。', 'untouched fields follow the newer saved value');
                 await sheet.locator('.pi-bot-sheet-save').click();
                 await page.locator('.pi-bot-sheet').waitFor({ state: 'detached', timeout: 8000 });
                 const expected = { bot: { model: { provider: 'fixture', id: 'large', thinking: 'high' }, permissions: { preset: 'balanced' } } };

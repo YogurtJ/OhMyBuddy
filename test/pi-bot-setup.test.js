@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const crypto = require('node:crypto');
 
 const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-bot-setup-test-')));
 const agentDir = path.join(root, 'agent');
@@ -184,6 +185,12 @@ test('a Bot profile target resolves to its main chat, following rotation', { tim
     const second = (await bots.resolve(botId, windowId)).session;
     assert.notEqual(second.id, first.id);
     assert.equal((await cron.target({ kind: 'profile', profileId: botId })).id, second.id, 'new runs go to the current generation');
+    // The overview shows the Bot's home as its main chat; it is derived and cannot be replaced.
+    const home = (await cron.snapshot()).homes.find(item => item.profileId === botId);
+    assert.deepEqual({ cwd: home.cwd, sessionId: home.sessionId, bot: home.bot, status: home.status }, { cwd: second.cwd, sessionId: second.id, bot: true, status: 'ready' });
+    await assert.rejects(cron.home(botId, { revision: 0, cwd: first.cwd, sessionId: first.id }), error => error.status === 409 && /主聊天/.test(error.message));
+    await assert.rejects(cron.home(botId, { revision: 0, cwd: first.cwd, create: true, requestId: crypto.randomUUID() }), error => error.status === 409);
+    assert.equal(cron.db.home(botId), null, 'nothing was stored for the Bot');
 });
 
 test('a new Bot can be told what another Bot knows about the user, only what was ticked', { timeout: 60000 }, async t => {
