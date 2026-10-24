@@ -1,0 +1,335 @@
+'use strict';
+// Bot Mode coordinator: Bots are profiles with a `bot` section; each Bot owns a private
+// workspace directory (its project cwd) and permanent windows whose current native
+// session generation is resolved here. Profile and window writes run under the shared
+// profile/settings reservation (reserved synchronously, before any await).
+const fs = require('node:fs');
+const path = require('node:path');
+const { randomUUID } = require('node:crypto');
+const { getSdk } = require('../pi-session-store');
+const { validateProfile, profileRevision } = require('../pi-profile-registry');
+const settings = require('./bot-settings');
+const { BotWindowRegistry } = require('./bot-window-registry');
+const { WINDOW_ENTRY, windowMarker, readWindowBinding } = require('./bot-window-state');
+const { HANDOFF_MESSAGE, buildHandoff } = require('./bot-handoff');
+const { EventEmitter } = require('node:events');
+
+const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
+const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+const UUID = /^[a-f0-9-]{36}$/;
+const WORKSPACE_PARENT = 'PivaneBots';
+const MAX_BOTS = 50;
+const PLACEHOLDER = Object.freeze({ 'zh-CN': '新伙伴', en: 'New buddy' });
+const DEFAULT_AVATAR = Object.freeze({ kind: 'emoji', value: '✨' });
+
+function publicWindow(window) {
+    const { id, kind, title, emoji, focus, createdAt, updatedAt, archivedAt, current, generations } = window;
+    return { id, kind, title, emoji, focus, createdAt, updatedAt, archivedAt,
+        generation: current?.generation ?? null, sessionId: current?.sessionId ?? null, generations: generations.length };
+}
+
+class BotService extends EventEmitter {
+    constructor({ store, profiles, supervisor, getAgentDir }) {
+        super();
+        this.store = store;
+        this.profiles = profiles;
+        this.supervisor = supervisor;
+        this.getAgentDir = getAgentDir || (async () => fs.realpathSync.native((await getSdk()).getAgentDir()));
+        this.windows = new BotWindowRegistry({ getAgentDir: this.getAgentDir });
+    }
+
+    // Bots in display order, with their windows. Profiles without a valid section are not Bots.
+    async list() {
+        const { state, revision } = await this.profiles.state();
+        const bots = [];
+        for (const profile of state.profiles) {
+            const bot = settings.readBot(profile);
+            if (!bot || profile.trashedAt !== undefined) continue;
+            const { state: windowState, revision: windowsRevision } = await this.windows.read(profile.id);
+            bots.push({ id: profile.id, name: profile.name, description: profile.description, avatar: profile.avatar ?? null,
+                enabled: settings.isBot(profile), profileRevision: profileRevision(profile), bot: this.publicBot(bot),
+                windowsRevision, windows: windowState.windows.map(publicWindow) });
+        }
+        bots.sort((a, b) => a.bot.order - b.bot.order || Date.parse(a.bot.createdAt) - Date.parse(b.bot.createdAt));
+        return { version: 1, revision, bots };
+    }
+
+    publicBot(bot) {
+        const { version, enabled, order, job, model, permissions, notify, onboarding, createdAt } = bot;
+        return { version, enabled, order, job, model, permissions: { preset: permissions.preset, rules: permissions.rules.length },
+            notify, onboarding, createdAt };
+    }
+
+    async bot(profileId) {
+        if (typeof profileId !== 'string' || !UUID.test(profileId)) fail('Invalid bot ID');
+        const profile = await this.profiles.getProfile(profileId);
+        const bot = settings.readBot(profile);
+        if (!profile || !bot || profile.trashedAt !== undefined) fail('Bot not found', 404);
+        return { profile, bot };
+    }
+
+    // A private directory inside the allowed project roots; named by ID so renaming a Bot
+    // never moves its sessions (a native session cwd is immutable).
+    prepareWorkspace(profileId, name, language) {
+        const base = this.store.defaultProject();
+        if (!base) fail('No accessible project directory is available for Bot workspaces', 409);
+        const parent = path.join(base, WORKSPACE_PARENT);
+        for (const directory of [parent, path.join(parent, `bot-${profileId.slice(0, 8)}`)]) {
+            try { fs.mkdirSync(directory, { mode: 0o700 }); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+            const stat = fs.lstatSync(directory);
+            if (!stat.isDirectory() || stat.isSymbolicLink()) fail('Bot workspace must be a real directory', 409);
+        }
+        const workspace = this.store.resolveProject(path.join(parent, `bot-${profileId.slice(0, 8)}`));
+        if (process.platform !== 'win32') fs.chmodSync(workspace, 0o700);
+        const readme = path.join(workspace, 'README.md');
+        const note = language === 'en'
+            ? `# Bot workspace\n\nFiles created by your Pivane Bot (${name}) live here. Bot ID: ${profileId}\n`
+            : `# Bot 工作目录\n\n这里存放你的 Pivane Bot（${name}）创建的文件。Bot ID：${profileId}\n`;
+        try { fs.writeFileSync(readme, note, { flag: 'wx', mode: 0o600 }); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+        return workspace;
+    }
+
+    create(input = {}) {
+        return this.profiles.reserve(async () => {
+            if (!object(input) || typeof input.expectedRevision !== 'string') fail('Expected revision is required');
+            const language = input.language === 'en' ? 'en' : 'zh-CN';
+            const id = randomUUID(), name = PLACEHOLDER[language];
+            const { state: current } = await this.profiles.state();
+            const existingBots = current.profiles.filter(profile => settings.readBot(profile) && profile.trashedAt === undefined);
+            if (existingBots.length >= MAX_BOTS) fail('Bot limit reached', 409);
+            const workspace = this.prepareWorkspace(id, name, language);
+            const now = new Date().toISOString();
+            const bot = settings.normalizeBot(settings.defaultBot({ workspace, now, firstBot: existingBots.length === 0,
+                order: existingBots.reduce((max, profile) => Math.max(max, settings.readBot(profile).order + 1), 0) }));
+            const base = validateProfile({ name, description: '', soul: '', enabled: true, avatar: DEFAULT_AVATAR,
+                memory: { enabled: true, autoLearn: false }, skills: { learnedEnabled: true } });
+            const saved = await this.profiles.mutate(input.expectedRevision, state => {
+                if (state.profiles.length >= 50) fail('Profile limit reached', 409);
+                const record = { ...base, id, bot, createdAt: now, updatedAt: now };
+                state.profiles.push(record);
+                return { profile: record };
+            });
+            const window = await this.createWindowLocked(id, 'main');
+            return { ok: true, revision: saved.revision, bot: { id, name, avatar: saved.profile.avatar, bot: this.publicBot(bot) }, window };
+        });
+    }
+
+    // Caller holds the profile reservation. Native marker first, index second: an
+    // interruption between the two leaves a marked session that reconcile() adopts.
+    async createWindowLocked(profileId, kind, { title = '', emoji = '', focus = '' } = {}) {
+        const { bot } = await this.bot(profileId);
+        const { state, revision } = await this.windows.read(profileId);
+        if (kind === 'main' && state.windows.some(window => window.kind === 'main')) fail('Bot already has a main chat', 409);
+        const windowId = randomUUID();
+        const session = await this.store.createSession(bot.workspace, '', { agentProfileId: profileId,
+            initializeSession: manager => manager.appendCustomEntry(WINDOW_ENTRY,
+                windowMarker({ sessionId: manager.getSessionId(), profileId, windowId, kind, generation: 0 })) });
+        const now = new Date().toISOString();
+        const record = { id: windowId, kind, title, emoji, focus, cwd: bot.workspace, createdAt: now, updatedAt: now, archivedAt: null,
+            current: { generation: 0, sessionId: session.id, sessionPath: session.path },
+            generations: [{ generation: 0, sessionId: session.id, sessionPath: session.path, startedAt: now, endedAt: null, reason: 'initial' }],
+            rotation: null };
+        const saved = await this.windows.mutate(profileId, revision, windowState => { windowState.windows.push(record); return {}; });
+        return { ...publicWindow(record), windowsRevision: saved.revision };
+    }
+
+    // Idempotent repair: a Bot without a main window gets one (adopting a marked native
+    // session left by an interrupted creation before creating a new one).
+    ensureMainWindow(profileId) {
+        return this.profiles.reserve(async () => {
+            const { state } = await this.windows.read(profileId);
+            const main = state.windows.find(window => window.kind === 'main');
+            if (main) return publicWindow(main);
+            const adopted = await this.reconcileLocked(profileId);
+            return adopted.main ? publicWindow(adopted.main) : this.createWindowLocked(profileId, 'main');
+        });
+    }
+
+    // Adds windows whose native generation-0 marker exists but whose index entry is
+    // missing. Never removes or rewrites existing index entries.
+    async reconcileLocked(profileId) {
+        const { bot } = await this.bot(profileId);
+        const markers = await this.nativeMarkers(profileId, bot.workspace);
+        const { state, revision } = await this.windows.read(profileId);
+        const known = new Set(state.windows.map(window => window.id));
+        const adoptable = markers.filter(marker => marker.generation === 0 && !known.has(marker.windowId))
+            .filter(marker => marker.kind !== 'main' || !state.windows.some(window => window.kind === 'main'));
+        // Only one main window can be adopted; prefer the earliest.
+        const mains = adoptable.filter(marker => marker.kind === 'main').sort((a, b) => a.created - b.created);
+        const chosen = [...mains.slice(0, 1), ...adoptable.filter(marker => marker.kind === 'topic')];
+        if (!chosen.length) return { main: state.windows.find(window => window.kind === 'main') || null, adopted: 0 };
+        const now = new Date().toISOString();
+        const saved = await this.windows.mutate(profileId, revision, windowState => {
+            for (const marker of chosen) windowState.windows.push({ id: marker.windowId, kind: marker.kind, title: '', emoji: '', focus: '',
+                cwd: bot.workspace, createdAt: now, updatedAt: now, archivedAt: null,
+                current: { generation: 0, sessionId: marker.sessionId, sessionPath: marker.path },
+                generations: [{ generation: 0, sessionId: marker.sessionId, sessionPath: marker.path, startedAt: now, endedAt: null, reason: 'initial' }],
+                rotation: null });
+            return {};
+        });
+        return { main: saved.state.windows.find(window => window.kind === 'main') || null, adopted: chosen.length };
+    }
+
+    // Window markers of every verified native session in a Bot workspace.
+    async nativeMarkers(profileId, cwd) {
+        const { SessionManager } = await getSdk();
+        const markers = [];
+        for (const candidate of await this.store._nativeSessionMetadata(cwd, SessionManager)) {
+            let binding = null, leafId = null;
+            try {
+                const manager = this.store.profileManager({ ...candidate, cwd }, SessionManager);
+                binding = readWindowBinding(manager); leafId = manager.getLeafId();
+            } catch { continue; }
+            if (binding?.profileId === profileId) markers.push({ ...binding, leafId, path: fs.realpathSync.native(candidate.path),
+                created: new Date(candidate.created).getTime() || 0 });
+        }
+        return markers;
+    }
+
+    rotate(profileId, windowId, input = {}) {
+        return this.profiles.reserve(() => this.rotateLocked(profileId, windowId, input));
+    }
+
+    // Moves a window to a fresh native session generation. Journal first, then (with the
+    // old file reserved and its worker stopped) create the successor whose window marker
+    // is its last initial entry, then commit the index. Any failure leaves routing on the
+    // old generation; recovery decides only from native evidence and never replays turns.
+    async rotateLocked(profileId, windowId, { reason = 'manual', expectedGeneration } = {}) {
+        if (!['size', 'entries', 'age', 'manual'].includes(reason)) fail('Invalid rotation reason');
+        if (expectedGeneration !== undefined && !Number.isSafeInteger(expectedGeneration)) fail('Invalid expected generation');
+        const { bot } = await this.bot(profileId);
+        await this.recoverRotationLocked(profileId, windowId);
+        const { state, revision } = await this.windows.read(profileId);
+        const window = state.windows.find(item => item.id === windowId);
+        if (!window) fail('Window not found', 404);
+        if (!window.current) fail('Window has no conversation yet', 409);
+        if (window.cwd !== bot.workspace) fail('Window workspace does not match its Bot', 409);
+        if (expectedGeneration !== undefined && window.current.generation !== expectedGeneration) fail('Window changed; reload before rotating', 409);
+        const from = { ...window.current }, toGeneration = from.generation + 1, requestId = randomUUID();
+        const preparedAt = new Date().toISOString();
+        await this.windows.mutate(profileId, revision, windowState => {
+            const item = windowState.windows.find(entry => entry.id === windowId);
+            if (!item || item.current?.sessionId !== from.sessionId || item.rotation) fail('Window changed; reload before rotating', 409);
+            item.rotation = { state: 'prepared', requestId, toGeneration, fromSessionId: from.sessionId, reason, preparedAt };
+            item.updatedAt = preparedAt;
+            return {};
+        });
+        let session;
+        try {
+            session = await this.supervisor.withSessionEdit(from.sessionPath, async worker => {
+                if (worker) await this.supervisor.stopSession(from.sessionPath);
+                const handoff = await this.store.withSessionRead(window.cwd, from.sessionId, (current, read) => {
+                    const manager = read.manager(), binding = readWindowBinding(manager);
+                    const result = buildHandoff(manager);
+                    read.validate();
+                    if (current.path !== from.sessionPath || binding?.windowId !== windowId || binding.generation !== from.generation)
+                        fail('Window conversation does not match its native marker', 409);
+                    return result;
+                });
+                return this.store.createSession(window.cwd, '', { agentProfileId: profileId, initializeSession: manager => {
+                    if (handoff.model) manager.appendModelChange(handoff.model.provider, handoff.model.modelId);
+                    if (handoff.thinkingLevel) manager.appendThinkingLevelChange(handoff.thinkingLevel);
+                    if (handoff.text) manager.appendCustomMessageEntry(HANDOFF_MESSAGE, handoff.text, false,
+                        { version: 1, fromSessionId: from.sessionId, fromGeneration: from.generation });
+                    // Last initial entry: its presence proves the seed above was written.
+                    manager.appendCustomEntry(WINDOW_ENTRY, windowMarker({ sessionId: manager.getSessionId(), profileId, windowId,
+                        kind: window.kind, generation: toGeneration, predecessor: { sessionId: from.sessionId, lastEntryId: handoff.lastEntryId } }));
+                } });
+            });
+        } catch (error) {
+            await this.recoverRotationLocked(profileId, windowId).catch(() => {});
+            throw error;
+        }
+        const committed = await this.commitRotationLocked(profileId, windowId, requestId, from, { sessionId: session.id, sessionPath: session.path });
+        this.emit('windowRotated', { profileId, windowId, from, to: committed.current });
+        return { ok: true, window: publicWindow(committed), session: { cwd: window.cwd, id: session.id, path: session.path } };
+    }
+
+    async commitRotationLocked(profileId, windowId, requestId, from, to) {
+        const { revision } = await this.windows.read(profileId);
+        const saved = await this.windows.mutate(profileId, revision, windowState => {
+            const item = windowState.windows.find(entry => entry.id === windowId);
+            if (!item?.rotation || item.rotation.requestId !== requestId || item.current?.sessionId !== from.sessionId)
+                fail('Window changed during rotation; it was not switched', 409);
+            const now = new Date().toISOString();
+            item.generations.at(-1).endedAt = now;
+            item.generations.push({ generation: item.rotation.toGeneration, sessionId: to.sessionId, sessionPath: to.sessionPath,
+                startedAt: now, endedAt: null, reason: item.rotation.reason });
+            item.current = { generation: item.rotation.toGeneration, sessionId: to.sessionId, sessionPath: to.sessionPath };
+            item.rotation = null; item.updatedAt = now;
+            return {};
+        });
+        return saved.state.windows.find(entry => entry.id === windowId);
+    }
+
+    // Completes or abandons an interrupted rotation. A successor is adopted only when its
+    // marker names the current generation as predecessor at the exact leaf the current
+    // generation still has; otherwise the journal is cleared and the successor file is
+    // left untouched (it never becomes current).
+    async recoverRotationLocked(profileId, windowId) {
+        const { state, revision } = await this.windows.read(profileId);
+        const window = state.windows.find(item => item.id === windowId);
+        if (!window?.rotation) return { recovered: false };
+        const rotation = window.rotation;
+        const markers = await this.nativeMarkers(profileId, window.cwd);
+        const current = markers.find(marker => marker.windowId === windowId && marker.sessionId === window.current?.sessionId);
+        const successor = markers.find(marker => marker.windowId === windowId && marker.generation === rotation.toGeneration
+            && marker.predecessor?.sessionId === rotation.fromSessionId);
+        if (successor && current && current.generation === rotation.toGeneration - 1 && successor.predecessor.lastEntryId === current.leafId
+            && !this.supervisor?.getActiveWorker(window.current.sessionPath)) {
+            const committed = await this.commitRotationLocked(profileId, windowId, rotation.requestId, window.current,
+                { sessionId: successor.sessionId, sessionPath: successor.path });
+            this.emit('windowRotated', { profileId, windowId, from: window.current, to: committed.current });
+            return { recovered: true, committed: true };
+        }
+        await this.windows.mutate(profileId, revision, windowState => {
+            const item = windowState.windows.find(entry => entry.id === windowId);
+            if (item?.rotation?.requestId === rotation.requestId) { item.rotation = null; item.updatedAt = new Date().toISOString(); }
+            return {};
+        });
+        return { recovered: true, committed: false };
+    }
+
+    // Resolves a window to its current generation and proves the native marker.
+    async resolve(profileId, windowId) {
+        const { bot } = await this.bot(profileId);
+        if (typeof windowId !== 'string' || !UUID.test(windowId)) fail('Invalid window ID');
+        const { state } = await this.windows.read(profileId);
+        const window = state.windows.find(item => item.id === windowId);
+        if (!window) fail('Window not found', 404);
+        if (!window.current) fail('Window has no conversation yet', 409);
+        if (window.cwd !== bot.workspace) fail('Window workspace does not match its Bot', 409);
+        return this.store.withSessionRead(window.cwd, window.current.sessionId, (session, read) => {
+            const binding = readWindowBinding(read.manager());
+            read.validate();
+            if (session.path !== window.current.sessionPath || binding?.profileId !== profileId || binding.windowId !== windowId
+                || binding.generation !== window.current.generation) fail('Window conversation does not match its native marker', 409);
+            return { window: publicWindow(window), session: { cwd: session.cwd || window.cwd, id: session.id, path: session.path } };
+        });
+    }
+
+    update(profileId, input = {}) {
+        return this.profiles.reserve(async () => {
+            if (!object(input) || typeof input.expectedRevision !== 'string' || !object(input.changes)) fail('Invalid bot change');
+            const { name, description, soul, avatar, bot: botPatch, ...rest } = input.changes;
+            if (Object.keys(rest).length) fail('Invalid bot change');
+            return this.profiles.mutate(input.expectedRevision, state => {
+                const index = state.profiles.findIndex(profile => profile.id === profileId);
+                const previous = state.profiles[index];
+                const bot = settings.readBot(previous);
+                if (index < 0 || !bot || previous.trashedAt !== undefined) fail('Bot not found', 404);
+                const base = validateProfile({ name: name ?? previous.name, description: description ?? previous.description,
+                    soul: soul ?? previous.soul, enabled: previous.enabled, memory: previous.memory, skills: previous.skills,
+                    ...(avatar !== undefined ? { avatar } : {}) }, previous);
+                if (base.avatar?.kind === 'image' && (previous.avatar?.kind !== 'image' || previous.avatar.version !== base.avatar.version)) fail('Image avatar must be uploaded');
+                const nextBot = botPatch === undefined ? bot : settings.applyBotPatch(bot, botPatch);
+                const record = { ...previous, ...base, bot: { ...previous.bot, ...nextBot }, updatedAt: new Date().toISOString() };
+                state.profiles[index] = record;
+                return { ok: true, bot: { id: record.id, name: record.name, avatar: record.avatar ?? null, bot: this.publicBot(nextBot) },
+                    profileRevision: profileRevision(record) };
+            });
+        });
+    }
+}
+
+module.exports = { BotService, publicWindow, WORKSPACE_PARENT };

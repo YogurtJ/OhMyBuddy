@@ -210,6 +210,9 @@ function createPiAgentGateway(options = {}) {
     require('./pi-profile-documents').mountProfileDocumentRoutes(router, profileResources);
     require('./pi-profile-avatar').mountProfileAvatarRoutes(router, profileResources);
     require('./pi-profile-authoring').mountProfileAuthoringRoutes(router, { store, profiles });
+    const bots = new (require('./bot/bot-service').BotService)({ store, profiles, supervisor, getAgentDir });
+    bots.on('windowRotated', event => supervisor.emit('botWindowRotated', event));
+    require('./bot/bot-routes').mountBotRoutes(router, { bots });
     const agentThreads = require('./pi-agent-threads').mountAgentThreads(router, { store, supervisor, settingsService, access,
         isSuspended: () => maintenance.locked || maintenance.referenceLocked || Boolean(store.sessionMoves?.running) });
 
@@ -246,6 +249,7 @@ function createPiAgentGateway(options = {}) {
             scheduledTasks: true,
             messageChannels: true,
             agentProfiles: true,
+            bots: true,
             assistantProjects: true,
             sessionClassification: true,
             profileDocuments: true,
@@ -582,6 +586,8 @@ function createPiAgentGateway(options = {}) {
 
     const sessionClassificationListeners = new Set();
     supervisor.on('sessionClassification', session => { for (const listener of sessionClassificationListeners) listener(session); });
+    const windowRotationListeners = new Set();
+    supervisor.on('botWindowRotated', event => { for (const listener of windowRotationListeners) listener(event); });
     const sessionMoveListeners = new Set();
     supervisor.on('sessionMove', event => { for (const listener of sessionMoveListeners) listener(event); });
     const sessionRemovalListeners = new Set();
@@ -680,6 +686,13 @@ function createPiAgentGateway(options = {}) {
                 socket.close(1012, 'Session classification changed');
             };
             sessionClassificationListeners.add(sessionClassification);
+            const windowRotation = event => {
+                if (event.from.sessionPath !== workerSessionPath) return;
+                safeSend(socket, { type: 'gateway_window_rotated', profileId: event.profileId, windowId: event.windowId,
+                    generation: event.to.generation }, { code: 1012, reason: 'Window rotated' });
+                socket.close(1012, 'Window rotated');
+            };
+            windowRotationListeners.add(windowRotation);
             const sessionRemoval = event => {
                 if (event.path !== workerSessionPath) return;
                 if (event.deleted) safeSend(socket, { type: 'gateway_session_deleted', cwd: event.cwd, sessionId: event.id, trashed: event.result.trashed },
@@ -1095,6 +1108,7 @@ function createPiAgentGateway(options = {}) {
             socket.on('close', () => {
                 sessionRemovalListeners.delete(sessionRemoval);
                 sessionClassificationListeners.delete(sessionClassification);
+                windowRotationListeners.delete(windowRotation);
                 sessionMoveListeners.delete(sessionMove);
                 socketClosed = true;
                 clearTimeout(authTimer);

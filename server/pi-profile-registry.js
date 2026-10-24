@@ -325,4 +325,4 @@ class PiProfileRegistry {
     }
 }
 
-module.exports = { PiProfileRegistry, readRegistry, profileRevision, normalizedMemory };
+module.exports = { PiProfileRegistry, readRegistry, profileRevision, normalizedMemory, validateProfile };
