@@ -13,6 +13,7 @@ const { BotWindowRegistry } = require('./bot-window-registry');
 const { WINDOW_ENTRY, windowMarker, readWindowBinding } = require('./bot-window-state');
 const { HANDOFF_MESSAGE, buildHandoff } = require('./bot-handoff');
 const history = require('./bot-history');
+const setup = require('./bot-setup');
 const { EventEmitter } = require('node:events');
 
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
@@ -30,11 +31,12 @@ function publicWindow(window) {
 }
 
 class BotService extends EventEmitter {
-    constructor({ store, profiles, supervisor, getAgentDir }) {
+    constructor({ store, profiles, supervisor, getAgentDir, documents = null }) {
         super();
         this.store = store;
         this.profiles = profiles;
         this.supervisor = supervisor;
+        this.documents = documents;
         this.getAgentDir = getAgentDir || (async () => fs.realpathSync.native((await getSdk()).getAgentDir()));
         this.windows = new BotWindowRegistry({ getAgentDir: this.getAgentDir });
     }
@@ -338,6 +340,87 @@ class BotService extends EventEmitter {
         if (!window || window.cwd !== cwd || window.current?.sessionId !== sessionId || window.current.sessionPath !== sessionPath
             || window.current.generation !== binding.generation) return null;
         return { version: 1, profileId: binding.profileId, windowId: binding.windowId, sessionId, cwd, sessionPath };
+    }
+
+    // Saves a setup card the user confirmed (possibly edited). The card must still be pending
+    // in the window's current native transcript; only its proposed fields are accepted.
+    setup(profileId, input = {}) {
+        return this.profiles.reserve(async () => {
+            if (!object(input) || typeof input.expectedRevision !== 'string' || typeof input.windowId !== 'string') fail('Invalid setup confirmation');
+            const window = await this.windowRecord(profileId, input.windowId);
+            if (!window.current) fail('Window has no conversation yet', 409);
+            const proposal = await this.store.withSessionRead(window.cwd, window.current.sessionId, (session, read) => {
+                const manager = read.manager(), binding = readWindowBinding(manager);
+                const found = setup.pendingProposal(manager, input.toolCallId);
+                read.validate();
+                if (session.path !== window.current.sessionPath || binding?.profileId !== profileId || binding.windowId !== window.id)
+                    fail('Window conversation does not match its native marker', 409);
+                return found;
+            });
+            const changes = setup.confirmedChanges(proposal, input.changes ?? proposal);
+            if (!Object.keys(changes).length) fail('Nothing to save');
+            const now = new Date().toISOString();
+            const saved = await this.profiles.mutate(input.expectedRevision, state => {
+                const index = state.profiles.findIndex(profile => profile.id === profileId);
+                const previous = state.profiles[index], bot = settings.readBot(previous);
+                if (index < 0 || !bot || previous.trashedAt !== undefined) fail('Bot not found', 404);
+                const base = validateProfile({ name: changes.name ?? previous.name, description: previous.description,
+                    soul: changes.personality ?? previous.soul, enabled: previous.enabled, memory: previous.memory, skills: previous.skills,
+                    ...(changes.avatar ? { avatar: { kind: 'emoji', value: changes.avatar } } : {}) }, previous);
+                const onboarding = { ...bot.onboarding, steps: { ...bot.onboarding.steps } };
+                if (changes.name || changes.avatar) onboarding.steps.identity = 'done';
+                if (changes.job) onboarding.steps.job = 'done';
+                if (changes.personality) onboarding.steps.personality = 'done';
+                if (changes.aboutUser) onboarding.steps.about = 'done';
+                if (onboarding.phase === 'greeting') onboarding.phase = 'interview';
+                if (changes.finish && !['done', 'skipped'].includes(onboarding.phase)) { onboarding.phase = 'done'; onboarding.completedAt = now; }
+                const nextBot = settings.normalizeBot({ ...bot, job: changes.job ?? bot.job, onboarding });
+                const record = { ...previous, ...base, bot: { ...previous.bot, ...nextBot }, updatedAt: now };
+                state.profiles[index] = record;
+                return { bot: { id: record.id, name: record.name, avatar: record.avatar ?? null, bot: this.publicBot(nextBot) } };
+            });
+            let user = null;
+            if (changes.aboutUser) {
+                // A separate document with its own revision; the identity change above stands either way.
+                try {
+                    if (!this.documents) fail('About-you notes are unavailable', 409);
+                    const document = await this.documents.run(profileId, 'user', false);
+                    if (document.status !== 'ready') fail('About-you notes are unavailable', 409);
+                    const next = setup.appendUserEntries(document.content, changes.aboutUser);
+                    if (!next.added.length) user = { added: [], documentSaved: true };
+                    else {
+                        const written = await this.documents.run(profileId, 'user', true, { content: next.content,
+                            expectedRevision: document.revision, expectedProfileRevision: document.profileRevision });
+                        user = { added: next.added, documentSaved: written.documentSaved === true, ...(written.error ? { error: written.error } : {}) };
+                    }
+                } catch (error) { user = { added: [], documentSaved: false, error: error.message }; }
+            }
+            this.emit('botChanged', { profileId });
+            return { ok: true, revision: saved.revision, bot: saved.bot, saved: changes, ...(user ? { user } : {}) };
+        });
+    }
+
+    // Onboarding without a model call: start (greeting → interview), skip, or start over.
+    onboarding(profileId, input = {}) {
+        return this.profiles.reserve(async () => {
+            if (!object(input) || typeof input.expectedRevision !== 'string' || !['start', 'skip', 'restart'].includes(input.action))
+                fail('Invalid onboarding change');
+            const now = new Date().toISOString();
+            const saved = await this.profiles.mutate(input.expectedRevision, state => {
+                const index = state.profiles.findIndex(profile => profile.id === profileId);
+                const previous = state.profiles[index], bot = settings.readBot(previous);
+                if (index < 0 || !bot || previous.trashedAt !== undefined) fail('Bot not found', 404);
+                const onboarding = { ...bot.onboarding, steps: { ...bot.onboarding.steps } };
+                if (input.action === 'start') { if (onboarding.phase === 'greeting') onboarding.phase = 'interview'; }
+                else if (input.action === 'skip') { onboarding.phase = 'skipped'; onboarding.completedAt = now; }
+                else Object.assign(onboarding, { phase: 'interview', steps: {}, startedAt: now, completedAt: null });
+                const nextBot = settings.normalizeBot({ ...bot, onboarding });
+                state.profiles[index] = { ...previous, bot: { ...previous.bot, ...nextBot }, updatedAt: now };
+                return { bot: { id: previous.id, bot: this.publicBot(nextBot) } };
+            });
+            this.emit('botChanged', { profileId });
+            return { ok: true, revision: saved.revision, bot: saved.bot };
+        });
     }
 
     update(profileId, input = {}) {

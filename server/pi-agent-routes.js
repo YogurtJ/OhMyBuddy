@@ -214,7 +214,8 @@ function createPiAgentGateway(options = {}) {
     require('./pi-profile-documents').mountProfileDocumentRoutes(router, profileResources);
     require('./pi-profile-avatar').mountProfileAvatarRoutes(router, profileResources);
     require('./pi-profile-authoring').mountProfileAuthoringRoutes(router, { store, profiles });
-    const bots = new (require('./bot/bot-service').BotService)({ store, profiles, supervisor, getAgentDir });
+    const bots = new (require('./bot/bot-service').BotService)({ store, profiles, supervisor, getAgentDir,
+        documents: require('./pi-profile-documents').profileDocuments(profileResources) });
     bots.on('windowRotated', event => supervisor.emit('botWindowRotated', event));
     require('./bot/bot-routes').mountBotRoutes(router, { bots });
     const agentThreads = require('./pi-agent-threads').mountAgentThreads(router, { store, supervisor, settingsService, access,
