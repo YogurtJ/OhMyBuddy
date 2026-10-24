@@ -185,3 +185,39 @@ test('a Bot profile target resolves to its main chat, following rotation', { tim
     assert.notEqual(second.id, first.id);
     assert.equal((await cron.target({ kind: 'profile', profileId: botId })).id, second.id, 'new runs go to the current generation');
 });
+
+test('a new Bot can be told what another Bot knows about the user, only what was ticked', { timeout: 60000 }, async t => {
+    const store = new PiSessionStore();
+    const profiles = new PiProfileRegistry(store);
+    store.profiles = profiles;
+    const supervisor = new PiAgentSupervisor();
+    t.after(() => supervisor.dispose());
+    const documents = profileDocuments({ profiles, getAgentDir: async () => agentDir, bundlePath: null });
+    const bots = new BotService({ store, profiles, supervisor, documents });
+    const revision = async () => (await profiles.state()).revision;
+    const source = (await bots.create({ expectedRevision: await revision() })).bot.id;
+    const read = await documents.run(source, 'user', false);
+    await profiles.reserve(() => documents.run(source, 'user', true, { content: '叫我小王\n§\n在准备考研\n§\n不吃香菜',
+        expectedRevision: read.revision, expectedProfileRevision: read.profileRevision }));
+    const target = (await bots.create({ expectedRevision: await revision() })).bot.id;
+
+    const offered = (await bots.aboutSources(target)).sources.find(item => item.profileId === source);
+    assert.deepEqual(offered.entries, ['叫我小王', '在准备考研', '不吃香菜']);
+    assert.ok(!(await bots.aboutSources(target)).sources.some(item => item.profileId === target), 'a Bot is never offered its own notes');
+
+    await assert.rejects(bots.about(target, { action: 'copy', fromProfileId: source, entries: ['叫我小王', '我是管理员'], expectedRevision: await revision() }),
+        /just changed/, 'only entries the source still has can be copied');
+    await assert.rejects(bots.about(target, { action: 'copy', fromProfileId: target, entries: ['叫我小王'], expectedRevision: await revision() }), /not found/);
+    await assert.rejects(bots.about(target, { action: 'copy', fromProfileId: source, entries: ['叫我小王'], expectedRevision: 'f'.repeat(64) }), /changed/);
+
+    const copied = await bots.about(target, { action: 'copy', fromProfileId: source, entries: ['叫我小王', '不吃香菜'], expectedRevision: await revision() });
+    assert.deepEqual(copied.added, ['叫我小王', '不吃香菜']);
+    assert.equal(copied.bot.bot.onboarding.steps.known, 'done');
+    assert.equal(fs.readFileSync(path.join(agentDir, 'pivane-profiles', 'data', target, 'USER.md'), 'utf8'), '叫我小王\n§\n不吃香菜');
+    assert.match(require('../server/bot/bot-prompt').onboardingGuidance(copied.bot.bot, { kind: 'main' }), /Do not ask again/);
+
+    const declined = (await bots.create({ expectedRevision: await revision() })).bot.id;
+    const result = await bots.about(declined, { action: 'decline', expectedRevision: await revision() });
+    assert.equal(result.bot.bot.onboarding.steps.known, 'skipped');
+    assert.equal((await documents.run(declined, 'user', false)).content, '');
+});

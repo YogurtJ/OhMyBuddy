@@ -156,7 +156,7 @@
     background: var(--surface-2); color: var(--text-main); animation: pi-bot-rise .24s ease-out;
 }
 .pi-bot-greeting-head { display: flex; align-items: center; gap: 8px; font-size: .84rem; }
-.pi-bot-greeting p { margin: 0; line-height: 1.65; font-size: .95rem; color: var(--text-main); }
+.pi-bot-greeting p { margin: 0; max-width: none; line-height: 1.65; font-size: .95rem; color: var(--text-main); }
 .pi-bot-greeting-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
 .pi-bot-greeting-actions .pi-bot-primary { margin-top: 0; min-width: 104px; min-height: 40px; }
 .pi-bot-chip {
@@ -211,3 +211,25 @@
 /* With earlier conversation above, the current part only takes the room it needs, so the
    latest earlier messages sit right above the composer. */
 #chat-tab.pi-bot-mode #pi-bot-history:not([hidden]) ~ .pi-transcript-content { min-height: 0; height: auto; }
+
+/* ---- a later Bot offers to keep what another Bot knows about the user --------------- */
+.pi-bot-greeting.is-known { max-width: 600px; }
+.pi-bot-greeting-wait { color: var(--text-muted); }
+.pi-bot-known-sources { display: flex; flex-wrap: wrap; gap: 6px; }
+.pi-bot-known-source {
+    display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px 0 6px; border: 1px solid var(--line);
+    border-radius: 999px; background: transparent; color: var(--text-main); font-size: .86rem; cursor: pointer;
+}
+.pi-bot-known-source[aria-pressed="true"] { border-color: var(--primary, var(--green)); background: var(--surface-1, var(--surface)); font-weight: 600; }
+.pi-bot-known-source:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
+.pi-bot-known-list {
+    display: grid; gap: 2px; max-height: min(38vh, 320px); margin: 0; padding: 4px; overflow-y: auto; overscroll-behavior: contain;
+    list-style: none; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-1, var(--surface));
+}
+.pi-bot-known-list label {
+    display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer;
+    font-size: .92rem; line-height: 1.5; overflow-wrap: anywhere;
+}
+.pi-bot-known-list label:hover { background: var(--pv-nav-hover, var(--surface-3)); }
+.pi-bot-known-list input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--primary, var(--green)); }
+.pi-bot-known-list input:not(:checked) + span { color: var(--text-muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); }
