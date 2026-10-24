@@ -29,6 +29,29 @@ function windowGuidance(window) {
         + ' Stay on this topic. If the user brings up something unrelated and substantial, help briefly and mention that the main chat or a new topic suits it better.';
 }
 
+// The first conversation: a short interview, resumable, every step skippable. Facts and
+// identity are saved only through confirmed setup cards.
+const INTERVIEW_STEPS = Object.freeze([
+    ['about', 'How to address the user (save it as an about-user fact).'],
+    ['job', 'What they mainly want your help with; offer a few everyday examples (daily chores, study, work, writing, just chatting).'],
+    ['identity', 'Your name and face: suggest three or four names that fit the job plus a fitting emoji, or take the user\'s own idea.'],
+    ['personality', 'Your personality: offer four vibes (crisp and efficient / warm and patient / a bit playful / professional and rigorous), then draft a short personality from their choice for them to confirm.']
+]);
+function onboardingGuidance(bot, window) {
+    const onboarding = bot?.onboarding;
+    if (!onboarding || !['greeting', 'interview'].includes(onboarding.phase) || window?.kind === 'topic') return '';
+    const remaining = INTERVIEW_STEPS.filter(([id]) => !onboarding.steps?.[id]);
+    return [
+        'Getting to know each other (you were just created):',
+        '- Keep it to two or three minutes. One short question per message, warm and natural. The user may skip any step or stop at any time; then move on or wrap up.',
+        '- Save each answer with bot_setup_propose as soon as you have it; the user confirms each card.',
+        ...(remaining.length ? ['- Steps still to do, in this order:', ...remaining.map(([, text], index) => `  ${index + 1}. ${text}`)] : []),
+        '- Then ask one or two light questions about them (what keeps them busy, anything you should keep in mind) and save the answers as about-user facts.',
+        '- Then explain in one or two lines how you work: most things you simply do; deleting things, sending messages to others or spending money you ask first; you will gradually remember their habits, and they can see and edit that in your settings.',
+        '- Finish with bot_setup_propose finish=true (with the last change or alone), then suggest three concrete things you could do right now, based on what you learned.'
+    ].join('\n');
+}
+
 function botPreamble({ name, bot, cwd, window }) {
     const displayName = oneLine(name, 80) || 'Assistant';
     const job = oneLine(bot?.job, 500);
@@ -57,6 +80,8 @@ function botPreamble({ name, bot, cwd, window }) {
         '',
         windowGuidance(window)
     ];
+    const interview = onboardingGuidance(bot, window);
+    if (interview) lines.push('', interview);
     return lines.join('\n');
 }
 

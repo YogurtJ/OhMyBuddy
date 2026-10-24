@@ -1,0 +1,163 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-bot-setup-test-')));
+const agentDir = path.join(root, 'agent');
+fs.mkdirSync(agentDir, { recursive: true });
+process.env.PI_CODING_AGENT_DIR = agentDir;
+process.env.PI_PROJECT_ROOTS = root;
+process.env.PI_OFFLINE = '1';
+const { PiSessionStore } = require('../server/pi-session-store');
+const { PiProfileRegistry } = require('../server/pi-profile-registry');
+const { PiAgentSupervisor } = require('../server/pi-agent-supervisor');
+const { BotService } = require('../server/bot/bot-service');
+const { profileDocuments } = require('../server/pi-profile-documents');
+const setup = require('../server/bot/bot-setup');
+
+test.after(() => fs.rmSync(root, { recursive: true, force: true }));
+
+test('setup proposals are bounded and only proposed fields can be confirmed', () => {
+    assert.deepEqual(setup.normalizeProposal({ name: ' 阿狸 ', avatar: '🦊', aboutUser: ['叫我小王', '叫我小王'], finish: false }),
+        { name: '阿狸', avatar: '🦊', aboutUser: ['叫我小王'] });
+    for (const bad of [{}, { name: '' }, { name: 'x'.repeat(41) }, { avatar: 'ab' }, { avatar: '<b>' }, { job: 'a\nb' },
+        { aboutUser: new Array(7).fill('x') }, { aboutUser: ['a § b'] }, { other: 1 }, { finish: 'yes' }])
+        assert.throws(() => setup.normalizeProposal(bad), undefined, JSON.stringify(bad));
+    const proposal = { name: '阿狸', job: '帮我安排生活' };
+    assert.deepEqual(setup.confirmedChanges(proposal, { name: '小狸', job: null }), { name: '小狸' });
+    assert.throws(() => setup.confirmedChanges(proposal, { personality: '偷偷加的' }), /Only the proposed fields/);
+    assert.deepEqual(setup.appendUserEntries('A\n§\nB', ['B', 'C']), { content: 'A\n§\nB\n§\nC', added: ['C'] });
+    assert.deepEqual(setup.appendUserEntries('', ['A']), { content: 'A', added: ['A'] });
+});
+
+test('a confirmed card saves identity, onboarding progress and about-you notes once', { timeout: 60000 }, async t => {
+    const store = new PiSessionStore();
+    const profiles = new PiProfileRegistry(store);
+    store.profiles = profiles;
+    const supervisor = new PiAgentSupervisor();
+    t.after(() => supervisor.dispose());
+    const documents = profileDocuments({ profiles, getAgentDir: async () => agentDir, bundlePath: null });
+    const bots = new BotService({ store, profiles, supervisor, documents });
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+    const created = await bots.create({ expectedRevision: (await profiles.state()).revision });
+    const botId = created.bot.id, windowId = created.window.id;
+    const { session } = await bots.resolve(botId, windowId);
+    const manager = SessionManager.open(session.path);
+    const callAssistant = (id, args) => manager.appendMessage({ role: 'assistant', content: [{ type: 'toolCall', id, name: setup.SETUP_TOOL, arguments: args }],
+        api: 'openai-completions', provider: 'fixture', model: 'small', usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: 'toolUse', timestamp: Date.now() });
+    manager.appendMessage({ role: 'user', content: '好呀', timestamp: Date.now() });
+    callAssistant('call-1', { name: '阿狸', avatar: '🦊', job: '帮我安排生活琐事', aboutUser: ['希望被叫做小王'] });
+
+    const events = [];
+    bots.on('botChanged', event => events.push(event));
+    const stale = 'f'.repeat(64);
+    await assert.rejects(bots.setup(botId, { windowId, toolCallId: 'call-1', expectedRevision: stale }), /changed|revision/i);
+    await assert.rejects(bots.setup(botId, { windowId, toolCallId: 'missing', expectedRevision: (await profiles.state()).revision }), /not found/);
+    await assert.rejects(bots.setup(botId, { windowId, toolCallId: 'call-1', expectedRevision: (await profiles.state()).revision,
+        changes: { personality: 'sneaky' } }), /Only the proposed fields/);
+
+    // The user renames the suggestion and drops the job before saving.
+    const result = await bots.setup(botId, { windowId, toolCallId: 'call-1', expectedRevision: (await profiles.state()).revision,
+        changes: { name: '小狸', avatar: '🦊', job: null, aboutUser: ['希望被叫做小王'] } });
+    assert.deepEqual(result.saved, { name: '小狸', avatar: '🦊', aboutUser: ['希望被叫做小王'] });
+    assert.deepEqual(result.user, { added: ['希望被叫做小王'], documentSaved: true });
+    assert.equal(events.length, 1);
+    const listed = (await bots.list()).bots[0];
+    assert.equal(listed.name, '小狸');
+    assert.deepEqual(listed.avatar, { kind: 'emoji', value: '🦊' });
+    assert.equal(listed.bot.job, '', 'a dropped field is not saved');
+    assert.equal(listed.bot.onboarding.phase, 'interview');
+    assert.deepEqual(listed.bot.onboarding.steps, { identity: 'done', about: 'done' });
+    const userFile = path.join(agentDir, 'pivane-profiles', 'data', botId, 'USER.md');
+    assert.equal(fs.readFileSync(userFile, 'utf8'), '希望被叫做小王');
+
+    // Once the tool has its result, the card cannot be saved again.
+    manager.appendMessage({ role: 'toolResult', toolCallId: 'call-1', toolName: setup.SETUP_TOOL, content: [{ type: 'text', text: '{}' }], isError: false, timestamp: Date.now() });
+    await assert.rejects(bots.setup(botId, { windowId, toolCallId: 'call-1', expectedRevision: (await profiles.state()).revision }), /already answered/);
+
+    // Personality and finish complete onboarding; existing notes are not duplicated.
+    callAssistant('call-2', { personality: '温柔耐心，说话简短。', aboutUser: ['希望被叫做小王', '在准备考研'], finish: true });
+    const second = await bots.setup(botId, { windowId, toolCallId: 'call-2', expectedRevision: (await profiles.state()).revision });
+    assert.deepEqual(second.user.added, ['在准备考研']);
+    assert.equal(fs.readFileSync(userFile, 'utf8'), '希望被叫做小王\n§\n在准备考研');
+    const done = (await bots.list()).bots[0];
+    assert.equal(done.bot.onboarding.phase, 'done');
+    assert.ok(done.bot.onboarding.completedAt);
+    assert.equal((await profiles.getProfile(botId)).soul, '温柔耐心，说话简短。');
+
+    // A card from another window's conversation is never accepted here.
+    const other = await services2(store, profiles, supervisor, documents);
+    await assert.rejects(other.setup(botId, { windowId: '00000000-0000-4000-8000-000000000000', toolCallId: 'call-2',
+        expectedRevision: (await profiles.state()).revision }), /not found/i);
+
+    // Onboarding without a model call.
+    const restarted = await bots.onboarding(botId, { action: 'restart', expectedRevision: (await profiles.state()).revision });
+    assert.equal(restarted.bot.bot.onboarding.phase, 'interview');
+    assert.deepEqual(restarted.bot.bot.onboarding.steps, {});
+    const skipped = await bots.onboarding(botId, { action: 'skip', expectedRevision: (await profiles.state()).revision });
+    assert.equal(skipped.bot.bot.onboarding.phase, 'skipped');
+    await assert.rejects(bots.onboarding(botId, { action: 'other', expectedRevision: (await profiles.state()).revision }), /Invalid/);
+});
+
+test('the setup tool reports only what the Bot page actually saved', { timeout: 60000 }, async t => {
+    const jitiPath = process.env.PIVANE_TEST_PI_JITI;
+    if (!jitiPath) return;
+    const store = new PiSessionStore();
+    const profiles = new PiProfileRegistry(store);
+    store.profiles = profiles;
+    const supervisor = new PiAgentSupervisor();
+    t.after(() => supervisor.dispose());
+    const documents = profileDocuments({ profiles, getAgentDir: async () => agentDir, bundlePath: null });
+    const bots = new BotService({ store, profiles, supervisor, documents });
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+    const created = await bots.create({ expectedRevision: (await profiles.state()).revision });
+    const botId = created.bot.id, windowId = created.window.id;
+    const { session } = await bots.resolve(botId, windowId);
+    const manager = SessionManager.open(session.path);
+    manager.appendMessage({ role: 'user', content: 'hi', timestamp: Date.now() });
+    const context = await bots.windowContext(manager, { cwd: session.cwd, sessionId: session.id, sessionPath: session.path });
+    const prior = { context: process.env.PIVANE_BOT_CONTEXT, token: process.env.PI_WEB_NAVIGATION_TOKEN };
+    t.after(() => {
+        for (const [key, name] of [['context', 'PIVANE_BOT_CONTEXT'], ['token', 'PI_WEB_NAVIGATION_TOKEN']])
+            if (prior[key] === undefined) delete process.env[name]; else process.env[name] = prior[key];
+    });
+    process.env.PIVANE_BOT_CONTEXT = JSON.stringify(context);
+    process.env.PI_WEB_NAVIGATION_TOKEN = 'synthetic-navigation';
+    const file = path.join(__dirname, '../server/bot/bot-context-extension.ts');
+    const { registerBotContext } = require(jitiPath).createJiti(file)(file);
+    const handlers = new Map(), tools = new Map();
+    registerBotContext({ on(name, fn) { handlers.set(name, fn); }, registerTool(tool) { tools.set(tool.name, tool); } }, () => agentDir);
+    let answer = null, onSelect = null;
+    const ctx = { mode: 'rpc', cwd: session.cwd, sessionManager: manager, hasUI: true, model: null, modelRegistry: { find: () => null },
+        ui: { notify() {}, async select(title, options) {
+            assert.equal(title, setup.SETUP_TITLE); assert.deepEqual(options, [setup.SAVE, setup.DECLINE]);
+            if (onSelect) await onSelect();
+            return answer;
+        } } };
+    await handlers.get('session_start')({}, ctx);
+    const tool = tools.get(setup.SETUP_TOOL);
+    assert.ok(tool, 'the setup tool exists in a verified Bot window');
+    const run = async args => JSON.parse((await tool.execute('call', args, undefined, undefined, ctx)).content[0].text);
+
+    answer = setup.SAVE;
+    assert.deepEqual(await run({ name: '阿狸' }), { status: 'not_saved', saved: {}, note: 'Nothing was saved. The card can only be saved in the Bot page.' },
+        'answering Save elsewhere saves nothing');
+    // The Bot page saves an edited value through the server, then answers Save.
+    manager.appendMessage({ role: 'assistant', content: [{ type: 'toolCall', id: 'call-x', name: setup.SETUP_TOOL, arguments: { name: '阿狸', aboutUser: ['叫我小王'] } }],
+        api: 'openai-completions', provider: 'fixture', model: 'small', usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: 'toolUse', timestamp: Date.now() });
+    onSelect = async () => bots.setup(botId, { windowId, toolCallId: 'call-x', changes: { name: '小狸', aboutUser: ['叫我小王'] },
+        expectedRevision: (await profiles.state()).revision });
+    assert.deepEqual(await run({ name: '阿狸', aboutUser: ['叫我小王'] }), { status: 'saved', saved: { name: '小狸', aboutUser: ['叫我小王'] } });
+    onSelect = null;
+    answer = setup.DECLINE;
+    assert.deepEqual(await run({ job: '陪我聊天' }), { status: 'declined' });
+    answer = undefined;
+    assert.deepEqual(await run({ job: '陪我聊天' }), { status: 'no_answer' });
+    await assert.rejects(tool.execute('call', { other: 1 }, undefined, undefined, ctx), /Unknown setup field/);
+});
+
+async function services2(store, profiles, supervisor, documents) { return new BotService({ store, profiles, supervisor, documents }); }

@@ -171,7 +171,7 @@ test('Bot window workers get a verified identity section that follows edits with
     const models = { 'fixture/small': { provider: 'fixture', id: 'small' }, 'fixture/big': { provider: 'fixture', id: 'big' },
         'nokey/x': { provider: 'nokey', id: 'x' } };
     let thinking = 'medium';
-    const pi = { on(name, fn) { handlers.set(name, fn); },
+    const pi = { on(name, fn) { handlers.set(name, fn); }, registerTool() {},
         async setModel(model) { calls.push(['model', model.id]); if (model.provider === 'nokey') return false; ctx.model = model; return true; },
         getThinkingLevel: () => thinking, setThinkingLevel(level) { calls.push(['thinking', level]); thinking = level; } };
     registerBotContext(pi, () => agentDir);

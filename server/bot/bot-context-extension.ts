@@ -12,6 +12,9 @@ import { readWindowBinding } from './bot-window-state.js';
 import { readWindowRecord } from './bot-window-registry.js';
 import { readBot } from './bot-settings.js';
 import { botPreamble } from './bot-prompt.js';
+import { SETUP_TOOL, SETUP_TITLE, SAVE, DECLINE, normalizeProposal } from './bot-setup.js';
+import { safeFile as readDocument } from '../profile-memory/management.js';
+import { Type } from 'typebox';
 
 export const BOT_SECTION = 'pivane_bot';
 
@@ -39,7 +42,7 @@ export function botSection(context: any, manager: any, cwd: string, agentDir: st
         if (!profile?.enabled || profile.trashedAt !== undefined || !bot?.enabled || bot.workspace !== context.cwd) return null;
         const window = readWindowRecord(agentDir, context.profileId, context.windowId);
         if (!window || window.current?.sessionId !== context.sessionId) return null;
-        return { binding, model: bot.model, soul: typeof profile.soul === 'string' ? profile.soul : '',
+        return { binding, model: bot.model, soul: typeof profile.soul === 'string' ? profile.soul : '', profile, bot,
             text: botPreamble({ name: profile.name, bot, cwd: context.cwd, window }) };
     } catch { return null; }
 }
@@ -65,6 +68,68 @@ export async function alignModel(pi: any, ctx: any, desired: any, notify: (value
     return 'aligned';
 }
 
+// What the user can see as this Bot right now, for reporting what a setup card saved.
+function identitySnapshot(context: any, agentDir: string) {
+    const profile = readRegistry(safeFile(agentDir, ['pivane-profiles', 'profiles.json'])).state.profiles
+        .find((item: any) => item.id === context.profileId);
+    let entries: string[] = [];
+    try {
+        const file = safeFile(agentDir, ['pivane-profiles', 'data', context.profileId, 'USER.md']);
+        const text = readDocument(file)?.text ?? '';
+        entries = text ? text.split('\n§\n').map((part: string) => part.trim()).filter(Boolean) : [];
+    } catch { entries = []; }
+    return { name: profile?.name ?? null, avatar: profile?.avatar?.kind === 'emoji' ? profile.avatar.value : null,
+        job: readBot(profile)?.job ?? null, personality: typeof profile?.soul === 'string' ? profile.soul : null, entries };
+}
+
+// The Bot proposes; the user decides on an editable card in the Bot page, where the server
+// saves the confirmed values. The result reports only what is actually saved now.
+function registerSetupTool(pi: ExtensionAPI, context: any, getAgentDir: () => string) {
+    let pending = false;
+    pi.registerTool({
+        name: SETUP_TOOL, label: 'Propose Bot setup', exposure: 'model-only',
+        description: 'Propose changes to your own name, face (one emoji), main job or personality, or short lasting facts about the user (how to address them, what matters to them). The user sees an editable card and decides; nothing is saved unless they confirm. Returns status and the values actually saved, which may differ from your proposal because the user can edit them.',
+        promptSnippet: 'Propose changes to your own identity or notes about the user for the user to confirm',
+        promptGuidelines: [
+            'Use bot_setup_propose for your own name, face emoji, main job and personality, and for lasting facts about the user. Propose one coherent step at a time, in the user\'s language.',
+            'Only status "saved" means something changed; then use the returned values, since the user may have edited them. After "declined" or "no_answer", carry on without proposing the same thing again right away.'
+        ],
+        parameters: Type.Object({
+            name: Type.Optional(Type.String({ maxLength: 40, description: 'Your new name.' })),
+            avatar: Type.Optional(Type.String({ maxLength: 16, description: 'One emoji for your face.' })),
+            job: Type.Optional(Type.String({ maxLength: 300, description: 'One sentence: what you mainly help this user with.' })),
+            personality: Type.Optional(Type.String({ maxLength: 6000, description: 'Your personality and way of talking, written as guidance to yourself (second person), a few short paragraphs at most.' })),
+            aboutUser: Type.Optional(Type.Array(Type.String({ maxLength: 300 }), { maxItems: 6, description: 'Short, self-contained facts about the user, e.g. how to address them.' })),
+            finish: Type.Optional(Type.Boolean({ description: 'true when this completes getting to know each other.' }))
+        }),
+        execute: async (_id: string, input: any, signal: AbortSignal | undefined, _update: any, ctx: any) => {
+            if (!botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir())) throw new Error('Bot setup is unavailable in this conversation');
+            const proposal = normalizeProposal(input);
+            const reply = (value: any) => ({ content: [{ type: 'text' as const, text: JSON.stringify(value) }], details: { pivaneBotSetup: value } });
+            if (!ctx.hasUI) return reply({ status: 'unavailable' });
+            if (pending) throw new Error('Another setup card is still waiting for the user');
+            pending = true;
+            try {
+                const before = identitySnapshot(context, getAgentDir());
+                const answer = await ctx.ui.select(SETUP_TITLE, [SAVE, DECLINE], { signal, timeout: 30 * 60 * 1000 });
+                if (answer === undefined) return reply({ status: signal?.aborted ? 'aborted' : 'no_answer' });
+                if (answer !== SAVE) return reply({ status: 'declined' });
+                const after = identitySnapshot(context, getAgentDir());
+                const saved: any = {};
+                for (const key of ['name', 'avatar', 'job', 'personality'] as const) {
+                    if (proposal[key] === undefined) continue;
+                    if (after[key] !== before[key] || after[key] === proposal[key]) saved[key] = key === 'personality' && after[key]
+                        ? String(after[key]).slice(0, 1500) : after[key];
+                }
+                const added = after.entries.filter((entry: string) => !before.entries.includes(entry));
+                if (proposal.aboutUser && added.length) saved.aboutUser = added;
+                const status = Object.keys(saved).length ? 'saved' : 'not_saved';
+                return reply({ status, saved, ...(status === 'not_saved' ? { note: 'Nothing was saved. The card can only be saved in the Bot page.' } : {}) });
+            } finally { pending = false; }
+        }
+    } as any);
+}
+
 export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) {
     const context = parseBotContext(process.env.PIVANE_BOT_CONTEXT);
     if (!context) return;
@@ -72,9 +137,11 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
     const reported = new Set<string>();
     // Private bridge record: the Supervisor consumes it and never shows it as a notification.
     const notifier = (ctx: any) => (value: any) => ctx.ui.notify(JSON.stringify({ pivaneBot: value, sessionId: ctx.sessionManager.getSessionId() }));
+    let toolRegistered = false;
     pi.on('session_start', async (_event, ctx: any) => {
         if (!managed(ctx)) return;
         const loaded = botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir());
+        if (loaded && !toolRegistered) { toolRegistered = true; registerSetupTool(pi, context, getAgentDir); }
         const notify = notifier(ctx);
         notify(loaded ? { event: 'loaded', profileId: context.profileId, windowId: context.windowId, generation: loaded.binding.generation }
             : { event: 'loaded', profileId: null });
