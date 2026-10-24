@@ -683,8 +683,19 @@ document.addEventListener('DOMContentLoaded', () => {
         context: () => ({ key: JSON.stringify([state.cwd, state.session?.id]), generation: state.socketGeneration, session: state.session, connected: state.connected }),
         render: renderArchivedMessage,
         openEntry: (entryId, view) => historyView.show(entryId, view),
-        onChange: () => timeline?.archiveChanged()
+        onChange: () => timeline?.archiveChanged(),
+        // A Bot never mentions compaction: its earlier turns are simply earlier conversation.
+        labels: () => state.botMode ? { head: count => count ? translateUi("更早的聊天 · {0} 条", count) : translateUi("更早的聊天"), note: () => '' } : null
     });
+    // Earlier generations of a Bot window, above the current generation's own earlier turns.
+    const botHistoryHost = document.createElement('section');
+    botHistoryHost.id = 'pi-bot-history'; botHistoryHost.hidden = true;
+    $('pi-transcript-archive').before(botHistoryHost);
+    const botHistory = window.PiBot?.history({ host: botHistoryHost, api: apiFetch, scroll: transcriptScroll,
+        current: () => state.botMode && state.bot && state.connected ? state.bot : null,
+        archive: { scroller: $('pi-transcript'), content: elements.transcript, scroll: transcriptScroll, toast, render: renderArchivedMessage,
+            context: () => ({ key: JSON.stringify([state.cwd, state.session?.id]), generation: state.socketGeneration, session: state.session, connected: state.connected }),
+            openEntry: () => toast(translateUi("更早的聊天只能在这里回看"), 'info') } });
     // Codex-style question outline with previews and native-label bookmarks.
     const timeline = window.PiTranscriptTimeline?.create({
         host: $('pi-transcript').parentElement, scroller: $('pi-transcript'), content: elements.transcript, archive,
@@ -2484,6 +2495,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!isCurrentNavigation(navigation) || !state.botMode) return false;
         const session = resolved.session;
         state.bot = { profileId, windowId, generation: resolved.window.generation };
+        botUi?.syncWindow(profileId, resolved.window);
         if (state.cwd !== session.cwd) {
             disconnectSocket(true);
             state.cwd = session.cwd; state.session = null; state.sessions = [];
@@ -2569,6 +2581,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderActivityBadges();
         }
         if (window.innerWidth <= 900) elements.sessionPane.classList.remove('open');
+        if (state.botMode) void botHistory?.open();
         return true;
     }
 
@@ -5241,7 +5254,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (accessBootstrapped && botUi?.wants(params)) void botUi.activate(params);
             return;
         }
-        if (wasBot) { botUi?.deactivate(); state.bot = null; }
+        if (wasBot) { botUi?.deactivate(); botHistory?.reset(); state.bot = null; }
         state.assistantMode = tab === 'assistant';
         $('pi-assistant-switcher').hidden = !state.assistantMode;
         elements.sessionFilters.hidden = state.assistantMode;

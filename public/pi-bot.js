@@ -44,6 +44,14 @@
         }
 
         bot() { return this.bots.find(item => item.id === this.profileId) || null; }
+        // The server's latest view of one window (e.g. after it moved to a new generation).
+        syncWindow(profileId, record) {
+            const bot = this.bots.find(item => item.id === profileId);
+            const index = bot?.windows.findIndex(item => item.id === record?.id) ?? -1;
+            if (index < 0) return;
+            bot.windows[index] = { ...bot.windows[index], ...record };
+            this.render();
+        }
         window() { return this.bot()?.windows.find(item => item.id === this.windowId) || null; }
         identity() { const bot = this.bot(); return bot ? { id: bot.id, name: bot.name, avatar: bot.avatar } : null; }
         face(size) { return face(this.bot(), size); }
@@ -286,6 +294,8 @@
             }
             if (!bot || !hasSession) return null;
             const window = this.window();
+            // A window that already has earlier conversation continues quietly under it.
+            if (window?.generations > 1) { root.classList.add('is-continuing'); return root; }
             if (bot.bot?.onboarding?.phase === 'greeting' && window?.kind === 'main') {
                 // The first hello is local: no model call until the user agrees to start.
                 root.classList.add('is-greeting');
@@ -424,5 +434,68 @@
         return { element: panel, owns, sync, hide };
     }
 
-    window.PiBot = Object.freeze({ create: options => new PiBotUi(options), setupCards: createSetupCards, face });
+    // ---- earlier conversation of a window ----------------------------------------------
+    // Each earlier generation of the open window is a read-only archive above the live
+    // transcript, loaded from the server (no worker). Newest first; older ones on request.
+    function createWindowHistory({ host, api, current, archive: archiveOptions, scroll }) {
+        let key = null, epoch = 0, generations = [], archives = [];
+        const day = value => {
+            const date = new Date(value);
+            return Number.isFinite(date.getTime()) ? date.toLocaleDateString(globalThis.PiI18n?.locale || 'zh-CN', { month: 'short', day: 'numeric' }) : '';
+        };
+        const range = record => { const from = day(record.startedAt), to = day(record.endedAt); return from === to || !to ? from : `${from} – ${to}`; };
+        const query = input => Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined).map(([name, value]) => [name, String(value)]));
+
+        function reset() {
+            epoch++; key = null; generations = []; archives = [];
+            host.replaceChildren(); host.hidden = true;
+        }
+
+        function addOlder(target) {
+            const record = generations[archives.length];
+            if (!record) return;
+            const container = el('section', 'pi-transcript-archive pi-bot-history-generation'); container.hidden = true;
+            scroll.preserve(() => { host.prepend(container); host.hidden = false; });
+            const base = `/api/pi/bots/${encodeURIComponent(target.profileId)}/windows/${encodeURIComponent(target.windowId)}/history?`;
+            let instance = null;
+            instance = window.PiTranscriptArchive.create({ ...archiveOptions, container, track: null,
+                request: (_type, input) => api(base + new URLSearchParams({ generation: String(record.generation), ...query(input) }))
+                    .catch(error => { throw Object.assign(error, { errorCode: error.code }); }),
+                anchor: () => `bot-generation:${target.windowId}:${record.generation}`,
+                labels: () => ({
+                    head: () => translateUi("更早的聊天 · {0}", range(record)),
+                    note: () => '',
+                    extra: () => {
+                        if (instance !== archives.at(-1) || archives.length >= generations.length) return null;
+                        const more = el('button', 'pi-archive-link', translateUi("再往前看")); more.type = 'button';
+                        more.addEventListener('click', () => addOlder(target));
+                        return more;
+                    }
+                }) });
+            archives.push(instance);
+            instance.setEnabled(true);
+            // The previously oldest head loses its "further back" link.
+            for (const item of archives) item.sync();
+        }
+
+        // Called whenever the open conversation (re)connects.
+        async function open() {
+            const target = current();
+            const next = target ? `${target.profileId}|${target.windowId}|${target.generation}` : null;
+            if (next === key) { for (const item of archives) item.sync(); return; }
+            reset(); key = next;
+            if (!target || !target.generation) return;
+            const mine = epoch;
+            try {
+                const data = await api(`/api/pi/bots/${encodeURIComponent(target.profileId)}/windows/${encodeURIComponent(target.windowId)}/generations`);
+                if (mine !== epoch) return;
+                generations = (data.generations || []).filter(item => !item.current).sort((a, b) => b.generation - a.generation);
+                if (generations.length) addOlder(target);
+            } catch { if (mine === epoch) key = null; }
+        }
+
+        return { open, reset };
+    }
+
+    window.PiBot = Object.freeze({ create: options => new PiBotUi(options), setupCards: createSetupCards, history: createWindowHistory, face });
 })();
