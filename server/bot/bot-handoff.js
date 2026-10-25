@@ -1,8 +1,11 @@
 'use strict';
-// Continuity seed for a new window generation. M1 carries the latest native compaction
-// summary plus a bounded verbatim tail of recent text turns. The structured summary and
-// ledger replace this in M2. Everything here is read from the predecessor's verified
-// native entries; nothing is invented.
+// Continuity seed for a new window generation (M2): the notebook snapshot, the latest
+// structured summary with a freshly rendered notebook (or Pi's own summary plus the
+// notebook when the last compaction fell back), and a bounded verbatim tail of recent text
+// turns. Everything is read from the predecessor's verified native entries; nothing is invented.
+const ledger = require('./bot-ledger');
+const { readSections, summaryText } = require('./bot-compaction');
+
 const HANDOFF_MESSAGE = 'pivane-bot-handoff';
 const MAX_TAIL_CHARS = 16000;
 const MAX_TAIL_MESSAGES = 16;
@@ -19,15 +22,23 @@ function clip(text, max) {
 }
 
 // manager: a verified, read-only SessionManager for the predecessor generation.
-function buildHandoff(manager) {
+function buildHandoff(manager, { now = new Date().toISOString() } = {}) {
     const branch = manager.getBranch();
-    let model = null, thinkingLevel = null, summary = '';
+    let model = null, thinkingLevel = null, summary = '', sections = null;
     for (const entry of branch) {
         if (entry.type === 'model_change' && entry.provider && entry.modelId) model = { provider: entry.provider, modelId: entry.modelId };
         if (entry.type === 'thinking_level_change' && entry.thinkingLevel) thinkingLevel = entry.thinkingLevel;
-        if (entry.type === 'compaction' && typeof entry.summary === 'string') summary = entry.summary;
-        if (entry.type === 'custom_message' && entry.customType === HANDOFF_MESSAGE && !summary) summary = textOf(entry.content);
+        if (entry.type === 'compaction' && typeof entry.summary === 'string') {
+            summary = entry.summary;
+            sections = readSections(entry.details?.pivaneBot?.sections);
+        }
+        // A generation that has not compacted yet carries its own seed forward.
+        if (entry.type === 'custom_message' && entry.customType === HANDOFF_MESSAGE && !summary) {
+            sections = readSections(entry.details?.sections);
+            summary = sections ? '' : textOf(entry.content);
+        }
     }
+    const state = ledger.replay(branch);
     // The model-visible projection after the latest compaction; only plain user/assistant text is carried.
     const tail = [];
     let used = 0;
@@ -44,10 +55,18 @@ function buildHandoff(manager) {
         }
         tail.unshift(line); used += line.length;
     }
-    const sections = ['[Continuation] This chat window continues from earlier conversation with the same user. Carry on naturally; do not mention any change of storage or session.'];
-    if (summary) sections.push('## Earlier conversation (summary)\n' + clip(summary.trim(), MAX_SUMMARY_CHARS));
-    if (tail.length) sections.push('## Most recent messages (verbatim)\n' + tail.join('\n\n'));
-    return { model, thinkingLevel, lastEntryId: manager.getLeafId(), text: summary || tail.length ? sections.join('\n\n') : '' };
+    const sectionsText = [];
+    if (sections) sectionsText.push(clip(summaryText(sections, state, now), MAX_SUMMARY_CHARS));
+    else {
+        if (summary) sectionsText.push('## Earlier conversation (summary)\n' + clip(summary.trim(), MAX_SUMMARY_CHARS));
+        if (state.items.length) sectionsText.push('## Notebook\n' + ledger.renderLedger(state, { now }));
+    }
+    const parts = ['[Continuation] This chat window continues from earlier conversation with the same user. Carry on naturally; do not mention any change of storage or session.',
+        ...sectionsText];
+    if (tail.length) parts.push('## Most recent messages (verbatim)\n' + tail.join('\n\n'));
+    const hasContent = sectionsText.length > 0 || tail.length > 0;
+    return { model, thinkingLevel, lastEntryId: manager.getLeafId(), snapshot: state.items.length ? state : null,
+        sections, notebook: state.items.length > 0, text: hasContent ? parts.join('\n\n') : '' };
 }
 
 module.exports = { HANDOFF_MESSAGE, buildHandoff };

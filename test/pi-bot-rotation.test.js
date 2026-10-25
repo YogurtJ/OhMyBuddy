@@ -206,7 +206,8 @@ test('Bot window workers get a verified identity section that follows edits with
     const models = { 'fixture/small': { provider: 'fixture', id: 'small' }, 'fixture/big': { provider: 'fixture', id: 'big' },
         'nokey/x': { provider: 'nokey', id: 'x' } };
     let thinking = 'medium';
-    const pi = { on(name, fn) { handlers.set(name, fn); }, registerTool() {},
+    // Keeps the first handler per event (the Bot context's own; later ones belong to helper modules).
+    const pi = { on(name, fn) { if (!handlers.has(name)) handlers.set(name, fn); }, registerTool() {},
         async setModel(model) { calls.push(['model', model.id]); if (model.provider === 'nokey') return false; ctx.model = model; return true; },
         getThinkingLevel: () => thinking, setThinkingLevel(level) { calls.push(['thinking', level]); thinking = level; } };
     let agentRoot = agentDir;
@@ -354,6 +355,39 @@ test('Bot window workers get a verified identity section that follows edits with
     reply = 'not json';
     assert.equal(await handlers.get('session_before_compact')(compactEvent, ctx), undefined, 'a failed summary falls back to Pi');
     assert.equal(notices.at(-1).pivaneBot.structured, false);
+    // S1 at the end of a completed run keeps other extensions' drafts; nothing for an aborted run.
+    const heavy = SessionManager.inMemory('/tmp');
+    const outputs = [];
+    for (let index = 0; index < 6; index++) {
+        heavy.appendMessage({ role: 'user', content: `q${index}`, timestamp: Date.now() });
+        heavy.appendMessage({ role: 'assistant', content: [{ type: 'toolCall', id: `r${index}`, name: 'read', arguments: {} }], api: 'openai-completions',
+            provider: 'fixture', model: 'small', usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { total: 0 } }, stopReason: 'toolUse', timestamp: Date.now() });
+        outputs.push(heavy.appendMessage({ role: 'toolResult', toolCallId: `r${index}`, toolName: 'read', content: [{ type: 'text', text: 'y'.repeat(80000) }], isError: false, timestamp: Date.now() }));
+    }
+    const other = { type: 'custom', customType: 'someone-else' };
+    const settle = outcome => handlers.get('agent_before_settle')({ outcome, entries: [other], context: { contextEntries: heavy.buildSessionProjection().entries } }, ctx);
+    ctx.getContextUsage = () => ({ tokens: 120000, contextWindow: 200000, percent: 60 });
+    const pruned = settle('completed');
+    assert.deepEqual(pruned.entries.map(entry => entry.targetId ?? entry.customType), ['someone-else', outputs[0], outputs[1], outputs[2]]);
+    assert.equal(settle('aborted'), undefined);
+    // S2: a summary in the background once the cache is cold, unless a new run starts first.
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const compacts = [];
+    Object.assign(ctx, { isIdle: () => true, hasPendingMessages: () => false, compact: options => compacts.push(options) });
+    handlers.get('agent_settled')({ aborted: false }, ctx);
+    t.mock.timers.tick(10 * 60 * 1000 - 1);
+    assert.equal(compacts.length, 0);
+    t.mock.timers.tick(1);
+    assert.equal(compacts[0].customInstructions, 'pivane-bot-idle');
+    handlers.get('agent_settled')({ aborted: false }, ctx);
+    handlers.get('agent_start')({}, ctx);
+    t.mock.timers.tick(20 * 60 * 1000);
+    assert.equal(compacts.length, 1, 'a new run cancels the idle summary');
+    ctx.getContextUsage = () => ({ tokens: 1000, contextWindow: 200000, percent: 0.5 });
+    handlers.get('agent_settled')({ aborted: false }, ctx);
+    t.mock.timers.tick(20 * 60 * 1000);
+    assert.equal(compacts.length, 1, 'a window with room left is not summarized');
+    t.mock.timers.reset();
     // A different session in the same worker process is not treated as the Bot window.
     assert.equal(botSection(context, { ...manager, getSessionId: () => 'foreign', getCwd: () => session.cwd, getSessionFile: () => session.path },
         session.cwd, agentDir), null);
