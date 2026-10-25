@@ -91,10 +91,10 @@ function summarizableTokens(projection, usage, keepRecentTokens = IDLE.keepRecen
     return total ? Math.round(usage.tokens * before / total) : 0;
 }
 
-function idleCompactionWanted(usage, projection) {
+function idleCompactionWanted(usage, projection, keepRecentTokens = IDLE.keepRecentTokens) {
     if (!usage || !Number.isFinite(usage.percent) || usage.percent < IDLE.minPercent) return false;
     const window = Number.isFinite(usage.contextWindow) && usage.contextWindow > 0 ? usage.contextWindow : usage.tokens * 100 / usage.percent;
-    return summarizableTokens(projection, usage) >= Math.max(IDLE.minSummarizeTokens, window * IDLE.minSummarizeShare);
+    return summarizableTokens(projection, usage, keepRecentTokens) >= Math.max(IDLE.minSummarizeTokens, window * IDLE.minSummarizeShare);
 }
 
 // S4: why the current generation should move to a new one, or null.
