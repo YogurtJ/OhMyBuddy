@@ -62,7 +62,7 @@ The extension ships with agents you can use immediately:
 | `researcher` | Web/docs research with sources and a concise research brief. Requires [pi-web-access in the child](docs/agents.md#web-research-prerequisites). |
 | `evidence-auditor` | Independently checks whether important research claims are supported by their sources. Requires [pi-web-access in the child](docs/agents.md#web-research-prerequisites). |
 | `worker` | Implementation work. Edits files, validates, escalates unapproved decisions instead of guessing. |
-| `reviewer` | Code review and small fixes against the task/plan, tests, edge cases, and simplicity. |
+| `reviewer` | Read-only code review against the task/plan, tests, edge cases, and simplicity. |
 | `oracle` | A second opinion before acting. Challenges assumptions without editing. |
 | `delegate` | A lightweight general delegate that behaves close to the parent session. |
 

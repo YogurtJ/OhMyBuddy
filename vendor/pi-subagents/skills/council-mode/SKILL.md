@@ -9,10 +9,7 @@ Council mode is parent-supervised advice for a material decision with real trade
 
 The parent selects the roster, relays only curated claims, decides validity, and writes the memo. Advisors stay read-only and do not see peer transcripts by default.
 
-Before launch, read:
-
-- `skills/pi-subagents/references/execution-controls.md`
-- `skills/council-mode/references/pass-contracts.md`
+Before launch, read `skills/council-mode/references/pass-contracts.md`.
 
 ## Roster
 

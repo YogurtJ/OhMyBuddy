@@ -707,8 +707,13 @@ export async function waitForSubagents(params, signal, deps) {
     const supervisorAttentionHint = relevantAttention.some(hasSupervisorTool)
         ? " Reply to any pending supervisor request. If subagent_supervisor({ action: \"pending\" }) is empty, check intercom({ action: \"pending\" }) because an external intercom tool may own the request."
         : "";
+    // Only when watchdog attention alone ended the wait: stopOnAttention: false would have kept blocking.
+    const keepWaitingHint = stopOnAttention && supervisorAttentionHint === ""
+        && (waitForAll || finishedAsyncCount + providerFinishedCount === 0)
+        ? " These runs are still running and none is waiting on a supervisor reply. To keep waiting through this kind of attention, call bg_wait again with stopOnAttention: false; supervisor requests still end that wait."
+        : "";
     const attentionNote = relevantAttention.length > 0
-        ? ` ${relevantAttention.length} run(s) need attention: ${relevantAttention.map((run) => run.id).join(", ")} —${supervisorAttentionHint} inspect with subagent({ action: "status" }) then steer a top-level live async child, resume a paused/completed/failed child, or interrupt explicitly.`
+        ? ` ${relevantAttention.length} run(s) need attention: ${relevantAttention.map((run) => run.id).join(", ")} —${supervisorAttentionHint} inspect with subagent({ action: "status" }) then steer a top-level live async child, resume a paused/completed/failed child, or interrupt explicitly.${keepWaitingHint}`
         : "";
     const stillRunning = active.filter((run) => initialAsyncIds.has(run.id)).length
         + providerActive.filter((item) => initialProviderIds.has(backgroundWorkIdentity(item))).length;

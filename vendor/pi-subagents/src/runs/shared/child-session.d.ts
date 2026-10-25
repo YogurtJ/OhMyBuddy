@@ -2,7 +2,7 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { ChildRuntimeConfig } from "./child-runtime-config.ts";
 import type { RequiredChildExtensionSnapshot } from "../../shared/required-child-extensions.ts";
-import type { HerdrMachineReference, HerdrRemoteGitStatus } from "../../shared/types.ts";
+import type { PlacementMachineReference, HerdrRemoteGitStatus } from "../../shared/types.ts";
 export interface ChildSessionEvent {
     type: string;
     [key: string]: unknown;
@@ -32,7 +32,7 @@ export type ChildSessionStorage = {
 export interface ChildSessionLaunch {
     cwd: string;
     /** Resolved pane-native placement. Local launches omit this field. */
-    machine?: HerdrMachineReference;
+    machine?: PlacementMachineReference;
     /** The launching session's project trust; undefined keeps Pi's default for hosts without trust. */
     projectTrusted?: boolean;
     /** Process-local provider source owned by the invoking foreground parent. */
@@ -107,6 +107,7 @@ export interface ChildSession {
     readonly virtualModelId?: string;
     readonly contextWindow?: number;
     readonly machineEvidence?: {
+        provider: PlacementMachineReference["provider"];
         machineId: string;
         initial?: HerdrRemoteGitStatus;
         final?: HerdrRemoteGitStatus;

@@ -19,7 +19,7 @@ import { parseChain, parseJsonChain } from "./chain-serializer.js";
 import { mergeAgentsForScope } from "./agent-selection.js";
 import { projectScopeRequiresTrustMessage } from "./agent-scope.js";
 import { closestMatch } from "../shared/edit-distance.js";
-import { parseFrontmatter, parseFrontmatterList } from "./frontmatter.js";
+import { parseFrontmatter, parseFrontmatterList, parseUnquotedList } from "./frontmatter.js";
 import { buildRuntimeName, parsePackageName } from "./identity.js";
 import { parseModelScopeConfig } from "../runs/shared/model-scope.js";
 export { BUILTIN_AGENT_NAMES } from "./builtin-names.js";
@@ -1919,11 +1919,11 @@ function loadAgentsFromDefinitionFiles(files, source, discoveryPriority, package
                 else
                     throw new Error(`Agent '${localName}' has invalid advertise frontmatter; expected true or false.`);
             }
-            const rawTools = parseFrontmatterList(frontmatter.tools);
+            const rawTools = parseUnquotedList(frontmatter.tools);
             const parsedTools = splitToolList(rawTools);
             const tools = parsedTools.tools ?? [];
             const mcpDirectTools = parsedTools.mcpDirectTools ?? [];
-            const excludeTools = parseFrontmatterList(frontmatter.excludeTools);
+            const excludeTools = parseUnquotedList(frontmatter.excludeTools);
             const parsedAllowedAgents = parseFrontmatterList(frontmatter.allowedAgents);
             const allowedAgents = parsedAllowedAgents === undefined ? undefined : normalizeCapabilityCeilingAllowedAgents(parsedAllowedAgents);
             const defaultReads = parseFrontmatterList(frontmatter.defaultReads);
@@ -1997,9 +1997,9 @@ function loadAgentsFromDefinitionFiles(files, source, discoveryPriority, package
                 else
                     throw new Error(`Agent '${localName}' has invalid acceptanceRole frontmatter; expected 'read-only' or 'writer'.`);
             }
-            const extensions = resolveAgentRelativeExtensionPaths(parseFrontmatterList(frontmatter.extensions), filePath);
-            const subagentOnlyExtensions = resolveAgentRelativeExtensionPaths(parseFrontmatterList(frontmatter.subagentOnlyExtensions), filePath);
-            const mutationTools = parseFrontmatterList(frontmatter.mutationTools);
+            const extensions = resolveAgentRelativeExtensionPaths(parseUnquotedList(frontmatter.extensions), filePath);
+            const subagentOnlyExtensions = resolveAgentRelativeExtensionPaths(parseUnquotedList(frontmatter.subagentOnlyExtensions), filePath);
+            const mutationTools = parseUnquotedList(frontmatter.mutationTools);
             let fast;
             if (frontmatter.fast !== undefined) {
                 if (frontmatter.fast === "true")

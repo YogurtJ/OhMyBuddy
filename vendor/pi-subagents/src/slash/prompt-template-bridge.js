@@ -1,5 +1,6 @@
 import { SUBAGENT_DELEGATION_CANCEL_EVENT, SUBAGENT_DELEGATION_REQUEST_EVENT, SUBAGENT_DELEGATION_RESPONSE_EVENT, SUBAGENT_DELEGATION_STARTED_EVENT, SUBAGENT_DELEGATION_UPDATE_EVENT, } from "../api/delegation.js";
 import { parseSubagentDelegationRequest } from "./delegation-request.js";
+import { sameProviderDiagnostics } from "../shared/provider-diagnostics.js";
 import { parsePromptTemplateRequest, toDelegationUpdate, toPromptTemplateResponse, toSubagentDelegationExecutionParams, toSubagentDelegationResponse, toSubagentDelegationUpdate, } from "./delegation-adapters.js";
 export const PROMPT_TEMPLATE_SUBAGENT_REQUEST_EVENT = SUBAGENT_DELEGATION_REQUEST_EVENT;
 export const PROMPT_TEMPLATE_SUBAGENT_STARTED_EVENT = SUBAGENT_DELEGATION_STARTED_EVENT;
@@ -58,7 +59,8 @@ function sameStructuredDelegationUpdateProgress(left, right) {
         && left.model === right.model
         && left.toolCount === right.toolCount
         && left.tokens === right.tokens
-        && sameUpdateUsage(left.usage, right.usage);
+        && sameUpdateUsage(left.usage, right.usage)
+        && sameProviderDiagnostics(left.providerDiagnostics, right.providerDiagnostics);
 }
 export function registerPromptTemplateDelegationBridge(options) {
     const legacyControllers = new Map();

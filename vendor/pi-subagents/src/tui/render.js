@@ -1104,14 +1104,14 @@ function shouldCollapseSingleChildDetails(job, step) {
         return isCompletedWidgetStepStatus(step.status);
     return false;
 }
-function singleChildTask(job, step) {
+/** A child's task in one line: its label and task, else its session name without the repeated agent name. */
+export function stepTaskSummary(step, agentName) {
     const task = compactTaskText(step.description, step.label);
     if (task)
         return task;
     const sessionName = step.sessionName?.trim();
     if (!sessionName)
         return undefined;
-    const agentName = singleChildAgentName(job, step);
     const sessionTask = stripRepeatedAgentPrefix(sessionName, agentName);
     return sessionTask === agentName ? undefined : compactTaskText(sessionTask);
 }
@@ -2223,7 +2223,7 @@ function foregroundStyleWidgetStepLines(job, theme, step, itemTitle, index, tota
     const lane = projectAsyncLane(job, step);
     if (lane)
         lines.push(...formatLaneProjectionLines(lane, theme, detailIndent));
-    const task = collapseDetails ? singleChildTask(job, step) : compactTaskText(step.description, step.label);
+    const task = collapseDetails ? stepTaskSummary(step, displayName) : compactTaskText(step.description, step.label);
     if (task)
         lines.push(`${detailIndent}${theme.fg("dim", `task: ${task}`)}`);
     const activity = widgetStepActivityLine(step, width, expanded, job.updatedAt);

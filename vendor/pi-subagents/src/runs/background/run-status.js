@@ -36,6 +36,7 @@ import { workflowAsyncChildSteeringGuidance } from "../shared/workflow-async-chi
 import { formatWorkflowKeyRevival, projectWorkflowKeyRevival } from "../../workflows/workflow-revival.js";
 import { capSummaryOutputs } from "../shared/single-output.js";
 import { ownsRun } from "../shared/run-ownership.js";
+import { foregroundChildStateLabel } from "../foreground/foreground-history.js";
 /** A step whose structured output has a path line needs only a short inline preview. */
 const STRUCTURED_PREVIEW_WITH_PATH_CHARS = 500;
 function formatProcessTerminal(value) {
@@ -200,7 +201,7 @@ function formatRememberedForegroundStatus(run) {
     for (const child of run.children) {
         const output = rememberedForegroundChildOutput(child).trim().split(/\r?\n/).find((line) => line.trim());
         const parts = [
-            `${child.index + 1}. ${child.sessionName?.trim() || child.agent} ${child.status}`,
+            `${child.index + 1}. ${child.sessionName?.trim() || child.agent} ${foregroundChildStateLabel(run, child)}`,
             child.exitCode !== undefined ? `exit ${child.exitCode}` : undefined,
             child.detachedReason ? `detached: ${child.detachedReason}` : undefined,
             child.acceptance ? `acceptance: ${child.acceptance.status}` : undefined,

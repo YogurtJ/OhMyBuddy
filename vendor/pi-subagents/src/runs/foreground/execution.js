@@ -24,7 +24,7 @@ import { deriveChildSessionName } from "../../shared/child-session-name.js";
 import { assertAgentAllowedByCapabilityCeiling, intersectSubagentCapabilityCeilings, resolveCurrentSubagentCapabilityCeiling } from "../shared/capability-ceiling.js";
 import { qualifyModelWithProvider, resolveEffectiveThinking } from "../../shared/model-info.js";
 import { assertThinkingWithinCeiling, intersectThinkingCeilings } from "../../shared/thinking-ceiling.js";
-import { formatStructuredOutputRejectionError, MISSING_STRUCTURED_ACCEPTANCE_REPORT_ERROR, MISSING_STRUCTURED_OUTPUT_CALL_ERROR } from "../shared/structured-output.js";
+import { formatStructuredOutputRejectionError, MISSING_STRUCTURED_ACCEPTANCE_REPORT_ERROR, MISSING_STRUCTURED_OUTPUT_CALL_ERROR, STRUCTURED_OUTPUT_FOLLOW_UP } from "../shared/structured-output.js";
 import { formatMidToolExitError, isOrdinaryToolForMidToolExit } from "../shared/process-signal.js";
 import { formatChildToolDiagnostic } from "../shared/tool-availability.js";
 import { formatChildModelResolutionDiagnostic, formatInheritedProviderDiagnostic, isChildModelResolutionFailure } from "../shared/model-resolution-diagnostic.js";
@@ -45,6 +45,8 @@ import { acceptChildWatchdogEvent, applyChildWatchdogMessage, childWatchdogIsAct
 import { buildInProcessChildLaunch, createReportedChildSessionInput } from "../shared/child-launch.js";
 import { childSessionFactory, childSessionHasQueuedMessages, projectChildSessionEventForJson } from "../shared/child-session.js";
 import { reconcileAttemptUsage } from "../shared/usage-reconciliation.js";
+import { clearProviderRetry, observeProviderDiagnostics, snapshotProviderDiagnostics } from "../../shared/provider-diagnostics.js";
+import { isRexLocalMachine } from "../shared/rex-machine.js";
 const artifactOutputByResult = new WeakMap();
 const acceptanceOutputByResult = new WeakMap();
 function emptyUsage() {
@@ -165,6 +167,7 @@ function snapshotProgress(progress) {
         ...progress,
         task: PROMPT_REDACTED,
         skills: progress.skills ? [...progress.skills] : undefined,
+        providerDiagnostics: snapshotProviderDiagnostics(progress.providerDiagnostics),
         recentTools: boundStreamedRecentTools(progress.recentTools),
         recentOutput: boundStreamedRecentOutput(progress.recentOutput),
     };
@@ -175,6 +178,7 @@ function snapshotResult(result, progress) {
         task: PROMPT_REDACTED,
         messages: result.outputMode === "file-only" && result.savedOutputPath ? undefined : result.messages ? [...result.messages] : undefined,
         usage: { ...result.usage },
+        providerDiagnostics: snapshotProviderDiagnostics(result.providerDiagnostics),
         skills: result.skills ? [...result.skills] : undefined,
         controlEvents: result.controlEvents ? result.controlEvents.map((event) => ({ ...event })) : undefined,
         progress,
@@ -198,6 +202,7 @@ function snapshotStreamResult(result, progress) {
 }
 function captureStructuredDelegationProgressState(progress, result) {
     return {
+        providerDiagnostics: progress.providerDiagnostics,
         currentTool: progress.currentTool,
         currentToolArgs: progress.currentToolArgs,
         recentOutput: [...progress.recentOutput],
@@ -210,7 +215,9 @@ function captureStructuredDelegationProgressState(progress, result) {
     };
 }
 function structuredDelegationProgressChanged(previous, progress, result) {
-    if (previous.currentTool !== progress.currentTool
+    // Observations replace internal diagnostics; no transcript walk or serialization on heartbeats.
+    if (previous.providerDiagnostics !== progress.providerDiagnostics
+        || previous.currentTool !== progress.currentTool
         || previous.currentToolArgs !== progress.currentToolArgs
         || previous.activityState !== progress.activityState
         || previous.model !== (progress.model ?? result.model)
@@ -352,6 +359,7 @@ async function runSingleAttempt(runtimeCwd, agent, task, model, options, shared)
         exitCode: 0,
         outputState: "absent",
         messages: [],
+        providerDiagnostics: shared.providerDiagnostics,
         usage: emptyUsage(),
         model: modelArg,
         ...(resolvedThinking ? { thinking: resolvedThinking } : {}),
@@ -383,6 +391,7 @@ async function runSingleAttempt(runtimeCwd, agent, task, model, options, shared)
     let cacheReadUsageComplete = true;
     let cacheWriteUsageComplete = true;
     const progress = {
+        providerDiagnostics: result.providerDiagnostics,
         index: options.index ?? 0,
         agent: agent.name,
         ...(childSessionName ? { sessionName: childSessionName } : {}),
@@ -433,7 +442,9 @@ async function runSingleAttempt(runtimeCwd, agent, task, model, options, shared)
         };
         return result;
     }
-    const mutationSnapshot = options.machine ? { source: "tracked-files", trackedOnly: true, cwd: options.cwd ?? runtimeCwd, dirtyFiles: [], fingerprints: {}, unavailable: "Local Git evidence is not authoritative for a pane-native remote run." } : snapshotTrackedMutations(options.cwd ?? runtimeCwd);
+    // A machine 'local' child edits this disk, so its local Git evidence is authoritative, as for an unplaced run.
+    const mutationCwd = isRexLocalMachine(options.machine) ? options.machine.cwd : options.cwd ?? runtimeCwd;
+    const mutationSnapshot = options.machine && !isRexLocalMachine(options.machine) ? { source: "tracked-files", trackedOnly: true, cwd: mutationCwd, dirtyFiles: [], fingerprints: {}, unavailable: "Local Git evidence is not authoritative for a pane-native remote run." } : snapshotTrackedMutations(mutationCwd);
     let structuredOutputToolInvoked = false;
     let structuredOutputMessageStartIndex;
     let toolAvailabilityError;
@@ -972,6 +983,14 @@ async function runSingleAttempt(runtimeCwd, agent, task, model, options, shared)
                 return;
             }
             const now = Date.now();
+            const providerDiagnostics = observeProviderDiagnostics(result.providerDiagnostics, evt, now);
+            if (providerDiagnostics !== result.providerDiagnostics) {
+                result.providerDiagnostics = providerDiagnostics;
+                progress.providerDiagnostics = providerDiagnostics;
+                // message_end already emits synchronously below; retry-only transitions need their own update.
+                if (evt.type !== "message_end")
+                    fireUpdate();
+            }
             progress.durationMs = now - startTime;
             progress.lastActivityAt = now;
             updateActivityState(now);
@@ -1243,7 +1262,7 @@ async function runSingleAttempt(runtimeCwd, agent, task, model, options, shared)
             toolAvailabilityError = toolDiagnosticError;
             result.runtimeAcknowledgedExtensions = capture.runtimeAcknowledgedExtensions();
             if (session?.machineEvidence)
-                result.nativeMachine = { provider: "herdr", machineId: session.machineEvidence.machineId, ...(session.machineEvidence.initial ? { initialGit: session.machineEvidence.initial } : {}), ...(session.machineEvidence.final ? { finalGit: session.machineEvidence.final } : {}) };
+                result.nativeMachine = { provider: session.machineEvidence.provider, machineId: session.machineEvidence.machineId, ...(session.machineEvidence.initial ? { initialGit: session.machineEvidence.initial } : {}), ...(session.machineEvidence.final ? { finalGit: session.machineEvidence.final } : {}) };
             let closeError = result.error ?? toolDiagnosticError ?? assistantError;
             const promptErrorMessage = promptError === undefined ? undefined : promptError instanceof Error ? promptError.message : String(promptError);
             if (promptError !== undefined)
@@ -1396,6 +1415,24 @@ async function runSingleAttempt(runtimeCwd, agent, task, model, options, shared)
                 // A runtime replacement can stop a child that detached while it was still being created.
                 if (!hostStopReason)
                     await created.prompt(`Task: ${task}`);
+                // A structured child that finished normally without calling structured_output gets one more turn (#2997).
+                if (options.structuredOutput
+                    && !structuredOutputToolInvoked
+                    && !sessionSettled
+                    && !lifecycleFinished
+                    && !hostStopReason
+                    && !created.shutDown
+                    && !abortedBySignal
+                    && !interruptedByControl
+                    && !result.timedOut
+                    && !forcedTermination
+                    && !result.error
+                    && !assistantError
+                    && !capture.toolDiagnostic()
+                    && !(progress.currentTool && isOrdinaryToolForMidToolExit(progress.currentTool))) {
+                    applyChildLifecycle("cancel-drain");
+                    await created.prompt(STRUCTURED_OUTPUT_FOLLOW_UP);
+                }
                 settle(undefined);
             }
             catch (error) {
@@ -1404,6 +1441,8 @@ async function runSingleAttempt(runtimeCwd, agent, task, model, options, shared)
         })();
     });
     result.exitCode = exitCode;
+    result.providerDiagnostics = clearProviderRetry(result.providerDiagnostics);
+    progress.providerDiagnostics = result.providerDiagnostics;
     if (afterCompactionSettlement) {
         result[AFTER_COMPACTION_SETTLEMENT] = true;
     }
@@ -1497,7 +1536,7 @@ async function runSingleAttempt(runtimeCwd, agent, task, model, options, shared)
         durationMs: progress.durationMs,
     };
     const remoteGitChanged = result.nativeMachine?.initialGit && result.nativeMachine.finalGit ? result.nativeMachine.initialGit.head !== result.nativeMachine.finalGit.head || result.nativeMachine.initialGit.dirty !== result.nativeMachine.finalGit.dirty : undefined;
-    const mutationEvidence = result.nativeMachine ? { source: "tracked-files", trackedOnly: true, changedFiles: [], attemptedMutation: remoteGitChanged === true, ...(remoteGitChanged === undefined ? { unavailable: "Remote Git before/after evidence was incomplete." } : {}) } : collectTrackedMutationEvidence(mutationSnapshot, options.cwd ?? runtimeCwd);
+    const mutationEvidence = result.nativeMachine && !isRexLocalMachine(options.machine) ? { source: "tracked-files", trackedOnly: true, changedFiles: [], attemptedMutation: remoteGitChanged === true, ...(remoteGitChanged === undefined ? { unavailable: "Remote Git before/after evidence was incomplete." } : {}) } : collectTrackedMutationEvidence(mutationSnapshot, mutationCwd);
     const acceptanceOutput = getFinalOutput(result.messages ?? []);
     const structuredText = result.structuredOutput === undefined ? undefined : JSON.stringify(result.structuredOutput, null, 2);
     let fullOutput = stripAcceptanceReport(acceptanceOutput);
@@ -1855,6 +1894,7 @@ async function runSyncCompletionInner(runtimeCwd, agents, agentName, task, optio
             orcaProgressTab,
             launchWarnings,
             verifyModel,
+            providerDiagnostics: lastResult?.providerDiagnostics,
         });
         lastResult = attemptResult;
         sumUsage(aggregateUsage, attemptResult.usage);

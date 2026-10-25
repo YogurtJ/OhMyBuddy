@@ -3,14 +3,14 @@
   "packages": [
     {
       "name": "pi-subagents",
-      "version": "0.80.0",
-      "source": "https://registry.npmjs.org/pi-subagents/-/pi-subagents-0.80.0.tgz",
-      "sha256": "7da08270b2aa241f97efeb8d15bd6b769125104af345a05f911becf8809d52a1",
+      "version": "0.82.1",
+      "source": "https://registry.npmjs.org/pi-subagents/-/pi-subagents-0.82.1.tgz",
+      "sha256": "7a1738adc53b0b09724f6aff9859b9992cfad251f96f9ff58e240f99fbec8e71",
       "license": "MIT",
       "files": [
         {
           "path": "vendor/pi-subagents/CHANGELOG.md",
-          "sha256": "a4539a0d9cd90473a345754751fc4c5f5f6a14bb307670b81db029b58c286e0b"
+          "sha256": "4b250a44c2d980145b54b6e3c825275227469e1b100d1a85f4a1590e3f50e0a9"
         },
         {
           "path": "vendor/pi-subagents/LICENSE",
@@ -18,7 +18,7 @@
         },
         {
           "path": "vendor/pi-subagents/README.md",
-          "sha256": "0ed65ac63ae42e2d27c71420da0202c6416ffae045fc48e5d5bd6822b75d2020"
+          "sha256": "5ecd91ff4eb56b283ff78d68e206fdc07898ceede1a074d22982b56b562ac3b9"
         },
         {
           "path": "vendor/pi-subagents/agents/claude-code-writer.md",
@@ -77,16 +77,240 @@
           "sha256": "9f0adac449093fb8ea6fa375a52a087575b20b57d3411efb057453186c568102"
         },
         {
+          "path": "vendor/pi-subagents/bundle/agents.js",
+          "sha256": "0f63e44d389cec448840a6fa8dbc5bd4b907765a11651c8fc71f74b81eb3eb3d"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/background-work.js",
+          "sha256": "d45a4dda0ce00962603aac1e591984935a405d19d94302ddc5cb1c3e0cf787a8"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/capability-ceiling.js",
+          "sha256": "1dcae22eb5f738aff5cfada1ccfd3fb6dfdc7f1f35b69fcdf2f60d06820ba568"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/child-tool-plan.js",
+          "sha256": "a07b5c5ea491d44e4ce64ecfa892af4b76803fc46200c88fb3e049eb5b264257"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-3JCDWF4V.js",
+          "sha256": "d7e81c83213c3fe80291ed17bfd5a8a400943ba56138c501aed15f9adf3ca35b"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-43SCHIMD.js",
+          "sha256": "e88b1e76294f57f7cefbf78c5e37cfca210121d7fe863bdaac29bdffc170864c"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-46XKCPJR.js",
+          "sha256": "4b7b04a6bc989ea16501d132be1beb9f1f8c243e2761eb2c807e60534097b337"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-4QFZZV3O.js",
+          "sha256": "a963af863262fb78878edf805bf1deb9c65f0a549a0b02f2b2a9a88f0c35097d"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-4SDU2BZX.js",
+          "sha256": "8c8c92f230bc2b61eafaa86b96cd13fe1e93ada5e0e5b89c8625d1a38d24216b"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-4Y2ROR7L.js",
+          "sha256": "eb0a638a13f6dee89d7420855580d16021eeb05a1d878c884436b9a66a7fd685"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-52UBALJL.js",
+          "sha256": "9a6578ccdc0cbc0163577bc67c9994264a9ebaae1f20f2bfc1645a76c8de9f02"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-5LFLVSTM.js",
+          "sha256": "fe2609687b3ee8c7b1e6d626f3bbedc233d8f544af677f32da931d742b4d0b05"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-5TYMSZX3.js",
+          "sha256": "0181df5bb80694b94f435365c48a06a00a2cda3f7046356f7896385ea69e1f1e"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-62OCY2S4.js",
+          "sha256": "725775e8bad9d6f2f65808a0f0c17c1b2e2f1879700521f3502e7564c635faec"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-6XJB7PIX.js",
+          "sha256": "d800fc914ca94128cddc9a638c28e347d3b3dcd571aadc73514322bf4178addd"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-7F6RKT6W.js",
+          "sha256": "30e7405becc2e9ed21eaee6cc8d10815c39826e4deac1f629db856f8787b332c"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-7J4ZXMY7.js",
+          "sha256": "6f24823ff5cc859bf177d06bf5e33d3474b2b66ca7d52997f13068b83abac9b5"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-CIZQXJ5Q.js",
+          "sha256": "3b0ce2e8ed30bba8f154da5c879783c0146f1db86757cb1d3f8fefa278ea3463"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-CTPAE36Y.js",
+          "sha256": "ef985ac25fad2219eb82eeaebae5687df781cf5e639ebd831306061a3b6065a4"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-D4EHT5SJ.js",
+          "sha256": "640192756f758a11c1751816fe44a03d6a932c54ebd8183ceaa0257b1c8df278"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-FXUXCX2K.js",
+          "sha256": "df9a1894161d2de5009bfa7b6db6eec8531cbe7454a97b1e2af77e7b8aad3fea"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-G4GZD3OJ.js",
+          "sha256": "8e072a18d02ad2341e47239b805cc8ac576c70fb4f379f342ca926478f0bc8af"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-GJECHSAR.js",
+          "sha256": "1ec5b89fc05cc7275d7c1a3974fcf3e8a3aab8302123333b60e64477d24f256d"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-IVAE5Z6Q.js",
+          "sha256": "6231c3b3cf78fa4090361a5b0833ea47f183f38fde0fae73c1719d9eb6dd4fdc"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-JYUKW2SY.js",
+          "sha256": "eff1e1f9a5c20d6ce6aa78fdca1fae8d96a24faa2f574ce95cd000b6f2ea286f"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-N2BN7BF5.js",
+          "sha256": "715d36eadf86a601f1bed4fb7180f5d5f0941fec6abff454b2038340e91650c6"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-NF7IEKBH.js",
+          "sha256": "44b810a0bc397150633b988bb3eec75e6e966c84cbdb2a6d34f715a9369c0ac3"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-NIXWDZZV.js",
+          "sha256": "3f433369cb10bc6ace6858c516b101f3137d28e1fd617ca654fcc9b90512211b"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-OYF6AFDY.js",
+          "sha256": "39a4b57c969ca49a909e1ae064e2e3decd082b091c24e739a1e6f366a255a508"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-PBK2I7WY.js",
+          "sha256": "0c9943a7b113d62c719a2bf7d00d683a11e68187b26f17bfd1ab7a3a653aae93"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-PDZWJCHD.js",
+          "sha256": "7ebcfc35ea2cea3f05f047f6345f5dd6c737d39e46d77f1aa4920c36cc18d29e"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-PLCCBLPY.js",
+          "sha256": "d0926411cc0fafc8f7d1aaaa3a2340a94e589c0bd5a1958c7c1f3679ac9375b1"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-QE4AGIMG.js",
+          "sha256": "65150dafa7b192bb5a9064bd8e9a20302a75cd101e3b6247ba183b1b803bf279"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-RMQFMMAT.js",
+          "sha256": "2887087c9c9e8ebee2cb708318fad6ad5d3aa57021c3a8b0dc71d797e278c375"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-UCPP4GNU.js",
+          "sha256": "e2bc4d6cc9e464f721c81c75270adc41af860a1b726b022cef47c5afc8e49f7b"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-UKG4V45O.js",
+          "sha256": "03ba44bccb55cc9ab07310e9257c7de5560cea33cb7a7535c2646ba3d58c3726"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-UTT254JE.js",
+          "sha256": "87d3e97e29a03508d0fc1dae0b746143fb952604739e489fec86eb8a06ba7fb6"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-VSUSLDNW.js",
+          "sha256": "3a6b885bcbbe782f291a2878a00f8010c95beff24e55e8ad61fb5be23f5e2caa"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-XSWOTIA3.js",
+          "sha256": "5c068a186cfc18350739a5b4080b034c66bf8137930e3e5c751ec5e0925dd333"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-YFCK7H2S.js",
+          "sha256": "147f54aec38e86c11cd488daa9bda7a817b2063b751d85686e345904956ae33a"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-YKEWIB4M.js",
+          "sha256": "bb2e658a8791a71148999d806fe1d386399147149668d9dcb1d0958cccbfb555"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-YYREO77V.js",
+          "sha256": "610f45c939460abf8cc79080985405617643bbda67230756cd7d9d1a236bd055"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-Z7KVHQHL.js",
+          "sha256": "46e4b16c7d8be50d0ed9b6fcefe29504d3b011ab5fee2d9b4aa046e5f969b3b2"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/chunk-ZIV4J4HG.js",
+          "sha256": "04598282b70cd5674c764d27641e10804bba79664cfb3303c973c087fbbad2b1"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/control-channel.js",
+          "sha256": "f24440f90c37e7b1f9d4efd6209deff8ae78dab4ffd27f181481dd974086b53c"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/delegation.js",
+          "sha256": "7845d67d61f7cd1290b38f2c2ccddeb92e0f3a53926131e546fcabb772579c5c"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/external-job-provider.js",
+          "sha256": "fc42d466aad50b1f7916521d58a45f31031c9d08385ca4f7917787c01fa303da"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/external-runs.js",
+          "sha256": "48344dc88ca90c9e5f68a9bff52ba45f1e78277bbf9191f89ef36fc172812898"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/index.js",
+          "sha256": "8d7d52c200ed75da764031f1991fbb522e03236c0d986e385a2e12af3d086b9e"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/inspectors.js",
+          "sha256": "03d94a082ed930508f6f89d62a19567fe2dd6aaad64d1325e7c58ed4fe231fc9"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/intercom-bridge.js",
+          "sha256": "cc53b28926b17cb1cf07b0c9e8b7a8091a99cb71f877850aba77714cd2ab2f23"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/preflight.js",
+          "sha256": "ebe7314a99f5f8d65687cf4fa153575bdb9c9ec6c3d9270307fa94e5ce5ae496"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/project-panes.js",
+          "sha256": "ccfff090c212ff281045bc8449c8660cfb44aec529b821abfd2d3cde5d45e7d3"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/required-child-extensions.js",
+          "sha256": "26024c233d6da001a13bf84cd65e7cafc537bfed6bbff8d19dcc807f58f6de9d"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/shared-types.js",
+          "sha256": "88aab80b61e9ffcd937a4bc676fcab114343b0a34728eaad6241f4740c6aa366"
+        },
+        {
+          "path": "vendor/pi-subagents/bundle/workflow-resources.js",
+          "sha256": "edffe9b9dac02c63c9ab99102aa27a7e7068d6811c8388ad9c77d22ad2f1c546"
+        },
+        {
           "path": "vendor/pi-subagents/docs/agents.md",
-          "sha256": "1e86cd16067ee0549b183d1cc6ed28793c9aa1e09338dd3fdf616207252803ba"
+          "sha256": "ea85a9f64d1386f986a5e985b57a9291f30f19bf7c9bb8bb9a1e5004352e86d0"
         },
         {
           "path": "vendor/pi-subagents/docs/configuration.md",
-          "sha256": "a7aacf3665f8d3a416d5bbf4e18b9edede86e6bd45b29f720ad04f608b6ca3e0"
+          "sha256": "1153c851364c5daaf0690851553c4dfcb107a5d87cea81c220cc8ef2ad7c41d8"
         },
         {
           "path": "vendor/pi-subagents/docs/extension-api.md",
-          "sha256": "79b62c11559766d7b330f093398f959274f39aa097c96f5dc46d7f8fd481562e"
+          "sha256": "404b9360021cf703b50b93e7bb09d553bc79f5b20ed688a91bd886e1c0a7f8dc"
         },
         {
           "path": "vendor/pi-subagents/docs/missions.md",
@@ -98,7 +322,7 @@
         },
         {
           "path": "vendor/pi-subagents/docs/observability.md",
-          "sha256": "8d0294c325e166ca7decad2e3cb9301f9766b52fa219cf43949afa9503b8132b"
+          "sha256": "787dfdf15b98e11ef1af30fb2588cc8073c98cc3d889ed82bce057325c330278"
         },
         {
           "path": "vendor/pi-subagents/docs/standalone-background.md",
@@ -106,7 +330,7 @@
         },
         {
           "path": "vendor/pi-subagents/docs/tool-reference.md",
-          "sha256": "b5689d928a8fa75323b0a8b796beafe02c12980f3e23cbbbf56cf8502f8fee8e"
+          "sha256": "0de89677517a7a76a0b5a3e341be6e37509341491a1cf4b408a27994bfab1438"
         },
         {
           "path": "vendor/pi-subagents/docs/watchdog.md",
@@ -114,7 +338,7 @@
         },
         {
           "path": "vendor/pi-subagents/docs/workflows.md",
-          "sha256": "8913e4da17b63b4fde99d92a92ed371b8eb6794ff2597078f0c43604a20b34c3"
+          "sha256": "18764f062955510a83dcaca90cda64f8d1c49adcab5a824d473aa09eb1b95d2a"
         },
         {
           "path": "vendor/pi-subagents/index.d.ts",
@@ -134,7 +358,7 @@
         },
         {
           "path": "vendor/pi-subagents/package.json",
-          "sha256": "4120bda39e0c433d5f694134a4f86b89a33a9b3a27130b36bab34d75b15b7989"
+          "sha256": "3df632dd36811e66b449ce90bd059c421477855cfb6ea17c6ad3db2249717428"
         },
         {
           "path": "vendor/pi-subagents/prompts/council.md",
@@ -170,7 +394,7 @@
         },
         {
           "path": "vendor/pi-subagents/skills/council-mode/SKILL.md",
-          "sha256": "e998812debc33870e5324fba20d5fe48930708e0b1498a7971504d60064881de"
+          "sha256": "12d4b7f8e8e1cc1770e85f8c511a690b9f18b23bae3250149602c04ca7575943"
         },
         {
           "path": "vendor/pi-subagents/skills/council-mode/references/pass-contracts.md",
@@ -178,31 +402,15 @@
         },
         {
           "path": "vendor/pi-subagents/skills/pi-subagents/SKILL.md",
-          "sha256": "d608c88c1f716d2881667ea367a67139cc22ed4049c0284b38e5bfbe5e4814de"
+          "sha256": "3e2638f053f01c649db3923fcbeb2cb2c64d504b1a7928d66e335c8800d8cd5d"
         },
         {
-          "path": "vendor/pi-subagents/skills/pi-subagents/references/constraints-and-recipes.md",
-          "sha256": "300e0457bd01e7c694c965bdac6fae775ed1e1d9678c33ae5e5fce114bd8d632"
-        },
-        {
-          "path": "vendor/pi-subagents/skills/pi-subagents/references/execution-controls.md",
-          "sha256": "52d45fa1aea875a57989fd87001525ec3a121d5d4a355352aa323bdbb5d6616b"
-        },
-        {
-          "path": "vendor/pi-subagents/skills/pi-subagents/references/management-authoring-rpc.md",
-          "sha256": "8676ad36e20e9d3f66cda1bcdab7ec7f4741c41912da2e2f0bcd0b6bc2da232a"
-        },
-        {
-          "path": "vendor/pi-subagents/skills/pi-subagents/references/multi-lane-orchestration.md",
-          "sha256": "20c5158038df0f55a7b3218cd21ec12d598af9175f1afab84ccf4740022ef01f"
+          "path": "vendor/pi-subagents/skills/pi-subagents/references/orchestration.md",
+          "sha256": "eaaa74a3750672c425aa675105169d740c8e1bbf778db134387d05f090b00434"
         },
         {
           "path": "vendor/pi-subagents/skills/pi-subagents/references/prompting-and-roles.md",
-          "sha256": "82b85adbe1543acb23e05769246fe45edfa7a9d16ff104c16cfc1b6c9c05b42c"
-        },
-        {
-          "path": "vendor/pi-subagents/skills/pi-subagents/references/review-and-validation.md",
-          "sha256": "2c41ea67edc0b9552058ae135b71d04d653d94e8180410417036e5353f8580bc"
+          "sha256": "b1145cb676bbf4dad747689855c8aa3fb6764506e0be1c5c747f5e174c711aa6"
         },
         {
           "path": "vendor/pi-subagents/src/agents/advertised-agent-prompt.d.ts",
@@ -218,7 +426,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/agents/agent-management.js",
-          "sha256": "23317dd2e21f75e631a958c535d0cc20fbd7165c5120f6b70e27eb6a23451584"
+          "sha256": "129e693757857c10b37c047717a01b57100305bbb6a324ca1547d528acff0599"
         },
         {
           "path": "vendor/pi-subagents/src/agents/agent-memory.d.ts",
@@ -226,7 +434,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/agents/agent-memory.js",
-          "sha256": "5a4b45d4fe859ff27b63a33cf6340558ab9749e7b94de00b8e7491945f268b66"
+          "sha256": "ad002a0ab8abdf3c695599411c6e036439c742e630f5ccad991d8e436d731be6"
         },
         {
           "path": "vendor/pi-subagents/src/agents/agent-refinements.d.ts",
@@ -266,7 +474,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/agents/agents.js",
-          "sha256": "324e083f8240242294084610c5bfeb2c87ce7df17fae7f5724c49b57c3d0fcda"
+          "sha256": "6d371038ea842341128858ddc1e87e0486b0090438681b12a07c57174d5021fd"
         },
         {
           "path": "vendor/pi-subagents/src/agents/builtin-names.d.ts",
@@ -286,11 +494,11 @@
         },
         {
           "path": "vendor/pi-subagents/src/agents/frontmatter.d.ts",
-          "sha256": "ea5b6b5fc2fb8c4d2c5f78beebcedd4547e009fa02c473cefbf28432565dab1d"
+          "sha256": "ccb4094a11313eb904c32d8dc70befd74ff3f3d632287b26cd5965c0f8765584"
         },
         {
           "path": "vendor/pi-subagents/src/agents/frontmatter.js",
-          "sha256": "7ddece3d3c116440f2e30bee0795b7ff4b2fc035e0b32ee8ee1b10bb9b98fbed"
+          "sha256": "24349037cc51b294fcf37d8bc616f5a8b80b24e3a494a340b552c4b3b81df385"
         },
         {
           "path": "vendor/pi-subagents/src/agents/global-npm-root.d.ts",
@@ -338,7 +546,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/agents/skills.js",
-          "sha256": "022cf6d18a8442aced6ae380726b3977601502db59f4c82f07480169fe33c9e8"
+          "sha256": "cfd8523f22b3397d7b80b9039268148a1afe14a084b1199deaaaf375c1373e47"
         },
         {
           "path": "vendor/pi-subagents/src/api/agents.d.ts",
@@ -382,7 +590,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/api/delegation.d.ts",
-          "sha256": "5a86ab17ce6f2bd3c16f830da9c468fb08a7ce4d374e7c12d856dc8894b95ebb"
+          "sha256": "66bc1230efb2805da6b3e6e72b3635dc989d135bdeddc9e5a54075e1884fdbfe"
         },
         {
           "path": "vendor/pi-subagents/src/api/delegation.js",
@@ -474,7 +682,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/extension/config.js",
-          "sha256": "de12c7d41f240c1149460b1df6071cc24089098c363b049402f0ab7b37fff682"
+          "sha256": "5e47c2076a8cefc0b9fe2a0ee8156bbb105cd69e4ca8f5c8eee397885e047304"
         },
         {
           "path": "vendor/pi-subagents/src/extension/control-notices.d.ts",
@@ -514,7 +722,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/extension/herdr-pi-bridge.js",
-          "sha256": "fd73a4fad8b4d885cc4ea198c13aeebceaa675cc374d84cfbe332aafa0828af8"
+          "sha256": "504aff815b9070d2046e0d8a945e66de64afefccacf7917fd54b374d392cd4e5"
         },
         {
           "path": "vendor/pi-subagents/src/extension/index.d.ts",
@@ -522,7 +730,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/extension/index.js",
-          "sha256": "c9726bf3d6ed185b6bcf605ec91575a90aa0b8a26f854029807cc9b8357838de"
+          "sha256": "161a52f1d2378cb58ad412f7ae41f3efe18a079035062884e31076749c76239d"
         },
         {
           "path": "vendor/pi-subagents/src/extension/public-execution.d.ts",
@@ -538,7 +746,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/extension/reply-workflow-script.js",
-          "sha256": "03c4d6dfa8ea05557f6070f390a732aa9ae77b48c60a7a1dfb0d65d0a659b79c"
+          "sha256": "c722b8f3f8403883cec43b3dea825f885f41a69cf43ff78b5cbaa993e71c7157"
         },
         {
           "path": "vendor/pi-subagents/src/extension/rpc.d.ts",
@@ -554,7 +762,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/extension/schemas.js",
-          "sha256": "febeecc49cb1205aed0029e338763160b5baaf5a00c0d9529aae4780346773e1"
+          "sha256": "37465a7310ccc740099ce8e307d25e3d8a90471673bebbf57641855db1279674"
         },
         {
           "path": "vendor/pi-subagents/src/extension/steering-notices.d.ts",
@@ -570,7 +778,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/extension/subagent-guide.js",
-          "sha256": "b2826ac8b37c8a402d0cf13c4235f7c014b2d14508f656483e0b44a78adeb9c5"
+          "sha256": "0e13081376b48142bf4101972f8f4e3cbc541f9d70c44e2dea5f5bac06c3e93a"
         },
         {
           "path": "vendor/pi-subagents/src/extension/subagent-options.d.ts",
@@ -778,7 +986,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/intercom/native-supervisor-channel.js",
-          "sha256": "484af927e2bc484d442f47b05238f3d4250c1beef182d56a204b48a9b389afbb"
+          "sha256": "4caa669d13238a93ef711c958bfa86ce3844a49c203651867b2174fe60ae4aa5"
         },
         {
           "path": "vendor/pi-subagents/src/intercom/result-intercom.d.ts",
@@ -818,7 +1026,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/missions/lifecycle.js",
-          "sha256": "f970d0ce6e5dc15d6814775f4739f5b9f644a2948c161fa97f7146b51e220360"
+          "sha256": "b386f5488c8db8f8ea1860735062c1db33c9154920d52bdd7873d6a0f28c4c5d"
         },
         {
           "path": "vendor/pi-subagents/src/missions/store.d.ts",
@@ -862,11 +1070,11 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/active-async-capacity.d.ts",
-          "sha256": "361e83619859e94224b624c2fe38bbe82fdaf69dc50587f1e67c5ed92c7d9e47"
+          "sha256": "446491beb81323ab2a60a42f7c7d480572f0a734b84f22907b4b2139e08be06b"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/active-async-capacity.js",
-          "sha256": "2daf1540819550798ef9f7b1c3a36410de63baeb0928e70a7a29ab81d65c379e"
+          "sha256": "ecbe7a75699441db386809902bb8f87970bba6aaff226c114dce75aa58180f30"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/active-run-index.d.ts",
@@ -882,15 +1090,15 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/async-execution.js",
-          "sha256": "94c070e51a329d4313f72b044ad01b4120cf3968d37b59398925a4fb2da43b1e"
+          "sha256": "7a8f6db7af4b1d1533c7e3390a120442b5f12b6b8ea6de4708d7b88d52f2f5b6"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/async-job-tracker.d.ts",
-          "sha256": "611e9d6fad6e19c4c3e1c4fa91e3f2b03cddec74b0c8d2969eb84d55ae7e0cb7"
+          "sha256": "12206e64e0951aedd3ba12a1b0b4f38d45f38de95b8a97e28a8a80149722ebbe"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/async-job-tracker.js",
-          "sha256": "d93fcf09def6a652c93b233fa6b208b195c025e5fd8e241628442e9ef3433254"
+          "sha256": "5543ed4f7c2c11713c1b9b8bbb3004dc6ec1b6ee9772307701d71300437df33f"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/async-resume.d.ts",
@@ -918,11 +1126,11 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/async-status.d.ts",
-          "sha256": "d07c7669e97397fe46566178591a9ab008372aec7f443d95c588bec94bdaae9a"
+          "sha256": "b86d2a029a355faf420d8b1c370f4c651b161a10cda65d1f86588a561a007eda"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/async-status.js",
-          "sha256": "754330a90d8e222b77492d8da2f01e789156f49032843293e0eb878c1591767a"
+          "sha256": "74c4ce7c12c3157cad1f27025dd97ed8c05a504a1e37bca9caedd615cbd03605"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/auto-drain.d.ts",
@@ -938,7 +1146,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/await-async-run.js",
-          "sha256": "0571867d27a3bed0b61198b9f4bb5f54d291aac60fbef8d46b4e36ec8ed5962d"
+          "sha256": "55e1b87fba43565165367218d94546758193e776e9b8fee1459f76871b6518e9"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/binary-bootstrap.d.ts",
@@ -947,6 +1155,14 @@
         {
           "path": "vendor/pi-subagents/src/runs/background/binary-bootstrap.js",
           "sha256": "ad928ecc3112407a3a8f2507dec3021d6a699780c4ebde33e6f3f668070788e1"
+        },
+        {
+          "path": "vendor/pi-subagents/src/runs/background/boot-id.d.ts",
+          "sha256": "2996c1b462a36c249ba91f18f2ade8ad5fda608c4ab60162b254328f257fd998"
+        },
+        {
+          "path": "vendor/pi-subagents/src/runs/background/boot-id.js",
+          "sha256": "dc90f7077eef25b05dcc51ef2a39ac1cfcef4f3794bdf878774e30daac68ef28"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/calendar-schedule.d.ts",
@@ -1029,12 +1245,20 @@
           "sha256": "66e1842f62dadbb20df5485b30ecd95c76618082f66e3e5f1a79abab51e3b141"
         },
         {
+          "path": "vendor/pi-subagents/src/runs/background/interrupted-elsewhere.d.ts",
+          "sha256": "55eefdf7b50a95fad025dbe465471eeceeb02b35d4ce3bcb693230e89743aab8"
+        },
+        {
+          "path": "vendor/pi-subagents/src/runs/background/interrupted-elsewhere.js",
+          "sha256": "b021cfd324d6ded9b6747fed6bcdfac284c05202103cac385d52643392a18377"
+        },
+        {
           "path": "vendor/pi-subagents/src/runs/background/notify.d.ts",
-          "sha256": "2e23a42096ab8f347c64fcb5c9265e7127df8ad7bf2e2244ae64a56710d0b664"
+          "sha256": "e9a24b42dc9ec329bbbdcd2d9578b8cf3a751a5a9e4243200bbf9016261ba0e2"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/notify.js",
-          "sha256": "3eec60e1a9c4f27178c866144696489c44781800e623522342c981b395fca8eb"
+          "sha256": "8b3a764d3c5393c2bf72fabba369902dd4d55a99fa1c3e934d9e54c5ebc2cf84"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/owned-process-tree.d.ts",
@@ -1078,11 +1302,11 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/result-delivery-ownership.d.ts",
-          "sha256": "40c80e47fdd3e6fe95b828bb617a448c8dbbd98feda36c1a767049525226336c"
+          "sha256": "e69ad62ce59a38def79b0261832f5e965ad41f1ed24342ba11d7e6205a3452a0"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/result-delivery-ownership.js",
-          "sha256": "6f7351ca1b95964921f2310fea99ff74bd081f8c2cec51f7c2e375818ee8e61d"
+          "sha256": "22cd84be9f5b2314cbe46e0c41ea4ac8056b82bb06c5c2b434ab7fe38faa7208"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/result-files.d.ts",
@@ -1094,11 +1318,11 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/result-watcher.d.ts",
-          "sha256": "9dcc15fffc3914aac5905e617fc90d673218442463330c88956eb0a177d3cd38"
+          "sha256": "2e4f9cfd49b172126012d164106b281d7cfd4787532196e2426d39188396d829"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/result-watcher.js",
-          "sha256": "2b57d9847e915b3c90c2c9d4709bcbd9cc78bb768c56d2124f8097971541c203"
+          "sha256": "ee4871378c806284a1be350b59c3b97a7c82b4ea647346b7d0aa0fd7bd07dd59"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/resume-guidance.d.ts",
@@ -1126,11 +1350,11 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/run-child-session.d.ts",
-          "sha256": "73f9627354f5861c5a5ccbee1911c823dab80aa1d4cb071475ac79c53daf3267"
+          "sha256": "a68dd1839559e1560014051923c68fdc8fb18f863e0c2d0f80c12643c97ad3f0"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/run-child-session.js",
-          "sha256": "a7c69f5af0f6c8a8f794df46296853d1484a5073da24d1baa9d500123b0845b0"
+          "sha256": "d01c52dcf343814dfbcd11948390ee24ad8da87830d27a6e38e0e1441644f881"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/run-id-query.d.ts",
@@ -1154,7 +1378,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/run-status.js",
-          "sha256": "c78798b943e9cb1c934e87d90c183cd1ad3dee0a33e5fedf9e38de3107d8eb7d"
+          "sha256": "693ff5d85699a39adc4000894cfb241a1809fab93bc84b38d07f6389e95ee7c3"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/runner-aliases.d.ts",
@@ -1206,11 +1430,11 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/stale-run-reconciler.d.ts",
-          "sha256": "9381cabaf6d2f8fe34787edc30cde465e60bbc7fd4a1ccfcf1f2f232135f74a7"
+          "sha256": "d594c5d6e6c72ae845df8cdc253dc793016045a044805f11c86044bcc418c8d5"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/stale-run-reconciler.js",
-          "sha256": "197494c828489ebf9c687ef186978eb789e08c7f3b6f72a7dedbc41d3dfa7bf9"
+          "sha256": "c06ce0c7a7b5f0be6ebff29ff65c0bd07bf876fc867099d650b8b8261fe85b6b"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/steering.d.ts",
@@ -1226,31 +1450,31 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/subagent-runner-bootstrap.js",
-          "sha256": "c7fc591c706a994914cc9cf60844f0c46a1dfc205a43af59d21cc6bda5f65fc7"
+          "sha256": "2bdbf9b73b81a5c85c68394905641a53ad079322e01e63f2e967497d9cb9e754"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/subagent-runner.d.ts",
-          "sha256": "5a9d204efcefc88c7d5778506c4ff64a1c56089fbeef517767e027907252179a"
+          "sha256": "0937b537e91f8dc08dd4d203b1d6950333ae19ccef6b9bd1e3622bad4818aeec"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/subagent-runner.js",
-          "sha256": "68e721efffb8255d6f6124ebf6d6ca951b597a766d740d7a88cf67b482ed9072"
+          "sha256": "7783189b5fcedf1e3dfa68193a17ac88732d2bcb53b5af9e600df68382fd2907"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/subagent-wait.d.ts",
-          "sha256": "b8198ce6e3e19135f59bc5c4d4e72f84dd0f472425c19a80fdb3524b89065c6d"
+          "sha256": "1eb3a09f78af27a3ea878b52119b8eee654dbe51c87b6bd444bc2474d3b4119a"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/subagent-wait.js",
-          "sha256": "50e8ac2d0ba0e9aea8a64eec3c22b7b28709361862b98d2b45b7052c87f2cdd3"
+          "sha256": "c14ee571bce297fb1c9059bbf7590112e79efa5328ad7ce781682800c1e6ac2b"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/terminal-run-index.d.ts",
-          "sha256": "1f1d567d3ae471e1ec99ac9b3566e74f1087c2c84fe1227d7b9ecfe106618f58"
+          "sha256": "6effd38785c49a54cb60d4559598caaffcbae59dd6d1901f4299a7b9dca3a4eb"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/terminal-run-index.js",
-          "sha256": "248957b084b01837c4875d8c20006f4d2f6261b3b79d4883a38c1ba74332597b"
+          "sha256": "9b5dd3df0cac3e9d74d56df45e3eab79508fc0cb8192443364c939ed490d62d5"
         },
         {
           "path": "vendor/pi-subagents/src/runs/background/top-level-async.d.ts",
@@ -1322,7 +1546,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/foreground/async-stop-action.js",
-          "sha256": "5c8fa7c4ac95f2064dfbf9eb512bb13a64ecde36c33e22176413e843a614599e"
+          "sha256": "b9b7f0c5b97fd503c3b08fd79a8b54616aab687298393b58367052c372963b7e"
         },
         {
           "path": "vendor/pi-subagents/src/runs/foreground/command-action.d.ts",
@@ -1338,7 +1562,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/foreground/execution.js",
-          "sha256": "70ead273acc2dc55bdc0babf5c0c8adc94871e11895cd230033e17f49d7e81d8"
+          "sha256": "df765f0cf0d97329a3b408e8f14450948fb3581c64c76aa2841cb69b755d8540"
         },
         {
           "path": "vendor/pi-subagents/src/runs/foreground/foreground-control.d.ts",
@@ -1350,11 +1574,11 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/foreground/foreground-history.d.ts",
-          "sha256": "739adc702f291b631251ee1ccd2f3948af7bdc2e4c6d0892a6274f464371070e"
+          "sha256": "dae3c00267c2cd1152a84582782f72436f92556e42d656a1b812b6fa939a907f"
         },
         {
           "path": "vendor/pi-subagents/src/runs/foreground/foreground-history.js",
-          "sha256": "e09b432464407463338d2d9da4adacfcd66d7a8c03db3432640c65acbdb16e17"
+          "sha256": "8ad1f059e18a894df61a98677ee884b0a8831fa849bafb9e0265864daaf5fc68"
         },
         {
           "path": "vendor/pi-subagents/src/runs/foreground/prompt-audit.d.ts",
@@ -1366,11 +1590,11 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/foreground/subagent-executor.d.ts",
-          "sha256": "7605e87eda08b14102167d52ac71485303fd99bcd1ba9e8bb0cfaf6fa9cd725e"
+          "sha256": "52f1a847d6df54edfb17aff2f1328d87d0d2915ca565dbbd26491cf49081aada"
         },
         {
           "path": "vendor/pi-subagents/src/runs/foreground/subagent-executor.js",
-          "sha256": "34b8f71b588a0c35ea25f5d958d7e74b9d39b135efdf8ad80e3c2e2375060b5c"
+          "sha256": "4620dbd750cd9fe5fa71d0c42c0214146d66191509a1a9511ebe26659759a404"
         },
         {
           "path": "vendor/pi-subagents/src/runs/foreground/workflow-detach-reconcile.d.ts",
@@ -1478,7 +1702,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/child-launch.d.ts",
-          "sha256": "f5601f9e73eba4e78f97c8fff896dc1708e511889d4d1c73cab2581f720bbdc9"
+          "sha256": "bfcd5d21784e1e9ffa0fa389efedf889f11789b9a0e6bb088f0f9a02164cd98b"
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/child-launch.js",
@@ -1502,19 +1726,19 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/child-session.d.ts",
-          "sha256": "ca00c4a6ca1c52a47b4e0c09bf66c75ce1282a25b9a8d65eba3fd0bab70fa9e9"
+          "sha256": "1a0deccd2277298a3df30aace1fbf0fcdc1baa6e183bef0e624dc7545629c791"
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/child-session.js",
-          "sha256": "d50de89acdfee98582dc601b1db30dc498d15774358e1e65a0d8c8c379f8dfee"
+          "sha256": "cb6ca172e2e8bc67d8b5301bc977027d57195349b5f715c89350d206661d41dd"
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/child-tool-plan.d.ts",
-          "sha256": "31e6f21d367ff84da6261ea0843887859a70d4a315e11fa166d706ea1bfbc1e7"
+          "sha256": "bf999b4d2da5961e9ac248337b34f76c307e3f8959c08aaab74bd9c870891851"
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/child-tool-plan.js",
-          "sha256": "545505c92d6fb9c478fbcf77db52031924db476b10be4f92631f5fe3e9feed48"
+          "sha256": "45c6f90187b4883f48c3b902b2cca8a100867482349726ac5656eb5d1ba4a278"
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/claude-code-adapter.d.ts",
@@ -1630,27 +1854,35 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/herdr-connection.d.ts",
-          "sha256": "c2ebcc12a996c74fbe559eda0391579e720f9fb72da27eae39bda7dac4cd2984"
+          "sha256": "d80d7d5ad8a5b844768ee6c77c6af3821043ed873a5632e93d1a817f1068a87e"
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/herdr-connection.js",
-          "sha256": "f07568ed4b52623537dc1ce1178ca7b9a344f82ff17fe918c8b3004afef86d27"
+          "sha256": "cac6ba9647d794618c147d098935784aa2ebd0179fa9daa8ec1beb0b56989b22"
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/herdr-external-adapters.d.ts",
-          "sha256": "196c7bdfe626cb40de6cec199c6bf97e3783afe9d00cdfabdcf347e2e6426a03"
+          "sha256": "fd775f08e092968fc17ff76cb59f04532f7d5869cd6229fe013923d4a05be314"
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/herdr-external-adapters.js",
-          "sha256": "46c1a0520cc29ff6b582d330505964c1a86d86e4b011d6f0f11fed8550942011"
+          "sha256": "98aaeb0631add0e2fa68897074cd37924cfcf80c30ce2f210f7ebbcd0e7b1bb3"
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/herdr-machine.d.ts",
-          "sha256": "ca546de82f9352b1045061dc700f9447ac54851316ad621724aa55a5a1e94ba9"
+          "sha256": "4ea9c7e0ce0e64bc4a1eb3f151ab6cd245a1ff68eb1291a36fe488ef2be2d2b5"
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/herdr-machine.js",
-          "sha256": "6ddfd4c83c87077a925df6ece170af344928e2703ef35b507f935b897b68b64f"
+          "sha256": "ffe235f9010db28f3d588f10baa12e9c6ce3007f487b929f0ae649cadb8c98d9"
+        },
+        {
+          "path": "vendor/pi-subagents/src/runs/shared/herdr-pane-host.d.ts",
+          "sha256": "ff99fca645f4f782ba9a2bae826e3fc82d4e81ea1fdbd263f897eb08b02ac558"
+        },
+        {
+          "path": "vendor/pi-subagents/src/runs/shared/herdr-pane-host.js",
+          "sha256": "816757b6f588c8d7b219543782650223f1281f2d5e3ee04513deb2fb059e0538"
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/herdr-pi-protocol.d.ts",
@@ -1662,11 +1894,11 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/herdr-placed-run.d.ts",
-          "sha256": "0a79e9f47f5ad79874a0a7d0b8808d699c3588bbd5f2ec841930adf79164af58"
+          "sha256": "66db56d35108930eae292dec4aa27af0b4791601762ec0122d877ee3682d724e"
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/herdr-placed-run.js",
-          "sha256": "dfbadcfb423702b4d13bd04d96a0e126338772db1b93be350cb373e6cbbfd96e"
+          "sha256": "711d45eebda8a38b3aea98b6683a52b223e96a95a322209258593c5e7c5f56b4"
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/host-step-status.d.ts",
@@ -1691,6 +1923,14 @@
         {
           "path": "vendor/pi-subagents/src/runs/shared/launch-cwd.js",
           "sha256": "eaae6040b21083ec6ea4a0f3da06374f1764f3f89f44af2209544acfcebc5f95"
+        },
+        {
+          "path": "vendor/pi-subagents/src/runs/shared/local-machine-access.d.ts",
+          "sha256": "4917b22e1c1592678e00138cd2c8dac60989195efa4f39cc08f8e38db6d748f4"
+        },
+        {
+          "path": "vendor/pi-subagents/src/runs/shared/local-machine-access.js",
+          "sha256": "30edf7ec4edc93c10f0028be8d7ee24d0ab275606aee101ae8e0ee99f540aabc"
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/long-running-guard.d.ts",
@@ -1782,11 +2022,11 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/orca-progress-tabs.d.ts",
-          "sha256": "1eb90b2d5ab78e1004735b8edfce2dc776ac285bd267f6b2969e7ff2de62e0c4"
+          "sha256": "3aa06460aef3e3ce88400683ec14ae20b41644ef09ec5d9f6cebe457256a61f5"
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/orca-progress-tabs.js",
-          "sha256": "6ea948107ecd8fcad6fe04ecc6f6fb8ac987afd140f9625e035fa91e29c01b6c"
+          "sha256": "2fdd0bbd7b40e09bd947e9d3a673ec81c94ef3f65f73aae1bb7b4a578d1ca4ad"
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/parallel-handoff.d.ts",
@@ -1798,7 +2038,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/parallel-utils.d.ts",
-          "sha256": "7f05b2da20cf63456ce906e6619fe549b72927f7f1b2b79090c9a1c6ceecbd1a"
+          "sha256": "a9ecd75a5b6d33b3f2ff0d7f9403d2b26440f2cc0c4ae605b74a2c802265f571"
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/parallel-utils.js",
@@ -1829,6 +2069,22 @@
           "sha256": "c54cf1dcb464bf9bbcd100300ee501a8904f60dda69618cb483595371c9f854e"
         },
         {
+          "path": "vendor/pi-subagents/src/runs/shared/placed-run-owner.d.ts",
+          "sha256": "c2c176b0a620c526877fec81419c650cd47eede559c5e1ab6c49f0f33216118e"
+        },
+        {
+          "path": "vendor/pi-subagents/src/runs/shared/placed-run-owner.js",
+          "sha256": "931cd5026c54bd896eb91e0f7f4f966e5a4943a29ee095f1cf9ebb9284db8344"
+        },
+        {
+          "path": "vendor/pi-subagents/src/runs/shared/placement-host.d.ts",
+          "sha256": "8e28fb5a74159107ae0a42ce0094e9e73e037882ba2d17d768428686759e50af"
+        },
+        {
+          "path": "vendor/pi-subagents/src/runs/shared/placement-host.js",
+          "sha256": "f96e1e924d413a4e394bd81c09c4cc5b71500e3d0a0ba98c1397439407bc9b2e"
+        },
+        {
           "path": "vendor/pi-subagents/src/runs/shared/process-signal.d.ts",
           "sha256": "7d8b473ec834605b4c8e282c1cd96ceea7b855d992b70784f0ee0cadc503d2fe"
         },
@@ -1843,6 +2099,22 @@
         {
           "path": "vendor/pi-subagents/src/runs/shared/readonly-drain-observation.js",
           "sha256": "1e3ee3a5f3344d19dc52477ba5916f8626b17615e386d870ac85fdb460fe6bcb"
+        },
+        {
+          "path": "vendor/pi-subagents/src/runs/shared/rex-machine.d.ts",
+          "sha256": "7f78b232c7b54a0c9fc4e4567ea877d47cdad1219270efff297a6f66b413d43c"
+        },
+        {
+          "path": "vendor/pi-subagents/src/runs/shared/rex-machine.js",
+          "sha256": "f2b9f5aed63f78ffb73129a97379811c4e7e5b4d6720001ef6adbba802378da9"
+        },
+        {
+          "path": "vendor/pi-subagents/src/runs/shared/rex-pane-host.d.ts",
+          "sha256": "9e18d6a13246971fe47bfdd9bfe04f6dcbada8bf813f76cc8ad27e1cf71c3b4b"
+        },
+        {
+          "path": "vendor/pi-subagents/src/runs/shared/rex-pane-host.js",
+          "sha256": "55c521b9e3c4219df3b195635a1644545e953f45405d99a220341c3ecdbd29ac"
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/run-fanout-budget.d.ts",
@@ -1902,11 +2174,11 @@
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/structured-output.d.ts",
-          "sha256": "e01c85b3ccb98be167504fabc723d6c68eecbad6aea21bfb00436cc98da3417d"
+          "sha256": "32411b77558dd35f0a684edd99a30503df8993712acff11d75c0561bec40ae4c"
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/structured-output.js",
-          "sha256": "2f1552797c6e48aaebeb39332d840e72f5e2aa0fb447aeb23a72fbb80d940a1b"
+          "sha256": "475a617075e94f26d14d77b3f31b97754203cf90aa89954bdb4c5d378dd9fa0e"
         },
         {
           "path": "vendor/pi-subagents/src/runs/shared/subagent-control.d.ts",
@@ -2026,7 +2298,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/shared/accessible-dir.js",
-          "sha256": "b5497e5677b49358e9c71c754e58df00a78471b8151c34cfbc17bc53b4d625cc"
+          "sha256": "a2f47a12e9e0997a7cd7959417884c653c1327ed60a37ace5a749b9890134b22"
         },
         {
           "path": "vendor/pi-subagents/src/shared/agent-stream-options.d.ts",
@@ -2086,11 +2358,11 @@
         },
         {
           "path": "vendor/pi-subagents/src/shared/completion-owner.d.ts",
-          "sha256": "227441877b4a4ac54b846abacd11fd90972e043abff318921ef280a896ab9ecd"
+          "sha256": "ef557a7e751fb1961c662c5e4b8167d0d72b04072a5065eac96ea4440f8f4ecd"
         },
         {
           "path": "vendor/pi-subagents/src/shared/completion-owner.js",
-          "sha256": "1fffebeb50acebf70811551803debba813dafa80163138f2c8ca02aae3d1d794"
+          "sha256": "d890fa4062bd6528e70ef6e303d529a3485555e6e617679bb3b50b9790359cae"
         },
         {
           "path": "vendor/pi-subagents/src/shared/disabled-features.d.ts",
@@ -2245,6 +2517,14 @@
           "sha256": "98d789baf97a540923f78292316c43adbbe207f54cbd6cfc2bfe559aa37f7c97"
         },
         {
+          "path": "vendor/pi-subagents/src/shared/provider-diagnostics.d.ts",
+          "sha256": "a6802efa40072a75c2fd3244916979484842bab99d9831d6c6808d7b8ff40d10"
+        },
+        {
+          "path": "vendor/pi-subagents/src/shared/provider-diagnostics.js",
+          "sha256": "ebcfef5edf40e7624128d5b4ce8d1a9e874964b14fefa8b88de0aa470368a501"
+        },
+        {
           "path": "vendor/pi-subagents/src/shared/pruned-fork.d.ts",
           "sha256": "6d1dfbb48acd6ba1c842d314c1986134eff900ba47109d9e8f3850cb1d80d655"
         },
@@ -2278,11 +2558,11 @@
         },
         {
           "path": "vendor/pi-subagents/src/shared/session-identity.d.ts",
-          "sha256": "2007d6ecd48874f7d842dad420a4907bfa5a3fba0c18c2b481b33b2cfc84994b"
+          "sha256": "7ca14a6e56c2cfc5bdcdeab5328c4585f55518426fc0324d875714917a1c9c80"
         },
         {
           "path": "vendor/pi-subagents/src/shared/session-identity.js",
-          "sha256": "73876b56b070c50a72e0ae675f8db677e5e42b8ecb3914a15c775d93b31f7902"
+          "sha256": "15cf8688d9cfcc09d573f690651dab0721a22c9620ee7010709f6c14821c6570"
         },
         {
           "path": "vendor/pi-subagents/src/shared/session-succession.d.ts",
@@ -2342,7 +2622,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/shared/types.d.ts",
-          "sha256": "59bda662b931102dfe2f429d84fb04c74dc1078ca37eff24bc779855aebc0931"
+          "sha256": "556455064d8a7ab669d06e9be4bb9f3dd6789a3cd999fea0543feb8cdf0fe80c"
         },
         {
           "path": "vendor/pi-subagents/src/shared/types.js",
@@ -2382,11 +2662,11 @@
         },
         {
           "path": "vendor/pi-subagents/src/slash/delegation-adapters.d.ts",
-          "sha256": "21928a85245f989759ca0e938e8435351bce9d1733bbed188deb147805ccd28f"
+          "sha256": "84ee1ba7edbfd4e2dd2b38cd64f91112b5a3b2994659c5f272eb704be8898dd4"
         },
         {
           "path": "vendor/pi-subagents/src/slash/delegation-adapters.js",
-          "sha256": "e85e920fea6fc65ab3894a1713b85338c4e7716d44cdeb9b4e31e3e4139c2a5b"
+          "sha256": "c6d7da148c9edc3582ef2ed986b824aebc24e3fbd3785a3d2a82eadf20479015"
         },
         {
           "path": "vendor/pi-subagents/src/slash/delegation-json.d.ts",
@@ -2410,7 +2690,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/slash/prompt-template-bridge.js",
-          "sha256": "e893204cce836235d931b947f15af72555e353127c8ed4453f11f908ef2eaeb7"
+          "sha256": "9e96fb23365696961db073e119591fcc4c78968132758bdd5bd333fc2399e5fd"
         },
         {
           "path": "vendor/pi-subagents/src/slash/prompt-workflows.d.ts",
@@ -2462,11 +2742,19 @@
         },
         {
           "path": "vendor/pi-subagents/src/slash/subagents-admin.d.ts",
-          "sha256": "becb5440e87c9d1bf17f0fbe11755728ed682fd61ad9b0bb551d44f24f7dde17"
+          "sha256": "ae0414bef230d55d5fe36a514211a16337481b7484a405882d2dd645aac5fa5b"
         },
         {
           "path": "vendor/pi-subagents/src/slash/subagents-admin.js",
-          "sha256": "e01291a624cfb20dfa2e8111fbbf302a96fd2425427b5e415f7d1eecf3327b30"
+          "sha256": "649f4d2dedb1121ec2a805d8a3e09b533c9889176e9d7ba11dc49df8c2af7a41"
+        },
+        {
+          "path": "vendor/pi-subagents/src/tui/fleet-layout.d.ts",
+          "sha256": "07985cf2f790b880047ba8a65e0cd7de8e6dc8b855e24490684a1dcec0b14602"
+        },
+        {
+          "path": "vendor/pi-subagents/src/tui/fleet-layout.js",
+          "sha256": "864c2f120b74d4085d0a3c6c9e87336ca98e75c57ed1fea34b4a5ecda4a97659"
         },
         {
           "path": "vendor/pi-subagents/src/tui/fleet-status.d.ts",
@@ -2485,12 +2773,20 @@
           "sha256": "0703531e7b68ab29da8edd3b2063f206e6bc87ede1329f12241c572e15fd14d7"
         },
         {
+          "path": "vendor/pi-subagents/src/tui/fleet-viewport.d.ts",
+          "sha256": "7cae97ea7f126c78932c28412bb2a99deeb76d3700e39930e1450d95d0d9f6fb"
+        },
+        {
+          "path": "vendor/pi-subagents/src/tui/fleet-viewport.js",
+          "sha256": "410c733193a51752f64c38b5973858f42d9b5c636bb57716fa1ed72683d8ee51"
+        },
+        {
           "path": "vendor/pi-subagents/src/tui/fleet.d.ts",
-          "sha256": "53287a7ca894db40fa8fc809a74ca9b23422e06dfb2c57966ed2eda487ff96f5"
+          "sha256": "b95038f757a4155532ec37d8d1e846e1e67a7586662c41ef4da635b1246c28b3"
         },
         {
           "path": "vendor/pi-subagents/src/tui/fleet.js",
-          "sha256": "6802bfa662eba1a2a7d055434ab4e357fe752b8fe88eafe3cc13bf1e660e6ba2"
+          "sha256": "2510916fa5573a75cfdb665ec570e9d82564853b36023a294ee5694bc301921f"
         },
         {
           "path": "vendor/pi-subagents/src/tui/render-helpers.d.ts",
@@ -2502,11 +2798,11 @@
         },
         {
           "path": "vendor/pi-subagents/src/tui/render.d.ts",
-          "sha256": "23bebc0530eedf32255d53b22ae1f9134de808b8d1f4620841d9a9b3db3fb8ff"
+          "sha256": "6e1a8caaa033bc5a27bffd12cab270a4f03cbe21dc9e26a9f39b826b4173bd13"
         },
         {
           "path": "vendor/pi-subagents/src/tui/render.js",
-          "sha256": "5f9fea50e6e069546f44d1b8f993f8b8a62a48db20cab43dcb6cb2498f0fdadc"
+          "sha256": "d15ad298ece31a45e1ec5a2310f7e62f31d1f59b3d6be3e230f053b54b8d9da7"
         },
         {
           "path": "vendor/pi-subagents/src/tui/running-tone.d.ts",
@@ -2522,7 +2818,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/tui/subagent-messages.js",
-          "sha256": "b04dffd485233e66aaa31233f08525cf9e4d7cf0c90cf6bd5dbf69f217d8401c"
+          "sha256": "94c0af8ff917c19d9deb76e7232b1dbc6ff8b23b41c492aed62010ba2366de0b"
         },
         {
           "path": "vendor/pi-subagents/src/watchdog/change-signature.d.ts",
@@ -2702,7 +2998,7 @@
         },
         {
           "path": "vendor/pi-subagents/src/workflows/scripted-workflow.d.ts",
-          "sha256": "c5cb25a344ddc3d7800b078f0abaf8019cb9730e5e6e94fe7536bc7c67a981d6"
+          "sha256": "7c088937e0cce416546ebcfe5f96cc3963d4092243c6f50bb7d692c4b5a15894"
         },
         {
           "path": "vendor/pi-subagents/src/workflows/scripted-workflow.js",
@@ -2710,11 +3006,19 @@
         },
         {
           "path": "vendor/pi-subagents/src/workflows/structured-workflow-scripts.d.ts",
-          "sha256": "f338011bebb34fd3fa0ce45b6bda7b06024cbe66730a90e7cc5f54f97d9614fd"
+          "sha256": "2d2984e158ae2deb10114a85e0d434d2b7135e67ce728681ac2a5df76f9a08e4"
         },
         {
           "path": "vendor/pi-subagents/src/workflows/structured-workflow-scripts.js",
-          "sha256": "fee11efb440b2ea5f47bf26469ba2a9c156a222756949ae67309f96b4d947bac"
+          "sha256": "4a88e969489220e6a063a6ae455e3ba930e64c007a5949c0a241d958f92f154b"
+        },
+        {
+          "path": "vendor/pi-subagents/src/workflows/workflow-auto-resume.d.ts",
+          "sha256": "5303a9c25a35a1184708fa5035c65d15ac116e470caf7dad07db2236afa210ad"
+        },
+        {
+          "path": "vendor/pi-subagents/src/workflows/workflow-auto-resume.js",
+          "sha256": "516c3d1df6cbb4675b768ad8414af52cf08a880b9c5c085b195b6405054edb18"
         },
         {
           "path": "vendor/pi-subagents/src/workflows/workflow-checklist.d.ts",
@@ -2731,6 +3035,14 @@
         {
           "path": "vendor/pi-subagents/src/workflows/workflow-child-summary.js",
           "sha256": "1b8598be3deadcbdeccc4aaf3818e2eab63bf5e83b2ee31042b8fd86e2a0e782"
+        },
+        {
+          "path": "vendor/pi-subagents/src/workflows/workflow-launch-record.d.ts",
+          "sha256": "a74fb2d1cb8191abe0c1a27b93dc9b8efefae275e61603e6f40919294df629fa"
+        },
+        {
+          "path": "vendor/pi-subagents/src/workflows/workflow-launch-record.js",
+          "sha256": "8ba051b24145d53dbe04da07edfe10750abadd99d9d2e555ef795cf193c81bd2"
         },
         {
           "path": "vendor/pi-subagents/src/workflows/workflow-preflight.d.ts",
@@ -2754,23 +3066,39 @@
         },
         {
           "path": "vendor/pi-subagents/src/workflows/workflow-resources.js",
-          "sha256": "12bd6e5dfa273771631e4b58d4b22ec85d44176a8815e9df7245afeb7868a959"
+          "sha256": "bde5f60a4f7414741ea41f3dac0fb536cf3fc469795f4197be94d1bcd2f022a7"
+        },
+        {
+          "path": "vendor/pi-subagents/src/workflows/workflow-resume-claim.d.ts",
+          "sha256": "eb18a651c7c37284af178bcab6f6a50386b7bca4ba208d276e18593329f5cf4e"
+        },
+        {
+          "path": "vendor/pi-subagents/src/workflows/workflow-resume-claim.js",
+          "sha256": "9139b8894d7dac3b332e7d54e98a16c8f183756907aa7e9ae130e96320d0056e"
+        },
+        {
+          "path": "vendor/pi-subagents/src/workflows/workflow-resume.d.ts",
+          "sha256": "7da08c2b424f75a7f71b6e6ac7af23996e523ac5a33d67491b3d5ed3f7941ad4"
+        },
+        {
+          "path": "vendor/pi-subagents/src/workflows/workflow-resume.js",
+          "sha256": "9560ec6c6651973ef25f6e7ebe3001a68ffeb58b8f149758ee38c6bc7508efa5"
         },
         {
           "path": "vendor/pi-subagents/src/workflows/workflow-reuse.d.ts",
-          "sha256": "57586185b365faef8e6ec4fd55a469095d272932e0f8d0df387d8c2c39a5cbb5"
+          "sha256": "cdc0950325004cdf6e3154b4d466f47fd133b4873c35f09df2a89d0f1d83f770"
         },
         {
           "path": "vendor/pi-subagents/src/workflows/workflow-reuse.js",
-          "sha256": "2467a2e0a71d75a1c8c74b30708ab2315558f0badfc61ad6b2537c1fed71c1f5"
+          "sha256": "f024877298e82bb857c61f34092615eedbd935d18fff4e91b0996b309d7f8709"
         },
         {
           "path": "vendor/pi-subagents/src/workflows/workflow-revival.d.ts",
-          "sha256": "f3e5aebbefb80a0cff0d8611f19c201bbe94345b66e055af8418b639c9854259"
+          "sha256": "775597bc6b64f01a99ffd011e0333b496e5e363fba648b1a802a6302f91a42ce"
         },
         {
           "path": "vendor/pi-subagents/src/workflows/workflow-revival.js",
-          "sha256": "c26f652d59f4b22f6539bcacee95abffaf1331b013ceee32a433c2d073a32c29"
+          "sha256": "c1e42dc5f5da4a99832a0c03a0ef0fddd42c9b4a2d6ec194bce0c94a064c8617"
         },
         {
           "path": "vendor/pi-subagents/src/workflows/workflow-settlement.d.ts",
@@ -2779,6 +3107,14 @@
         {
           "path": "vendor/pi-subagents/src/workflows/workflow-settlement.js",
           "sha256": "911cec251702c2d65c230096417c163da1fd46a3c5e63795bb67ad26e5a6ec0a"
+        },
+        {
+          "path": "vendor/pi-subagents/src/workflows/workflow-stop-cause.d.ts",
+          "sha256": "833f46d26917859cca199c09ee2ffedf03dd219f112d45548e125744e48f8d89"
+        },
+        {
+          "path": "vendor/pi-subagents/src/workflows/workflow-stop-cause.js",
+          "sha256": "5c5417abea03ec5974a771b02be223712a604d29c6b923b4932fa4cb00afa866"
         }
       ]
     },

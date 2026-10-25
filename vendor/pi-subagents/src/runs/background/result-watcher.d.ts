@@ -31,7 +31,7 @@ type ResultWatcherDeps = {
     resultScanLogging?: "all" | "activity" | "off";
     platform?: NodeJS.Platform;
     /** Shared current/predecessor session ownership used by the notifier. */
-    ownership?: Pick<ResultDeliveryOwnership, "owns" | "claimedSessionIds">;
+    ownership?: Pick<ResultDeliveryOwnership, "owns" | "claimedSessionIds" | "deliveryOwnerId">;
     /** Called once the parent has this run's result: the notifier accepted it, or an earlier delivery already did. */
     onResultDelivered?: (runId: string) => void;
 };
@@ -69,6 +69,8 @@ type ResultFileData = CompletionNotification & {
     intercomTarget?: string;
     parallelHandoff?: ParallelHandoffReference;
     notificationDeliveredAt?: unknown;
+    completionOwnerProcess?: unknown;
+    parentWorkflowRunId?: unknown;
 };
 /**
  * Watches persisted async results for the session currently owned by this

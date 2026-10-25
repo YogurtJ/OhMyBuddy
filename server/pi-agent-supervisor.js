@@ -971,6 +971,8 @@ class AgentWorker extends EventEmitter {
         if (completed && !this.noSession && this.sessionId) {
             this.emit('completion', { cwd: this.cwd, sessionId: this.sessionId, completionId: randomUUID(), completedAt: new Date().toISOString() });
         }
+        // pi-subagents snapshot/inspect lines reach browsers only via gateway_controls.
+        if (subagentRuntime.privateWidget(event)) return;
         this._broadcast(event);
     }
 

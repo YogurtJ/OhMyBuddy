@@ -13,7 +13,8 @@ let revision = 0;
 const running = { version: 1, generatedAt: now, omitted: { runs: 0, children: 0 }, runs: [{
     id: 'run-1', kind: 'workflow', label: 'Review <img src=x onerror=alert(1)> ' + 'long-workflow-label-'.repeat(6), state: 'running', startedAt: now - 65000,
     activity: { currentTool: 'read', turnCount: 3, toolCount: 7 },
-    children: [{ id: 'run-1:0', kind: 'step', label: 'scout', state: 'complete' }, { id: 'run-1:1', kind: 'step', label: 'reviewer ' + 'x'.repeat(80), state: 'running', activity: { currentTool: 'bash' } }]
+    children: [{ id: 'run-1:0', kind: 'step', label: 'scout', state: 'complete', agent: 'scout', model: 'fixture/fast-model' },
+        { id: 'run-1:1', kind: 'step', label: 'reviewer ' + 'x'.repeat(80), state: 'running', agent: 'reviewer', model: 'anthropic/claude-opus-4-5', thinking: 'high', activity: { currentTool: 'bash' } }]
 }] };
 const finished = { ...running, runs: [{ ...running.runs[0], state: 'paused', endedAt: now - 1000, children: [] }] };
 const controls = (snapshot, active) => ({ runtimeId: 'main', revision: ++revision, queue: { steering: [], followUp: [] }, recoveries: [], stopping: false, drafts: [], draftOverflow: false,
@@ -24,7 +25,9 @@ const extraNotices = [
     ['subagent-supervisor-blocked', '子 Agent 请求受阻', 'Subagent request blocked'],
     ['subagent-completion-unanswered', '子 Agent 结果尚未答复', 'Subagent result unanswered'],
     ['subagent-completion-unhandled', '子 Agent 结果尚未处理', 'Subagent result unhandled'],
-    ['subagent_watchdog_clarification', '子 Agent 监督待澄清', 'Subagent watchdog needs clarification']
+    ['subagent_watchdog_clarification', '子 Agent 监督待澄清', 'Subagent watchdog needs clarification'],
+    ['subagent-auto-resume', '工作流自动续跑未启动', 'Workflow auto-resume did not start'],
+    ['subagents-admin', '子 Agent 管理', 'Subagent administration']
 ];
 const messages = [
     { role: 'user', timestamp: 1, content: 'Delegate a review' },
@@ -44,6 +47,7 @@ async function check(browser, base, width, language) {
     const fixtureNow = Date.now();
     running.generatedAt = fixtureNow; running.runs[0].startedAt = fixtureNow - 65000;
     finished.runs[0].startedAt = fixtureNow - 65000; finished.runs[0].endedAt = fixtureNow - 1000;
+    running.runs[0].children[1].activity = { state: 'needs_attention', currentTool: 'bash', lastActivityAt: fixtureNow - 185000 };
     const en = language === 'en';
     const context = await browser.newContext({ viewport: { width, height: 900 }, locale: language });
     const page = await context.newPage(), errors = [], commands = [];
@@ -78,19 +82,21 @@ async function check(browser, base, width, language) {
         if (cmd.type === 'get_messages') return reply(data());
         if (cmd.type === 'subagent_control') {
             commands.push({ method: cmd.method, params: cmd.params });
-            if (cmd.method === 'status' && cmd.params.id) return reply({ text: ['Run: run-1', 'Dir: /private/async/run-1',
-                'Step 1: reviewer <b>x</b> (reviewer) running (claude-opus-4-5 · thinking high), active now', 'Step 2: scout (scout) complete'].join('\n') });
             if (cmd.method === 'status') return reply({ text: 'ok', snapshot: running });
             if (cmd.method === 'cost') return reply({ cost: { parent: { input: 1200, output: 300, cost: 0.012 }, childTotal: { input: 45000, output: 2000, cost: 0.31 },
                 total: { input: 46200, output: 2300, cost: 0.322 }, unresolvedAsyncChildren: 1, children: [{ label: 'reviewer: check auth', agent: 'reviewer', usage: { input: 45000, output: 2000, cost: 0.31 } }] } });
             if (cmd.method === 'stop' && stopFails) return fail('Async run run-1 is complete; stop only supports running async runs.');
-            return reply(cmd.method === 'stop' ? { state: 'stopping', text: 'Stop requested' } : { text: 'delivered' });
+            if (cmd.method === 'steer') return reply({ text: 'Steering queued', delivery: 'queued', state: 'pending' });
+            if (cmd.method === 'resume') return reply({ text: 'Resumed', runId: 'run-2' });
+            return reply(cmd.method === 'stop' ? { state: 'stopping', text: 'Stop requested' } : { text: 'ok' });
         }
         throw new Error(`Unexpected command: ${cmd.type}`);
     }));
     await page.goto(base);
     await page.locator('#pi-input').fill('Keep my draft');
     const panel = page.locator('#pi-subagent-runs');
+    // The panel also holds the “finished” fold, which has its own summary.
+    const panelSummary = page.locator('#pi-subagent-runs > summary');
     await panel.waitFor({ state: 'visible' });
     assert.equal(await page.locator('#pi-agent-state').textContent(), en ? 'Subagents running · 1' : '子 Agent 运行中 · 1');
     emit({ type: 'agent_settled' });
@@ -110,45 +116,64 @@ async function check(browser, base, width, language) {
     assert.ok(rows.every(row => row.right <= innerWidthOf(width) + 1), 'chips fit the width');
     assert.equal(await panel.locator('.sa-runs-count').evaluate(node => node.scrollWidth <= node.clientWidth + 1), true, 'subagent count is not truncated');
     await progress.locator('summary').click();
-    await panel.locator('summary').click();
+    await panelSummary.click();
     await page.waitForFunction(() => document.querySelector('#pi-subagent-runs').open && !document.querySelector('#pi-task-progress').open);
     assert.deepEqual([await panel.evaluate(node => node.open), await progress.evaluate(node => node.open)], [true, false], 'opening one closes the other');
     await page.screenshot({ path: `/tmp/pivane-composer-status-open-${width}-${language}.png` });
     assert.equal(await panel.locator('.sa-runs-count').textContent(), en ? '1 running' : '1 个运行中');
-    assert.equal(await panel.locator('.sa-runs-keep').isVisible(), true);
+    assert.equal(await panel.locator('.sa-runs-progress').textContent(), '1/2', 'workflow progress is on the chip');
+    assert.equal(await panel.locator('.sa-runs-keep').isVisible(), false, 'reported runs replace the retention badge');
+    assert.match(await panelSummary.getAttribute('title'), en ? /keeps this session open/ : /保留此会话/);
     assert.equal(await panel.locator('.sa-run').count(), 1);
     assert.equal(await panel.locator('.sa-run-children > li').count(), 2);
     assert.equal(await panel.locator('img').count(), 0, 'labels are text');
-    assert.match(await panel.locator('.sa-run-time').textContent(), en ? /1m \d+s/ : /1 分 \d+ 秒/);
+    assert.match(await panel.locator('.sa-run-time').textContent(), /^1:0\d$/);
+    assert.match(await panel.locator('.sa-run-time').getAttribute('title'), en ? /1m \d+s/ : /1 分 \d+ 秒/);
     assert.match(await panel.locator('.sa-run-meta').textContent(), en ? /Workflow · Using read · 3 turns · 7 tool calls/ : /工作流 · 正在使用 read · 3 轮 · 7 次工具/);
 
-    // Models (the log view was removed)
-    assert.equal(await panel.getByRole('button', { name: en ? 'View log' : '查看记录' }).count(), 0);
-    await panel.getByRole('button', { name: en ? 'View models' : '查看模型' }).click();
-    const dialog = page.locator('dialog.sa-runs-dialog[open]');
-    await dialog.waitFor();
-    assert.deepEqual(commands.at(-1), { method: 'status', params: { id: 'run-1' } });
-    assert.equal(await dialog.evaluate(node => node.textContent.includes('/private')), false, 'only step lines are shown');
-    assert.deepEqual(await page.evaluate(() => window.PiSubagentRuns.stepModels([
-        'Step 1: reviewer running (anthropic/claude-opus-4 · thinking high), active now, error: later failed',
-        'Step 2/3 Agent 1/2: [review] auth check (reviewer) complete (gpt-5)',
-        'Workflow child s1: s1-source (worker) failed, error: boom', 'Agent 2/2: scout pending (thinking low)', 'Dir: /x'].join('\n'))), [
-        { step: 'Step 1', name: 'reviewer', agent: '', state: 'running', model: 'anthropic/claude-opus-4', thinking: 'high' },
-        { step: 'Step 2/3 Agent 1/2', name: 'auth check', agent: 'reviewer', state: 'complete', model: 'gpt-5', thinking: '' },
-        { step: 'Workflow child s1', name: 's1-source', agent: 'worker', state: 'failed', model: '', thinking: '' },
-        { step: 'Agent 2/2', name: 'scout', state: 'pending', agent: '', model: '', thinking: 'low' }]);
-    assert.equal(await dialog.locator('.sa-model').count(), 2);
-    assert.equal(await dialog.locator('.sa-model-name').first().textContent(), 'reviewer <b>x</b>');
-    assert.equal(await dialog.locator('.sa-model-id').first().textContent(), 'claude-opus-4-5');
-    assert.equal(await dialog.locator('.sa-model-thinking').first().textContent(), en ? 'Thinking High' : '思考 高');
-    assert.equal(await dialog.locator('.sa-model-id.muted').textContent(), en ? 'Default model' : '默认模型');
-    assert.ok(await dialog.evaluate(node => node.getBoundingClientRect().right <= innerWidth + 1 && [...node.querySelectorAll('.sa-model')].every(item => item.scrollWidth <= item.clientWidth + 1)));
-    await page.screenshot({ path: `/tmp/pivane-subagent-models-${width}-${language}.png` });
-    await page.keyboard.press('Escape'); await dialog.waitFor({ state: 'detached' }).catch(() => {});
-    assert.equal(await page.locator('dialog.sa-runs-dialog[open]').count(), 0);
+    // Role, model, thinking and the stall warning are on each lane row; there is no separate model dialog.
+    const lanes = panel.locator('.sa-run-children > li');
+    assert.equal(await panel.getByRole('button', { name: en ? 'View models' : '查看模型' }).count(), 0);
+    assert.equal(await lanes.nth(0).locator('.sa-child-meta').textContent(), en ? 'Code explorer · fast-model' : '代码探索 · fast-model');
+    assert.equal(await lanes.nth(0).locator('.sa-child-time').textContent(), en ? 'Completed' : '已完成');
+    assert.equal(await lanes.nth(1).locator('.sa-meta-model').textContent(), 'claude-opus-4-5');
+    assert.equal(await lanes.nth(1).locator('.sa-meta-model').getAttribute('title'), 'anthropic/claude-opus-4-5');
+    assert.equal(await lanes.nth(1).locator('.sa-meta-thinking').textContent(), en ? 'Thinking High' : '思考 高');
+    assert.equal(await lanes.nth(1).locator('.sa-meta-stall').textContent(), en ? 'No activity for 3 min' : '3 分钟无活动');
+    assert.equal(await lanes.nth(1).getAttribute('data-stalled'), 'true');
+    assert.match(await lanes.nth(1).locator('.sa-child-meta').textContent(), en ? /Using bash/ : /正在使用 bash/);
+    const laneOverflow = await lanes.nth(1).evaluate(node => [node, ...node.querySelectorAll('*')].filter(item => item.getBoundingClientRect().right > innerWidth + 1)
+        .map(item => `${item.tagName}.${item.className} right=${Math.round(item.getBoundingClientRect().right)} w=${Math.round(item.getBoundingClientRect().width)} grid=${getComputedStyle(node).gridTemplateColumns} popover=${Math.round(node.closest('.sa-runs-body').getBoundingClientRect().right)} ${item.textContent.slice(0, 40)}`));
+    assert.deepEqual(laneOverflow, [], 'lane rows fit the width');
 
-    // Steer
-    await panel.getByRole('button', { name: en ? 'Steer' : '引导' }).click();
+    // Actions live in the ⋯ menu. Snapshot updates patch the card in place and keep focus.
+    const card = panel.locator('.sa-run[data-run-id="run-1"]');
+    const menu = card.locator('.sa-run-menu');
+    const dialog = page.locator('dialog.sa-runs-dialog[open]');
+    assert.equal(await card.locator('.sa-run-actions').isVisible(), false);
+    assert.equal(await menu.getAttribute('aria-label'), en ? 'More actions' : '更多操作');
+    await menu.click();
+    assert.equal(await menu.getAttribute('aria-expanded'), 'true');
+    await card.getByRole('button', { name: en ? 'Steer' : '引导' }).focus();
+    await card.evaluate(node => { node.__fixtureMarker = true; });
+    const updated = structuredClone(running); updated.generatedAt += 5000;
+    updated.runs[0].activity = { ...updated.runs[0].activity, currentTool: 'grep', toolCount: 8 };
+    emit({ type: 'gateway_controls', controls: controls(updated, true) });
+    await page.waitForFunction(() => /grep/.test(document.querySelector('#pi-subagent-runs .sa-run-meta').textContent));
+    assert.equal(await card.evaluate(node => node.__fixtureMarker === true), true, 'the same card node is patched');
+    assert.equal(await page.evaluate(() => Boolean(document.activeElement?.closest('.sa-run-actions'))), true, 'focus survives the update');
+    await page.keyboard.press('Escape');
+    assert.equal(await card.locator('.sa-run-actions').isVisible(), false, 'Esc closes the menu first');
+    assert.equal(await panel.evaluate(node => node.open), true);
+    assert.equal(await page.evaluate(() => document.activeElement?.classList.contains('sa-run-menu')), true, 'focus returns to the menu button');
+    await page.keyboard.press('Escape');
+    assert.equal(await panel.evaluate(node => node.open), false, 'a second Esc closes the panel');
+    await panelSummary.click();
+    await card.waitFor();
+
+    // Steer: the plugin said “queued”, so the toast must not claim delivery.
+    await menu.click();
+    await card.getByRole('button', { name: en ? 'Steer' : '引导' }).click();
     await dialog.waitFor();
     const textarea = dialog.locator('textarea');
     if (width < 700) assert.ok(await textarea.evaluate(node => parseFloat(getComputedStyle(node).fontSize) >= 16));
@@ -160,20 +185,31 @@ async function check(browser, base, width, language) {
     await dialog.locator('button.primary').click();
     await page.locator('dialog.sa-runs-dialog[open]').waitFor({ state: 'detached' });
     assert.deepEqual(commands.at(-1), { method: 'steer', params: { id: 'run-1', message: 'Focus on sign-in', mode: 'follow_up' } });
-    await page.locator('.pi-toast.success').first().waitFor();
+    await page.locator('.pi-toast.info', { hasText: en ? 'queued' : '已排队' }).waitFor();
+    assert.equal(await page.locator('.pi-toast', { hasText: en ? 'Message delivered' : '引导已送达' }).count(), 0);
 
-    // Stop: cancel sends nothing; accepted failure is reported without retry.
-    page.once('dialog', prompt => prompt.dismiss());
+    // Stop uses the in-app confirmation: cancel sends nothing; an accepted failure is reported without retry.
+    const confirmDialog = page.locator('dialog.pi-profile-confirm[open]');
     const beforeStop = commands.length;
-    await panel.getByRole('button', { name: en ? 'Stop' : '停止' }).click();
-    await page.waitForTimeout(100);
+    await menu.click();
+    await card.getByRole('button', { name: en ? 'Stop' : '停止' }).click();
+    await confirmDialog.waitFor();
+    assert.match(await confirmDialog.locator('h2').textContent(), en ? /^Stop “Review/ : /^停止“Review/);
+    await confirmDialog.locator('.settings-secondary-button').click();
+    await confirmDialog.waitFor({ state: 'detached' });
     assert.equal(commands.length, beforeStop);
-    stopFails = true; page.once('dialog', prompt => prompt.accept());
-    await panel.getByRole('button', { name: en ? 'Stop' : '停止' }).click();
+    stopFails = true;
+    await menu.click();
+    await card.getByRole('button', { name: en ? 'Stop' : '停止' }).click();
+    await confirmDialog.locator('.pi-profile-confirm-discard').click();
     await page.locator('.pi-toast.error', { hasText: 'stop only supports running' }).waitFor();
     assert.equal(commands.filter(item => item.method === 'stop').length, 1);
 
-    // Cost
+    // Cost: the footer shows the child total read once on opening; the dialog keeps the breakdown.
+    await panel.locator('.sa-cost-total', { hasText: '$0.31' }).waitFor();
+    assert.equal(await panel.locator('.sa-cost-total').textContent(), en ? 'Subagents at least $0.31' : '子 Agent 至少 $0.31');
+    assert.equal(commands.filter(item => item.method === 'cost').length, 1, 'reopening within the cache window does not reread');
+    assert.equal(await panel.getByRole('button', { name: en ? 'Refresh status' : '刷新状态' }).count(), 1);
     await panel.getByRole('button', { name: en ? 'Usage and cost' : '用量与费用' }).click();
     await dialog.waitFor();
     assert.equal(await dialog.locator('tr').count(), 5);
@@ -182,8 +218,25 @@ async function check(browser, base, width, language) {
     assert.ok(await dialog.evaluate(node => node.getBoundingClientRect().right <= innerWidth + 1));
     await dialog.locator('.pi-native-heading button').click();
 
+    // Finished runs fold under one row; a single-agent run shows its role and model on the card itself.
+    const done = { id: 'done-run', kind: 'subagent', label: 'worker', state: 'complete', startedAt: fixtureNow - 90000, endedAt: fixtureNow - 30000,
+        activity: { turnCount: 4, toolCount: 9 }, children: [{ id: 'step:0', kind: 'step', label: 'worker', state: 'complete', agent: 'worker', model: 'bit-gpt/gpt-6.1-sol', thinking: 'xhigh' }] };
+    emit({ type: 'gateway_controls', controls: controls({ ...running, runs: [...running.runs, done] }, true) });
+    const ended = panel.locator('.sa-runs-ended');
+    await ended.waitFor({ state: 'visible' });
+    assert.equal(await ended.evaluate(node => node.open), false);
+    assert.equal(await ended.locator('summary').textContent(), en ? 'Finished 1' : '已结束 1');
+    assert.equal(await panel.locator('.sa-runs-count').textContent(), en ? '1 running' : '1 个运行中');
+    await ended.locator('summary').click();
+    const doneCard = ended.locator('.sa-run[data-run-id="done-run"]');
+    await doneCard.waitFor();
+    assert.equal(await doneCard.locator('.sa-run-children').count(), 0, 'a single step is not repeated under its run');
+    assert.equal(await doneCard.locator('.sa-run-meta').textContent(), en ? 'Task worker · gpt-6.1-sol · Thinking Very high · 4 turns · 9 tool calls' : '任务执行 · gpt-6.1-sol · 思考 极高 · 4 轮 · 9 次工具');
+    assert.equal(await doneCard.locator('.sa-run-time').textContent(), '1:00');
+    assert.equal(await doneCard.locator('.sa-run-menu').isVisible(), true, 'completed runs can be continued');
+
     // Layout
-    const overflow = await panel.locator('summary, .sa-run, .sa-run-head, .sa-run-children li, .sa-run-actions').evaluateAll(nodes => nodes.filter(n => n.getBoundingClientRect().right > innerWidth + 1).map(n => n.className));
+    const overflow = await panel.locator('summary, .sa-run, .sa-run-head, .sa-run-children li, .sa-meta, .sa-runs-footer').evaluateAll(nodes => nodes.filter(n => n.getClientRects().length && n.getBoundingClientRect().right > innerWidth + 1).map(n => n.className));
     assert.deepEqual(overflow, []);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     assert.ok(await page.locator('#pi-input').evaluate(node => node.getBoundingClientRect().bottom <= innerHeight));
@@ -200,15 +253,21 @@ async function check(browser, base, width, language) {
     await page.waitForFunction(label => document.querySelector('#pi-subagent-runs .sa-runs-count').textContent === label, en ? '1 need attention' : '1 个需处理');
     assert.equal(await panel.locator('.sa-runs-keep').isVisible(), false);
     assert.equal(await page.locator('#pi-agent-state').textContent(), en ? 'Subagents need attention · 1' : '子 Agent 需处理 · 1');
-    await panel.getByRole('button', { name: en ? 'Continue' : '继续' }).click();
+    const paused = panel.locator('.sa-run[data-run-id="run-1"]');
+    await paused.locator('.sa-run-menu').click();
+    await paused.getByRole('button', { name: en ? 'Continue' : '继续' }).click();
     await dialog.waitFor();
     await dialog.locator('textarea').fill('Finish the rest');
     await dialog.locator('button.primary').click();
     await page.locator('dialog.sa-runs-dialog[open]').waitFor({ state: 'detached' });
     assert.deepEqual(commands.at(-1), { method: 'resume', params: { id: 'run-1', message: 'Finish the rest' } });
-    await panel.locator('summary').click();
+    await page.locator('.pi-toast.success', { hasText: 'run-2' }).waitFor();
+    // The continuation is marked once the plugin reports the new run.
+    emit({ type: 'gateway_controls', controls: controls({ ...finished, runs: [...finished.runs, { ...done, id: 'run-2', state: 'running', endedAt: undefined }] }, true) });
+    await panel.locator('.sa-run[data-run-id="run-2"] .sa-run-meta', { hasText: en ? 'Continued from Review' : '继续自 Review' }).waitFor();
+    await panelSummary.click();
     emit({ type: 'gateway_controls', controls: controls(running, true) });
-    await page.waitForFunction(() => document.querySelector('#pi-subagent-runs .sa-runs-keep:not([hidden])'));
+    await page.waitForFunction(label => document.querySelector('#pi-subagent-runs .sa-runs-count').textContent === label, en ? '1 running' : '1 个运行中');
     assert.equal(await panel.evaluate(node => node.open), false, 'updates respect manual collapse');
     emit({ type: 'gateway_controls', controls: controls(null, false) });
     await page.waitForFunction(() => document.querySelector('#pi-subagent-runs').hidden);
@@ -216,6 +275,7 @@ async function check(browser, base, width, language) {
     assert.equal(await page.locator('#pi-agent-state').textContent(), en ? 'Idle' : '空闲');
     emit({ type: 'gateway_controls', controls: controls(null, true) });
     await page.waitForFunction(label => document.querySelector('#pi-agent-state').textContent === label, en ? 'Background work in progress' : '后台工作进行中');
+    assert.equal(await panel.locator('.sa-runs-keep').isVisible(), true, 'the badge stands in while no run is reported');
     emit({ type: 'gateway_controls', controls: controls(null, false) });
 
     const queuedControls = controls(null, false);
@@ -288,7 +348,7 @@ async function check(browser, base, width, language) {
     await page.locator('[data-session-id="main"] .pi-session-main').click();
     await panel.waitFor({ state: 'visible' });
     assert.equal(await panel.evaluate(node => node.open), false, 'restored panel stays collapsed');
-    await panel.locator('summary').click();
+    await panelSummary.click();
     await panel.locator('.sa-run').first().waitFor();
     assert.equal(await panel.locator('.sa-run').count(), 1, 'open_session snapshot restores the panel');
     assert.equal(await page.locator('#pi-input').inputValue(), 'Keep my draft');

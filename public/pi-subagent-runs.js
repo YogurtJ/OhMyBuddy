@@ -7,25 +7,14 @@
         stopped: ['已停止', 'fa-regular fa-circle-stop', 'muted'], rejected: ['未启动', 'fa-solid fa-ban', 'error']
     };
     const ACTIVE = new Set(['queued', 'running']);
-    // pi-subagents reports each step's model only in targeted status text, e.g.
-    // "Step 1: auth check (reviewer) running (claude-opus-4 · thinking high), 3 turns".
-    const STEP_LINE = /^(Step \d+(?:\/\d+)?(?: Agent \d+\/\d+)?|Agent \d+\/\d+|Workflow child [^:]{1,120}): (?:\[[^\]]{0,80}\] )?(.+?) (pending|queued|running|complete|completed|failed|paused|stopped|skipped|cancelled|canceled|interrupted|rejected|partial|detached)(?: \(([^()]{1,300})\))?(?:,|$)/;
-    function stepModels(text) {
-        const steps = [];
-        for (const line of String(text || '').split('\n')) {
-            const match = STEP_LINE.exec(line.trimEnd());
-            if (!match) continue;
-            const [, step, display, state, detail = ''] = match;
-            const named = /^(.*) \(([^()]+)\)$/.exec(display);
-            const parts = detail.split(' · ').map(part => part.trim()).filter(Boolean);
-            const thinking = parts.find(part => /^thinking \S+$/.test(part));
-            steps.push({ step, name: named ? named[1] : display, agent: named ? named[2] : '', state,
-                model: parts.find(part => part !== thinking) || '', thinking: thinking ? thinking.slice(9) : '' });
-            if (steps.length >= 50) break;
-        }
-        return steps;
-    }
+    // Finished runs that need no decision fold under “已结束”.
+    const ENDED = new Set(['complete', 'stopped']);
     const RESUMABLE = new Set(['paused', 'stopped', 'failed', 'partial', 'complete']);
+    // Same wording as the composer's thinking selector.
+    const THINKING = { off: '不启用', minimal: '极简', low: '低', medium: '中', high: '高', xhigh: '极高', max: '最大' };
+    const HOST_KIND = { command: '命令', ci: 'CI', gate: '检查' };
+    const VERDICT = { pass: ['通过', 'done'], fail: ['未通过', 'error'], inconclusive: ['无结论', 'attention'] };
+    const COST_TTL_MS = 30000;
     const el = (tag, className, text) => {
         const node = document.createElement(tag);
         if (className) node.className = className;
@@ -40,28 +29,75 @@
         if (minutes < 60) return t('{0} 分 {1} 秒', minutes, seconds % 60);
         return t('{0} 小时 {1} 分', Math.floor(minutes / 60), minutes % 60);
     };
+    // Compact elapsed time for the right-hand column: 0:42, 12:49, 1:02:03.
+    const clock = ms => {
+        const total = Math.max(0, Math.floor(ms / 1000)), pad = value => String(value).padStart(2, '0');
+        const hours = Math.floor(total / 3600), minutes = Math.floor(total % 3600 / 60), seconds = total % 60;
+        return hours ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`;
+    };
+    const age = ms => {
+        const seconds = Math.max(0, Math.round(ms / 1000));
+        if (seconds < 60) return t('{0} 秒', seconds);
+        const minutes = Math.floor(seconds / 60);
+        return minutes < 60 ? t('{0} 分钟', minutes) : t('{0} 小时', Math.floor(minutes / 60));
+    };
     const tokens = value => Number.isFinite(value) ? value >= 10000 ? `${(value / 1000).toFixed(1)}k` : String(value) : '—';
     const money = value => Number.isFinite(value) ? `$${value < 0.01 && value > 0 ? value.toFixed(4) : value.toFixed(2)}` : '—';
+    const stateOf = state => STATES[state] || [state, 'fa-regular fa-circle', 'muted'];
+    const roleName = agent => agent ? window.PiSubagentSettings?.roleName?.(agent) || agent : '';
+    const lanes = run => (run.children || []).filter(child => child.kind !== 'host-step');
+    // A single-agent run reports one step that repeats the run: show it on the run row.
+    const solo = run => run.children?.length === 1 && run.children[0].kind === 'step' && !run.children[0].children?.length ? run.children[0] : null;
+    function runTitle(run) {
+        const list = lanes(run);
+        if (list.length > 1) {
+            const names = list.map(lane => lane.agent || lane.label);
+            // “worker, worker, worker” says nothing; name the shape and count instead.
+            if (names.every(name => name === names[0])) return run.kind === 'workflow'
+                ? t('工作流 · {0} 个子任务', list.length) : t('{0} · {1} 个子任务', roleName(names[0]) || names[0], list.length);
+        }
+        return run.label;
+    }
+    function progress(run) {
+        const list = lanes(run);
+        return list.length > 1 ? { done: list.filter(lane => lane.state === 'complete').length, total: list.length } : null;
+    }
+    // Live text recomputed by the one-second clock while work runs.
+    const live = (node, render) => { node.classList.add('sa-live'); node._piLive = render; return node; };
 
     class PiSubagentRuns {
         constructor(root, options) {
             this.root = root; this.options = options; this.epoch = 0; this.busy = false;
-            root.innerHTML = '<summary><i class="fa-solid fa-people-group" aria-hidden="true"></i><strong></strong><span class="sa-runs-count" role="status" aria-live="polite"></span><span class="sa-runs-keep" hidden><i class="sa-runs-keep-dot" aria-hidden="true"></i><span></span></span><i class="fa-solid fa-chevron-up sa-runs-chevron" aria-hidden="true"></i></summary><div class="sa-runs-body"><div class="sa-runs-list"></div><div class="sa-runs-footer"></div></div>';
-            this.list = root.querySelector('.sa-runs-list');
+            root.innerHTML = '<summary><i class="fa-solid fa-people-group" aria-hidden="true"></i><strong></strong><span class="sa-runs-count" role="status" aria-live="polite"></span><span class="sa-runs-progress"></span><span class="sa-runs-keep" hidden><i class="sa-runs-keep-dot" aria-hidden="true"></i><span></span></span><i class="fa-solid fa-chevron-up sa-runs-chevron" aria-hidden="true"></i></summary>'
+                + '<div class="sa-runs-body"><div class="sa-runs-list"></div><details class="sa-runs-ended" hidden><summary><i class="fa-solid fa-chevron-right" aria-hidden="true"></i><span></span></summary><div class="sa-runs-list"></div></details><div class="sa-runs-notes"></div><div class="sa-runs-footer"></div></div>';
+            this.list = root.querySelector('.sa-runs-body > .sa-runs-list');
+            this.ended = root.querySelector('.sa-runs-ended');
+            this.endedList = this.ended.querySelector('.sa-runs-list');
+            this.notes = root.querySelector('.sa-runs-notes');
             this.footer = root.querySelector('.sa-runs-footer');
+            this.cards = new Map();
+            this.costButton = this.action(el('button', 'sa-runs-cost-button'), () => this.showCost());
+            this.costButton.append(icon('fa-solid fa-coins'), el('span', 'sa-cost-label'), el('span', 'sa-cost-total'));
+            this.refreshButton = this.action(el('button', 'sa-runs-refresh'), () => this.refresh());
+            this.refreshButton.append(icon('fa-solid fa-rotate'));
+            this.footer.append(this.costButton, this.refreshButton);
             this.dialog = el('dialog', 'pi-native-dialog sa-runs-dialog');
             document.body.append(this.dialog);
             this.dialog.addEventListener('close', () => { this.dialog.replaceChildren(); this.returnFocus?.focus?.(); this.returnFocus = null; });
-            root.addEventListener('toggle', () => { if (root.open) this.render(); });
+            root.addEventListener('toggle', () => { if (root.open) { this.render(); void this.loadCostSummary(); } else this.closeMenus(); });
             this.clock = setInterval(() => { if (!root.hidden && root.open && this.hasActive()) this.renderTimes(); }, 1000);
             this.reset();
         }
         reset() {
             this.epoch++; this.value = null; this.snapshot = null; this.background = null; this.busy = false;
-            this.root.hidden = true; this.root.open = false; this.list.replaceChildren(); this.footer.replaceChildren();
+            this.continued = new Map(); this.costSummary = null; this.costAt = 0; this.costLoading = false;
+            this.root.hidden = true; this.root.open = false;
+            this.cards.clear(); this.list.replaceChildren(); this.endedList.replaceChildren(); this.notes.replaceChildren();
+            this.ended.hidden = true; this.ended.open = false;
             if (this.dialog.open) this.dialog.close();
         }
         hasActive() { return Boolean(this.snapshot?.runs.some(run => ACTIVE.has(run.state))); }
+        current(id) { return this.snapshot?.runs.find(run => run.id === id) || null; }
         apply(value) {
             if (!value || typeof value !== 'object') return;
             const signature = JSON.stringify(value);
@@ -74,90 +110,230 @@
             const keep = Boolean(this.background?.active);
             this.root.hidden = !runs.length && !keep;
             if (this.root.hidden) return;
-            const active = runs.filter(run => ACTIVE.has(run.state)).length;
+            const active = runs.filter(run => ACTIVE.has(run.state));
             const attention = runs.filter(run => STATES[run.state]?.[2] === 'attention' || STATES[run.state]?.[2] === 'error').length;
-            this.root.dataset.state = attention ? 'attention' : active ? 'active' : 'done';
-            this.root.querySelector('summary strong').textContent = t('子 Agent');
+            this.root.dataset.state = attention ? 'attention' : active.length ? 'active' : 'done';
+            const summary = this.root.querySelector(':scope > summary');
+            summary.querySelector('strong').textContent = t('子 Agent');
             this.root.querySelector('.sa-runs-count').textContent = attention
-                ? [active ? t('{0} 个运行中', active) : '', t('{0} 个需处理', attention)].filter(Boolean).join(' · ')
-                : active ? t('{0} 个运行中', active) : runs.length ? t('{0} 个已结束', runs.length) : t('后台工作进行中');
+                ? [active.length ? t('{0} 个运行中', active.length) : '', t('{0} 个需处理', attention)].filter(Boolean).join(' · ')
+                : active.length ? t('{0} 个运行中', active.length) : runs.length ? t('{0} 个已结束', runs.length) : t('后台工作进行中');
+            let done = 0, total = 0;
+            for (const run of active) { const value = progress(run); if (value) { done += value.done; total += value.total; } }
+            const progressNode = this.root.querySelector('.sa-runs-progress');
+            progressNode.textContent = total ? `${done}/${total}` : '';
+            progressNode.title = total ? t('运行中工作流的子任务：已完成 {0} / 共 {1}', done, total) : '';
+            // The retention badge only stands in for runs the plugin has not reported.
+            const keepText = t('后台子 Agent 未结束，Pivane 会保留此会话，以便结果返回后主 Agent 自动继续。');
             const keepBadge = this.root.querySelector('.sa-runs-keep');
-            keepBadge.hidden = !keep; keepBadge.querySelector('span').textContent = t('会话保持中');
-            keepBadge.title = t('后台子 Agent 未结束，Pivane 会保留此会话，以便结果返回后主 Agent 自动继续。');
+            keepBadge.hidden = !keep || runs.length > 0; keepBadge.querySelector('span').textContent = t('会话保持中'); keepBadge.title = keepText;
+            summary.title = keep && runs.length ? keepText : '';
             if (!this.root.open) return;
-            this.list.replaceChildren(...runs.map(run => this.card(run)));
-            if (!runs.length) this.list.append(el('p', 'sa-runs-empty', t('后台工作尚未提供运行详情。')));
-            if (this.snapshot?.omitted?.runs) this.list.append(el('p', 'sa-runs-empty', t('另有 {0} 个运行未显示。', this.snapshot.omitted.runs)));
-            this.footer.replaceChildren(
-                this.button(t('刷新状态'), 'fa-solid fa-rotate', () => this.refresh()),
-                this.button(t('用量与费用'), 'fa-solid fa-coins', () => this.showCost()));
+            this.renderRuns(runs);
+            this.renderFooter();
             this.renderTimes();
         }
-        card(run) {
-            const [label, iconClass, tone] = STATES[run.state] || [run.state, 'fa-regular fa-circle', 'muted'];
-            const card = el('article', 'sa-run'); card.dataset.tone = tone; card.dataset.runId = run.id;
-            const head = el('div', 'sa-run-head');
-            const status = el('span', 'sa-run-state'); status.append(icon(iconClass), el('span', '', t(label)));
-            const title = el('strong', 'sa-run-title', run.label); title.title = run.label;
-            head.append(status, title, el('span', 'sa-run-time'));
-            card.append(head);
-            const activity = run.activity || {};
-            const meta = [
-                run.kind === 'workflow' ? t('工作流') : null,
-                activity.currentTool ? t('正在使用 {0}', activity.currentTool) : null,
-                Number.isInteger(activity.turnCount) ? t('{0} 轮', activity.turnCount) : null,
-                Number.isInteger(activity.toolCount) ? t('{0} 次工具', activity.toolCount) : null
-            ].filter(Boolean);
-            if (meta.length) card.append(el('p', 'sa-run-meta', meta.join(' · ')));
-            if (run.children?.length) {
-                const list = el('ul', 'sa-run-children');
-                for (const child of run.children) list.append(this.child(child));
-                card.append(list);
+        renderRuns(runs) {
+            const seen = new Set(), open = [], ended = [];
+            for (const run of runs) {
+                seen.add(run.id);
+                let card = this.cards.get(run.id);
+                if (!card) { card = this.card(run.id); this.cards.set(run.id, card); }
+                this.update(card, run);
+                (ENDED.has(run.state) ? ended : open).push(card);
             }
-            const actions = el('div', 'sa-run-actions');
-            actions.append(this.button(t('查看模型'), 'fa-solid fa-microchip', () => this.showModels(run)));
-            if (ACTIVE.has(run.state)) {
-                actions.append(this.button(t('引导'), 'fa-regular fa-comment-dots', () => this.message(run, 'steer')));
-                const stop = this.button(t('停止'), 'fa-regular fa-circle-stop', () => this.stop(run)); stop.classList.add('danger');
-                actions.append(stop);
-            } else if (RESUMABLE.has(run.state)) actions.append(this.button(t('继续'), 'fa-solid fa-play', () => this.message(run, 'resume')));
-            card.append(actions);
+            for (const [id, card] of this.cards) if (!seen.has(id)) { card.remove(); this.cards.delete(id); }
+            this.place(this.list, open); this.place(this.endedList, ended);
+            this.ended.hidden = !ended.length;
+            this.ended.querySelector('summary span').textContent = t('已结束 {0}', ended.length);
+            const notes = [];
+            if (!runs.length) notes.push(t('后台工作尚未提供运行详情。'));
+            if (this.snapshot?.omitted?.runs) notes.push(t('另有 {0} 个运行未显示。', this.snapshot.omitted.runs));
+            if (this.snapshot?.omitted?.children) notes.push(t('另有 {0} 个子任务未显示。', this.snapshot.omitted.children));
+            this.notes.replaceChildren(...notes.map(text => el('p', 'sa-runs-empty', text)));
+        }
+        // Reorder only when needed: moving a node that holds focus would blur it.
+        place(container, cards) {
+            cards.forEach((card, index) => { if (container.children[index] !== card) container.insertBefore(card, container.children[index] || null); });
+            for (const node of [...container.children].slice(cards.length)) if (!cards.includes(node)) node.remove();
+        }
+        card(id) {
+            const card = el('article', 'sa-run'); card.dataset.runId = id;
+            const head = el('div', 'sa-run-head');
+            const state = el('span', 'sa-run-state'); state.append(icon(''), el('span', 'sa-run-state-label'));
+            const title = el('strong', 'sa-run-title');
+            const progressNode = el('span', 'sa-run-progress');
+            const time = el('span', 'sa-run-time');
+            const menu = el('button', 'sa-run-menu'); menu.type = 'button';
+            menu.append(icon('fa-solid fa-ellipsis'));
+            menu.setAttribute('aria-label', t('更多操作')); menu.title = t('更多操作');
+            menu.setAttribute('aria-expanded', 'false');
+            const actions = el('div', 'sa-run-actions'); actions.hidden = true;
+            actions.id = `sa-run-actions-${Math.random().toString(36).slice(2)}`; menu.setAttribute('aria-controls', actions.id);
+            menu.addEventListener('click', () => this.toggleMenu(card, actions.hidden));
+            card.addEventListener('keydown', event => {
+                if (event.key !== 'Escape' || event.isComposing || actions.hidden) return;
+                event.preventDefault(); event.stopPropagation();
+                this.toggleMenu(card, false); menu.focus();
+            });
+            head.append(state, title, progressNode, time, menu);
+            const body = el('div', 'sa-run-body');
+            card.append(head, actions, body);
+            card._parts = { state, title, progress: progressNode, time, menu, actions, body };
             return card;
         }
-        child(node, depth = 0) {
-            const [label, iconClass, tone] = STATES[node.state] || [node.state, 'fa-regular fa-circle', 'muted'];
+        toggleMenu(card, open) {
+            if (open) this.closeMenus(card);
+            card._parts.actions.hidden = !open;
+            card._parts.menu.setAttribute('aria-expanded', String(open));
+        }
+        closeMenus(except = null) { for (const card of this.cards.values()) if (card !== except && !card._parts.actions.hidden) this.toggleMenu(card, false); }
+        update(card, run) {
+            const [label, iconClass, tone] = stateOf(run.state);
+            const parts = card._parts;
+            card.dataset.tone = tone;
+            parts.state.firstChild.className = iconClass;
+            parts.state.title = t(label);
+            parts.state.lastChild.textContent = t(label);
+            const title = runTitle(run);
+            parts.title.textContent = title; parts.title.title = title === run.label ? run.label : `${title}\n${run.label}`;
+            const value = progress(run);
+            parts.progress.textContent = value ? `${value.done}/${value.total}` : '';
+            parts.progress.hidden = !value;
+            if (run.startedAt) live(parts.time, now => {
+                const end = ACTIVE.has(run.state) ? now : run.endedAt || run.updatedAt || now;
+                parts.time.title = duration(end - run.startedAt);
+                return clock(end - run.startedAt);
+            }); else { parts.time.classList.remove('sa-live'); parts.time.textContent = ''; }
+            this.menu(card, run);
+            const signature = JSON.stringify([run, this.continued.get(run.id) || null]);
+            if (parts.body.dataset.signature !== signature) {
+                parts.body.dataset.signature = signature;
+                parts.body.replaceChildren(...this.body(run));
+            }
+        }
+        menu(card, run) {
+            const kind = ACTIVE.has(run.state) ? 'active' : RESUMABLE.has(run.state) ? 'resume' : '';
+            const { menu, actions } = card._parts;
+            menu.hidden = !kind;
+            if (actions.dataset.kind === kind) return;
+            actions.dataset.kind = kind;
+            this.toggleMenu(card, false);
+            const item = (text, iconClass, handler, danger) => {
+                const button = this.action(el('button', 'sa-run-button' + (danger ? ' danger' : '')), handler, () => { this.toggleMenu(card, false); menu.focus(); });
+                button.append(icon(iconClass), el('span', '', text));
+                return button;
+            };
+            const id = run.id;
+            if (kind === 'active') actions.replaceChildren(
+                item(t('引导'), 'fa-regular fa-comment-dots', () => this.message(id, 'steer')),
+                item(t('停止'), 'fa-regular fa-circle-stop', () => this.stop(id), true));
+            else if (kind === 'resume') actions.replaceChildren(item(t('继续'), 'fa-solid fa-play', () => this.message(id, 'resume')));
+            else actions.replaceChildren();
+        }
+        body(run) {
+            const lead = solo(run);
+            const source = lead ? { state: run.state, agent: lead.agent, model: lead.model, thinking: lead.thinking, hostStep: lead.hostStep,
+                activity: { ...(run.activity || {}), ...(lead.activity || {}) } } : { state: run.state, activity: run.activity };
+            const meta = this.meta(source, { counts: true, continued: this.continued.get(run.id),
+                workflow: run.kind === 'workflow' && runTitle(run) === run.label });
+            const nodes = [];
+            if (meta.childNodes.length) { meta.classList.add('sa-run-meta'); nodes.push(meta); }
+            if (!lead && run.children?.length) {
+                const list = el('ul', 'sa-run-children');
+                for (const child of run.children) list.append(this.row(child, 0));
+                nodes.push(list);
+            }
+            return nodes;
+        }
+        // One line: role · model · thinking · current activity · host result · counts.
+        meta(source, { counts = false, continued = '', workflow = false } = {}) {
+            const parts = [];
+            if (workflow) parts.push(el('span', '', t('工作流')));
+            const role = roleName(source.agent);
+            if (role) { const node = el('span', 'sa-meta-role', role); node.title = source.agent; parts.push(node); }
+            if (source.model) { const node = el('code', 'sa-meta-model', source.model.split('/').pop()); node.title = source.model; parts.push(node); }
+            if (source.thinking) parts.push(el('span', 'sa-meta-thinking', t('思考 {0}', t(THINKING[source.thinking] || source.thinking))));
+            const activity = source.activity || {};
+            if (ACTIVE.has(source.state)) {
+                if (activity.state === 'needs_attention') {
+                    const node = el('span', 'sa-meta-stall', t('需要关注'));
+                    if (activity.lastActivityAt) live(node, now => t('{0}无活动', age(now - activity.lastActivityAt)));
+                    parts.push(node);
+                } else if (activity.state === 'active_long_running') parts.push(el('span', 'sa-meta-long', t('长时间运行')));
+                if (activity.currentTool) {
+                    const node = el('span', 'sa-meta-tool', t('正在使用 {0}', activity.currentTool));
+                    if (activity.currentToolStartedAt) live(node, now => t('正在 {0} · {1}', activity.currentTool, age(now - activity.currentToolStartedAt)));
+                    parts.push(node);
+                }
+            }
+            const host = source.hostStep;
+            if (host) {
+                parts.push(el('span', '', t(HOST_KIND[host.kind] || host.kind)));
+                if (host.verdict && VERDICT[host.verdict]) { const node = el('span', 'sa-meta-verdict', t(VERDICT[host.verdict][0])); node.dataset.tone = VERDICT[host.verdict][1]; parts.push(node); }
+                if (host.stale) parts.push(el('span', 'sa-meta-stall', t('结果已过期')));
+                if (host.detail) { const node = el('span', 'sa-meta-detail', host.detail); node.title = host.detail; parts.push(node); }
+            }
+            if (continued) parts.push(el('span', '', t('继续自 {0}', continued)));
+            if (counts) {
+                if (Number.isInteger(activity.turnCount)) parts.push(el('span', 'sa-meta-count', t('{0} 轮', activity.turnCount)));
+                if (Number.isInteger(activity.toolCount)) parts.push(el('span', 'sa-meta-count', t('{0} 次工具', activity.toolCount)));
+            }
+            const box = el('span', 'sa-meta');
+            parts.forEach((part, index) => { if (index) box.append(el('span', 'sa-meta-sep', ' · ')); box.append(part); });
+            if (parts.some(part => part.classList.contains('sa-meta-stall'))) box.dataset.stalled = 'true';
+            return box;
+        }
+        row(node, depth) {
+            const [label, iconClass, tone] = stateOf(node.state);
             const row = el('li'); row.dataset.tone = tone;
+            const mark = icon(iconClass); mark.title = t(label);
+            const main = el('span', 'sa-child-main');
             const name = el('span', 'sa-child-label', node.label); name.title = node.label;
-            row.append(icon(iconClass), name, el('span', 'sa-child-state', t(label)));
-            if (node.activity?.currentTool && ACTIVE.has(node.state)) row.append(el('span', 'sa-child-tool', node.activity.currentTool));
+            main.append(name);
+            const meta = this.meta(node);
+            if (meta.childNodes.length) { meta.classList.add('sa-child-meta'); main.append(meta); if (meta.dataset.stalled) row.dataset.stalled = 'true'; }
+            const time = el('span', 'sa-child-time');
+            if (node.startedAt) live(time, now => {
+                const end = ACTIVE.has(node.state) ? now : node.endedAt || node.updatedAt || now;
+                time.title = `${t(label)} · ${duration(end - node.startedAt)}`;
+                return clock(end - node.startedAt);
+            }); else time.textContent = t(label);
+            // Without a start time the right column already names the state.
+            row.append(mark, ...(node.startedAt ? [el('span', 'sa-sr', t(label))] : []), main, time);
             if (depth < 2 && node.children?.length) {
                 const list = el('ul', 'sa-run-children');
-                for (const child of node.children) list.append(this.child(child, depth + 1));
+                for (const child of node.children) list.append(this.row(child, depth + 1));
                 row.append(list);
             }
             return row;
         }
         renderTimes() {
             const now = Date.now();
-            for (const card of this.list.querySelectorAll('.sa-run')) {
-                const run = this.snapshot?.runs.find(item => item.id === card.dataset.runId);
-                const target = card.querySelector('.sa-run-time');
-                if (!run || !target || !run.startedAt) continue;
-                const end = ACTIVE.has(run.state) ? now : run.endedAt || run.updatedAt || now;
-                target.textContent = duration(end - run.startedAt);
-            }
+            for (const node of this.root.querySelectorAll('.sa-live')) if (node._piLive) node.textContent = node._piLive(now);
         }
-        button(text, iconClass, handler) {
-            const button = el('button', 'sa-run-button'); button.type = 'button';
-            button.append(icon(iconClass), el('span', '', text));
+        renderFooter() {
+            this.costButton.querySelector('.sa-cost-label').textContent = t('用量与费用');
+            const cost = this.costSummary?.childTotal?.cost;
+            this.costButton.querySelector('.sa-cost-total').textContent = Number.isFinite(cost)
+                ? t(this.costSummary.unresolvedAsyncChildren ? '子 Agent 至少 {0}' : '子 Agent 约 {0}', money(cost)) : '';
+            this.refreshButton.setAttribute('aria-label', t('刷新状态')); this.refreshButton.title = t('刷新状态');
+            this.syncDisabled();
+        }
+        syncDisabled() {
+            const disabled = this.busy || !this.options.connected();
+            for (const button of this.root.querySelectorAll('[data-sa-action]')) button.disabled = disabled;
+        }
+        action(button, handler, before) {
+            button.type = 'button'; button.dataset.saAction = '';
             button.disabled = this.busy || !this.options.connected();
             button.addEventListener('click', async () => {
                 if (this.busy) return;
-                const epoch = this.epoch; this.busy = true;
-                this.root.querySelectorAll('.sa-run-button').forEach(item => { item.disabled = true; });
+                before?.();
+                const epoch = this.epoch; this.busy = true; this.syncDisabled();
                 try { await handler(button); }
                 catch (error) { if (epoch === this.epoch) this.options.toast(error.message || t('子 Agent 操作失败'), 'error'); }
-                finally { if (epoch === this.epoch) { this.busy = false; this.render(); } }
+                finally { if (epoch === this.epoch) { this.busy = false; this.render(); this.syncDisabled(); } }
             });
             return button;
         }
@@ -170,7 +346,18 @@
         async refresh() {
             const data = await this.request('status', {});
             if (data?.snapshot) { this.snapshot = data.snapshot; this.value = null; }
+            this.costAt = 0; void this.loadCostSummary();
             this.options.toast(t('已刷新子 Agent 状态'), 'success');
+        }
+        // One read per panel opening at most every 30 s; never on a timer.
+        async loadCostSummary() {
+            if (this.costLoading || (this.costAt && Date.now() - this.costAt < COST_TTL_MS) || !this.options.connected()) return;
+            const epoch = this.epoch; this.costLoading = true;
+            try {
+                const data = await this.options.request('cost', {}, 30000);
+                if (epoch === this.epoch) this.costSummary = data?.cost || null;
+            } catch { if (epoch === this.epoch) this.costSummary = null; }
+            finally { if (epoch === this.epoch) { this.costLoading = false; this.costAt = Date.now(); if (this.root.open) this.renderFooter(); } }
         }
         openDialog(title, content, actions = []) {
             this.returnFocus = document.activeElement;
@@ -182,35 +369,22 @@
             this.dialog.replaceChildren(heading, body, footer);
             this.dialog.showModal();
         }
-        async showModels(run) {
-            const models = stepModels((await this.request('status', { id: run.id }))?.text);
-            const thinking = { off: '关闭思考', minimal: '极低', low: '低', medium: '中等', high: '高', xhigh: '很高', max: '最高' };
-            const list = el('ul', 'sa-models');
-            for (const step of models) {
-                const item = el('li', 'sa-model');
-                const [stateLabel, iconClass, tone] = STATES[step.state === 'completed' ? 'complete' : step.state] || [step.state, 'fa-regular fa-circle', 'muted'];
-                const role = step.agent ? window.PiSubagentSettings?.roleName?.(step.agent) || step.agent : null;
-                const head = el('div', 'sa-model-head');
-                const icon = el('i', iconClass); icon.setAttribute('aria-hidden', 'true');
-                const state = el('span', 'sa-model-state'); state.dataset.tone = tone; state.title = t(stateLabel); state.append(icon);
-                head.append(state, el('strong', 'sa-model-name', step.name || step.step), el('span', 'sa-model-step', role ? `${role} · ${step.step}` : step.step));
-                const tags = el('div', 'sa-model-tags');
-                const model = el('code', 'sa-model-id', step.model || t('默认模型')); model.title = step.model || t('pi-subagents 未报告模型，使用继承的默认模型');
-                if (!step.model) model.classList.add('muted');
-                tags.append(model);
-                if (step.thinking) tags.append(el('span', 'sa-model-thinking', t('思考 {0}', t(thinking[step.thinking] || step.thinking))));
-                item.append(head, tags); list.append(item);
-            }
-            const content = models.length ? [list] : [el('p', 'pi-native-help', t('pi-subagents 没有报告此运行的模型信息。'))];
-            this.openDialog(t('模型 · {0}', run.label), content);
+        async confirmStop(run) {
+            const message = t('已完成的步骤会保留，进行中的工作会被中断。');
+            const dialog = window.PiProfileDialog;
+            if (!dialog?.confirm) return window.confirm(`${t('停止“{0}”？', runTitle(run))}\n${message}`);
+            return dialog.confirm({ title: t('停止“{0}”？', runTitle(run)), message, accept: t('停止'), cancelLabel: t('取消') });
         }
-        async stop(run) {
-            if (!window.confirm(t('停止“{0}”？已完成的步骤会保留，进行中的工作会被中断。', run.label))) return;
-            const data = await this.request('stop', { id: run.id });
+        async stop(id) {
+            const run = this.current(id);
+            if (!run || !await this.confirmStop(run)) return;
+            const data = await this.request('stop', { id });
             this.options.toast(data?.state === 'stopping' ? t('已请求停止，状态更新后会显示在这里') : t('已发送停止请求'), 'success');
         }
-        message(run, method) {
-            const steer = method === 'steer';
+        message(id, method) {
+            const run = this.current(id);
+            if (!run) return;
+            const steer = method === 'steer', name = runTitle(run);
             const label = el('label', 'sa-runs-field');
             label.append(el('span', '', steer ? t('要告诉子 Agent 的内容') : t('继续时的说明')));
             const input = el('textarea'); input.rows = 4; input.maxLength = 8000; input.required = true;
@@ -231,20 +405,30 @@
                 const epoch = this.epoch;
                 submit.disabled = true; input.disabled = true;
                 try {
-                    const data = await this.request(method, steer ? { id: run.id, message: text, mode: mode.value } : { id: run.id, message: text });
+                    const data = await this.request(method, steer ? { id, message: text, mode: mode.value } : { id, message: text });
                     if (data?.isError) throw new Error(data.text || t('子 Agent 操作失败'));
                     this.dialog.close();
-                    this.options.toast(steer ? t('引导已送达子 Agent') : t('已请求继续运行'), 'success');
+                    if (steer) {
+                        // Report the plugin's acknowledgement; a queued message is not yet delivered.
+                        if (data?.delivery === 'delivered') this.options.toast(t('引导已送达子 Agent'), 'success');
+                        else if (data?.delivery === 'queued') this.options.toast(t('引导已排队，尚未确认送达子 Agent'), 'info');
+                        else this.options.toast(t('引导已提交，未收到送达确认；可刷新状态核对'), 'info');
+                    } else if (data?.runId) {
+                        this.continued.set(data.runId, name);
+                        this.options.toast(t('已继续运行，新运行 {0}', data.runId), 'success');
+                        this.render();
+                    } else this.options.toast(t('已请求继续运行'), 'success');
                 } catch (error) {
                     if (epoch === this.epoch) { submit.disabled = false; input.disabled = false; this.options.toast(error.message, 'error'); }
                 }
             });
-            this.openDialog(steer ? t('引导 · {0}', run.label) : t('继续 · {0}', run.label), content, [submit]);
+            this.openDialog(steer ? t('引导 · {0}', name) : t('继续 · {0}', name), content, [submit]);
             input.focus();
         }
         async showCost() {
             const { cost } = await this.request('cost', {});
             if (!cost) throw new Error(t('当前 pi-subagents 版本不提供用量数据'));
+            this.costSummary = cost; this.costAt = Date.now(); this.renderFooter();
             const table = el('table', 'sa-runs-cost');
             const head = el('tr'); for (const text of [t('来源'), t('输入'), t('输出'), t('费用')]) head.append(el('th', '', text));
             table.append(head);
@@ -263,6 +447,5 @@
             this.openDialog(t('子 Agent 用量与费用'), content);
         }
     }
-    PiSubagentRuns.stepModels = stepModels;
     window.PiSubagentRuns = PiSubagentRuns;
 })();

@@ -10112,6 +10112,8 @@
         ["子 Agent 请求受阻", "Subagent request blocked"],
         ["子 Agent 结果尚未答复", "Subagent result unanswered"],
         ["子 Agent 结果尚未处理", "Subagent result unhandled"],
+        ["工作流自动续跑未启动", "Workflow auto-resume did not start"],
+        ["子 Agent 管理", "Subagent administration"],
         ["子 Agent 监督待澄清", "Subagent watchdog needs clarification"]
     );
     rows.push(["媒体状态查询超时", "Media status request timed out"]);
@@ -10411,6 +10413,34 @@
         ["记下 {0} 件事", "{0} noted"],
         ["重新打开", "Reopen"],
         ["已有答案", "Answered"]
+    );
+    // Subagent run panel (2026-10-25).
+    rows.push(
+        ["CI", "CI"],
+        ["检查", "Check"],
+        ["通过", "Passed"],
+        ["未通过", "Failed"],
+        ["无结论", "Inconclusive"],
+        ["工作流 · {0} 个子任务", "Workflow · {0} tasks", "Workflow · {0} task"],
+        ["{0} · {1} 个子任务", "{0} · {1} tasks"],
+        ["{0} 分钟", "{0} min"],
+        ["{0} 小时", "{0} h"],
+        ["运行中工作流的子任务：已完成 {0} / 共 {1}", "Tasks in running workflows: {0} of {1} complete"],
+        ["已结束 {0}", "Finished {0}"],
+        ["另有 {0} 个子任务未显示。", "{0} more tasks are not shown.", "{0} more task is not shown."],
+        ["需要关注", "Needs attention"],
+        ["{0}无活动", "No activity for {0}"],
+        ["长时间运行", "Long-running"],
+        ["正在 {0} · {1}", "Running {0} · {1}"],
+        ["结果已过期", "Result is stale"],
+        ["继续自 {0}", "Continued from {0}"],
+        ["子 Agent 至少 {0}", "Subagents at least {0}"],
+        ["子 Agent 约 {0}", "Subagents ≈ {0}"],
+        ["停止“{0}”？", "Stop “{0}”?"],
+        ["已完成的步骤会保留，进行中的工作会被中断。", "Completed steps are kept; work in progress is interrupted."],
+        ["引导已排队，尚未确认送达子 Agent", "Guidance is queued; delivery to the subagent is not confirmed yet"],
+        ["引导已提交，未收到送达确认；可刷新状态核对", "Guidance submitted without a delivery receipt; refresh the status to check"],
+        ["已继续运行，新运行 {0}", "Continued as run {0}"]
     );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

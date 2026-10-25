@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { stableJsonDigest } from "../shared/launch-contract.js";
 import { createWorkflowResourcePermit, } from "../shared/workflow-child-permit.js";
-import { buildStructuredWorkflowScript, isPlainRecord } from "./structured-workflow-scripts.js";
+import { buildStructuredWorkflowScript, isPlainRecord, TOP_LEVEL_CONTROLS_HINT } from "./structured-workflow-scripts.js";
 const RESOURCE_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 export const MAX_ARGS_BYTES = 16 * 1024;
 export const MAX_ARGS_FIELDS = 16;
@@ -152,7 +152,7 @@ function resolveRunCi(args) {
 function resolveParallel(args) {
     const unsupported = Object.keys(args).filter((key) => key !== "tasks");
     if (unsupported.length > 0)
-        return { error: `workflow 'parallel' args contain unsupported fields: ${unsupported.join(", ")}. Pass args.tasks: [{ agent, task, cwd?, model? }, ...].` };
+        return { error: `workflow 'parallel' args contain unsupported fields: ${unsupported.join(", ")}. Pass args.tasks: [{ agent, task, cwd?, model? }, ...].${TOP_LEVEL_CONTROLS_HINT}` };
     try {
         return { script: buildStructuredWorkflowScript("tasks", args.tasks, undefined) };
     }

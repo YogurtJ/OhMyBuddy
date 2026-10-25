@@ -7,7 +7,7 @@ import { editableAgentConfig, preservedAgentFrontmatterFields } from "../agents/
 import { findModelInfo, getSupportedThinkingLevels, toModelInfo } from "../shared/model-info.js";
 import { SelectorComponent } from "./selector.js";
 import { canRenderComponents } from "../shared/extension-context.js";
-const ADMIN_MESSAGE_TYPE = "subagents-admin";
+export const ADMIN_MESSAGE_TYPE = "subagents-admin";
 const INHERIT_MODEL_CHOICE = "Default / inherit session model";
 const INHERIT_THINKING_CHOICE = "Default / inherit session thinking";
 function sourceRank(source) {

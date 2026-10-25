@@ -9,6 +9,8 @@ export interface WorkflowKeyRevival {
     /** State of the latest revived run; undefined when its status is unreadable. */
     state?: AsyncStatus["state"];
 }
+/** A run directory name, never a path. */
+export declare function isRunId(value: unknown): value is string;
 /**
  * Links a detached revival to the workflow key of its source run when the source failed and is
  * an async workflow child or an earlier revival of one. Throws when the source status cannot be
