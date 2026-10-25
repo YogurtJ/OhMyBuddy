@@ -233,8 +233,18 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
             if (parent) { nested.get(parent)?.delete(controller); if (!nested.get(parent)?.size) nested.delete(parent); }
         }
     });
+    // S4 due (D-030/D-033): the server moves the window on after the next compaction.
+    const rotationDue = (manager: any) => {
+        try {
+            const file = manager.getSessionFile();
+            const bytes = file ? fs.statSync(file).size : 0;
+            return rotationReason({ bytes, entries: bytes >= 1024 * 1024 ? manager.getEntries().length : 0,
+                startedAt: manager.getHeader?.()?.timestamp, now: Date.now() });
+        } catch { return null; }
+    };
     // Every compaction of a Bot window (idle, threshold, overflow) gets the structured summary with
-    // notebook reconciliation (D-029). Any failure falls back to Pi's own summary; the notebook is
+    // notebook reconciliation (D-029); when the window is about to move on, the part Pi keeps
+    // verbatim is reconciled too. Any failure falls back to Pi's own summary; the notebook is
     // then shown to the model again before the next run (notebookNotice).
     pi.on('session_before_compact', async (event: any, ctx: any) => {
         if (!managed(ctx) || !botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir())) return;
@@ -245,6 +255,7 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
                 branch: event.branchEntries, projection: ctx.sessionManager.buildSessionProjection().entries,
                 firstKeptEntryId: event.preparation.firstKeptEntryId, previousSummary: event.preparation.previousSummary,
                 sessionId: ctx.sessionManager.getSessionId(), model, now: new Date().toISOString(), reason: event.reason, signal: event.signal,
+                includeKept: Boolean(rotationDue(ctx.sessionManager)),
                 complete: async ({ systemPrompt, text, signal }: any) => {
                     // Request options as in Pi's own summaries: the chat's thinking level when the model
                     // reasons (some reasoning models reject a request without one), no cache writes.
@@ -280,14 +291,6 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
     // summarized in the background, so the user does not wait for it in their next message.
     // A generation that is due to move on (S4) is summarized too: the server rotates after a
     // compaction, so the next generation starts from a fresh summary.
-    const rotationDue = (manager: any) => {
-        try {
-            const file = manager.getSessionFile();
-            const bytes = file ? fs.statSync(file).size : 0;
-            return rotationReason({ bytes, entries: bytes >= 1024 * 1024 ? manager.getEntries().length : 0,
-                startedAt: manager.getHeader?.()?.timestamp, now: Date.now() });
-        } catch { return null; }
-    };
     let idleTimer: ReturnType<typeof setTimeout> | null = null;
     const stopIdle = () => { if (idleTimer) clearTimeout(idleTimer); idleTimer = null; };
     pi.on('agent_start', stopIdle);

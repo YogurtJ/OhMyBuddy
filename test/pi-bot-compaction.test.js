@@ -110,3 +110,21 @@ test('summary requests carry the chat thinking level only for reasoning models',
     assert.deepEqual(summaryReasoning({ reasoning: false }, 'high'), {});
     assert.deepEqual(summaryReasoning(null, 'medium'), {});
 });
+
+test('before the window moves on, the part Pi keeps verbatim is reconciled too', async () => {
+    const { manager, ids } = await conversation();
+    const kept = manager.appendMessage({ role: 'user', content: '报价那件事不用了，撤掉吧', timestamp: Date.now() });
+    manager.appendMessage(assistant([{ type: 'text', text: '好，撤掉。' }]));
+    const notes = [{ op: 'cancel', id: 'n1', entry: kept.slice(0, 8), quote: '报价那件事不用了' }];
+    const seen = [];
+    const complete = async ({ text }) => { seen.push(text); return { text: answerWith(notes), stopReason: 'stop', usage }; };
+    const input = { branch: manager.getBranch(), projection: manager.buildSessionProjection().entries, firstKeptEntryId: ids.kept,
+        sessionId: manager.getSessionId(), model: { provider: 'fixture', id: 'small', contextWindow: 128000 }, now: NOW, complete, reason: 'threshold' };
+    const ordinary = await compaction.structuredCompaction(input);
+    assert.doesNotMatch(seen[0], /撤掉吧/);
+    assert.deepEqual(ordinary.details.pivaneBot.rejected.map(item => item.reason), ['unknown entry'], 'the kept part cannot be cited normally');
+    const moving = await compaction.structuredCompaction({ ...input, includeKept: true });
+    assert.match(seen[1], /撤掉吧/);
+    assert.deepEqual(moving.details.pivaneBot.ledger.ops.map(op => [op.op, op.id, op.status]), [['status', 'n1', 'cancelled']]);
+    assert.equal(moving.details.pivaneBot.includedKept, true);
+});

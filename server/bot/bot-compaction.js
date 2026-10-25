@@ -48,8 +48,9 @@ function stamp(entry, message) {
     return Number.isFinite(time) ? new Date(time).toISOString().slice(0, 16).replace('T', ' ') : '';
 }
 
-// The summarized part: projected messages before the kept tail, each with the entry that
-// owns it. projection = manager.buildSessionProjection().entries.
+// The summarized part: projected messages before the kept tail (or all of them, when the
+// generation moves on after this summary), each with the entry that owns it.
+// projection = manager.buildSessionProjection().entries.
 function summarizedEntries(projection, firstKeptEntryId) {
     const result = [];
     for (const item of projection) {
@@ -257,8 +258,10 @@ function summaryText(sections, state, now) {
 // Runs the structured compaction with a caller-supplied model call:
 //   complete({ systemPrompt, text, signal }) -> { text, usage, stopReason }
 // Returns { summary, details, usage } or throws (the caller falls back to Pi's native summary).
-async function structuredCompaction({ branch, projection, firstKeptEntryId, previousSummary, sessionId, model, now, complete, signal, reason }) {
-    const messages = summarizedEntries(projection, firstKeptEntryId);
+// includeKept: the window moves to a new generation right after this summary (D-033), so the
+// part Pi keeps verbatim is read too; it is reconciled with the notebook here or never.
+async function structuredCompaction({ branch, projection, firstKeptEntryId, previousSummary, sessionId, model, now, complete, signal, reason, includeKept = false }) {
+    const messages = summarizedEntries(projection, includeKept ? null : firstKeptEntryId);
     if (!messages.length) throw new Error('Nothing to summarize');
     if (!branch.some(entry => entry.id === firstKeptEntryId)) throw new Error('The kept part is not on this branch');
     let state = ledger.replay(branch);
@@ -284,7 +287,7 @@ async function structuredCompaction({ branch, projection, firstKeptEntryId, prev
     return {
         summary,
         usage: mergeUsage(usage),
-        details: { pivaneBot: { v: SUMMARY_SCHEMA, kind: 'summary', reason, sections, chunks: chunks.length,
+        details: { pivaneBot: { v: SUMMARY_SCHEMA, kind: 'summary', reason, sections, chunks: chunks.length, ...(includeKept ? { includedKept: true } : {}),
             model: model ? { provider: model.provider, id: model.id } : null,
             ledger: { ops, snapshot: state }, rejected: rejected.slice(0, 40) } }
     };

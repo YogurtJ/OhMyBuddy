@@ -15,7 +15,7 @@ const { WINDOW_ENTRY, windowMarker, readWindowBinding } = require('./bot-window-
 const { HANDOFF_MESSAGE, buildHandoff } = require('./bot-handoff');
 const ledger = require('./bot-ledger');
 const { LEDGER_ENTRY } = ledger;
-const { rotationReason, keptSplit } = require('./bot-maintenance');
+const { rotationReason } = require('./bot-maintenance');
 const history = require('./bot-history');
 const setup = require('./bot-setup');
 const { EventEmitter } = require('node:events');
@@ -313,10 +313,9 @@ class BotService extends EventEmitter {
     // generation when its file is large, long or old. Only an idle window rotates; a busy one
     // is tried again after its next run. Never throws; returns the rotation or null.
     // S4 (D-030/D-033). trigger: 'compaction' right after a summary was written, else 'completion'.
-    // A new generation starts from a fresh summary (which also reconciles the notebook) plus the
-    // verbatim part after it. After an ordinary reply it moves on only when there is nothing to
-    // summarize and the verbatim part holds everything; otherwise the worker's idle summary runs
-    // first (it also summarizes a generation that is due) and its compaction brings us back here.
+    // A new generation starts from a fresh summary, which (made while the generation was due)
+    // also reconciled the notebook with the part kept verbatim. So it moves on only after a
+    // compaction; after an ordinary reply the worker's idle summary runs first.
     async maintainWindow(worker, { now = Date.now(), trigger = 'completion' } = {}) {
         const loaded = worker?.loadedBot, sessionPath = worker?.sessionPath;
         if (!loaded || typeof sessionPath !== 'string' || !this.supervisor) return null;
@@ -331,12 +330,7 @@ class BotService extends EventEmitter {
             const bytes = fs.statSync(sessionPath).size;
             const reason = rotationReason({ bytes, entries: bytes >= 1024 * 1024 ? countLines(sessionPath) : 0, startedAt: started, now });
             if (!reason || !this.supervisor.isSessionIdle(sessionPath)) return null;
-            if (trigger !== 'compaction' && !await this.store.withSessionRead(window.cwd, window.current.sessionId, (current, read) => {
-                const manager = read.manager();
-                const ready = keptSplit(manager.buildSessionProjection().entries).before === 0 && buildHandoff(manager).complete;
-                read.validate();
-                return current.path === sessionPath && ready;
-            })) return null;
+            if (trigger !== 'compaction') return null;
             return await this.rotate(loaded.profileId, loaded.windowId, { reason, expectedGeneration: loaded.generation });
         } catch (error) {
             if (error?.status !== 409) console.error(`Bot window maintenance failed: ${error?.message || error}`);
