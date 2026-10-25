@@ -220,16 +220,28 @@ function entryLedger(entry) {
     return null;
 }
 
+// A snapshot written before tombstones kept a text hash: the same tombstone (id and deletion
+// time) already rebuilt by replay keeps its hash. Nothing is guessed where the text is gone.
+function withHashes(snapshot, before) {
+    for (const item of snapshot.items) {
+        if (item.status !== 'deleted' || item.hash) continue;
+        const known = before.items.find(entry => entry.id === item.id && entry.status === 'deleted' && entry.hash && entry.updatedAt === item.updatedAt);
+        if (known) item.hash = known.hash;
+    }
+    return snapshot;
+}
+
 // Replays the notebook from a branch (root to leaf). A compaction's snapshot is the state
 // after its operations, so it replaces everything before it.
 function replay(branch) {
     let state = emptyLedger();
+    const take = value => { const snap = readSnapshot(value); if (snap) state = withHashes(snap, state); };
     for (const entry of branch || []) {
         const ledger = entryLedger(entry);
         if (!ledger) continue;
-        if (ledger.snapshot && !ledger.after) { const snap = readSnapshot(ledger.snapshot); if (snap) state = snap; }
+        if (ledger.snapshot && !ledger.after) take(ledger.snapshot);
         for (const op of ledger.ops.slice(0, MAX_OPS)) state = replayOp(state, op);
-        if (ledger.snapshot && ledger.after) { const snap = readSnapshot(ledger.snapshot); if (snap) state = snap; }
+        if (ledger.snapshot && ledger.after) take(ledger.snapshot);
     }
     return state;
 }

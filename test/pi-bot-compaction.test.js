@@ -157,10 +157,10 @@ test('a note the user deleted does not come back from what was said before the d
 test('an answer missing a section is not taken as the summary; Pi\'s own summary is used instead', async () => {
     const now = { doing: '', next: '', waiting: '' };
     for (const bad of [{}, { topic: '装修', now }, { topic: '装修', episodes: ['a'], now: null }, { topic: ' ', episodes: ['a'], now },
-        { topic: '装修', episodes: [], now }, { topic: '装修', episodes: ['a'], now, notes: 'n1 done' }])
+        { topic: '装修', episodes: [], now }, { topic: '装修', episodes: ['a'], now, notes: 'n1 done' }, { topic: '装修', episodes: ['a'], now }])
         assert.throws(() => compaction.readAnswer(bad), /summary/i, JSON.stringify(bad));
     assert.throws(() => compaction.readAnswer({ topic: '装修', episodes: [' '], now }, { earlier: { episodes: ['2026-03-01: 定了瓷砖'] } }), /dropped the earlier episodes/);
-    assert.deepEqual(compaction.readAnswer({ topic: '装修', episodes: ['a'], now: {} }), { topic: '装修', episodes: ['a'], now, notes: [] });
+    assert.deepEqual(compaction.readAnswer({ topic: '装修', episodes: ['a'], now: {}, notes: [] }), { topic: '装修', episodes: ['a'], now, notes: [] });
     const { manager, ids } = await conversation();
     await assert.rejects(compaction.structuredCompaction({ branch: manager.getBranch(), projection: manager.buildSessionProjection().entries,
         firstKeptEntryId: ids.kept, sessionId: manager.getSessionId(), model: { provider: 'fixture', id: 'small', contextWindow: 128000 },

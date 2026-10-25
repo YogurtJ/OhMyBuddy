@@ -125,6 +125,9 @@ test('S4 rotates an idle window that is due and carries the notebook and structu
     assert.equal(notebookNotice(branch, new Date().toISOString()), null, 'the seed already shows the notebook');
     const compaction = require('../server/bot/bot-compaction');
     assert.deepEqual(compaction.earlierSections(branch), sections, 'the next compaction continues from these sections');
+    assert.equal(seed.details.reconciled, true, 'the summary before the move read the verbatim part');
+    assert.deepEqual(seed.details.tail.map(item => item.role + ':' + item.text), ['user:报价不急了，取消吧', 'assistant:已取消报价']);
+    assert.deepEqual(compaction.summarizedEntries(next.buildSessionProjection().entries, null), [], 'so the next summary does not read it again');
     // The old worker's view is stale now: nothing happens; a busy window waits for its next run.
     assert.equal(await bots.maintainWindow(worker, { now: later, trigger: 'compaction' }), null);
     const current = { loadedBot: { profileId: botId, windowId, generation: 1 }, sessionPath: rotated.session.path };
@@ -200,4 +203,44 @@ test('S4 after an ordinary reply waits even when the recent text would fit', { t
     assert.equal((await bots.maintainWindow(worker, { now: later, trigger: 'compaction' })).window.generation, 1);
     // The rotation path checks the same proof under the reservation.
     assert.equal(require('../server/bot/bot-maintenance').freshRotationSummary(SessionManager.open(session.path).getBranch()), true);
+});
+
+test('after a manual move the next summary reads the carried messages and can cite them', { timeout: 60000 }, async t => {
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+    const compaction = require('../server/bot/bot-compaction');
+    const store = new PiSessionStore();
+    const profiles = new PiProfileRegistry(store);
+    store.profiles = profiles;
+    const supervisor = new PiAgentSupervisor();
+    t.after(() => supervisor.dispose());
+    const bots = new BotService({ store, profiles, supervisor });
+    const created = await bots.create({ expectedRevision: (await profiles.state()).revision });
+    const botId = created.bot.id, windowId = created.window.id;
+    const { session } = await bots.resolve(botId, windowId);
+    const manager = SessionManager.open(session.path);
+    manager.appendMessage({ role: 'user', content: '先聊装修', timestamp: Date.now() });
+    const kept = manager.appendMessage(assistant([{ type: 'text', text: '好' }]));
+    const sections = { topic: '装修', episodes: ['2026-03-01: 开始聊装修'], now: { doing: '', next: '', waiting: '' } };
+    manager.appendCompaction('bot summary', kept, 10, { pivaneBot: { v: 1, sections, ledger: { ops: [], snapshot: ledger.emptyLedger() } } }, true);
+    manager.appendMessage({ role: 'user', content: '对了，门牌改成 12 号了', timestamp: Date.now() });
+    manager.appendMessage(assistant([{ type: 'text', text: '记住了，12 号' }]));
+    const rotated = await bots.rotate(botId, windowId, { expectedGeneration: 0 });
+    const next = SessionManager.open(rotated.session.path);
+    const seed = next.getBranch().find(entry => entry.customType === HANDOFF_MESSAGE);
+    assert.equal(seed.details.reconciled, undefined, 'a manual move does not prove the verbatim part was summarized');
+    next.appendMessage({ role: 'user', content: '再聊点别的', timestamp: Date.now() });
+    const latest = next.appendMessage(assistant([{ type: 'text', text: '好的' }]));
+    let request = '';
+    const answer = { topic: '装修', episodes: ['2026-03-01: 开始聊装修', '2026-03-02: 门牌改成 12 号'], now: { doing: '', next: '', waiting: '' },
+        notes: [{ op: 'add', kind: 'ref', text: '门牌 12 号', entry: seed.id.slice(0, 8), quote: '门牌改成 12 号了' },
+            { op: 'add', kind: 'decision', text: '记住 12 号', entry: seed.id.slice(0, 8), quote: '记住了，12 号' }] };
+    const result = await compaction.structuredCompaction({ branch: next.getBranch(), projection: next.buildSessionProjection().entries,
+        firstKeptEntryId: latest, sessionId: next.getSessionId(), model: { provider: 'fixture', id: 'small', contextWindow: 128000 },
+        now: new Date().toISOString(), reason: 'threshold', complete: async ({ text }) => { request = text; return { text: JSON.stringify(answer), stopReason: 'stop', usage: usageRecord }; } });
+    assert.match(request, new RegExp(`\\[e:${seed.id.slice(0, 8)}\\][^\\n]*User: 对了，门牌改成 12 号了\\n\\[e:${seed.id.slice(0, 8)}\\][^\\n]*Assistant: 记住了，12 号`));
+    assert.doesNotMatch(request, /Context note/, 'the sections are the earlier memory, not repeated');
+    const bot = result.details.pivaneBot;
+    assert.deepEqual(bot.ledger.ops.map(op => [op.op, op.text, op.source.entryId, op.source.role]), [['add', '门牌 12 号', seed.id, 'user']]);
+    assert.deepEqual(bot.rejected.map(item => item.reason), ['quote from the wrong speaker'], 'speakers are checked for carried messages too');
+    assert.deepEqual(bot.sections.episodes.at(-1), '2026-03-02: 门牌改成 12 号');
 });

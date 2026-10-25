@@ -205,5 +205,24 @@ test('panel edits reach the model as the notes stand now, every one of them', ()
     const many = notebook.notebookNotice(branch, T1);
     assert.match(many.content, /^Notebook of this chat/, 'many changes: the whole notebook again');
     assert.equal(many.details.reason, 'user-edits');
+    const listed = many.content.slice(many.content.indexOf('The user changed these notes'));
+    assert.match(listed, /- \[n1\] \(commitment, active, no due date\) 交三家报价/);
+    for (let index = 2; index <= 45; index++) if (index !== 23) assert.ok(listed.includes(`- [n${index}] (ref, done) 门牌 ${index - 2}`), `n${index} is listed with its status`);
+    assert.ok(listed.includes('- [n23] deleted by the user'), 'and the deletion');
     assert.equal(notebook.notebookNotice([...branch, { type: 'custom_message', customType: notebook.NOTEBOOK_MESSAGE, details: { v: 1 } }], T1), null);
+});
+
+test('a snapshot written before tombstones kept a hash does not lose the hash replay rebuilt', () => {
+    const added = ledger.prepareOps(ledger.emptyLedger(), [{ op: 'add', kind: 'decision', text: '瓷砖 60×120 哑光灰' }], { at: T0, by: 'bot' });
+    const removed = ledger.prepareOps(added.state, [{ op: 'delete', id: 'n1' }], { at: T1, by: 'user' });
+    const legacy = JSON.parse(JSON.stringify(removed.state));
+    delete legacy.items[0].hash;
+    const branch = [{ type: 'custom', customType: ledger.LEDGER_ENTRY, data: { v: 1, ops: added.ops } },
+        { type: 'custom', customType: ledger.LEDGER_ENTRY, data: { v: 1, ops: removed.ops } },
+        { type: 'compaction', details: { pivaneBot: { ledger: { ops: [], snapshot: legacy } } } }];
+    assert.equal(ledger.replay(branch).items[0].hash, ledger.textHash('瓷砖 60×120 哑光灰'));
+    // Only the same tombstone: a different deletion time is not matched; nothing is invented.
+    legacy.items[0].updatedAt = T2;
+    assert.equal(ledger.replay(branch).items[0].hash, undefined);
+    assert.equal(ledger.replay([branch[2]]).items[0].hash, undefined);
 });
