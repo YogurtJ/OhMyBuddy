@@ -285,10 +285,21 @@
             else if (action === 'known-decline') void this.knownAction('decline');
             else if (action === 'known-source' && this.known) { this.known.sourceId = target.dataset.profileId; this.onChange?.('identity'); }
             else if (action === 'retry') void this.activate(new URLSearchParams(this.profileId ? { profileId: this.profileId } : {}));
-            else if (action === 'settings') {
+            else if (action === 'notes') {
+                if (window.innerWidth <= 900) document.getElementById('pi-session-pane')?.classList.remove('open');
+                this.openNotebook();
+            } else if (action === 'settings') {
                 if (window.innerWidth <= 900) document.getElementById('pi-session-pane')?.classList.remove('open');
                 this.openSettings();
             } else if (action === 'menu') document.getElementById('pi-session-pane')?.classList.toggle('open');
+        }
+
+        // What the Bot keeps in mind for the open chat (M2-5).
+        openNotebook() {
+            const bot = this.bot(), current = this.current();
+            if (!bot || !current || !window.PiBotNotebook) return;
+            window.PiBotNotebook.open({ api: this.api, toast: this.toast, profileId: current.profileId, windowId: current.windowId,
+                name: bot.name, face: size => face(bot, size) });
         }
 
         openSettings() {
@@ -359,9 +370,11 @@
                     for (const topic of topics) list.append(this.windowItem(topic, null, topic.title, topic.emoji));
                 }
                 const foot = el('footer', 'pi-bot-side-foot');
+                const notes = button('pi-bot-notes-link'); notes.dataset.botAction = 'notes';
+                notes.append(icon('fa-thumbtack'), el('span', null, translateUi("我记着的事")));
                 const settings = button('pi-bot-settings'); settings.dataset.botAction = 'settings';
                 settings.append(icon('fa-sliders'), el('span', null, translateUi("{0} 的设置", bot.name)));
-                foot.append(settings);
+                foot.append(notes, settings);
                 side.append(head, list, foot);
             } else if (!this.loaded) {
                 side.append(el('p', 'pi-bot-side-state', translateUi("正在读取…")));
@@ -395,7 +408,10 @@
             line.append(el('i', 'pi-bot-status-dot'), document.createTextNode(STATUS[this.statusKind]()));
             if (current?.kind === 'topic') line.append(document.createTextNode(` · ${current.title}`));
             who.append(name, line);
-            this.header.replaceChildren(menu, face(bot, 'sm'), who);
+            const notes = button('pi-bot-notes-button', translateUi("我记着的事")); notes.dataset.botAction = 'notes';
+            notes.append(icon('fa-thumbtack'));
+            notes.hidden = !this.windowId;
+            this.header.replaceChildren(menu, face(bot, 'sm'), who, notes);
         }
 
         // Shown in the conversation area when nothing else is: no Bot yet, or a fresh chat.
