@@ -30,8 +30,11 @@
     }
 
     class PiTranscriptActivity {
-        constructor({ root, content, onChange, locateSummary }) {
+        // plain(): everyday wording (Bot mode); waiting(): the user has a request to answer.
+        constructor({ root, content, onChange, locateSummary, plain, waiting }) {
             this.root = root;
+            this.plain = typeof plain === 'function' ? plain : () => false;
+            this.waiting = typeof waiting === 'function' ? waiting : () => false;
             this.content = content;
             this.onChange = onChange || (() => {});
             this.locateSummary = locateSummary || (() => false);
@@ -234,6 +237,13 @@
         }
 
         label(phase) {
+            if (this.plain()) {
+                if (phase.kind === 'sending') return t('正在发送…');
+                if (phase.kind === 'retry') return t('连接不太顺，正在重试（第 {0} 次）', phase.attempt || 1);
+                if (['tool', 'toolcall'].includes(phase.kind) && this.waiting()) return t('等你确认');
+                if (['tool', 'toolcall'].includes(phase.kind) || phase.afterTool) return t('正在处理');
+                return t('正在思考');
+            }
             if (phase.kind === 'sending') return t('正在发送…');
             if (phase.kind === 'thinking') return t('正在思考');
             if (phase.kind === 'toolcall') return t('正在准备工具调用');

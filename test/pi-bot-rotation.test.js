@@ -246,8 +246,45 @@ test('Bot window workers get a verified identity section that follows edits with
     await run();
     assert.deepEqual(calls.slice(2), [['model', 'big'], ['thinking', 'high']], 'alignment resumes once the run is over');
     assert.match(sections[BOT_SECTION], /You are Momo, .* Your main job: Plan my week/);
-    assert.match(sections[BOT_SECTION], /wait for the user's go-ahead/);
+    assert.match(sections[BOT_SECTION], /Ask-every-time mode[^]*approval card/);
     assert.equal(sections.assistant_profile_soul, 'Warm and playful.');
+    // Careful presets: the worker asks on one approval confirm before a gated step runs.
+    const { APPROVAL_TITLE } = require('../server/bot/bot-guard');
+    const asked = []; let answer = true;
+    Object.assign(ctx, { hasUI: true, signal: undefined });
+    ctx.ui.confirm = async (title, message, options) => { asked.push([title, message, options.timeout]); return answer; };
+    const call = (toolName, input) => handlers.get('tool_call')({ type: 'tool_call', toolCallId: `t${asked.length}`, toolName, input }, ctx);
+    assert.equal(await call('read', { path: 'notes.md' }), undefined);
+    assert.equal(await call('web_search', { query: 'weather' }), undefined);
+    assert.deepEqual(asked, [], 'reading needs no approval');
+    assert.equal(await call('bash', { command: 'ls -la' }), undefined, 'an approved command runs');
+    assert.deepEqual(asked.at(-1), [APPROVAL_TITLE, 'command\n\nls -la', 30 * 60 * 1000]);
+    assert.equal(await call('write', { path: 'plan.md', content: 'x' }), undefined);
+    assert.equal(asked.at(-1)[1], 'write\n\nplan.md', 'Ask every time: even workspace writes ask');
+    answer = false;
+    const blocked = await call('memory_add', { content: 'Prefers short replies' });
+    assert.equal(asked.at(-1)[1], 'memory\n\nPrefers short replies');
+    assert.equal(blocked.block, true); assert.match(blocked.reason, /did not approve/);
+    await bots.update(botId, { expectedRevision: (await profiles.state()).revision, changes: { bot: { permissions: { preset: 'balanced' } } } });
+    answer = true; asked.length = 0;
+    assert.equal(await call('write', { path: 'plan.md', content: 'x' }), undefined);
+    assert.equal(await call('memory_add', { content: 'x' }), undefined);
+    assert.deepEqual(asked, [], 'Careful: workspace writes and notes go ahead');
+    await call('write', { path: '../elsewhere.md', content: 'x' });
+    await call('bash', { command: 'date' });
+    await call('subagent', { task: 'Research flights' });
+    assert.deepEqual(asked.map(([, message]) => message.split('\n')[0]), ['outside', 'command', 'delegate']);
+    // Nobody can approve an unattended step: it is refused without asking.
+    ctx.hasUI = false;
+    assert.match((await call('bash', { command: 'date' })).reason, /nobody can approve/);
+    ctx.hasUI = true;
+    manager.appendCustomEntry('pivane-cron-run', { version: 1, runId: 'b'.repeat(64), sessionId: manager.getSessionId(), status: 'running', model: { provider: 'fixture', modelId: 'small' } });
+    assert.match((await call('bash', { command: 'date' })).reason, /scheduled or unattended run/);
+    manager.appendCustomEntry('pivane-cron-run', { version: 1, runId: 'b'.repeat(64), sessionId: manager.getSessionId(), status: 'completed' });
+    assert.equal(asked.length, 3, 'unattended refusals never ask');
+    await bots.update(botId, { expectedRevision: (await profiles.state()).revision, changes: { bot: { permissions: { preset: 'free' } } } });
+    assert.equal(await call('bash', { command: 'date' }), undefined);
+    assert.equal(asked.length, 3, 'Hands-off stays guidance only');
     // An unavailable model keeps the current one and is reported once.
     const reported = new Set(), sent = [];
     assert.equal(await alignModel(pi, ctx, { provider: 'nokey', id: 'x' }, value => sent.push(value), reported), 'unavailable');

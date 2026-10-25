@@ -54,7 +54,7 @@ pi-subagents 通过受管扩展报告后台活动，Supervisor 用它阻止过�
 
 Bot 是带 `bot` 段的助手档案；“窗口”（目前只有主聊天）是永久逻辑容器，指向一串原生会话“代”。窗口索引 `<agentDir>/pivane-bots/<profileId>/windows.json` 只是路由缓存，可从每代开头的原生标记 `pivane-bot-window {profileId,windowId,generation,predecessor{sessionId,lastEntryId}}` 重建；Pi 原生 JSONL 仍是唯一聊天事实。换代在 Supervisor 会话编辑预占内进行：日志预备 → 停止空闲 worker → 核对旧代并写新代（模型、思考、隐藏交接消息、标记最后写入）→ CAS 提交索引。恢复只采用标记代数、前任会话与前任最后条目都匹配的新代，否则放弃，不重放回合；恢复在档案预占和前任会话编辑预占内进行，并且在 `resolve()` 交出会话之前完成，因此普通打开路径不会先把前任交给新的回合；只有决定采用新代时才停止前任 worker（先广播 `gateway_reconnect`），放弃时前任 worker 与已连接页面保持不变。已受理的工作留在原代。
 
-Bot 身份在 worker 内作为独立提示词段 `pivane_bot` 注入（不用 `customPrompt`，以免丢掉原生工具与规则段），每轮刷新 SOUL 并按 Bot 设置对齐模型（定时运行结束或复核之前不对齐，保持准入计价所用模型）。窗口上下文只对核实过标记、档案、工作目录和当前代的会话生效。浏览器的 `#/bot` 复用聊天面板：`pi-chat.js` 的 botMode 打开窗口当前代，`open_session` 带 `botWindow` 由服务端在启动 worker 前和订阅后核对当前代（`BOT_WINDOW_STALE`/`BOT_WINDOW_ROTATING`），断线重连和启动失败后的重试都先重新解析窗口，`pi-bot.js` 负责 Bot 栏、问候和较早代只读回看，`pi-bot-settings.js` 负责设置窗口。设计与取舍见维护工作区的 Bot 模式设计文档（不随发行包），用户行为见 [Bot 模式](../BOT_MODE.md)。
+Bot 身份在 worker 内作为独立提示词段 `pivane_bot` 注入（不用 `customPrompt`，以免丢掉原生工具与规则段），每轮刷新 SOUL 并按 Bot 设置对齐模型（定时运行结束或复核之前不对齐，保持准入计价所用模型）。窗口上下文只对核实过标记、档案、工作目录和当前代的会话生效。“稳妥”“每次都问”由同一扩展的 `tool_call` 钩子执行（`bot-guard.js` 判定）：需要确认时发一个标题固定的原生 `confirm`（消息首行为类型），Bot 页渲染为确认卡，其他页面落到通用对话框；未确认或定时运行中直接阻止。Bot 工作目录基准为家目录或首个项目根，排除服务 cwd 与安装目录。浏览器的 `#/bot` 复用聊天面板：`pi-chat.js` 的 botMode 打开窗口当前代，`open_session` 带 `botWindow` 由服务端在启动 worker 前和订阅后核对当前代（`BOT_WINDOW_STALE`/`BOT_WINDOW_ROTATING`），断线重连和启动失败后的重试都先重新解析窗口，`pi-bot.js` 负责 Bot 栏、问候和较早代只读回看，`pi-bot-settings.js` 负责设置窗口。设计与取舍见维护工作区的 Bot 模式设计文档（不随发行包），用户行为见 [Bot 模式](../BOT_MODE.md)。
 
 ## 外部消息渠道
 

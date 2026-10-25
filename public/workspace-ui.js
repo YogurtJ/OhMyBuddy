@@ -120,6 +120,9 @@
         const settingsTabs = new Set(['providers', 'media', 'models', 'system-prompts', 'native', 'access', 'usage', 'updates']);
         const extensionTabs = new Set(['extensions', 'installed', 'mcp', 'channels']);
         const moreTabs = new Set(['cron', 'artifacts', 'media', 'profiles', 'extensions']);
+        // With Bots available, the phone bar leaves assistant conversations to the More menu.
+        const inMore = tab => moreTabs.has(tab) || tab === 'assistant' && document.body.classList.contains('pv-bots-on');
+        const moreItems = () => [...(moreMenu?.querySelectorAll('[data-more-tab]') || [])].filter(item => item.getClientRects().length);
         document.querySelectorAll('[data-cron-nav]').forEach(label => { label.textContent = translateUi('定时任务'); });
         const moreToggle = document.getElementById('workspace-more-toggle');
         const moreMenu = document.getElementById('workspace-more-menu');
@@ -288,8 +291,8 @@
             closeMoreMenu();
             if (featureError.open) featureError.close();
             if (tab === 'chat' || tab === 'assistant' || tab === 'bot') lastConversation = location.hash || '#/chat';
-            moreToggle?.classList.toggle('active', moreTabs.has(tab));
-            if (moreTabs.has(tab)) moreToggle?.setAttribute('aria-current', 'page'); else moreToggle?.removeAttribute('aria-current');
+            moreToggle?.classList.toggle('active', inMore(tab));
+            if (inMore(tab)) moreToggle?.setAttribute('aria-current', 'page'); else moreToggle?.removeAttribute('aria-current');
             moreMenu?.querySelectorAll('[data-more-tab]').forEach(button => {
                 if (button.dataset.moreTab === tab) button.setAttribute('aria-current', 'page');
                 else button.removeAttribute('aria-current');
@@ -352,7 +355,7 @@
             closeThemeMenu();
             moreMenu.hidden = !opening;
             moreToggle.setAttribute('aria-expanded', String(opening));
-            if (opening) moreMenu.querySelector('button')?.focus({ preventScroll: true });
+            if (opening) moreItems()[0]?.focus({ preventScroll: true });
         });
         moreMenu?.addEventListener('click', event => {
             const button = event.target.closest('[data-more-tab]');
@@ -362,7 +365,7 @@
             }
         });
         moreMenu?.addEventListener('keydown', event => {
-            const items = [...moreMenu.querySelectorAll('[data-more-tab]')];
+            const items = moreItems();
             const index = items.indexOf(document.activeElement);
             const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
                 : event.key === 'ArrowDown' ? (index + 1) % items.length

@@ -14,6 +14,7 @@ import { readWindowRecord } from './bot-window-registry.js';
 import { readBot } from './bot-settings.js';
 import { botPreamble } from './bot-prompt.js';
 import { SETUP_TOOL, SETUP_TITLE, SAVE, DECLINE, normalizeProposal } from './bot-setup.js';
+import { APPROVAL_TITLE, BLOCKED, approvalFor, approvalMessage } from './bot-guard.js';
 import { safeFile as readDocument } from '../profile-memory/management.js';
 import { Type } from 'typebox';
 
@@ -155,6 +156,20 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
             : { event: 'loaded', profileId: null });
         // Align at open so the page shows the Bot's model before the first message.
         if (loaded) await alignModel(pi, ctx, loaded.model, notify, reported);
+    });
+    // Careful presets: the user approves commands, hand-offs and outside writes ("Ask every
+    // time": everything but reading) before they run. Unattended runs cannot be approved.
+    pi.on('tool_call', async (event: any, ctx: any) => {
+        if (!managed(ctx)) return;
+        const loaded = botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir());
+        if (!loaded) return;
+        let annotations;
+        try { annotations = pi.getAllTools().find((tool: any) => tool.name === event.toolName)?.annotations; } catch { annotations = undefined; }
+        const approval = approvalFor({ preset: loaded.bot?.permissions?.preset, toolName: event.toolName, input: event.input, cwd: context.cwd, annotations });
+        if (!approval) return;
+        if (!ctx.hasUI || scheduledRunActive(ctx.sessionManager)) return { block: true, reason: BLOCKED.unattended };
+        const allowed = await ctx.ui.confirm(APPROVAL_TITLE, approvalMessage(approval), { signal: ctx.signal, timeout: 30 * 60 * 1000 });
+        return allowed ? undefined : { block: true, reason: BLOCKED.not_approved };
     });
     pi.on('before_agent_start', async (event: any, ctx: any) => {
         if (!managed(ctx)) return;

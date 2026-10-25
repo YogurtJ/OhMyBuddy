@@ -16,8 +16,14 @@
 #chat-tab.pi-bot-mode #pi-toggle-sessions,
 #chat-tab.pi-bot-mode .pi-composer-models,
 #chat-tab.pi-bot-mode .pi-tool-rail,
-#chat-tab.pi-bot-mode .pi-inspector,
-#chat-tab.pi-bot-mode #pi-inspector-split,
+#chat-tab.pi-bot-mode .pi-inspector:not(.show-changes),
+#chat-tab.pi-bot-mode #pi-inspector-tabs,
+#chat-tab.pi-bot-mode #pi-inspector-title,
+#chat-tab.pi-bot-mode #pi-files-toolbar,
+#chat-tab.pi-bot-mode #pi-file-explorer,
+#chat-tab.pi-bot-mode #pi-changes-file-list,
+#chat-tab.pi-bot-mode #pi-chat-knowledge,
+#chat-tab.pi-bot-mode .pi-turn-edits,
 #chat-tab.pi-bot-mode #pi-composer-status,
 #chat-tab.pi-bot-mode.pi-bot-welcome .pi-composer-wrap,
 #chat-tab.pi-bot-mode.pi-bot-welcome .pi-session-pane,
@@ -26,14 +32,21 @@
 #chat-tab.pi-bot-mode .pi-message.assistant > header > span:not(.pi-bot-face) { display: none !important; }
 #chat-tab:not(.pi-bot-mode) #pi-bot-pane,
 #chat-tab:not(.pi-bot-mode) #pi-bot-header { display: none !important; }
+/* The right panel appears in Bot mode only as the file preview (delivery cards, file links);
+   pi-chat.js closes it when anything else would open there. */
+#chat-tab.pi-bot-mode .pi-inspector.show-changes .inspector-heading { justify-content: flex-end; }
+#chat-tab.pi-bot-mode .pi-bot-approval-detail {
+    max-height: 30vh; margin: 0; padding: 10px 12px; overflow: auto; overscroll-behavior: contain; border-radius: 10px;
+    background: var(--surface-1); color: var(--text-main); font: .86rem/1.55 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    white-space: pre-wrap; overflow-wrap: anywhere;
+}
+#chat-tab.pi-bot-mode .pi-bot-approval-detail:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
 
 /* ---- workspace navigation ----------------------------------------------------------- */
 /* .nav-btn sets display, which would otherwise override the hidden attribute. */
 #workspace-bot-toggle[hidden] { display: none !important; }
-/* Phones: one more route keeps every bottom-bar cell the same width. */
-@media (max-width: 680px) {
-    .nav-menu:has(#workspace-bot-toggle:not([hidden])) { flex-grow: 4; }
-}
+/* Phones: with Bots available the bar holds Bot, Pi Agent and More (assistant conversations
+   move into More, pi-sidebar.css), the same count as without Bots, so cells stay equal. */
 
 /* ---- session pane: rail + windows ---------------------------------------------------- */
 #pi-bot-pane { display: flex; flex: 1; min-height: 0; height: 100%; }

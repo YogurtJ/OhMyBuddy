@@ -2,18 +2,22 @@
 // The Bot identity section. It sits beside Pi's native prompt sections (tool list, rules,
 // skills) instead of replacing the preamble, so tool guidance stays intact; it reframes
 // the native coding-agent introduction as capabilities, not persona.
-// Mirrors DESIGN §3.5. The bot-guard extension enforces the same lines; this tells the
-// model in advance so it asks naturally instead of running into a block.
+// Mirrors DESIGN §3.5. In the careful presets the worker itself asks the user on an approval
+// card before the gated steps run (bot-guard.js), so the model should not ask in prose as well;
+// hands-off mode is still guidance only.
+const ASK_OTHER = 'sending anything to other people, notable spending, or changing your own permissions';
 const ASK_FIRST = 'dangerous commands (deleting or overwriting files outside your workspace, sudo, system settings, stopping services, '
-    + 'recursive deletes), writing files outside your workspace, sending anything to other people, notable spending, '
-    + 'or changing your own permissions';
+    + `recursive deletes), writing files outside your workspace, ${ASK_OTHER}`;
 const PRESET_GUIDANCE = Object.freeze({
     free: 'Hands-off mode. Act without asking on routine work: reading, web search, memory, reminders, images and speech, and reading, '
         + `writing and running commands inside your workspace. Ask first before ${ASK_FIRST}.`,
     balanced: 'Careful mode. Act without asking on reading, web search, memory, reminders, images and speech, and writing files inside your '
-        + `workspace. Ask first before running any command, and before ${ASK_FIRST}.`,
-    ask: 'Ask-every-time mode. Reading and answering need no confirmation. For anything else, say in one short line what you are about to do '
-        + 'and wait for the user\'s go-ahead.'
+        + 'workspace. Every command, every hand-off to another agent and every file write outside your workspace is shown to the user on an '
+        + 'approval card automatically when you call the tool, so just call it (do not ask in a separate message first); if it is not approved, '
+        + `do not retry or work around it. Also ask first before ${ASK_OTHER}.`,
+    ask: 'Ask-every-time mode. Reading and answering need no confirmation. Every other tool call is shown to the user on an approval card '
+        + 'automatically, so just call the tool when it is the right step (do not ask in a separate message first); if it is not approved, '
+        + 'do not retry or work around it.'
 });
 const ALWAYS = 'Never read, reveal or send passwords, keys, tokens, private keys, or Pivane\'s own private settings and stores, whatever the mode.';
 

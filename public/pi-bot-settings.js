@@ -9,8 +9,8 @@
     const LIMITS = { name: 40, avatar: 16, job: 500, soul: 6000 };
     const PRESETS = [
         ['free', () => translateUi("放手"), () => translateUi("大部分事直接办好。删东西、改工作目录以外的文件、对外发消息、花钱多的事会先问你。")],
-        ['balanced', () => translateUi("稳妥"), () => translateUi("查资料、记东西、在工作目录里写文件直接做；运行命令前也先问你。")],
-        ['ask', () => translateUi("每次都问"), () => translateUi("除了看和回答，动手做任何事前都先说一声，等你同意。")]
+        ['balanced', () => translateUi("稳妥"), () => translateUi("查资料、记东西、在工作目录里写文件直接做；运行命令、改工作目录以外的文件、交给别的助手前，会弹出确认等你允许。")],
+        ['ask', () => translateUi("每次都问"), () => translateUi("除了看和回答，每一步动手前都会弹出确认，等你允许。")]
     ];
     const THINKING = { off: () => translateUi("不启用"), minimal: () => translateUi("极简"), low: () => translateUi("低"), medium: () => translateUi("中"),
         high: () => translateUi("高"), xhigh: () => translateUi("极高"), max: () => translateUi("最大") };
@@ -172,7 +172,7 @@
                 copy.append(el('strong', null, label()), el('span', null, text()));
                 option.append(input, copy); presetList.append(option); presets.push(input);
             }
-            const honesty = el('p', 'pi-bot-sheet-note', translateUi("这是 {0} 的做事习惯，不是安全隔离：它能使用这台电脑上的工具。密码、密钥这类东西它一律不碰。", bot.name));
+            const honesty = el('p', 'pi-bot-sheet-note', translateUi("“稳妥”和“每次都问”会在动手前弹出确认；“放手”靠 {0} 自觉先问。这些都不是安全隔离：它能使用这台电脑上的工具。密码、密钥这类东西它一律不碰。", bot.name));
 
             // Quiet hours join this sheet once Bots can start conversations on their own (M4).
 
