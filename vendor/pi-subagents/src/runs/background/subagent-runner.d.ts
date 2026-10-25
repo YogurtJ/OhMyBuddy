@@ -4,6 +4,7 @@ import { type RunnerSubagentStep as SubagentStep, type RunnerStep } from "../sha
 import type { InheritedChildRuntime } from "../shared/child-launch.ts";
 import type { ChildSessionFactory, DefaultChildSessionFactoryOptions } from "../shared/child-session.ts";
 import { type ChildEvent, type SteerDelivery, type StepSteerHandler } from "./run-child-session.ts";
+import type { RecordedPid } from "./stale-run-reconciler.ts";
 import type { SessionLeaseRequest } from "../shared/session-lease.ts";
 import { createHerdrExternalAdapter, type HerdrExternalAdapterId, type HerdrExternalResult } from "../shared/herdr-external-adapters.ts";
 import { type OrcaProgressTab } from "../shared/orca-progress-tabs.ts";
@@ -25,6 +26,7 @@ export interface SubagentRunConfig {
     asyncDir: string;
     sessionId?: string | null;
     completionOwnerId?: string;
+    completionOwnerProcess?: RecordedPid;
     piPackageRoot?: string;
     /** Test seam: module the runner imports its `ChildSessionFactory` from. */
     childSessionFactoryModule?: string;
@@ -76,6 +78,8 @@ export interface SubagentRunConfig {
     runtimeAcknowledgedExtensions?: RuntimeAcknowledgedChildExtensions;
     runnerProcessInstanceId?: string;
     launchBarrierToken?: string;
+    /** Pi's boot id, set only for a direct (non-launcher) runner; the runner never reads its own. */
+    bootId?: string;
     parentWorkflowRunId?: string;
     workflowKey?: string;
     lane?: WorkflowLaneMetadata;

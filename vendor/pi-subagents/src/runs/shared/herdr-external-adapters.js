@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import * as path from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { connectHerdrMachine, HerdrRpcError, HerdrTransportError, remoteShellCommand, shellQuoteRemote } from "./herdr-connection.js";
-import { HerdrPlacedRunOwner, herdrStatusSubscriptions, ownsHerdrPane, parseHerdrAgent, reconcileHerdrPlacedRun } from "./herdr-placed-run.js";
+import { HerdrPlacedRunOwner, herdrStatusSubscriptions, ownsHerdrPane, parseHerdrAgent, reconcileHerdrPlacedRun } from "./herdr-pane-host.js";
 const CAPABILITIES = { stop: true, steer: false, resume: false, supervisor: "unsupported" };
 const MAX_EVIDENCE_BYTES = 4 * 1024 * 1024, MAX_OUTPUT_BYTES = 1024 * 1024, MAX_PREFLIGHT_BYTES = 64 * 1024, MAX_GIT_BYTES = 2048;
 const CODEX_OUTPUT_BYTES = 64 * 1024, EXTERNAL_STARTUP_TIMEOUT_MS = 45_000, EXTERNAL_STARTUP_BACKOFF_AFTER_MS = 15_000, EXTERNAL_STARTUP_SLOW_POLL_MS = 2_500, CODEX_STARTUP_GRACE_MS = 15_000, CODEX_QUIET_MS = 8_000, CODEX_POLL_MS = 1_000, CODEX_DEFAULT_TIMEOUT_MS = 30 * 60_000;

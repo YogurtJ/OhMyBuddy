@@ -15,6 +15,7 @@ import { withWorkflowChildRunModel } from "./workflow-terminal-proof.js";
 import { validHostStepNodes } from "../shared/host-step-status.js";
 import { readProcessTerminal } from "./process-terminal.js";
 import { withCachedUiContext } from "../../shared/extension-context.js";
+import { OWNING_SESSION_COMPLETION_OWNER } from "../../shared/completion-owner.js";
 const CONTROL_EVENT_READ_CHUNK_BYTES = 64 * 1024;
 const MAX_CONTROL_EVENT_LINE_BYTES = 1024 * 1024;
 const CONTROL_EVENT_SCAN_WINDOW_BYTES = 2 * 1024 * 1024;
@@ -560,8 +561,11 @@ export function createAsyncJobTracker(pi, state, asyncDirRoot, options = {}) {
                 if (isTerminalJobStatus(job.status)) {
                     let publication = terminalPublications.get(job.asyncId);
                     if (!publication && status.mode !== "workflow" && status.processTerminal?.state === "pending"
-                        && status.runId === job.asyncId && status.sessionId === state.currentSessionId
-                        && status.completionOwnerId && status.completionOwnerId === state.completionOwnerId) {
+                        && status.runId === job.asyncId && status.completionOwnerId
+                        && ((status.sessionId === state.currentSessionId && status.completionOwnerId === state.completionOwnerId)
+                            // Also covers a session inherited after /new or /resume: deliveryOwnerId checks run ownership.
+                            || (typeof status.sessionId === "string"
+                                && options.deliveryOwnerId?.(status.sessionId, status.completionOwnerId, status.completionOwnerProcess, status.parentWorkflowRunId) === OWNING_SESSION_COMPLETION_OWNER))) {
                         publication = { instanceId: status.processTerminal.runnerProcessInstanceId, pending: true };
                         terminalPublications.set(job.asyncId, publication);
                     }
@@ -883,7 +887,7 @@ export function createAsyncJobTracker(pi, state, asyncDirRoot, options = {}) {
             rerenderWidget(ctx, []);
         }
     };
-    const restoreActiveJobs = (ctx) => {
+    const restoreActiveJobs = (ctx, observeStatus) => {
         if (ctx?.hasUI)
             state.lastUiContext = ctx;
         state.statusProjectionSessionId = null;
@@ -891,7 +895,8 @@ export function createAsyncJobTracker(pi, state, asyncDirRoot, options = {}) {
             return;
         let runs;
         try {
-            runs = listAsyncRuns(asyncDirRoot, { states: ["queued", "running"], sessionId: state.currentSessionId, resultsDir, kill: options.kill, now: options.now });
+            // A workflow whose Pi exited is repaired here, in the session that owns it, which then delivers its notice.
+            runs = listAsyncRuns(asyncDirRoot, { states: ["queued", "running"], sessionId: state.currentSessionId, resultsDir, kill: options.kill, now: options.now, adoptCompletionOwnerId: state.completionOwnerId }, observeStatus);
         }
         catch (error) {
             console.error(`Failed to restore active async jobs from '${asyncDirRoot}':`, error);

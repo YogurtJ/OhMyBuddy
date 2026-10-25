@@ -54,7 +54,7 @@ export interface SubagentWaitParams {
     all?: boolean;
     /** Give up after this many milliseconds. Defaults to waitTool.defaultTimeoutMs, then 30 minutes. */
     timeoutMs?: number;
-    /** False keeps a blocking wait open through idle attention; supervisor/contact requests still stop the wait. */
+    /** False keeps a blocking wait open through all attention except supervisor/contact requests, such as idle time, a tool held open, or repeated tool failures. */
     stopOnAttention?: boolean;
 }
 /** Minimal event-bus surface wait subscribes to (matches pi.events). */

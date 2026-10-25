@@ -19,25 +19,31 @@ const RETRY_DELAY_MS = 100;
 // lease attempt instead of parking this event loop while a runner publishes the same run.
 const CLEANUP_LEASE_WAIT_MS = 0;
 const SLOW_RESULT_SCAN_MS = 500;
-function jsonStringProperty(raw, property) {
-    const matches = raw.matchAll(new RegExp(`"${property}"\\s*:\\s*("(?:\\\\.|[^"\\\\])*")`, "g"));
+/** The last `"property": <value>` whose value matches `valuePattern`, parsed without reading the whole file; malformed reads as none. */
+function jsonPropertyValue(raw, property, valuePattern) {
     let encoded;
-    for (const match of matches)
+    for (const match of raw.matchAll(new RegExp(`"${property}"\\s*:\\s*(${valuePattern})`, "g")))
         encoded = match[1];
     if (!encoded)
         return undefined;
     try {
-        const value = JSON.parse(encoded);
-        return typeof value === "string" && value ? value : undefined;
+        return JSON.parse(encoded);
     }
     catch {
         return undefined;
     }
 }
+function jsonStringProperty(raw, property) {
+    const value = jsonPropertyValue(raw, property, `"(?:\\\\.|[^"\\\\])*"`);
+    return typeof value === "string" && value ? value : undefined;
+}
 function resultFileIdentity(raw, file) {
     return {
         sessionId: jsonStringProperty(raw, "sessionId"),
         completionOwnerId: jsonStringProperty(raw, "completionOwnerId"),
+        // Recorded as a flat object, so a brace-free match is the whole value.
+        completionOwnerProcess: jsonPropertyValue(raw, "completionOwnerProcess", `\\{[^{}]*\\}`),
+        parentWorkflowRunId: jsonStringProperty(raw, "parentWorkflowRunId"),
         runId: file.replace(/\.json$/i, ""),
     };
 }
@@ -105,6 +111,9 @@ export function createResultWatcher(pi, state, resultsDir, completionTtlMs, deps
     // While deliverPendingResults runs, completions skip the batch delay.
     let deliveringPending = 0;
     const identityCache = new Map();
+    // Result file -> last logged mission-sync error. A failed sync is retried
+    // every pass, so the same error is logged once per result file.
+    const reportedMissionSyncFailures = new Map();
     let deliveryActive = true;
     let deliveryEpoch = 0;
     let resultScanTimer = null;
@@ -116,6 +125,7 @@ export function createResultWatcher(pi, state, resultsDir, completionTtlMs, deps
             && typeof completionOwnerId === "string"
             && completionOwnerId === state.completionOwnerId);
     const claimedSessionIds = () => deps.ownership?.claimedSessionIds() ?? [];
+    const deliveryOwnerId = deps.ownership?.deliveryOwnerId ?? ((_sessionId, completionOwnerId) => completionOwnerId);
     const ownsCompletion = (sessionId, completionOwnerId, epoch) => {
         if (!deliveryActive || epoch !== deliveryEpoch)
             return false;
@@ -223,7 +233,7 @@ export function createResultWatcher(pi, state, resultsDir, completionTtlMs, deps
         // files keep their existing diagnostics and compatibility behavior.
         if (!identity.sessionId)
             return true;
-        if (ownsResult(identity.sessionId, identity.completionOwnerId))
+        if (ownsResult(identity.sessionId, deliveryOwnerId(identity.sessionId, identity.completionOwnerId, identity.completionOwnerProcess, identity.parentWorkflowRunId)))
             return true;
         // Acknowledgment removes the observer index; gating on the mission binding instead
         // re-ran mission sync for an unowned result on every scan.
@@ -306,7 +316,7 @@ export function createResultWatcher(pi, state, resultsDir, completionTtlMs, deps
             if (typeof data.sessionId !== "string" || !data.sessionId)
                 return;
             const sessionId = data.sessionId;
-            const completionOwnerId = data.completionOwnerId;
+            const completionOwnerId = deliveryOwnerId(sessionId, data.completionOwnerId, data.completionOwnerProcess, data.parentWorkflowRunId);
             const runId = typeof data.runId === "string" && data.runId
                 ? data.runId
                 : typeof data.id === "string" && data.id ? data.id : file.replace(/\.json$/i, "");
@@ -329,10 +339,15 @@ export function createResultWatcher(pi, state, resultsDir, completionTtlMs, deps
             let observerSucceeded = true;
             try {
                 syncMissionFromAsyncCompletion({ ...data, runId });
+                reportedMissionSyncFailures.delete(file);
             }
             catch (error) {
                 observerSucceeded = false;
-                console.error(`Mission completion sync failed for '${resultPath}':`, error);
+                const message = error instanceof Error ? error.message : String(error);
+                if (reportedMissionSyncFailures.get(file) !== message) {
+                    reportedMissionSyncFailures.set(file, message);
+                    console.error(`Mission completion sync failed for '${resultPath}':`, error);
+                }
             }
             try {
                 deps.observeCompletion?.({ ...data, runId });
@@ -484,6 +499,7 @@ export function createResultWatcher(pi, state, resultsDir, completionTtlMs, deps
                 ...data,
                 id: data.id ?? runId,
                 runId,
+                completionOwnerId,
                 triggerTurn,
                 intercomDelivered,
                 ...(nestedChildren?.length ? { nestedChildren } : {}),

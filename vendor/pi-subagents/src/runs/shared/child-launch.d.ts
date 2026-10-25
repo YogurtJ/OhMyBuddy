@@ -1,6 +1,6 @@
 import type { ChildWatchdogConfig, ChildWatchdogStatusEvent } from "../../watchdog/child-status.ts";
 import type { ThinkingLevel } from "../../shared/model-info.ts";
-import { type LaunchResolvedChildExtensions, type ResolvedToolBudget, type RunFanoutBudgetDescriptor, type HerdrMachineReference } from "../../shared/types.ts";
+import { type LaunchResolvedChildExtensions, type ResolvedToolBudget, type RunFanoutBudgetDescriptor, type PlacementMachineReference } from "../../shared/types.ts";
 import { type McpRuntimeSnapshotHost, type ResolvedMcpDirectToolSelection } from "./mcp-direct-tool-allowlist.ts";
 import type { PermissionRules } from "./permissions.ts";
 import type { StructuredOutputRuntime } from "./structured-output.ts";
@@ -23,7 +23,7 @@ export declare const MCP_DIRECT_TOOLS_ENV = "MCP_DIRECT_TOOLS";
 export type InheritedChildRuntime = Pick<ChildRuntimeConfig, "depth" | "maxDepth" | "nestedRoute" | "nestedParent" | "capabilityCeiling" | "thinkingCeiling" | "runFanoutBudget" | "requiredExtensions">;
 export declare function inheritedChildRuntime(config: ChildRuntimeConfig | undefined): InheritedChildRuntime | undefined;
 export interface BuildInProcessChildLaunchInput {
-    machine?: HerdrMachineReference;
+    machine?: PlacementMachineReference;
     remoteSkillNames?: string[];
     remoteReads?: string[] | false;
     parentSessionId?: string;

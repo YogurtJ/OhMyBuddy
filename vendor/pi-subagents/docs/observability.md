@@ -116,8 +116,8 @@ FleetView and the under-editor async widget are both enabled by default; set `as
 Default keys:
 
 - `↑`/`↓` or `j`/`k` — select a child
-- `Shift+K`/`Shift+J` — scroll one line
-- `PgUp`/`PgDn` — scroll one page
+- `K`/`J` (Shift+k / Shift+j) — scroll output one line
+- `PgUp`/`PgDn` — scroll output one body viewport page (structured headers stay pinned)
 - `x`/`Ctrl+O` — toggle tool details
 - `r` — refresh
 - `Esc` — close
@@ -125,6 +125,10 @@ Default keys:
 - `s` — compose an acknowledged message to a selected live async child; Tab cycles `steer`, `follow_up`, and `auto`
 - `D` — stop a selected child's top-level async run after confirmation
 - `H` — open the selected active async child through the available Inspect plugin
+
+In fullscreen mode with Pi mouse reporting enabled, primary-click a visible roster row to select that child. Wheel or trackpad input over the output pane (including its pinned header) scrolls the same viewport as the keyboard. Owned wheel events stay inside the inspector, even at the top and bottom. New output follows the bottom until you scroll away; reaching the bottom resumes following. Steering/redo drafts and stop confirmation retain input ownership, and Prompt Audit blocks roster clicks. Footer shortcuts remain text hints, not buttons.
+
+In regular (non-fullscreen) mode, the terminal retains mouse scrolling and scrollback ownership; internal-pane wheel scrolling and roster clicking are not promised. Use the keyboard controls above to navigate clipped inspector output in either mode. The extension does not enable terminal mouse tracking.
 
 Set `fleetKeybindings` in the extension config to replace inspector-level keys when a terminal intercepts keys such as `PgUp`, `PgDn`, `Home`, or `End`. Prompt modes keep fixed keys such as `Esc`, `Enter`, `Tab`, and stop-confirmation `Y`/`N`.
 

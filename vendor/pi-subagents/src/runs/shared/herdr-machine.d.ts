@@ -1,4 +1,4 @@
-import type { ExternalProcessStatus, HerdrMachineReference } from "../../shared/types.ts";
+import type { ExternalProcessStatus, HerdrMachineReference, PlacementMachineReference } from "../../shared/types.ts";
 import type { runExternalCli } from "./external-cli-runner.ts";
 export { shellQuoteRemote as shellQuote } from "./herdr-connection.ts";
 /** The local ssh process gets only what ssh itself needs; remote runs use the machine's own credentials. */
@@ -7,6 +7,10 @@ type RunExternalCliInput = Parameters<typeof runExternalCli>[0];
 interface MachineSettingsEntry {
     cwd?: string;
     env?: Record<string, string>;
+    /** User settings only: run this machine's children in Rex panes reached over SSH at `ssh`. */
+    rex?: {
+        ssh: string;
+    };
 }
 export interface ResolveHerdrMachinePlacementInput {
     /** Profile id or label as typed by the operator. */
@@ -22,8 +26,12 @@ export interface ResolveHerdrMachinePlacementInput {
     settings?: MachineSettingsEntry;
     herdrBin?: string;
 }
-export interface HerdrMachinePlacement {
+export interface HerdrMachinePlacement extends MachinePlacement {
     machine: HerdrMachineReference;
+}
+/** A resolved `machine` value: a Herdr saved machine, or the reserved `local` (a Rex pane on this machine). */
+export interface MachinePlacement {
+    machine: PlacementMachineReference;
     /** Opt-in `subagents.machines.<name>.env`, exported in front of the remote command. */
     env?: Record<string, string>;
 }
@@ -32,6 +40,8 @@ export interface PreparedHerdrMachineExternalCliRun {
     decorateProcess(process: ExternalProcessStatus): ExternalProcessStatus;
 }
 export declare function resolveHerdrMachinePlacement(input: ResolveHerdrMachinePlacementInput): HerdrMachinePlacement;
+/** `local` resolves to a Rex pane on this machine; a name with a `rex` entry in user settings to a Rex pane on that SSH host; any other value to a Herdr saved machine. */
+export declare function resolveMachinePlacement(input: ResolveHerdrMachinePlacementInput): MachinePlacement;
 export declare function formatHerdrMachineRunnerUnsupported(input: {
     machine?: string;
     agentName: string;

@@ -1,9 +1,9 @@
 ---
 name: pi-subagents
 description: |
-  Technical guidance for operator-requested delegation to builtin or custom
-  subagents: bounded handoffs, parallel review, scripted workflows, async work,
-  forked context, isolation, and coordinated execution.
+  Delegate work to Pi subagents after the operator asks for it: one child,
+  parallel or scripted workflows, async runs, resume/steer/stop, review fanout,
+  and multi-lane or worktree orchestration.
 ---
 
 # Pi Subagents
@@ -14,111 +14,134 @@ instructions. Task size, complexity, risk, tool-call count, recipe fit, or an
 available specialist does not independently authorize delegation.
 
 Once authorized, choose the smallest bounded shape that earns its token and
-elapsed-time overhead through concrete evidence, independent review,
-specialization, useful parallelism, or needed isolation. A single child is
-valid; writer, challenge, and review stages must each earn their overhead rather
-than becoming default ceremony. The parent keeps user intent, constraints,
-routing, arbitration, decisions, final acceptance, and publication authority,
-and may perform the work directly where it is the most efficient owner.
+elapsed-time overhead through evidence, independent review, specialization,
+useful parallelism, or isolation. A single child is valid. The parent keeps
+intent, routing, decisions, final acceptance, and publication authority, and
+does the work itself where that is cheaper.
 
-Children do not spawn subagents unless the parent explicitly delegated fanout
-and their resolved `tools` allow `subagent`.
+## Calls
 
-## Launch shape
+```typescript
+subagent({ agent: "worker", task: "<brief>" })                    // one child; async by default
+subagent({ workflow: "parallel", args: { tasks: [{ agent, task, cwd?, model? }] } })  // independent children
+subagent({ workflow: true })              // runs the one ```js workflow block in this same reply
+subagent({ workflow: "./lane.js", args }) // script file, path relative to the request cwd
+subagent({ action: "validate", workflow: "./lane.js" })          // check a script without launching
+subagent({ action: "status", id })        // options: { view: "fleet" } or { view: "transcript", index: 0 }
+subagent({ action: "resume", id, message })   // completed or paused child; returns a new run id
+subagent({ action: "steer", id, message })    // live async child
+subagent({ action: "stop", id })              // ends the run; not resumable
+subagent({ action: "interrupt", id })         // pauses the child's current turn
+subagent({ action: "list" })  ·  subagent({ action: "models" })
+subagent({ action: "guide", options: { topic: "<section address>" } })
+```
 
-| Need | Use |
-| --- | --- |
-| One bounded task for one child | direct `{ agent, task }` |
-| JavaScript control flow or data-dependent branching; sequence, fanout, retry, rolling fanout, or aggregation | a workflow script with `runs.run(...)` / `runs.all(...)` |
-| A broad plan split into visible narrow stages per lane | a workflow script with `runs.lanes([{ key, stages: [...] }])` |
-| Independent worktree or repository lanes | `references/multi-lane-orchestration.md` |
-| Council of advisors | `../council-mode/SKILL.md` |
-| Management, status, steering, authoring, or inspection | `action` |
+Launches are async by default. Set `async: false` only when the parent must
+block; final reviews and gates stay async. After launching, keep doing safe
+independent work, or yield: native completion wakes this session. Do not sleep,
+poll, or call `bg_wait` for ordinary children. Use `bg_wait` only for provider
+or detached work that has no native notification and whose result this turn
+needs.
 
-To launch a workflow script, write it as one ```` ```js workflow ```` fenced
-block in your reply, then call `subagent({ workflow: true, ... })` in the same
-reply. Use `workflow: "./path/to/script.js"` for a script file and
-`workflow: "<name>"` for a named resource.
+## Workflow scripts
 
-A workflow script is code-driven: `runs.run(...)` for keyed steps,
-`runs.all([...])` for fanout, plain JavaScript for branching and aggregation.
-Keep scripts portable: use top-level `await`, plain helpers, or explicit Promise
-chains, not nested async helpers. Legacy top-level `chain` / `tasks` inputs and
-durable `.chain.md` execution are inspection or migration material only, except
-that `disabledFeatures: ["workflow-scripts"]` replaces scripts with top-level
-`chain` and `tasks` (see [configuration](../../docs/configuration.md#chain-and-tasks-without-workflow-scripts)).
+Use a script when later steps depend on earlier results, or for keyed,
+retried, aggregated, or resumed children. Write one ```` ```js workflow ````
+block in the reply and call `subagent({ workflow: true })` in the same reply.
+For a long script, or when a `workflow: true` call reports the block missing,
+write it to a file and pass `workflow: "./path.js"`. On Claude 5.x models (Opus
+5.5, Sonnet 5.5, Fable 5.1), use the file whenever the turn already made a tool
+call: text after one reaches the session as a summary without the block. Calls in one reply run at
+the same time, so write the file in one reply and `validate` or launch it in
+the next.
 
-Use `runs.lanes(...)` only inside a workflow script, not as a top-level mode,
-when a broad, predeclared plan benefits from visible per-lane stages; otherwise
-use ordinary `runs.run(...)` / `runs.all(...)`. See the [canonical staged-lane
-example](../../docs/workflows.md#parallel-sequential-lanes). Keep assignments
-bounded, but do not add stages or ceremony just to satisfy this skill.
+```js workflow
+const scan = await runs.run("scan", { label: "Map auth flow", agent: "scout", task: "..." });
+const reviews = await runs.all([
+  { key: "correctness", label: "Review auth correctness", agent: "reviewer", task: "... " + scan.output },
+  { key: "tests", label: "Review auth tests", agent: "reviewer", task: "..." },
+]);
+return reviews.map((review) => review.output);
+```
 
-When composing `runs.run(...)`, `runs.all(...)`, or `runs.lanes(...)`, always
-supply a short verb + behavior display `label` derived from the task, unless
-the user supplied an explicit label; preserve that label. Keep the stable
-machine `key` independent (for example, `issue2011-writer` with
-`label: "Fix workflow steering"`). For `runs.lanes`, put labels on stage
-items, not lane objects. Use stage-appropriate labels for reviews and retained-child
-follow-ups too (for example, `Review workflow steering`). Generate labels in
-the orchestrator while composing the launch—no extra model call, runtime
-generator, or schema change. Native direct `{ agent, task }` calls have no
-top-level `label` parameter; do not invent one or wrap a tiny single task in
-a workflow just to label it.
+- Scripts are statement bodies with an explicit `return`, top-level `await`,
+  and plain helpers. Nested async functions, arrows, and methods are rejected.
+- Every `runs.run` / `runs.all` item needs a stable `key`. Add a short
+  verb + behavior `label` unless the user gave one.
+- Bind files with `output: "plans/x.md"` (relative paths land in run
+  artifacts) and return `outputReference` or `artifactPaths`. A filename in
+  task text does not route output. Never send reports to the repo root.
+- `runs.lanes([{ key, stages: [...] }])` runs a predeclared plan: first stages
+  together, later stages in order per lane.
 
-Use async/background by default. Set `async:false` only when the parent must
-block. Final reviews, validation gates, oracle checks, and publication checks
-stay async.
+Resuming a retained child:
 
-In an ordinary interactive session, yield after launching or triaging useful
-async lanes and let Pi wake the parent on completion; ordinary async subagents
-already have native completion notifications, so do not call `bg_wait()` merely
-because a child is active. Use blocking `bg_wait()` only for provider,
-detached, or other background work without a native notification when a
-headless/run-to-completion contract or a required same-turn artifact makes the
-result necessary before this turn ends. For
-“continue/orchestrate/work until done,” keep the lane board moving while a safe
-immediate action remains; if only async lanes are running, record the revisit
-trigger and yield.
+```js workflow
+let child = await runs.run("fix-1", { agent: "worker", task: "..." });
+child = await runs.run("fix-2", { resume: child.runId, task: "Apply these accepted findings: ..." });
+return child.output;
+```
 
-Package agents appear in `subagent({ action: "list" })`. External CLI/job agents
-use their own runner contract. Do not pass native Pi child options to them unless
-that runner explicitly supports the option.
+- Always resume the latest returned run id; every resume returns a new one.
+- Use a new stable key for every resume pass.
+- `resume` excludes `agent` and `gate`; the child keeps its agent, model, and tools.
+- Resume a completed child; steer a live one. Top-level `{ action: "resume" }` is detached.
 
-## Read the reference for the branch
+## Briefs
 
-For exact API fields and worked examples, call `subagent({action:"guide",options:{topic:"tool-reference"}})` or `topic:"workflows"`. The compact tool definition is not the recipe catalog; use `topic:"missions"` for mission updates and schedules.
+Every child starts cold. Its task states: goal; repo, explicit `cwd`, and
+ref; authority and edit boundary; relevant files, decisions, and evidence;
+success criteria; validation; expected output; and when to stop or ask.
+Make parallel briefs differ by seam, evidence, and decision, not just an item
+number.
 
-| Branch | Read |
-| --- | --- |
-| Delegate or choose roles, prompts, models, or slash commands | `references/prompting-and-roles.md` |
-| Execute single, scripted, async, scheduled, mission, forked, watchdog, oracle, or intercom workflows | `references/execution-controls.md` |
-| Review, validate, triage gate failures, or prepare delivery | `references/review-and-validation.md` |
-| Coordinate lanes, worktrees, repositories, or writer waves | `references/multi-lane-orchestration.md` |
-| List, create, edit, disable, eject, or expose agents/RPC | `references/management-authoring-rpc.md` |
-| Check safety constraints, recipes, or error handling | `references/constraints-and-recipes.md` |
+## Rules
 
-For an authorized complex delegated workflow, read `prompting-and-roles.md` and
-`execution-controls.md`, then load `review-and-validation.md` and
-`constraints-and-recipes.md` before launch or review.
-
-## Operating rules
-
-- Avoid duplicate scouts, overlapping writers, and vague prompts without a concrete deliverable.
-- Call `subagent`, `subagents_enable`, `subagent_supervisor`, `contact_supervisor`, and `structured_output` as ordinary model tool calls. They are model-only, so codemode scripts cannot reach them through `tools.*`, `ALL_TOOLS`, or `searchTools`.
-- Keep the parent on the ordinary strong default model. Route workers/scouts to a fast capable tier, serious reviews to a strong tier, and top reasoning to bounded read-only critique.
-- Exact model names are deployment policy. Put them in user/project settings or profiles, not package guidance.
-- Give every child a compact meta-prompt checklist: objective; repo/cwd/ref; authority/edit boundary; relevant files/contracts and constraints; success/acceptance criteria; validation; expected output/report; and stop/ask conditions. See `references/prompting-and-roles.md`.
-- Before launching a writer for substantial mutation work, classify it as single-seam or multi-seam and partition multi-seam work across exclusive component owners, gates, and durable handoffs before an integration-only owner. See `references/multi-lane-orchestration.md`.
-- For mutation work, use an isolated lane/worktree when isolation, overlap, or concurrent juggling matters; keep one writer per cwd/worktree. `worktree: true` refuses to launch unless the source checkout is clean (untracked files count; `.pi/subagents/` does not), so commit your own changes first or plan the lane without managed isolation. See `references/multi-lane-orchestration.md` for lane mechanics.
-- Keep long/high-output validation out of chat: prefer `interactive_shell` dispatch/background monitors, bounded logs, or subagent-owned reports; return a concise summary plus report path unless same-turn output is required. Do not use `interactive_shell` as an implicit fallback for a failed `subagent` lane; see `references/execution-controls.md`.
-- Treat subagent workflow, child launch, prompt runtime, extension load, and child tooling setup failures as lane infrastructure blockers. Stop, report the exact failure and run/worktree state, verify a clean worktree or capture a partial diff, and use only a clear same-protocol retry or an owner-approved execution-mode fallback.
-- For cross-codebase work, record the repo, explicit `cwd`, authority boundary, and expected output before launch.
-- Make parallel prompts distinct by source seam, evidence, and decision. Do not clone prompts with only item numbers swapped.
-- Prefer fresh-context review/validation fanout, then synthesize and apply fixes in the parent.
-- For Pi extension repos under `~/.pi/agent/extensions`, put lane worktrees outside extension auto-discovery, such as `~/.pi/agent/worktrees`.
-- Preserve capability ceilings, including child tool limits and allowed-agent restrictions.
-- Preserve parent authority and escalate unresolved choices.
-- Treat receipts, CI, review bots, and external-run records as evidence, not authority.
-- For backlog maintenance, releases, merge queues, or other public-repo mutation policy, load the matching user/project skill. This package defines delegation primitives, not private policy.
+- One writer per cwd or worktree. Parallelize reading, review, and
+  validation. `worktree: true` needs a clean checkout (untracked files count;
+  `.pi/subagents/` does not). For Pi extension repos, put lane worktrees
+  outside `~/.pi/agent/extensions`, for example `~/.pi/agent/worktrees`.
+- Reviewers use fresh context. Use `context: "fork"` only when the child needs
+  the parent's history; it requires a persisted parent session.
+- Children do not spawn subagents unless the parent delegated fanout and their
+  resolved `tools` include `subagent`.
+- A failed workflow, launch, prompt runtime, extension load, or child tool
+  setup blocks the lane. Stop, report the exact failure and run/worktree state,
+  verify a clean worktree or capture the partial diff, then retry the same way
+  once. Switching to `interactive_shell`, `pi -ne`, or another CLI needs owner
+  approval.
 - As a conservative orchestration policy, do not pass a hard `toolBudget` or tight `usageBudget` to mutation-capable workers. The default tool budget blocks read/search tools rather than mutation tools. If interrupted after a tool call starts, checkpoint after the current tool returns with changed files, build/test state, and commit or PR state.
+- Route workers and scouts to a fast capable tier, serious reviews to a strong
+  tier, and top reasoning only to bounded read-only critique. Exact model names
+  belong in user or project settings, not here.
+- `subagent`, `subagents_enable`, `subagent_supervisor`, `contact_supervisor`, and `structured_output` are model-only: call them as ordinary model tool calls. Codemode scripts cannot reach them through `tools.*`, `ALL_TOOLS`, or `searchTools`.
+- Receipts, CI, and review bots are evidence, not authority. Backlog, release,
+  and merge policy belong to the user's or project's own skill.
+
+## Look up the rest
+
+If only `subagents_enable` is visible, call it first; `subagent` and `guide`
+work from the next request. Read one section, not a whole topic:
+
+| Need | Guide section |
+| --- | --- |
+| Script API: `runs.*`, `state`, limits | `workflows/scripted-workflows` |
+| Typed gates, host commands, rolling fanout | `workflows/typed-post-run-checks-and-typed-steps`, `workflows/host-command-steps`, `workflows/advanced-rolling-child-runs` |
+| Budgets, timeouts, `baseRef`, `gate`, `output` | `tool-reference/execution-parameters`, `tool-reference/output-mode-details` |
+| Fresh or forked context | `tool-reference/fork-context-details` |
+| Resume, steer modes, stop, status | `tool-reference/retained-children`, `tool-reference/resume`, `tool-reference/steer`, `tool-reference/stop`, `tool-reference/status` |
+| Acceptance and review gates | `tool-reference/acceptance-gates` |
+| Worktrees and handoffs | `workflows/worktree-isolation` |
+| Child asks the parent (`contact_supervisor`) | `workflows/supervisor-coordination-child-asks-parent` |
+| Agent create, update, eject, disable, refine | `tool-reference/management-actions`, `agents/frontmatter-reference` |
+| Missions and schedules | `missions/missions`, `missions/schedules` |
+| Watchdog | `watchdog/when-it-runs`, `watchdog/choosing-a-model` |
+| Model overrides and profiles | `models/setting-defaults-and-overrides` |
+| Other projects in panes | `tool-reference/herdr-project-panes` |
+| Setup looks wrong | `subagent({ action: "doctor" })` |
+
+## References
+
+- Choosing roles, writing prompts, review/research/cleanup techniques, oracle → [prompting-and-roles.md](references/prompting-and-roles.md)
+- Several lanes, worktrees, repositories, staged fixes, review loops, finding and gate triage → [orchestration.md](references/orchestration.md)
+- Advisor council → [../council-mode/SKILL.md](../council-mode/SKILL.md)

@@ -100,6 +100,23 @@ export function formatRuntimeSnapshotMcpServersError(agentName, serverNames) {
     const subject = agentName ? `Agent '${agentName}'` : "Subagent";
     return `${subject} selects MCP tools from servers that exist only in pi-mcp-adapter's runtime snapshot (${serverNames.join(", ")}). MCP servers from the runtime snapshot cannot be provided to in-process children; MCP tools must come from an ambient adapter extension in a background child (\`async: true\`), so add the server to the adapter's configuration file instead.`;
 }
+/** Path-like entries load extensions instead of naming tools, so Pi never reads them as modifiers. */
+function isToolExtensionPath(entry) {
+    return entry.includes("/") || entry.endsWith(".ts") || entry.endsWith(".js");
+}
+/**
+ * A child's `tools` list is a complete allowlist. Read as names, Pi's modifier
+ * entries would become required tools no child has, or mix with the names the
+ * plan adds into a list Pi rejects. The modifier rule is Pi's `isToolModifier`:
+ * a `+name` or `-name` entry edits Pi's default tool selection.
+ */
+export function assertNoToolModifierEntries(agentName, tools) {
+    const entries = tools.filter((entry) => /^[+-]/u.test(entry) && !isToolExtensionPath(entry));
+    if (entries.length === 0)
+        return;
+    const subject = agentName ? `Agent '${agentName}'` : "Subagent";
+    throw new Error(`${subject} lists Pi tool modifier ${entries.length === 1 ? "entry" : "entries"} in \`tools\`: ${entries.join(", ")}. A child's \`tools\` list is the complete set of tools it gets, so +name and -name entries are not supported; name every tool the child needs, or omit \`tools\` and use \`excludeTools\` to drop one.`);
+}
 export function projectLaunchResolvedChildExtensions(toolPlan) {
     const runtime = boundedExtensionIdentifiers(toolPlan.runtimeExtensions);
     const configured = boundedExtensionIdentifiers(toolPlan.configuredExtensions);
@@ -178,7 +195,8 @@ export function resolvePiLaunchToolPlan(input) {
     const allowedToolSet = capabilityCeiling?.allowedTools === undefined
         ? undefined
         : new Set(capabilityCeiling.allowedTools);
-    const requestedBuiltinTools = input.tools?.filter((tool) => !(tool.includes("/") || tool.endsWith(".ts") || tool.endsWith(".js"))) ?? [];
+    const requestedBuiltinTools = input.tools?.filter((tool) => !isToolExtensionPath(tool)) ?? [];
+    assertNoToolModifierEntries(input.agentName, input.tools ?? []);
     if (input.requireReadTool && allowedToolSet && !allowedToolSet.has("read")) {
         throw new Error(`Capability ceiling from ${capabilityCeiling?.sources.join(", ") || "unknown source"} excludes required tool 'read' for lazy skill loading.`);
     }
@@ -204,8 +222,7 @@ export function resolvePiLaunchToolPlan(input) {
     }
     const toolExtensionPaths = capabilityCeiling?.denyExtensions
         ? []
-        : (input.tools ?? []).filter((tool) => !requestedBuiltinTools.includes(tool) &&
-            (tool.includes("/") || tool.endsWith(".ts") || tool.endsWith(".js")));
+        : (input.tools ?? []).filter(isToolExtensionPath);
     const mcpResolution = capabilityCeiling?.denyExtensions
         ? { selections: [], unresolvedSelectors: [] }
         : input.builtinMcpTools
@@ -318,9 +335,7 @@ export function resolvePiLaunchToolPlan(input) {
             removedExtensionCount: capabilityCeiling.denyExtensions
                 ? (input.extensions?.length ?? 0) +
                     (input.subagentOnlyExtensions?.length ?? 0) +
-                    (input.tools ?? []).filter((tool) => tool.includes("/") ||
-                        tool.endsWith(".ts") ||
-                        tool.endsWith(".js")).length
+                    (input.tools ?? []).filter(isToolExtensionPath).length
                 : 0,
             requestedMcpToolCount: input.mcpDirectTools?.length ?? 0,
             effectiveMcpTools,
