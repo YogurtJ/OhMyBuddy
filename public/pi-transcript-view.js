@@ -344,9 +344,14 @@
                     + (node.matches('.pi-tool-row, .pi-bash-message') ? 1 : 0)
                     + (node.querySelectorAll ? node.querySelectorAll('.pi-tool-row, .pi-bash-message').length : 0), 0);
                 const plain = this.plain();
+                // A Bot reader sees in the folded summary when something was put in the chat's notebook.
+                const NOTED = '.pi-tool-row[data-tool-name="window_note"]:not([data-state="error"])';
+                const notes = plain ? processNodes.reduce((count, node) => count + (node.matches(NOTED) ? 1 : 0)
+                    + (node.querySelectorAll ? node.querySelectorAll(NOTED).length : 0), 0) : 0;
                 const label = [
                     duration != null ? translateUi("用时 {0}", this.formatDuration(duration)) : '',
-                    tools ? (plain ? translateUi("{0} 个步骤", tools) : translateUi("{0} 次工具调用", tools)) : ''
+                    tools ? (plain ? translateUi("{0} 个步骤", tools) : translateUi("{0} 次工具调用", tools)) : '',
+                    notes ? translateUi("记下 {0} 件事", notes) : ''
                 ].filter(Boolean).join(' · ') || (plain ? translateUi("过程") : translateUi("执行记录"));
                 const finalMessage = nodes[finalIndex]._piAssistantMessage || {};
                 const failedTools = processNodes.reduce((count, node) => count

@@ -69,7 +69,7 @@
 .pi-bot-rail-add:hover:not(:disabled) { color: var(--primary, var(--green)); border-color: color-mix(in srgb, var(--primary, var(--green)) 55%, var(--line)); background: color-mix(in srgb, var(--primary, var(--green)) 10%, transparent); }
 .pi-bot-rail-add:disabled { cursor: progress; }
 .pi-bot-rail-item:focus-visible, .pi-bot-rail-add:focus-visible, .pi-bot-window:focus-visible,
-.pi-bot-settings:focus-visible, .pi-bot-menu:focus-visible, .pi-bot-primary:focus-visible {
+.pi-bot-settings:focus-visible, .pi-bot-notes-link:focus-visible, .pi-bot-menu:focus-visible, .pi-bot-primary:focus-visible {
     outline: 2px solid var(--primary, var(--green)); outline-offset: 2px;
 }
 
@@ -90,12 +90,12 @@
 .pi-bot-window-mark i { font-size: .82rem; color: var(--primary, var(--green)); }
 .pi-bot-window-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pi-bot-side-foot { padding: 10px 8px 12px; border-top: 1px solid var(--line); }
-.pi-bot-settings {
+.pi-bot-settings, .pi-bot-notes-link {
     display: flex; align-items: center; gap: 10px; width: 100%; min-height: 38px; padding: 8px 10px;
     border: 0; border-radius: 9px; background: transparent; color: var(--text-muted); font-size: .82rem; text-align: left; cursor: pointer;
 }
-.pi-bot-settings:hover { background: var(--pv-nav-hover, var(--surface-2)); color: var(--text-main); }
-.pi-bot-settings span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-bot-settings:hover, .pi-bot-notes-link:hover { background: var(--pv-nav-hover, var(--surface-2)); color: var(--text-main); }
+.pi-bot-settings span, .pi-bot-notes-link span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pi-bot-side-state { padding: 22px 16px; color: var(--text-muted); font-size: .84rem; display: grid; gap: 10px; justify-items: start; }
 .pi-bot-link { border: 0; background: none; padding: 0; color: var(--primary, var(--green)); font: inherit; cursor: pointer; }
 
@@ -155,11 +155,12 @@
 /* ---- phones: the pane is a drawer opened from the header --------------------------- */
 @media (max-width: 900px) {
     #chat-tab.pi-bot-mode .pi-command-left { width: auto; flex: 1; min-width: 0; }
+    #chat-tab.pi-bot-mode #pi-bot-header { flex: 1 1 auto; }
     .pi-bot-menu { display: inline-grid; }
     #chat-tab.pi-bot-mode .pi-session-pane { width: min(340px, 88vw); }
     .pi-bot-rail { flex-basis: 64px; }
     .pi-bot-rail-item, .pi-bot-rail-add { width: 46px; height: 46px; }
-    .pi-bot-window, .pi-bot-settings { min-height: 46px; font-size: .92rem; }
+    .pi-bot-window, .pi-bot-settings, .pi-bot-notes-link { min-height: 46px; font-size: .92rem; }
 }
 
 /* ---- the first hello (local, before any model call) --------------------------------- */
@@ -314,6 +315,90 @@
     .pi-bot-sheet-foot { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
     .pi-bot-sheet input[type="text"], .pi-bot-sheet textarea, .pi-bot-sheet select { font-size: 16px; }
     .pi-bot-sheet-status { font-size: .78rem; }
+}
+
+/* ---- notebook ("我记着的事"): header button, side entry and sheet ------------------------ */
+.pi-bot-notes-button {
+    margin-left: auto; flex: 0 0 auto; display: inline-grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 10px;
+    background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.pi-bot-notes-button[hidden] { display: none; }
+.pi-bot-notes-button:hover { background: var(--pv-nav-hover, var(--surface-2)); color: var(--text-main); }
+.pi-bot-notes-button:focus-visible, .pi-bot-note-action:focus-visible, .pi-bot-note-source summary:focus-visible,
+.pi-bot-notes-closed > summary:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
+.pi-bot-side-foot { display: grid; gap: 2px; }
+.pi-bot-notes-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.pi-bot-note { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 10px; margin: 0 -10px; padding: 9px 4px 9px 10px; border-radius: 10px; }
+.pi-bot-note:hover, .pi-bot-note:focus-within { background: var(--surface-1, var(--surface)); }
+.pi-bot-note-check {
+    flex: none; display: inline-grid; place-items: center; width: 22px; height: 22px; margin-top: 2px; padding: 0;
+    border: 1.5px solid var(--line-strong); border-radius: 50%; background: transparent; color: transparent; font-size: .66rem; cursor: pointer;
+    transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+.pi-bot-note-check:hover:not(:disabled), .pi-bot-note-check:focus-visible { border-color: var(--green); color: var(--green); }
+.pi-bot-note-check:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 2px; }
+.pi-bot-note-check:disabled { opacity: .5; cursor: default; }
+.pi-bot-note-main { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.pi-bot-note-text { margin: 0; font-size: .93rem; line-height: 1.55; color: var(--text-main); overflow-wrap: anywhere; white-space: pre-wrap; }
+.pi-bot-note:not(.is-active) .pi-bot-note-text {
+    color: var(--text-muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+}
+.pi-bot-note-meta { margin: 0; font-size: .76rem; line-height: 1.45; color: var(--text-muted); }
+.pi-bot-note-source { font-size: .78rem; color: var(--text-muted); }
+.pi-bot-note-source summary { width: fit-content; cursor: pointer; }
+.pi-bot-note-source p {
+    margin: 4px 0 0; padding: 5px 9px; border-left: 2px solid var(--line-strong); line-height: 1.55; overflow-wrap: anywhere;
+}
+.pi-bot-note-tools { flex: none; display: flex; align-items: center; gap: 2px; }
+.pi-bot-note-action {
+    flex: none; display: inline-grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 8px;
+    background: transparent; color: var(--text-muted); font-size: .84rem; cursor: pointer;
+}
+.pi-bot-note-action:hover:not(:disabled) { background: var(--pv-nav-hover, var(--surface-3)); color: var(--text-main); }
+.pi-bot-note-action[data-note-action="delete"]:hover:not(:disabled) { color: var(--danger); }
+.pi-bot-note-action:disabled { opacity: .45; cursor: default; }
+.pi-bot-note-action[aria-expanded="true"] { background: var(--surface-3); color: var(--text-main); }
+/* Pointer screens show icons with the row (and on keyboard focus); touch or narrow screens get "more". */
+.pi-bot-note-action[data-note-action="more"] { display: none; }
+@media (hover: hover) and (pointer: fine) and (min-width: 601px) {
+    .pi-bot-note:not(:hover):not(:focus-within) .pi-bot-note-tools { opacity: 0; }
+}
+@media not all and (hover: hover) and (pointer: fine) and (min-width: 601px) {
+    .pi-bot-note-tools { display: none; }
+    .pi-bot-note-action[data-note-action="more"] { display: inline-grid; width: 40px; height: 40px; margin: -8px -2px -8px 0; }
+}
+/* Under the note: labelled choices, or the delete confirmation. */
+.pi-bot-note-panel { flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 6px 2px 0; }
+.pi-bot-note-check ~ .pi-bot-note-panel { padding-left: 32px; }
+.pi-bot-note-panel .pi-bot-chip { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; margin: 0; }
+.pi-bot-note-panel .pi-bot-chip > i { font-size: .8rem; color: var(--text-muted); }
+.pi-bot-note-panel .pi-bot-chip.is-danger, .pi-bot-note-panel .pi-bot-chip.is-danger > i { color: var(--danger); }
+.pi-bot-note-panel.is-confirming { justify-content: flex-end; }
+.pi-bot-note-ask { flex: 1 1 100%; margin: 0; font-size: .82rem; line-height: 1.5; color: var(--text-main); }
+.pi-bot-danger {
+    min-height: 36px; padding: 0 14px; border: 0; border-radius: 9px; background: var(--danger); color: #fff; font: inherit; font-size: .85rem; cursor: pointer;
+}
+.pi-bot-danger:focus-visible { outline: 2px solid var(--danger); outline-offset: 2px; }
+.pi-bot-danger:disabled { opacity: .55; cursor: default; }
+.pi-bot-note-edit { padding-right: 6px; flex: 1; min-width: 0; display: grid; gap: 8px; }
+.pi-bot-note-due { display: flex; align-items: center; gap: 10px; font-size: .82rem; color: var(--text-muted); }
+.pi-bot-sheet input[type="date"] {
+    min-height: 38px; padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: 10px;
+    background: var(--surface-1, var(--surface)); color: var(--text-main); font: inherit; font-size: .9rem;
+}
+.pi-bot-note-confirm { display: flex; justify-content: flex-end; gap: 8px; }
+.pi-bot-note-confirm .pi-bot-primary { margin-top: 0; min-height: 36px; min-width: 72px; }
+.pi-bot-notes-empty { display: grid; justify-items: center; gap: 6px; padding: 40px 12px 32px; text-align: center; color: var(--text-muted); }
+.pi-bot-notes-empty > i { margin-bottom: 6px; font-size: 1.35rem; color: var(--primary, var(--green)); }
+.pi-bot-notes-empty p { margin: 0; max-width: 360px; font-size: .88rem; line-height: 1.6; }
+.pi-bot-notes-empty p:first-of-type { color: var(--text-main); font-weight: 600; }
+.pi-bot-notes-closed > summary { width: fit-content; font-size: .8rem; font-weight: 600; color: var(--text-muted); cursor: pointer; }
+.pi-bot-notes-closed[open] > summary { margin-bottom: 4px; }
+@media (max-width: 600px) {
+    .pi-bot-note-check { position: relative; }
+    .pi-bot-note-check::after { content: ""; position: absolute; inset: -9px; }
+    .pi-bot-note-panel .pi-bot-chip, .pi-bot-danger { min-height: 40px; }
+    .pi-bot-sheet input[type="date"] { font-size: 16px; }
 }
 
 /* ---- no chat model yet ---------------------------------------------------------------- */
