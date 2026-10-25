@@ -18,6 +18,7 @@ import { SETUP_TOOL, SETUP_TITLE, SAVE, DECLINE, normalizeProposal } from './bot
 import { APPROVAL_TITLE, BLOCKED, PRESETS, approvalFor, approvalMessage, newToken } from './bot-guard.js';
 import { safeFile as readDocument } from '../profile-memory/management.js';
 import { registerNotebook, notebookNotice } from './bot-notebook.ts';
+import { registerRecall } from './bot-recall-tools.ts';
 import { structuredCompaction } from './bot-compaction.js';
 import { pruneDrafts, idleDelay, idleCompactionWanted } from './bot-maintenance.js';
 import { Type } from 'typebox';
@@ -179,7 +180,9 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
         if (loaded && !toolRegistered) {
             toolRegistered = true;
             registerSetupTool(pi, context, getAgentDir);
-            registerNotebook(pi, (toolCtx: any) => Boolean(botSection(context, toolCtx.sessionManager, toolCtx.cwd, getAgentDir())));
+            const verified = (toolCtx: any) => Boolean(botSection(context, toolCtx.sessionManager, toolCtx.cwd, getAgentDir()));
+            registerNotebook(pi, verified);
+            registerRecall(pi, context, getAgentDir, verified);
         }
         const notify = notifier(ctx);
         notify(loaded ? { event: 'loaded', profileId: context.profileId, windowId: context.windowId, generation: loaded.binding.generation }

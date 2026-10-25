@@ -42,8 +42,9 @@ function estimateTokens(text) {
 
 function shortId(id) { return String(id).slice(0, 8); }
 
-function stamp(entry) {
-    const time = Date.parse(entry?.timestamp);
+// The message's own time (what was said when), else when the entry was written.
+function stamp(entry, message) {
+    const own = message?.timestamp, time = Number.isFinite(own) ? own : Date.parse(entry?.timestamp);
     return Number.isFinite(time) ? new Date(time).toISOString().slice(0, 16).replace('T', ' ') : '';
 }
 
@@ -68,7 +69,7 @@ function summarizedEntries(projection, firstKeptEntryId) {
 // One line block per message; tool output and very long text are clipped (quotes are still
 // checked against the full original text).
 function serializeMessage({ entry, message }) {
-    const head = `[e:${shortId(entry.id)}] ${stamp(entry)}`.trim();
+    const head = `[e:${shortId(entry.id)}] ${stamp(entry, message)}`.trim();
     if (message.role === 'user') return `${head} User: ${clip(fold(textOf(message.content)), MAX_MESSAGE_CHARS)}`;
     if (message.role === 'assistant') {
         const lines = [`${head} Assistant: ${clip(fold(textOf(message.content)), MAX_MESSAGE_CHARS)}`];
