@@ -329,6 +329,31 @@ test('Bot window workers get a verified identity section that follows edits with
     assert.equal(await alignModel(pi, ctx, { provider: 'nokey', id: 'x' }, value => sent.push(value), reported), 'unavailable');
     assert.deepEqual(sent.map(item => `${item.provider}/${item.id}`), ['nokey/x', 'missing/y']);
     assert.equal(ctx.model.id, 'big');
+    // Compaction: the structured summary with checked notebook changes, made with the Bot's model; Pi's own on failure.
+    const branch = manager.getBranch();
+    const userEntry = branch.find(entry => entry.type === 'message' && entry.message.role === 'user');
+    const kept = branch.find(entry => entry.type === 'message' && entry.message.role === 'assistant');
+    const requests = [];
+    let reply = JSON.stringify({ topic: 'Greetings', episodes: ['2026-03-01: said hello'], now: { next: 'say hello again' }, notes: [
+        { op: 'add', kind: 'decision', text: 'Keep saying hello', entry: userEntry.id.slice(0, 8), quote: 'question 0' },
+        { op: 'add', kind: 'decision', text: 'An assistant idea', entry: kept.id.slice(0, 8), quote: 'answer 0' }] });
+    ctx.modelRegistry.complete = async (model, request, options) => {
+        requests.push({ model: model.id, request, options });
+        return { content: [{ type: 'text', text: reply }], stopReason: 'stop', usage: { input: 5, output: 7, cacheRead: 0, cacheWrite: 0, totalTokens: 12, cost: { total: 0 } } };
+    };
+    const compactEvent = { branchEntries: branch, preparation: { firstKeptEntryId: kept.id, tokensBefore: 123 }, reason: 'manual', signal: new AbortController().signal };
+    const compacted = await handlers.get('session_before_compact')(compactEvent, ctx);
+    assert.equal(requests[0].model, 'big', 'the Bot model writes the summary');
+    assert.equal(requests[0].options.cacheRetention, 'none');
+    assert.equal(compacted.compaction.firstKeptEntryId, kept.id);
+    assert.equal(compacted.compaction.tokensBefore, 123);
+    assert.match(compacted.compaction.summary, /## What this chat is about\nGreetings[^]*## Notebook[^]*\[n1\] Keep saying hello[^]*- Next: say hello again/);
+    assert.deepEqual(compacted.compaction.details.pivaneBot.rejected, [{ op: 'add', id: null, reason: 'unknown entry' }], 'the kept tail cannot be cited');
+    assert.equal(compacted.compaction.details.pivaneBot.ledger.snapshot.items.length, 1);
+    assert.equal(compacted.compaction.usage.totalTokens, 12);
+    reply = 'not json';
+    assert.equal(await handlers.get('session_before_compact')(compactEvent, ctx), undefined, 'a failed summary falls back to Pi');
+    assert.equal(notices.at(-1).pivaneBot.structured, false);
     // A different session in the same worker process is not treated as the Bot window.
     assert.equal(botSection(context, { ...manager, getSessionId: () => 'foreign', getCwd: () => session.cwd, getSessionFile: () => session.path },
         session.cwd, agentDir), null);

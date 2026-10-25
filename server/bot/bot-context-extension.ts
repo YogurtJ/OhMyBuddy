@@ -4,6 +4,7 @@
 // every run, so edits take effect on the next message without restarting the worker.
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { readRegistry } from '../pi-profile-registry.js';
 import { safeFile } from '../pi-native-service.js';
@@ -16,6 +17,8 @@ import { botPreamble } from './bot-prompt.js';
 import { SETUP_TOOL, SETUP_TITLE, SAVE, DECLINE, normalizeProposal } from './bot-setup.js';
 import { APPROVAL_TITLE, BLOCKED, PRESETS, approvalFor, approvalMessage, newToken } from './bot-guard.js';
 import { safeFile as readDocument } from '../profile-memory/management.js';
+import { registerNotebook, notebookNotice } from './bot-notebook.ts';
+import { structuredCompaction } from './bot-compaction.js';
 import { Type } from 'typebox';
 
 export const BOT_SECTION = 'pivane_bot';
@@ -172,7 +175,11 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
     pi.on('session_start', async (_event, ctx: any) => {
         if (!managed(ctx)) return;
         const loaded = botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir());
-        if (loaded && !toolRegistered) { toolRegistered = true; registerSetupTool(pi, context, getAgentDir); }
+        if (loaded && !toolRegistered) {
+            toolRegistered = true;
+            registerSetupTool(pi, context, getAgentDir);
+            registerNotebook(pi, (toolCtx: any) => Boolean(botSection(context, toolCtx.sessionManager, toolCtx.cwd, getAgentDir())));
+        }
         const notify = notifier(ctx);
         notify(loaded ? { event: 'loaded', profileId: context.profileId, windowId: context.windowId, generation: loaded.binding.generation }
             : { event: 'loaded', profileId: null });
@@ -215,6 +222,35 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
             if (parent) { nested.get(parent)?.delete(controller); if (!nested.get(parent)?.size) nested.delete(parent); }
         }
     });
+    // Every compaction of a Bot window (idle, threshold, overflow) gets the structured summary with
+    // notebook reconciliation (D-029). Any failure falls back to Pi's own summary; the notebook is
+    // then shown to the model again before the next run (notebookNotice).
+    pi.on('session_before_compact', async (event: any, ctx: any) => {
+        if (!managed(ctx) || !botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir())) return;
+        const model = ctx.model;
+        if (!model) return;
+        try {
+            const result = await structuredCompaction({
+                branch: event.branchEntries, projection: ctx.sessionManager.buildSessionProjection().entries,
+                firstKeptEntryId: event.preparation.firstKeptEntryId, previousSummary: event.preparation.previousSummary,
+                sessionId: ctx.sessionManager.getSessionId(), model, now: new Date().toISOString(), reason: event.reason, signal: event.signal,
+                complete: async ({ systemPrompt, text, signal }: any) => {
+                    const response = await ctx.modelRegistry.complete(model, { systemPrompt,
+                        messages: [{ role: 'user', content: [{ type: 'text', text }], timestamp: Date.now() }] },
+                    { maxTokens: 16000, signal, cacheRetention: 'none', sessionId: randomUUID() });
+                    const answer = (response.content || []).filter((part: any) => part?.type === 'text').map((part: any) => part.text).join('\n');
+                    return { text: answer, usage: response.usage, stopReason: response.stopReason, errorMessage: response.errorMessage };
+                }
+            });
+            notifier(ctx)({ event: 'compacted', reason: event.reason, structured: true });
+            return { compaction: { summary: result.summary, firstKeptEntryId: event.preparation.firstKeptEntryId,
+                tokensBefore: event.preparation.tokensBefore, details: result.details, usage: result.usage } };
+        } catch (error: any) {
+            if (!event.signal?.aborted) notifier(ctx)({ event: 'compacted', reason: event.reason, structured: false,
+                error: String(error?.message || error).slice(0, 200) });
+            return undefined;
+        }
+    });
     pi.on('before_agent_start', async (event: any, ctx: any) => {
         if (!managed(ctx)) return;
         const loaded = botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir());
@@ -229,5 +265,8 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
             if (loaded.soul.trim()) event.systemPromptOptions.sections.assistant_profile_soul = loaded.soul;
             else delete event.systemPromptOptions.sections.assistant_profile_soul;
         }
+        // The notebook is appended to the conversation (never the system prompt), so the cached prefix stays.
+        const notice = notebookNotice(ctx.sessionManager.getBranch(), new Date().toISOString());
+        if (notice) return { message: notice };
     });
 }
