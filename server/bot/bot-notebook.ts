@@ -108,7 +108,7 @@ export function registerNotebook(pi: ExtensionAPI, isBotWindow: (ctx: any) => bo
             'Use window_note when the user decides something, when you or the user commit to doing something (include the due date if one was said), when a question is left waiting for an answer, for preferences or constraints that apply to this chat, and for exact names, numbers or dates worth keeping.',
             'Only note what the user decided, asked for or agreed to. A suggestion of yours is not a decision until the user accepts it. Do not note small talk.',
             'When a noted thing changes, update it (or add a new note with replaces); when it is settled, mark it done or cancelled. Refer to notes by id, for example n3.',
-            'The notebook of this chat is shown to you in the conversation context; trust it over your recollection of older messages.'
+            'The notebook of this chat is shown to you in the conversation context; trust it over your recollection of older messages. Before telling the user that an older open question or promise is still open, check with window_recall whether it was settled since.'
         ],
         parameters: Type.Object({
             action: Type.Union(ACTIONS.map(value => Type.Literal(value)) as any, { description: 'add, update, done, cancel or reopen.' }),

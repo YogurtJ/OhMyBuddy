@@ -138,17 +138,18 @@ function requestText({ earlier, nativeSummary, state, chunk, today }) {
     parts.push('<conversation>\n' + chunk.map(serializeMessage).join('\n') + '\n</conversation>');
     parts.push(`Today is ${today}. Return this JSON object:
 {
+  "notes": [
+    { "op": "done", "id": "n3", "entry": "e-id", "quote": "..." },
+    { "op": "cancel", "id": "n3", "entry": "e-id", "quote": "..." },
+    { "op": "update", "id": "n3", "text": "...", "due": "YYYY-MM-DD (optional)", "entry": "e-id", "quote": "..." },
+    { "op": "add", "kind": "decision|commitment|open|preference|ref", "text": "...", "due": "YYYY-MM-DD (optional)", "replaces": "n3 (optional)", "entry": "e-id", "quote": "..." }
+  ],
   "topic": "what this chat is about overall, 1-3 sentences",
   "episodes": ["YYYY-MM-DD: what happened or was decided", "..."],
-  "now": { "doing": "what is in progress", "next": "agreed next steps", "waiting": "what is waiting for the user" },
-  "notes": [
-    { "op": "add", "kind": "decision|commitment|open|preference|ref", "text": "...", "due": "YYYY-MM-DD (optional)", "replaces": "n3 (optional)", "entry": "e-id", "quote": "..." },
-    { "op": "update", "id": "n3", "text": "...", "due": "YYYY-MM-DD (optional)", "entry": "e-id", "quote": "..." },
-    { "op": "done", "id": "n3", "entry": "e-id", "quote": "..." },
-    { "op": "cancel", "id": "n3", "entry": "e-id", "quote": "..." }
-  ]
+  "now": { "doing": "what is in progress", "next": "agreed next steps", "waiting": "what is waiting for the user" }
 }
 Rules:
+- First go through every ACTIVE note in the notebook, one by one. If the new conversation part shows that it was done, answered, settled, cancelled, withdrawn, no longer needed, or changed (new date, new text), add the done, cancel or update for it, quoting the message that says so. This matters most: a note left active after the user settled or withdrew it misleads the assistant for months.
 - episodes: merge the earlier memory's episodes with the new part, oldest first, at most ${MAX_EPISODES}; condense old ones, keep exact names, numbers and dates. Leave a "now" field empty when there is nothing.
 - notes are changes to the notebook based only on the new conversation part:
   - decision and preference: only what the USER decided or stated. A suggestion by the assistant is not a decision unless the user accepted it; then quote the user's acceptance.
