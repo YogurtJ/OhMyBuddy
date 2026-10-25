@@ -17,7 +17,7 @@ import { botPreamble } from './bot-prompt.js';
 import { SETUP_TOOL, SETUP_TITLE, SAVE, DECLINE, normalizeProposal } from './bot-setup.js';
 import { APPROVAL_TITLE, BLOCKED, PRESETS, approvalFor, approvalMessage, newToken } from './bot-guard.js';
 import { safeFile as readDocument } from '../profile-memory/management.js';
-import { registerNotebook, notebookNotice } from './bot-notebook.ts';
+import { registerNotebook, notebookNotice, editNotebook } from './bot-notebook.ts';
 import { registerRecall } from './bot-recall-tools.ts';
 import { structuredCompaction } from './bot-compaction.js';
 import { pruneDrafts, idleDelay, idleCompactionWanted } from './bot-maintenance.js';
@@ -166,6 +166,13 @@ function registerSetupTool(pi: ExtensionAPI, context: any, getAgentDir: () => st
     } as any);
 }
 
+// Panel edits arrive through Pivane's internal command; only a verified Bot window worker accepts them.
+let notebookEditor: ((ctx: any, input: any) => any) | null = null;
+export function handleBotNotebook(ctx: any, input: any) {
+    if (!notebookEditor) throw new Error('This chat has no notebook');
+    return notebookEditor(ctx, input);
+}
+
 export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) {
     const context = parseBotContext(process.env.PIVANE_BOT_CONTEXT);
     if (!context) return;
@@ -256,6 +263,10 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
         }
     });
     const isBot = (ctx: any) => managed(ctx) && Boolean(botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir()));
+    notebookEditor = (ctx: any, input: any) => {
+        if (!isBot(ctx)) throw new Error('This chat has no notebook');
+        return editNotebook(pi, ctx, input);
+    };
     // S1 (D-030): at the end of a completed run, old large tool outputs become short stubs when
     // that saves a lot. Earlier drafts of other extensions are kept as they are.
     pi.on('agent_before_settle', (event: any, ctx: any) => {

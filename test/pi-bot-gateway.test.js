@@ -168,3 +168,49 @@ test('a scheduled task reopens a stale Bot main chat through the guarded restart
     const opened = await again.call('open_session', { cwd: main.cwd, sessionId: main.id, token: TOKEN, botWindow });
     assert.match(JSON.stringify(opened.messages), /Scheduled greeting fixture/);
 });
+
+test('notebook edits are written by the running worker, or with the file reserved when none runs', { timeout: 120000 }, async t => {
+    const { gateway, rest, connect, createBot } = await setup(t);
+    const { botId, windowId, botWindow, session } = await createBot();
+    const current = await session();
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+    const ledger = require('../server/bot/bot-ledger');
+    // Fixture notes, as a window_note result would leave them (no worker runs yet).
+    const manager = SessionManager.open(current.path);
+    const userEntry = manager.appendMessage({ role: 'user', content: '瓷砖定哑光灰，周五前给我报价', timestamp: Date.now() });
+    const { state } = ledger.prepareOps(ledger.emptyLedger(), [{ op: 'add', kind: 'decision', text: '瓷砖哑光灰' },
+        { op: 'add', kind: 'commitment', text: '周五前给报价', due: '2026-03-06' }], { at: new Date().toISOString(), by: 'bot', source: { sessionId: current.id, entryId: userEntry } });
+    manager.appendCustomEntry(ledger.LEDGER_ENTRY, { v: 1, snapshot: state });
+    const url = `/bots/${botId}/windows/${windowId}/notebook`;
+    let book = await rest('GET', url);
+    assert.equal(book.generation, 0);
+    assert.deepEqual(book.items.map(item => [item.id, item.kind, item.status]), [['n1', 'decision', 'active'], ['n2', 'commitment', 'active']]);
+    assert.deepEqual(book.items[0].source, { role: 'user', text: '瓷砖定哑光灰，周五前给我报价' });
+    // No worker: appended with the file reserved.
+    book = await rest('POST', url, { expectedGeneration: 0, expectedVersion: book.version, ops: [{ op: 'status', id: 'n2', status: 'done' }] });
+    assert.equal(book.items[1].status, 'done');
+    assert.equal(gateway.supervisor.getActiveWorker(current.path), undefined, 'no worker was started for it');
+    // A running worker writes it itself and keeps running.
+    const page = await connect();
+    await page.call('open_session', { cwd: current.cwd, sessionId: current.id, token: TOKEN, botWindow });
+    const worker = await deadline(() => gateway.supervisor.getActiveWorker(current.path)?.loadedBot && gateway.supervisor.getActiveWorker(current.path));
+    book = await rest('POST', url, { expectedGeneration: 0, expectedVersion: book.version, ops: [{ op: 'update', id: 'n1', text: '瓷砖改成浅灰' }, { op: 'delete', id: 'n2' }] });
+    assert.deepEqual(book.items.map(item => [item.id, item.text]), [['n1', '瓷砖改成浅灰']], 'a deleted note leaves the panel');
+    assert.equal(gateway.supervisor.getActiveWorker(current.path), worker, 'the page keeps its runtime');
+    const written = SessionManager.open(current.path).getEntries().filter(entry => entry.customType === ledger.LEDGER_ENTRY && entry.data.ops);
+    assert.deepEqual(written.map(entry => entry.data.ops.map(op => `${op.by}:${op.op}:${op.id}`)), [['user:status:n2'], ['user:update:n1', 'user:delete:n2']]);
+    // Stale version, stale generation and invalid edits are refused without writing.
+    await assert.rejects(rest('POST', url, { expectedGeneration: 0, expectedVersion: '0000000000000000', ops: [{ op: 'status', id: 'n1', status: 'done' }] }),
+        error => error.status === 409 && error.code === 'NOTEBOOK_CHANGED');
+    await assert.rejects(rest('POST', url, { expectedGeneration: 3, expectedVersion: book.version, ops: [{ op: 'status', id: 'n1', status: 'done' }] }),
+        error => error.status === 409 && error.code === 'BOT_WINDOW_STALE');
+    await assert.rejects(rest('POST', url, { expectedGeneration: 0, expectedVersion: book.version, ops: [{ op: 'status', id: 'n9', status: 'done' }] }),
+        error => error.status === 400 && /No note n9/.test(error.message));
+    await assert.rejects(rest('POST', url, { expectedGeneration: 0, expectedVersion: book.version, ops: [{ op: 'add', kind: 'ref', text: 'x' }] }), /Invalid notebook edit/);
+    assert.equal(SessionManager.open(current.path).getEntries().filter(entry => entry.customType === ledger.LEDGER_ENTRY && entry.data.ops).length, 2);
+    // The model is told about the panel edits before its next run.
+    page.call('prompt', { message: 'hello' }).catch(() => {});
+    await deadline(() => SessionManager.open(current.path).getEntries().some(entry => entry.type === 'custom_message' && entry.customType === 'pivane-bot-notebook'));
+    const notice = SessionManager.open(current.path).getEntries().find(entry => entry.customType === 'pivane-bot-notebook');
+    assert.match(notice.content, /Notebook of this chat[^]*\[n1\] 瓷砖改成浅灰/, 'never shown before, so the whole notebook');
+});

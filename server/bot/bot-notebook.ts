@@ -4,7 +4,7 @@
 // Pi has not appended yet.
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
-import { LEDGER_ENTRY, KINDS, replay, prepareOps, renderLedger, describeOp, applyOp } from './bot-ledger.js';
+import { LEDGER_ENTRY, KINDS, replay, prepareOps, renderLedger, describeOp, applyOp, ledgerVersion } from './bot-ledger.js';
 
 export const NOTE_TOOL = 'window_note';
 export const NOTEBOOK_MESSAGE = 'pivane-bot-notebook';
@@ -51,6 +51,21 @@ export function notebookNotice(branch: any[], now: string) {
     const lines = userOps.slice(-20).map(op => '- ' + describeOp(op, state));
     return { customType: NOTEBOOK_MESSAGE, display: false, details: { v: 1, reason: 'user-edits' },
         content: 'The user changed the notebook of this chat themselves:\n' + lines.join('\n') };
+}
+
+const PANEL_OPS = ['update', 'status', 'delete'];
+
+// An edit from the notebook panel, applied by the worker that owns the session file (the
+// Supervisor only sends it while the session is idle). The panel names the version it saw.
+export function editNotebook(pi: any, ctx: any, input: any) {
+    if (!ctx.isIdle()) throw Object.assign(new Error('The chat is busy; try again in a moment'), { code: 'SESSION_BUSY' });
+    const state = replay(ctx.sessionManager.getBranch());
+    if (input?.expectedVersion !== ledgerVersion(state)) throw Object.assign(new Error('The notebook changed; reload it'), { code: 'NOTEBOOK_CHANGED' });
+    if (!Array.isArray(input.ops) || input.ops.some((op: any) => !PANEL_OPS.includes(op?.op))) throw new Error('Invalid notebook edit');
+    const { ops, state: next } = prepareOps(state, input.ops.map((op: any) => ({ op: op.op, id: op.id, text: op.text, status: op.status, due: op.due })),
+        { at: new Date().toISOString(), by: 'user' });
+    pi.appendEntry(LEDGER_ENTRY, { v: 1, ops });
+    return { ops, version: ledgerVersion(next) };
 }
 
 export function registerNotebook(pi: ExtensionAPI, isBotWindow: (ctx: any) => boolean) {
