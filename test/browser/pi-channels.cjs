@@ -165,6 +165,28 @@ const server = http.createServer((req, res) => {
             assert.equal(await page.locator('[onerror]').count(), 0, 'diagnostic file names use safe text');
             const diagnosticOverflow = await page.evaluate(() => [...document.querySelectorAll('.channel-job,.channel-inline-alert')].some(n => n.getBoundingClientRect().right > innerWidth + 1));
             assert.equal(diagnosticOverflow, false);
+            await page.evaluate(() => {
+                data.jobs = [
+                    { id: 'unconfirmed-delivery', status: 'uncertain', kind: 'cron', at: Date.now(), reason: 'execution-or-delivery-uncertain', blocksFollowing: false, sentChunks: 1 },
+                    { id: 'blocked-execution', status: 'uncertain', at: Date.now(), blocksFollowing: true, canRecover: true },
+                    { id: 'expired-login', status: 'failed', at: Date.now(), reason: 'wechat-login-expired', blocksFollowing: false, platformCode: -14 },
+                    { id: 'retrying-delivery', status: 'sending', at: Date.now(), reason: 'delivery-retrying', blocksFollowing: false }
+                ];
+            });
+            await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
+            const unconfirmed = page.locator('[data-job-id="unconfirmed-delivery"]');
+            assert.match(await unconfirmed.innerText(), /Delivery unconfirmed/);
+            assert.match(await unconfirmed.innerText(), /No manual release is needed/);
+            assert.equal(await unconfirmed.getByRole('button', { name: 'Check and send native reply' }).count(), 0);
+            assert.match(await page.locator('[data-job-id="blocked-execution"]').innerText(), /Task execution is unresolved/);
+            assert.match(await page.locator('[data-job-id="expired-login"]').innerText(), /WeChat credentials expired/);
+            assert.match(await page.locator('[data-job-id="expired-login"]').innerText(), /WeChat response code: -14/);
+            assert.match(await page.locator('[data-job-id="retrying-delivery"]').innerText(), /Automatically retrying/);
+            await page.locator('[data-job-filter="attention"]').click();
+            assert.equal(await page.locator('.channel-job').count(), 3);
+            await page.locator('[data-job-filter="all"]').click();
+            const deliveryOverflow = await page.evaluate(() => [...document.querySelectorAll('.channel-job,.channel-job-reason')].some(n => n.getBoundingClientRect().right > innerWidth + 1));
+            assert.equal(deliveryOverflow, false);
             await page.evaluate(() => { delayedRead = true; });
             await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
             await page.waitForFunction(() => typeof resolveRead === 'function');

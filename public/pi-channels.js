@@ -54,7 +54,7 @@
     const validUser = id => id.length > 0 && id.length <= 256 && !/[\x00-\x1f]/.test(id);
     const labels = () => ({ queued: t('等待线程空闲', 'Waiting for thread'), dispatching: t('正在投递', 'Submitting'), running: t('运行中', 'Running'), ready: t('回复待发送', 'Reply pending'), sending: t('正在发送回复', 'Sending reply'), delivered: t('已送达', 'Delivered'), partial: t('部分送达', 'Partially delivered'), uncertain: t('需要核对', 'Needs review'), reviewed: t('已核对', 'Reviewed'), ignored: t('未进入线程', 'Not submitted'), failed: t('失败', 'Failed'), cancelled: t('已取消', 'Cancelled') });
     const jobKind = status => status === 'delivered' || status === 'reviewed' ? 'on' : ['running', 'dispatching', 'sending', 'queued', 'ready'].includes(status) ? 'info' : ['uncertain', 'failed', 'partial'].includes(status) ? 'error' : 'off';
-    const needsAttention = job => ['uncertain', 'failed'].includes(job.status) || Boolean(job.waiting);
+    const needsAttention = job => ['uncertain', 'failed', 'partial'].includes(job.status) || Boolean(job.waiting) || job.reason === 'reply-context-missing';
     const inProgress = job => ['queued', 'dispatching', 'running', 'ready', 'sending'].includes(job.status);
     const reasons = () => ({ unbound: t('尚未绑定线程', 'No thread binding'), 'reply-context-missing': t('缺少微信回复上下文，请在微信再发一条消息', 'Reply context is missing; send another WeChat message'), 'unsupported-message': t('当前支持文字私聊，请用文字重发', 'Text DMs are supported; resend as text'), 'queue-full': t('待处理消息已满', 'Pending queue is full'), restart: t('服务重启，未自动重试', 'Service restarted; no automatic retry'), 'execution-or-delivery-uncertain': t('执行或发送结果不确定，请查看线程', 'Execution or delivery is uncertain; inspect the thread'), 'binding-changed': t('绑定已变化', 'Binding changed'), 'attachments-incomplete': t('部分附件尚未发送，请查看下方说明或打开线程。', 'Some attachments were not sent. See details below or open the thread.'), 'admission-changed': t('执行前权限或绑定已变化', 'Permission or binding changed before execution'), 'delivery-revoked': t('回复权限已撤销', 'Reply permission was revoked'), 'notification-revoked': t('定时通知已关闭', 'Scheduled notification was disabled') });
     const commandList = () => [
@@ -119,7 +119,7 @@
         let jobPage = 0, jobSignature = '', jobFilter = 'all';
         const jobPageSize = 5;
         const filterButtons = new Map();
-        for (const [value, caption] of [['all', t('全部', 'All')], ['attention', t('需处理', 'Needs attention')], ['active', t('进行中', 'In progress')]]) {
+        for (const [value, caption] of [['all', t('全部', 'All')], ['attention', t('异常与提醒', 'Issues and notices')], ['active', t('进行中', 'In progress')]]) {
             const b = button(caption, () => { jobFilter = value; jobPage = 0; renderJobs(); controls(); });
             b.classList.add('channel-filter'); b.dataset.jobFilter = value; b.append(el('span', '0', 'channel-filter-count'));
             filterButtons.set(value, b); jobFilters.append(b);
@@ -248,7 +248,7 @@
                 ['fa-puzzle-piece', t('连接组件', 'Connector'), c.broken ? t('需要修复', 'Needs repair') : installed ? `v${c.version}` : t('未安装', 'Not installed'), c.broken ? 'error' : installed ? 'on' : 'off'],
                 ['fa-user-check', t('微信账号', 'WeChat accounts'), snapshot.accounts.length ? t(`${connected}/${snapshot.accounts.length} 已连接`, `${connected}/${snapshot.accounts.length} connected`) : t('未连接', 'None yet'), connected ? 'on' : snapshot.accounts.length ? 'warn' : 'off'],
                 ['fa-link', t('线程绑定', 'Thread bindings'), snapshot.bindings.length ? t(`${snapshot.bindings.length} 个聊天`, `${snapshot.bindings.length} chat${snapshot.bindings.length === 1 ? '' : 's'}`) : t('未绑定', 'None yet'), snapshot.bindings.length ? 'on' : 'off'],
-                ['fa-bell', t('需处理', 'Needs attention'), attention ? t(`${attention} 条消息`, `${attention} message${attention === 1 ? '' : 's'}`) : t('没有', 'Nothing'), attention ? 'warn' : 'on']
+                ['fa-bell', t('异常与提醒', 'Issues and notices'), attention ? t(`${attention} 条消息`, `${attention} message${attention === 1 ? '' : 's'}`) : t('没有', 'Nothing'), attention ? 'warn' : 'on']
             ];
             overview.replaceChildren(...tiles.map(([glyph, caption, value, kind], index) => {
                 const tile = el(index === 3 && attention ? 'button' : 'div', null, 'channel-tile');
@@ -510,7 +510,7 @@
             const start = jobPage * jobPageSize, visible = filtered.slice(start, start + jobPageSize);
             jobEmpty.hidden = total > 0; jobList.hidden = total === 0; jobPager.hidden = total === 0;
             jobEmpty.textContent = snapshot.jobs.length === 0 ? t('绑定后，网页或微信发起任务即可在这里查看结果投递。', 'After binding, run a task from the web or WeChat to see result delivery here.')
-                : jobFilter === 'attention' ? t('没有需要处理的消息。', 'Nothing needs attention.') : t('没有进行中的消息。', 'No messages in progress.');
+                : jobFilter === 'attention' ? t('没有异常或提醒。', 'No issues or notices.') : t('没有进行中的消息。', 'No messages in progress.');
             jobRange.textContent = t(`共 ${total} 条 · ${start + 1}–${start + visible.length}`, `${total} total · ${start + 1}–${start + visible.length}`);
             jobPageButtons.hidden = total <= jobPageSize;
             jobPrevious.dataset.unavailable = String(jobPage === 0);
@@ -527,7 +527,8 @@
                 const kinds = { thread: ['fa-check', t('线程最终结果', 'Thread final result')], cron: ['fa-clock', t('定时通知', 'Scheduled notification')], slash: ['fa-terminal', t('斜杠指令', 'Slash command')], notice: ['fa-circle-info', t('系统提示', 'Notice')] };
                 const [kindIcon, kindName] = kinds[job.kind] || ['fa-message', t('微信消息', 'WeChat message')];
                 kind.append(icon(kindIcon), document.createTextNode(kindName));
-                top.append(kind, badge(labels()[job.status] || job.status, jobKind(job.status)));
+                const deliveryUnconfirmed = job.status === 'uncertain' && job.blocksFollowing === false;
+                top.append(kind, badge(deliveryUnconfirmed ? t('投递未确认', 'Delivery unconfirmed') : labels()[job.status] || job.status, jobKind(job.status)));
                 const recipient = el('span', job.peerId, 'channel-job-peer'); recipient.title = job.peerId;
                 const meta = el('div', null, 'channel-job-meta'), date = new Date(job.at), time = el('time');
                 if (Number.isFinite(date.getTime())) {
@@ -540,8 +541,25 @@
                 if (job.sentMedia) sent.push(t(`图片/文件 ${job.sentMedia} 个`, `${job.sentMedia} images/files`));
                 if (sent.length) row.append(el('small', t('已发送：', 'Sent: ') + sent.join(' · '), 'channel-job-sent'));
                 if (job.waiting) row.append(el('p', t('正在等待交互确认，请打开 Pivane 线程处理。', 'Waiting for confirmation. Open the Pivane thread to respond.'), 'channel-job-alert'));
-                if (job.reason && reasons()[job.reason]) row.append(el('p', reasons()[job.reason], 'channel-job-reason'));
-                const issueLabels = { size: t('超过 16 MiB', 'Exceeds 16 MiB'), limit: t('超过附件数量限制', 'Attachment limit exceeded'), unreadable: t('读取或校验失败', 'Read or verification failed'), unavailable: t('发送组件不可用', 'Delivery unavailable'), pending: t('尚在生成', 'Still generating'), failed: t('生成未完成', 'Generation incomplete') };
+                const deliveryReasons = {
+                    'delivery-unconfirmed': t('未收到明确的发送回执，为避免重复，本条没有重发。', 'No definite send receipt was received. This item was not resent to avoid duplicates.'),
+                    'delivery-retrying': t('正在自动重试确定尚未发送的内容。', 'Automatically retrying content confirmed not sent.'),
+                    'wechat-login-expired': t('微信登录凭据已失效，请重新扫码连接。', 'WeChat credentials expired. Connect again with a QR code.'),
+                    'wechat-rejected': t('微信明确拒绝了本条发送。', 'WeChat rejected this delivery.'),
+                    'wechat-rate-limited': t('微信暂时限制发送，自动重试后仍未成功。', 'WeChat rate limited this delivery; automatic retries were unsuccessful.'),
+                    'connection-unavailable': t('暂时无法连接微信，自动重试后仍未成功。', 'Unable to connect to WeChat after automatic retries.'),
+                    'delivery-interrupted': t('本条发送被维护或停机中断。', 'This delivery was interrupted by maintenance or shutdown.'),
+                    'reply-read-pending': t('暂时无法读取原生回复；系统会有限重试，不会重新执行任务。', 'The native reply is temporarily unavailable. Reads are retried a limited number of times; the task is never rerun.'),
+                    'execution-not-started': t('任务尚未执行，请检查线程是否可用后在微信重发。', 'The task did not start. Check the thread and resend from WeChat.')
+                };
+                const displayReason = deliveryUnconfirmed ? 'delivery-unconfirmed' : job.reason;
+                if (displayReason && (deliveryReasons[displayReason] || reasons()[displayReason])) row.append(el('p', deliveryReasons[displayReason] || reasons()[displayReason], 'channel-job-reason'));
+                if (Number.isSafeInteger(job.platformCode)) row.append(el('small', t(`微信返回码：${job.platformCode}`, `WeChat response code: ${job.platformCode}`), 'channel-job-reason'));
+                if (job.blocksFollowing === false && ['uncertain', 'partial', 'failed'].includes(job.status)) row.append(el('p', t('不阻塞后续聊天或定时通知，无需手动放行。', 'Later chats and scheduled notifications can continue. No manual release is needed.'), 'channel-job-reason'));
+                if (job.blocksFollowing === true) row.append(el('p', t('任务执行结果尚未确定；系统会先核对原生完成记录，无法确认时才需人工处理。', 'Task execution is unresolved. The system checks native completion records before requiring manual review.'), 'channel-job-reason'));
+                const issueLabels = { size: t('超过 16 MiB', 'Exceeds 16 MiB'), limit: t('超过附件数量限制', 'Attachment limit exceeded'), unreadable: t('读取或校验失败', 'Read or verification failed'), unavailable: t('发送组件不可用', 'Delivery unavailable'), pending: t('尚在生成', 'Still generating'), failed: t('生成未完成', 'Generation incomplete'),
+                    'media-upload-failed': t('上传失败，已尝试恢复', 'Upload failed after retries'), 'send-unconfirmed': t('发送回执未确认，未重复发送', 'Send receipt unconfirmed; not resent'),
+                    'wechat-rejected': t('微信拒绝接收', 'Rejected by WeChat'), 'wechat-rate-limited': t('微信暂时限制发送', 'Rate limited by WeChat'), 'connection-unavailable': t('暂时无法连接微信', 'Unable to connect to WeChat') };
                 for (const issue of (job.deliveryIssues || []).slice(0, 20)) row.append(el('p', `${issue.name}：${issueLabels[issue.reason] || issueLabels.unreadable}`, 'channel-job-reason'));
                 const actions = el('div', null, 'channel-actions');
                 if (['running', 'dispatching'].includes(job.status)) actions.append(button(t('停止任务', 'Stop task'), () => write('stop', { jobId: job.id }), 'danger'));

@@ -1,6 +1,7 @@
 const { randomUUID, randomBytes, createHash } = require('node:crypto');
 const { proxyFor } = require('../pi-update-service');
 const { classify } = require('../pi-file-types');
+const { ChannelDeliveryError, checkSendResponse } = require('./delivery-errors');
 const BASE = 'https://ilinkai.weixin.qq.com';
 const CDN_BASE = 'https://novac2c.cdn.weixin.qq.com/c2c';
 const MAX_MEDIA_BYTES = 16 * 1024 * 1024;
@@ -31,6 +32,11 @@ function createTransport(stoppingSignal, getLoginSignal = () => undefined) {
             const response = await require('node-fetch')(url, { ...options, redirect: 'error', size: maxSize, agent,
                 signal: AbortSignal.any([...stopping, AbortSignal.timeout(isCdn ? 60000 : 40000), ...(options.signal ? [options.signal] : []), ...(loginSignal ? [loginSignal] : [])]) });
             const buffer = await response.buffer();
+            if (!isCdn && pathname === '/ilink/bot/sendmessage') {
+                let value;
+                try { value = JSON.parse(buffer.toString('utf8')); } catch {}
+                checkSendResponse(value, response.status);
+            }
             // sendTyping discards the API response. Inspect only this endpoint
             // here so upstream still builds its own request/base_info unchanged.
             if (!isCdn && pathname === '/ilink/bot/sendtyping') {
@@ -40,6 +46,11 @@ function createTransport(stoppingSignal, getLoginSignal = () => undefined) {
             return { ok: response.ok, status: response.status, statusText: response.statusText || '', headers: response.headers,
                 text: async () => buffer.toString('utf8'),
                 arrayBuffer: async () => buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) };
+        } catch (error) {
+            if (!isCdn && pathname === '/ilink/bot/sendmessage' && ['ENOTFOUND', 'EAI_AGAIN', 'ECONNREFUSED'].includes(error.code)) {
+                throw new ChannelDeliveryError('connection-unavailable', true);
+            }
+            throw error;
         } finally { agent?.destroy(); }
     };
 }
@@ -126,14 +137,29 @@ class WeixinAdapter {
         return { type: 'image', mimeType: type.mime, data: bytes.toString('base64') };
     }
     async send(account, peer, text, clientId) {
-        if (!peer.contextToken) throw new Error('微信回复上下文已失效，请在微信发送一条新消息');
-        return this.api.sendMessage({ baseUrl: account.baseUrl, token: account.token, body: { msg: {
+        if (!peer.contextToken) throw new ChannelDeliveryError('reply-context-missing');
+        return checkSendResponse(await this.api.sendMessage({ baseUrl: account.baseUrl, token: account.token, body: { msg: {
             from_user_id: '', to_user_id: peer.peerId, client_id: clientId, message_type: 2, message_state: 2,
             item_list: [{ type: 1, text_item: { text } }], context_token: peer.contextToken
-        } } });
+        } } }));
     }
-    async sendMedia(account, peer, media, clientId) {
-        if (!peer.contextToken) throw new Error('微信回复上下文已失效，请在微信发送一条新消息');
+    async sendMedia(account, peer, media, clientId, beforeSend = () => {}) {
+        if (!peer.contextToken) throw new ChannelDeliveryError('reply-context-missing');
+        let item;
+        try { item = await this.prepareMedia(account, peer, media); }
+        catch (error) {
+            // CDN preparation cannot deliver a chat message. Re-uploading after
+            // a failed preparation is safe; sendMessage stays outside this catch.
+            if (error instanceof ChannelDeliveryError) throw error;
+            throw new ChannelDeliveryError('media-upload-failed', true);
+        }
+        beforeSend();
+        return checkSendResponse(await this.api.sendMessage({ baseUrl: account.baseUrl, token: account.token, body: { msg: {
+            from_user_id: '', to_user_id: peer.peerId, client_id: clientId, message_type: 2, message_state: 2,
+            item_list: [item], context_token: peer.contextToken
+        } } }));
+    }
+    async prepareMedia(account, peer, media) {
         if (!this.module.cryptoMedia || !this.module.cdnUpload || typeof this.api.getUploadUrl !== 'function') throw new Error('微信媒体上传组件不可用');
         const bytes = Buffer.isBuffer(media.bytes) ? media.bytes : Buffer.from(media.bytes);
         if (!bytes.length || bytes.length > MAX_MEDIA_BYTES) throw new Error('微信发送文件大小超出 16 MiB 限制');
@@ -148,6 +174,7 @@ class WeixinAdapter {
             baseUrl: account.baseUrl, token: account.token, filekey, media_type: isImage ? 1 : 3,
             to_user_id: peer.peerId, rawsize, rawfilemd5, filesize, no_need_thumb: true, aeskey: aeskeyHex
         });
+        checkSendResponse(uploadResp);
         const uploadFullUrl = typeof uploadResp?.upload_full_url === 'string' && uploadResp.upload_full_url.trim() ? uploadResp.upload_full_url.trim() : undefined;
         if (uploadFullUrl) cdnOrigin(uploadFullUrl);
         const uploadParam = typeof uploadResp?.upload_param === 'string' && uploadResp.upload_param ? uploadResp.upload_param : undefined;
@@ -156,13 +183,9 @@ class WeixinAdapter {
             buf: bytes, uploadFullUrl, uploadParam, filekey, cdnBaseUrl: CDN_BASE, aeskey, label: 'pivane-upload'
         });
         const mediaRef = { encrypt_query_param: downloadParam, aes_key: Buffer.from(aeskeyHex).toString('base64'), encrypt_type: 1 };
-        const item = isImage
+        return isImage
             ? { type: 2, image_item: { media: mediaRef, mid_size: filesize } }
             : { type: 4, file_item: { media: mediaRef, file_name: String(media.name || 'file.bin').slice(0, 240), len: String(rawsize) } };
-        return this.api.sendMessage({ baseUrl: account.baseUrl, token: account.token, body: { msg: {
-            from_user_id: '', to_user_id: peer.peerId, client_id: clientId, message_type: 2, message_state: 2,
-            item_list: [item], context_token: peer.contextToken
-        } } });
     }
 }
 module.exports = { WeixinAdapter, createTransport, apiOrigin, cdnOrigin, validId, BASE, CDN_BASE, MAX_MEDIA_BYTES };
