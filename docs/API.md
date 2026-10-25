@@ -260,6 +260,8 @@
 - `GET /bots/:id/windows/:windowId/generations` → `{window,generations:[{generation,startedAt,endedAt,reason,current}]}`。
 - `GET /bots/:id/windows/:windowId/history?generation=N&view=index|turns&…` 只读分页较早一代，参数与返回同历史归档接口；服务端核对该代的原生窗口标记，不启动 worker。
 - `POST /bots/:id/windows/:windowId/rotate` `{expectedGeneration}` 维护入口：手动换代。`expectedGeneration` 必填（非负整数，缺失或无效返回 400），与当前代数不符返回 409，重复的旧请求不会再次换代。服务端在会话编辑预占内停止空闲 worker、写入新一代（初始条目：模型、思考程度、隐藏交接消息 `pivane-bot-handoff`、窗口标记 `pivane-bot-window`），再提交窗口索引；代数不符 409。中断后按原生标记的 `predecessor{sessionId,lastEntryId}` 恢复或放弃。打开中的连接收到 `gateway_window_rotated {profileId,windowId,generation}` 后以 4007 关闭，网页重新解析窗口。
+- `GET /bots/:id/windows/:windowId/notebook` → `{generation,version,items:[{id,kind,text,status,due,by,supersedes,createdAt,updatedAt,source}]}`：窗口当前一代分支重放出的记事本（“我记着的事”），不含已删除条目。`kind` 为 `decision|commitment|open|preference|ref`，`status` 为 `active|done|cancelled|superseded`，`by` 为 `bot|summary|user`（最初由谁记下），`source` 为 `null` 或 `{role:'user'|'assistant'|'toolResult',text}`（保存的原话引文，或当前一代中来源消息的前 160 字）；`version` 是账本状态摘要，用于修改时核对。
+- `POST /bots/:id/windows/:windowId/notebook` `{expectedGeneration,expectedVersion,ops}` 修改记事本，返回同 GET。`ops` 1–20 条，只接受 `{op:'update',id,text?,due?}`（`due` 为 `YYYY-MM-DD` 或 null）、`{op:'status',id,status:'active'|'done'|'cancelled'}`、`{op:'delete',id}`；一批全部成立才写入。窗口有运行实例时由它写入原生 custom 条目 `pivane-bot-ledger`，否则服务端预占会话文件后追加；只在会话空闲时接受。代数不符 409 `BOT_WINDOW_STALE`，正在换代 409 `BOT_WINDOW_ROTATING`，版本不符 409 `NOTEBOOK_CHANGED`，正在运行 409 `SESSION_BUSY`，无效修改 400 `LEDGER_INVALID`。修改会在下一次运行前以隐藏消息告诉模型。
 - `POST /bots/:id/onboarding` `{expectedRevision,action:'start'|'skip'|'restart'}`。
 - `POST /bots/:id/setup` `{expectedRevision,windowId,toolCallId,changes?}` 保存模型 `bot_setup_propose` 提出的设置卡：该调用必须仍在窗口当前一代中等待回答，`changes` 只能包含卡上提出的字段（null 表示不保存该字段）；返回 `{ok,revision,bot,saved,user?:{added,documentSaved,error?}}`。“关于你”条目经档案文档服务去重追加。
 - `GET /bots/:id/about-sources` → `{sources:[{profileId,name,avatar,entries}]}`，列出其他 Bot 的“关于你”条目。
@@ -268,6 +270,8 @@
 WebSocket `open_session` 可带 `botWindow:{profileId,windowId}`（Bot 页面打开和重连时都带）：服务端在启动 worker 前和订阅后各核对一次，只接受该窗口当前一代；否则返回失败响应 `errorCode:'BOT_WINDOW_STALE'`（已换代）或 `'BOT_WINDOW_ROTATING'`（正在换代），网页重新解析窗口。不带 `botWindow` 时按普通原生会话打开（Pi Agent 页面）。另有 `gateway_bot_notice {notice:'model_unavailable',provider,id}`：Bot 指定的模型不可用，本轮继续使用当前模型。
 
 Bot 设置为“稳妥”或“每次都问”时，需要确认的工具调用在执行前发出 `extension_ui_request` `method:'confirm'`，`title` 固定为 `允许这一步吗？ / Allow this step?`，`message` 为 `<kind> #<token>\n\n<detail>`（`token` 为 16 位十六进制，标识这次请求；`kind` 为 `command`、`delegate`、`outside`、`write`、`memory`、`action` 之一；`detail` 为命令、路径、记忆内容或工具名，最多约 2000 字符）。按普通确认回复 `{type:'extension_ui_response',id,confirmed:true|false}`；拒绝、取消或 30 分钟无回答时该调用被阻止。没有界面或定时运行进行中时不发确认，直接阻止。请求在 worker 内结束（回答、超时、所在的嵌套调用被取消）后，仍挂起的同一请求由服务端撤回并广播 `gateway_ui_resolved`。
+
+Bot 窗口的 worker 另有三个工具：`window_note`（记事本 add/update/done/cancel/reopen，结果 `details.pivaneLedger`）、`window_recall` 与 `window_read`（只读检索和查看本窗口各代原文，带 `readOnlyHint`）。Bot 窗口的压缩由扩展写结构化摘要（`details.pivaneBot` 含 `sections`、记事本对账 `ledger:{ops,snapshot}` 与被拒的变更），失败时回落 Pi 原生摘要。服务端在回复完成或压缩完成约 3 秒后检查换代条件（8 MiB、8000 条或 60 天），规则见 [Bot 模式](BOT_MODE.md#长期聊天的维护)。
 
 Bot 窗口会话不能移动或绑定消息渠道。以 Bot 档案为目标的定时任务进入主聊天当前一代，运行期间使用任务准入和计价时选定的模型；`GET /cron` 的 `homes` 中 Bot 的主线程按主聊天当前一代派生（`bot:true`），`PUT /cron/homes/:profileId` 对 Bot 返回 409，不保存也不创建会话。
 
