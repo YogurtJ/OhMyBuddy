@@ -203,3 +203,28 @@ test('a new generation shows the whole notebook however long it is', async () =>
     assert.equal(handoff.sections.episodes[0].length, 400, 'stored sections are read within the answer limits');
     assert.match(handoff.text, /## Most recent messages \(verbatim\)\nUser: 记下这些\n\nAssistant: 记好了$/);
 });
+
+test('carried messages: a statement made anew after the deletion counts, unknown origins are held back', () => {
+    const T0 = '2026-03-01T09:00:00.000Z', T1 = '2026-03-02T09:00:00.000Z';
+    const added = ledger.prepareOps(ledger.emptyLedger(), [{ op: 'add', kind: 'ref', text: '门牌 12 号',
+        source: { sessionId: 'old', entryId: 'orig-1', role: 'user', quote: '对了，门牌改成 12 号了' } }], { at: T0, by: 'bot' });
+    const state = ledger.prepareOps(added.state, [{ op: 'delete', id: 'n1' }], { at: T1, by: 'user' }).state;
+    const seed = { id: 'seed0001-aaaa', timestamp: '2026-03-05T09:00:00.000Z' };
+    const carried = (text, origin) => ({ entry: seed, message: { role: 'user' }, text, sessionId: 'new', origin });
+    const before = carried('对了，门牌改成 12 号了', { entryId: 'orig-1', at: Date.parse(T0) + 1000 });
+    const anew = carried('再说一次，门牌改成 12 号了', { entryId: 'orig-2', at: Date.parse(T1) + 1000 });
+    const note = { op: 'add', kind: 'ref', text: '门牌 12 号', entry: 'seed0001', quote: '门牌改成 12 号了' };
+    const meta = { at: '2026-03-06T09:00:00.000Z' };
+    assert.equal(compaction.checkNote(note, state, new Map([['seed0001', [before]]]), meta).rejected, 'deleted by the user');
+    const renewed = compaction.checkNote(note, state, new Map([['seed0001', [before, anew]]]), meta);
+    assert.equal(renewed.op?.op, 'add', 'the later matching message in the same seed is the evidence');
+    assert.equal(renewed.op.source.entryId, seed.id);
+    // A seed whose carried messages have no original entry: a rephrase of the same kind said before the deletion is held back.
+    const legacy = carried('对了，门牌改成 12 号了', { entryId: null, at: Date.parse(T0) + 1000 });
+    const rephrase = { ...note, text: '门牌号是 12' };
+    assert.equal(compaction.checkNote(rephrase, state, new Map([['seed0001', [legacy]]]), meta).rejected, 'deleted by the user');
+    assert.equal(compaction.checkNote({ ...rephrase, kind: 'open', text: '门牌要不要换' }, state, new Map([['seed0001', [legacy]]]), meta).op?.op, 'add',
+        'other kinds are not affected');
+    assert.equal(compaction.checkNote(rephrase, state, new Map([['seed0001', [carried('对了，门牌改成 12 号了', { entryId: null, at: null })]]]), meta).rejected,
+        'deleted by the user', 'no time: not newer than the deletion');
+});

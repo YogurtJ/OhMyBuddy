@@ -268,24 +268,31 @@ function checkNote(note, state, byShortId, { at }) {
     const roles = note.op === 'add' ? QUOTE_ROLES[kind] : note.op === 'update' && ['decision', 'preference'].includes(kind) ? ['user']
         : QUOTE_ROLES[note.op === 'update' ? 'update' : 'status'];
     if (!roles) return { rejected: 'unknown kind' };
-    const matching = sources.find(source => roles.includes(source.message.role) && fold(source.text).includes(quote));
-    if (!matching) return { rejected: sources.some(source => fold(source.text).includes(quote)) ? 'quote from the wrong speaker' : 'quote not found' };
-    const source = { sessionId: matching.sessionId, entryId: matching.entry.id, role: matching.message.role, quote };
-    let raw;
+    const candidates = sources.filter(source => roles.includes(source.message.role) && fold(source.text).includes(quote));
+    if (!candidates.length) return { rejected: sources.some(source => fold(source.text).includes(quote)) ? 'quote from the wrong speaker' : 'quote not found' };
+    let matching = candidates[0], raw;
     if (note.op === 'add') {
         const text = fold(note.text);
         if (state.items.some(item => item.status === 'active' && item.kind === note.kind && fold(item.text) === text)) return { rejected: 'already noted' };
         // A note the user deleted does not come back from what was said before the deletion. A
-        // message carried in a generation seed counts from when it was said (unknown: not newer).
-        const origin = matching.origin;
-        const said = origin ? (origin.at ?? NaN) : Date.parse(matching.entry.timestamp), hash = ledger.textHash(note.text);
-        const entries = [matching.entry.id, origin?.entryId].filter(Boolean);
-        if (state.items.some(item => item.status === 'deleted' && !(said > Date.parse(item.updatedAt))
-            && (item.hash === hash || item.kind === note.kind && entries.includes(item.source?.entryId)))) return { rejected: 'deleted by the user' };
+        // message carried in a generation seed counts from when it was said (unknown: not newer);
+        // when its original entry is unknown, any older deletion of the same kind bars it. Of
+        // several messages with the quote (a seed carries many), one said anew counts.
+        const hash = ledger.textHash(note.text);
+        const barred = candidate => {
+            const origin = candidate.origin;
+            const said = origin ? (origin.at ?? NaN) : Date.parse(candidate.entry.timestamp);
+            const entries = [candidate.entry.id, origin?.entryId].filter(Boolean);
+            return state.items.some(item => item.status === 'deleted' && !(said > Date.parse(item.updatedAt)) && (item.hash === hash
+                || item.kind === note.kind && (entries.includes(item.source?.entryId) || Boolean(origin) && !origin.entryId)));
+        };
+        matching = candidates.find(candidate => !barred(candidate));
+        if (!matching) return { rejected: 'deleted by the user' };
         raw = { op: 'add', kind: note.kind, text: note.text, due: note.due || null, supersedes: note.replaces || undefined };
     } else if (note.op === 'update') raw = { op: 'update', id: note.id, text: note.text, due: note.due || undefined };
     else if (note.op === 'done' || note.op === 'cancel') raw = { op: 'status', id: note.id, status: note.op === 'done' ? 'done' : 'cancelled' };
     else return { rejected: 'unknown op' };
+    const source = { sessionId: matching.sessionId, entryId: matching.entry.id, role: matching.message.role, quote };
     try { return { op: ledger.normalizeOp(raw, state, { at, by: 'summary', source }) }; }
     catch (error) { return { rejected: error.message }; }
 }
