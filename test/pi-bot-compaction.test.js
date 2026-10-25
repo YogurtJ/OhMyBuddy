@@ -102,3 +102,11 @@ test('a summary that is cut off, not JSON or over budget is refused so Pi can su
     await assert.rejects(compaction.structuredCompaction({ branch: manager.getBranch(), projection: manager.buildSessionProjection().entries,
         firstKeptEntryId: 'not-on-branch', sessionId: 's', model: {}, now: NOW, complete: async () => ({}), reason: 'manual' }), /Nothing to summarize|not on this branch/);
 });
+
+test('summary requests carry the chat thinking level only for reasoning models', () => {
+    const { summaryReasoning } = require('../server/bot/bot-compaction');
+    assert.deepEqual(summaryReasoning({ reasoning: true }, 'high'), { reasoning: 'high' });
+    assert.deepEqual(summaryReasoning({ reasoning: true }, 'off'), {});
+    assert.deepEqual(summaryReasoning({ reasoning: false }, 'high'), {});
+    assert.deepEqual(summaryReasoning(null, 'medium'), {});
+});

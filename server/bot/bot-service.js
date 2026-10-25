@@ -312,7 +312,11 @@ class BotService extends EventEmitter {
     // S4 (D-030): after a Bot window run settles or compacts, move the window to a new
     // generation when its file is large, long or old. Only an idle window rotates; a busy one
     // is tried again after its next run. Never throws; returns the rotation or null.
-    async maintainWindow(worker, { now = Date.now() } = {}) {
+    // S4 (D-030). trigger: 'compaction' right after a summary was written, else 'completion'.
+    // A new generation starts from the latest summary plus the verbatim part after it; after an
+    // ordinary reply it moves on only when that verbatim part holds everything since the summary,
+    // otherwise the worker's idle summary runs first and its compaction brings us back here.
+    async maintainWindow(worker, { now = Date.now(), trigger = 'completion' } = {}) {
         const loaded = worker?.loadedBot, sessionPath = worker?.sessionPath;
         if (!loaded || typeof sessionPath !== 'string' || !this.supervisor) return null;
         const key = `${loaded.profileId}/${loaded.windowId}`;
@@ -326,6 +330,11 @@ class BotService extends EventEmitter {
             const bytes = fs.statSync(sessionPath).size;
             const reason = rotationReason({ bytes, entries: bytes >= 1024 * 1024 ? countLines(sessionPath) : 0, startedAt: started, now });
             if (!reason || !this.supervisor.isSessionIdle(sessionPath)) return null;
+            if (trigger !== 'compaction' && !await this.store.withSessionRead(window.cwd, window.current.sessionId, (current, read) => {
+                const complete = buildHandoff(read.manager()).complete;
+                read.validate();
+                return current.path === sessionPath && complete;
+            })) return null;
             return await this.rotate(loaded.profileId, loaded.windowId, { reason, expectedGeneration: loaded.generation });
         } catch (error) {
             if (error?.status !== 409) console.error(`Bot window maintenance failed: ${error?.message || error}`);

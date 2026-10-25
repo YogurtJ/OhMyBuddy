@@ -289,6 +289,12 @@ async function structuredCompaction({ branch, projection, firstKeptEntryId, prev
     };
 }
 
+// The reasoning option of a summary request, set the way Pi sets it for its own summaries:
+// the chat's thinking level when the model reasons, nothing when thinking is off.
+function summaryReasoning(model, thinkingLevel) {
+    return model?.reasoning && typeof thinkingLevel === 'string' && thinkingLevel && thinkingLevel !== 'off' ? { reasoning: thinkingLevel } : {};
+}
+
 function mergeUsage(list) {
     if (!list.length) return undefined;
     const total = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
@@ -301,5 +307,5 @@ function mergeUsage(list) {
 
 module.exports = {
     SUMMARY_SCHEMA, SYSTEM_PROMPT, estimateTokens, summarizedEntries, serializeMessage, chunkMessages, requestBudget,
-    earlierSections, readSections, requestText, parseJson, readAnswer, checkNote, applyNotes, indexSources, summaryText, structuredCompaction
+    earlierSections, readSections, requestText, parseJson, readAnswer, checkNote, applyNotes, indexSources, summaryText, structuredCompaction, summaryReasoning
 };

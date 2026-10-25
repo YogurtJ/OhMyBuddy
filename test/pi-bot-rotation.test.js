@@ -338,14 +338,20 @@ test('Bot window workers get a verified identity section that follows edits with
     let reply = JSON.stringify({ topic: 'Greetings', episodes: ['2026-03-01: said hello'], now: { next: 'say hello again' }, notes: [
         { op: 'add', kind: 'decision', text: 'Keep saying hello', entry: userEntry.id.slice(0, 8), quote: 'question 0' },
         { op: 'add', kind: 'decision', text: 'An assistant idea', entry: kept.id.slice(0, 8), quote: 'answer 0' }] });
-    ctx.modelRegistry.complete = async (model, request, options) => {
+    // Provider-neutral request, like Pi's own summaries (a plain complete() without reasoning is
+    // rejected by some reasoning models).
+    ctx.modelRegistry.streamSimple = (model, request, options) => {
         requests.push({ model: model.id, request, options });
-        return { content: [{ type: 'text', text: reply }], stopReason: 'stop', usage: { input: 5, output: 7, cacheRead: 0, cacheWrite: 0, totalTokens: 12, cost: { total: 0 } } };
+        return { result: async () => ({ content: [{ type: 'text', text: reply }], stopReason: 'stop',
+            usage: { input: 5, output: 7, cacheRead: 0, cacheWrite: 0, totalTokens: 12, cost: { total: 0 } } }) };
     };
+    ctx.model.reasoning = true;
     const compactEvent = { branchEntries: branch, preparation: { firstKeptEntryId: kept.id, tokensBefore: 123 }, reason: 'manual', signal: new AbortController().signal };
     const compacted = await handlers.get('session_before_compact')(compactEvent, ctx);
     assert.equal(requests[0].model, 'big', 'the Bot model writes the summary');
     assert.equal(requests[0].options.cacheRetention, 'none');
+    assert.equal(requests[0].options.reasoning, thinking, 'with the chat\'s thinking level');
+    assert.equal(requests[0].options.maxTokens, 16000);
     assert.equal(compacted.compaction.firstKeptEntryId, kept.id);
     assert.equal(compacted.compaction.tokensBefore, 123);
     assert.match(compacted.compaction.summary, /## What this chat is about\nGreetings[^]*## Notebook[^]*\[n1\] Keep saying hello[^]*- Next: say hello again/);
@@ -353,7 +359,10 @@ test('Bot window workers get a verified identity section that follows edits with
     assert.equal(compacted.compaction.details.pivaneBot.ledger.snapshot.items.length, 1);
     assert.equal(compacted.compaction.usage.totalTokens, 12);
     reply = 'not json';
+    const level = thinking; thinking = 'off';
     assert.equal(await handlers.get('session_before_compact')(compactEvent, ctx), undefined, 'a failed summary falls back to Pi');
+    assert.equal('reasoning' in requests.at(-1).options, false, 'no reasoning option when thinking is off');
+    thinking = level;
     assert.equal(notices.at(-1).pivaneBot.structured, false);
     // S1 at the end of a completed run keeps other extensions' drafts; nothing for an aborted run.
     const heavy = SessionManager.inMemory('/tmp');
@@ -370,8 +379,15 @@ test('Bot window workers get a verified identity section that follows edits with
     const pruned = settle('completed');
     assert.deepEqual(pruned.entries.map(entry => entry.targetId ?? entry.customType), ['someone-else', outputs[0], outputs[1], outputs[2]]);
     assert.equal(settle('aborted'), undefined);
-    // S2: a summary in the background once the cache is cold, unless a new run starts first.
-    t.mock.timers.enable({ apis: ['setTimeout'] });
+    // S2: a summary in the background once the cache is cold, unless a new run starts first;
+    // only when much of the context lies before what Pi keeps verbatim.
+    for (let index = 0; index < 6; index++) {
+        manager.appendMessage({ role: 'user', content: `long ${index} ` + 'z'.repeat(60000), timestamp: Date.now() });
+        manager.appendMessage({ role: 'assistant', content: [{ type: 'text', text: `ok ${index}` }], api: 'openai-completions', provider: 'fixture', model: 'small',
+            usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { total: 0 } }, stopReason: 'stop', timestamp: Date.now() });
+    }
+    const realNow = Date.now();
+    t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: realNow });
     const compacts = [];
     Object.assign(ctx, { isIdle: () => true, hasPendingMessages: () => false, compact: options => compacts.push(options) });
     handlers.get('agent_settled')({ aborted: false }, ctx);
@@ -387,6 +403,12 @@ test('Bot window workers get a verified identity section that follows edits with
     handlers.get('agent_settled')({ aborted: false }, ctx);
     t.mock.timers.tick(20 * 60 * 1000);
     assert.equal(compacts.length, 1, 'a window with room left is not summarized');
+    // A generation due to move on is summarized anyway; the server moves it after that compaction.
+    t.mock.timers.setTime(realNow + 61 * 24 * 3600 * 1000);
+    handlers.get('agent_settled')({ aborted: false }, ctx);
+    t.mock.timers.tick(10 * 60 * 1000);
+    assert.equal(compacts.length, 2);
+    assert.equal(compacts[1].customInstructions, 'pivane-bot-rotate');
     t.mock.timers.reset();
     // A different session in the same worker process is not treated as the Bot window.
     assert.equal(botSection(context, { ...manager, getSessionId: () => 'foreign', getCwd: () => session.cwd, getSessionFile: () => session.path },

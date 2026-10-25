@@ -55,13 +55,23 @@ test('S1 prunes old large tool outputs only when it saves enough, keeping the re
     assert.deepEqual(maintenance.pruneDrafts(small.manager.buildSessionProjection().entries, usage), [], 'small outputs stay');
 });
 
-test('S2 waits for a cold cache and S4 names the rotation reason', () => {
+test('S2 waits for a cold cache and S4 names the rotation reason', async () => {
     assert.equal(maintenance.idleDelay(undefined), 10 * 60 * 1000);
     assert.equal(maintenance.idleDelay({ promptCache: { short: 300 } }), 10 * 60 * 1000);
     assert.equal(maintenance.idleDelay({ promptCache: { short: 3600 } }), 3600 * 1000);
-    assert.equal(maintenance.idleCompactionWanted({ tokens: 10, percent: 54.9 }), false);
-    assert.equal(maintenance.idleCompactionWanted({ tokens: 10, percent: 55 }), true);
-    assert.equal(maintenance.idleCompactionWanted({ tokens: null, percent: null }), false);
+    // 8 turns of 60 000 characters: Pi keeps the last ~80 000 characters (two turns) verbatim.
+    const { manager } = await toolHeavy(8, 60000);
+    const projection = manager.buildSessionProjection().entries;
+    const full = { tokens: 120000, contextWindow: 200000, percent: 60 };
+    const share = maintenance.summarizableTokens(projection, full);
+    assert.ok(share > 85000 && share < 95000, `about three quarters of the context would be summarized: ${share}`);
+    assert.equal(maintenance.idleCompactionWanted({ ...full, percent: 54.9 }, projection), false);
+    assert.equal(maintenance.idleCompactionWanted(full, projection), true);
+    assert.equal(maintenance.idleCompactionWanted({ tokens: null, percent: null }, projection), false);
+    // Mostly what Pi keeps verbatim anyway: no repeated summary of a few messages at each pause.
+    const recent = await toolHeavy(2, 60000);
+    assert.equal(maintenance.idleCompactionWanted(full, recent.manager.buildSessionProjection().entries), false);
+    assert.ok(maintenance.summarizableTokens(recent.manager.buildSessionProjection().entries, full) < 100);
     const now = Date.parse('2026-06-01T00:00:00Z');
     assert.equal(maintenance.rotationReason({ bytes: 8 * 1024 * 1024, entries: 1, startedAt: '2026-05-30T00:00:00Z', now }), 'size');
     assert.equal(maintenance.rotationReason({ bytes: 1, entries: 8000, startedAt: '2026-05-30T00:00:00Z', now }), 'entries');
@@ -117,4 +127,33 @@ test('S4 rotates an idle window that is due and carries the notebook and structu
     assert.equal(await bots.maintainWindow(current, { now: later + 61 * 24 * 3600 * 1000 }), null);
     supervisor.isSessionIdle = idle;
     assert.equal(generations.generations.length, 2);
+});
+
+test('S4 after an ordinary reply waits for a summary when the recent part is too long to carry verbatim', { timeout: 60000 }, async t => {
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+    const store = new PiSessionStore();
+    const profiles = new PiProfileRegistry(store);
+    store.profiles = profiles;
+    const supervisor = new PiAgentSupervisor();
+    t.after(() => supervisor.dispose());
+    const bots = new BotService({ store, profiles, supervisor });
+    const created = await bots.create({ expectedRevision: (await profiles.state()).revision });
+    const botId = created.bot.id, windowId = created.window.id;
+    const { session } = await bots.resolve(botId, windowId);
+    const manager = SessionManager.open(session.path);
+    manager.appendMessage({ role: 'user', content: '旧'.repeat(70000), timestamp: Date.now() });
+    manager.appendMessage(assistant([{ type: 'text', text: '收到' }]));
+    manager.appendMessage({ role: 'user', content: '最近的话', timestamp: Date.now() });
+    manager.appendMessage(assistant([{ type: 'text', text: '好的' }]));
+    const worker = { loadedBot: { profileId: botId, windowId, generation: 0 }, sessionPath: session.path };
+    const later = Date.now() + 61 * 24 * 3600 * 1000;
+    // Without a summary the new generation would lose the long message: wait for the idle summary.
+    assert.equal(await bots.maintainWindow(worker, { now: later }), null);
+    assert.equal((await bots.windows.read(botId)).state.windows[0].generations.length, 1);
+    // The worker's idle summary (S2, due to rotate) is followed by the move.
+    const rotated = await bots.maintainWindow(worker, { now: later, trigger: 'compaction' });
+    assert.equal(rotated.window.generation, 1);
+    const seed = SessionManager.open(rotated.session.path).getBranch().find(entry => entry.customType === HANDOFF_MESSAGE);
+    assert.match(seed.content, /## Most recent messages \(verbatim\)\nAssistant: 收到\n\nUser: 最近的话\n\nAssistant: 好的$/);
+    assert.equal(seed.content.includes('旧旧旧'), false, 'what does not fit is left to the summary and recall');
 });
