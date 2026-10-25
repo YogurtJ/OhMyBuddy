@@ -10369,7 +10369,10 @@
         ["{0} 个步骤", "{0} steps"],
         ["{0} 步没成功", "{0} steps failed"],
         ["连接不太顺，正在重试（第 {0} 次）", "Connection hiccup, retrying (attempt {0})"],
-        ["正在处理", "Working on it"]
+        ["正在处理", "Working on it"],
+        ["把文件交给你", "Hand files over to you"],
+        ["取出你上传的附件原件", "Take out the original of your upload"],
+        ["生成图片、视频或语音", "Generate an image, video or speech"]
     );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

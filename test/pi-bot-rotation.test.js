@@ -194,7 +194,7 @@ test('Bot window workers get a verified identity section that follows edits with
     const jitiPath = process.env.PIVANE_TEST_PI_JITI;
     if (!jitiPath) return;
     const file = path.join(__dirname, '../server/bot/bot-context-extension.ts');
-    const { botSection, registerBotContext, alignModel, BOT_SECTION } = require(jitiPath).createJiti(file)(file);
+    const { botSection, botPreset, registerBotContext, alignModel, BOT_SECTION } = require(jitiPath).createJiti(file)(file);
     const prior = { context: process.env.PIVANE_BOT_CONTEXT, token: process.env.PI_WEB_NAVIGATION_TOKEN };
     t.after(() => {
         for (const [key, name] of [['context', 'PIVANE_BOT_CONTEXT'], ['token', 'PI_WEB_NAVIGATION_TOKEN']])
@@ -249,16 +249,22 @@ test('Bot window workers get a verified identity section that follows edits with
     assert.match(sections[BOT_SECTION], /Ask-every-time mode[^]*approval card/);
     assert.equal(sections.assistant_profile_soul, 'Warm and playful.');
     // Careful presets: the worker asks on one approval confirm before a gated step runs.
-    const { APPROVAL_TITLE } = require('../server/bot/bot-guard');
+    const { APPROVAL_TITLE, parseApprovalMessage } = require('../server/bot/bot-guard');
     const asked = []; let answer = true;
     Object.assign(ctx, { hasUI: true, signal: undefined });
-    ctx.ui.confirm = async (title, message, options) => { asked.push([title, message, options.timeout]); return answer; };
+    ctx.ui.confirm = async (title, message, options) => {
+        const parsed = parseApprovalMessage(message);
+        asked.push([title, `${parsed.kind}\n\n${parsed.detail}`, options.timeout, parsed.token]);
+        return answer;
+    };
+    const retired = () => notices.filter(item => item.pivaneBot?.event === 'approval-done').map(item => item.pivaneBot.token);
     const call = (toolName, input) => handlers.get('tool_call')({ type: 'tool_call', toolCallId: `t${asked.length}`, toolName, input }, ctx);
     assert.equal(await call('read', { path: 'notes.md' }), undefined);
     assert.equal(await call('web_search', { query: 'weather' }), undefined);
     assert.deepEqual(asked, [], 'reading needs no approval');
     assert.equal(await call('bash', { command: 'ls -la' }), undefined, 'an approved command runs');
-    assert.deepEqual(asked.at(-1), [APPROVAL_TITLE, 'command\n\nls -la', 30 * 60 * 1000]);
+    assert.deepEqual(asked.at(-1).slice(0, 3), [APPROVAL_TITLE, 'command\n\nls -la', 30 * 60 * 1000]);
+    assert.deepEqual(retired(), [asked.at(-1)[3]], 'an answered request is reported as over');
     assert.equal(await call('write', { path: 'plan.md', content: 'x' }), undefined);
     assert.equal(asked.at(-1)[1], 'write\n\nplan.md', 'Ask every time: even workspace writes ask');
     answer = false;
@@ -285,6 +291,27 @@ test('Bot window workers get a verified identity section that follows edits with
     await bots.update(botId, { expectedRevision: (await profiles.state()).revision, changes: { bot: { permissions: { preset: 'free' } } } });
     assert.equal(await call('bash', { command: 'date' }), undefined);
     assert.equal(asked.length, 3, 'Hands-off stays guidance only');
+    // A nested call waiting for approval is cancelled with its parent tool, and its request retired.
+    await bots.update(botId, { expectedRevision: (await profiles.state()).revision, changes: { bot: { permissions: { preset: 'balanced' } } } });
+    let pendingSignal = null;
+    ctx.ui.confirm = (title, message, options) => new Promise(resolve => {
+        pendingSignal = options.signal; asked.push([title, message, options.timeout, parseApprovalMessage(message).token]);
+        options.signal.addEventListener('abort', () => resolve(false), { once: true });
+    });
+    const waiting = handlers.get('tool_call')({ type: 'tool_call', toolCallId: 'parent-1/1', parentToolCallId: 'parent-1', toolName: 'bash', input: { command: 'pwd' } }, ctx);
+    for (let i = 0; i < 50 && !pendingSignal; i++) await new Promise(done => setTimeout(done, 10));
+    handlers.get('tool_execution_end')({ type: 'tool_execution_end', toolCallId: 'other' });
+    assert.equal(pendingSignal.aborted, false, 'another call ending does not cancel it');
+    handlers.get('tool_execution_end')({ type: 'tool_execution_end', toolCallId: 'parent-1' });
+    assert.match((await waiting).reason, /did not approve/);
+    assert.equal(retired().at(-1), asked.at(-1)[3]);
+    // The gate fails closed: an unreadable profile store counts as "Ask every time"; another session is not the Bot.
+    const broken = path.join(root, 'broken-agent');
+    fs.mkdirSync(path.join(broken, 'pivane-profiles', 'profiles.json'), { recursive: true });
+    assert.equal(await botPreset(context, manager, session.cwd, broken, async () => {}), 'ask');
+    assert.equal(await botPreset(context, { ...manager, getSessionId: () => 'foreign' }, session.cwd, agentDir), null);
+    assert.equal(await botPreset(context, manager, '/elsewhere', agentDir), 'ask');
+    assert.equal(await botPreset(context, manager, session.cwd, agentDir), 'balanced');
     // An unavailable model keeps the current one and is reported once.
     const reported = new Set(), sent = [];
     assert.equal(await alignModel(pi, ctx, { provider: 'nokey', id: 'x' }, value => sent.push(value), reported), 'unavailable');

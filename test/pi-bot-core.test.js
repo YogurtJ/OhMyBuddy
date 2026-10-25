@@ -159,4 +159,20 @@ test('Bot bridge records stay private: loaded state is recorded and model proble
     assert.equal(worker.loadedBot, null);
     assert.deepEqual(seen.map(({ webRuntimeId, webSequence, ...event }) => event),
         [{ type: 'gateway_bot_notice', notice: 'model_unavailable', provider: 'fixture', id: 'gone' }]);
+    // An approval request that ended in the worker leaves the pending requests; others stay.
+    const { APPROVAL_TITLE, approvalMessage } = require('../server/bot/bot-guard');
+    const token = 'a'.repeat(16), other = 'b'.repeat(16);
+    worker._handleEvent({ type: 'extension_ui_request', id: 'ui-a', method: 'confirm', title: APPROVAL_TITLE, message: approvalMessage({ kind: 'command', detail: 'ls', token }) });
+    worker._handleEvent({ type: 'extension_ui_request', id: 'ui-b', method: 'confirm', title: APPROVAL_TITLE, message: approvalMessage({ kind: 'command', detail: 'ls', token: other }) });
+    worker._handleEvent({ type: 'extension_ui_request', id: 'ui-c', method: 'confirm', title: 'Something else', message: `command #${token}\n\nls` });
+    seen.length = 0;
+    notify({ event: 'approval-done', token }, 'foreign-session');
+    notify({ event: 'approval-done', token: 'not-a-token' });
+    assert.deepEqual([...worker.pendingUi.keys()], ['ui-a', 'ui-b', 'ui-c']);
+    notify({ event: 'approval-done', token });
+    assert.deepEqual([...worker.pendingUi.keys()], ['ui-b', 'ui-c'], 'only the matching approval is retired');
+    assert.deepEqual(seen.map(({ webRuntimeId, webSequence, ...event }) => event), [{ type: 'gateway_ui_resolved', id: 'ui-a' }]);
+    notify({ event: 'approval-done', token });
+    assert.equal(worker.pendingUi.size, 2, 'a repeated record is harmless');
+    for (const id of ['ui-b', 'ui-c']) worker.resolveUi(id);
 });

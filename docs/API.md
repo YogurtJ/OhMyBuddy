@@ -267,7 +267,7 @@
 
 WebSocket `open_session` 可带 `botWindow:{profileId,windowId}`（Bot 页面打开和重连时都带）：服务端在启动 worker 前和订阅后各核对一次，只接受该窗口当前一代；否则返回失败响应 `errorCode:'BOT_WINDOW_STALE'`（已换代）或 `'BOT_WINDOW_ROTATING'`（正在换代），网页重新解析窗口。不带 `botWindow` 时按普通原生会话打开（Pi Agent 页面）。另有 `gateway_bot_notice {notice:'model_unavailable',provider,id}`：Bot 指定的模型不可用，本轮继续使用当前模型。
 
-Bot 设置为“稳妥”或“每次都问”时，需要确认的工具调用在执行前发出 `extension_ui_request` `method:'confirm'`，`title` 固定为 `允许这一步吗？ / Allow this step?`，`message` 为 `<kind>\n\n<detail>`（`kind` 为 `command`、`delegate`、`outside`、`write`、`memory`、`action` 之一；`detail` 为命令、路径、记忆内容或工具名，最多约 2000 字符）。按普通确认回复 `{type:'extension_ui_response',id,confirmed:true|false}`；拒绝、取消或 30 分钟无回答时该调用被阻止。没有界面或定时运行进行中时不发确认，直接阻止。
+Bot 设置为“稳妥”或“每次都问”时，需要确认的工具调用在执行前发出 `extension_ui_request` `method:'confirm'`，`title` 固定为 `允许这一步吗？ / Allow this step?`，`message` 为 `<kind> #<token>\n\n<detail>`（`token` 为 16 位十六进制，标识这次请求；`kind` 为 `command`、`delegate`、`outside`、`write`、`memory`、`action` 之一；`detail` 为命令、路径、记忆内容或工具名，最多约 2000 字符）。按普通确认回复 `{type:'extension_ui_response',id,confirmed:true|false}`；拒绝、取消或 30 分钟无回答时该调用被阻止。没有界面或定时运行进行中时不发确认，直接阻止。请求在 worker 内结束（回答、超时、所在的嵌套调用被取消）后，仍挂起的同一请求由服务端撤回并广播 `gateway_ui_resolved`。
 
 Bot 窗口会话不能移动或绑定消息渠道。以 Bot 档案为目标的定时任务进入主聊天当前一代，运行期间使用任务准入和计价时选定的模型；`GET /cron` 的 `homes` 中 Bot 的主线程按主聊天当前一代派生（`bot:true`），`PUT /cron/homes/:profileId` 对 Bot 返回 409，不保存也不创建会话。
 

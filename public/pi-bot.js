@@ -582,7 +582,7 @@
     // ---- approval cards ----------------------------------------------------------------
     // In the careful presets the worker asks with one native confirm (server/bot/bot-guard.js)
     // before a gated step runs. The card says what the Bot wants to do; the message carries
-    // the kind on its first line and the detail after a blank line. One request at a time.
+    // "<kind> #<token>" on its first line and the detail after a blank line. One at a time.
     const APPROVAL_TITLE = '允许这一步吗？ / Allow this step?';
     const APPROVAL_KINDS = {
         command: name => translateUi("{0} 想运行一条命令", name),
@@ -594,9 +594,12 @@
     };
     function parseApproval(event) {
         if (event?.method !== 'confirm' || event.title !== APPROVAL_TITLE) return null;
-        const match = /^([a-z]+)\n\n([\s\S]*)$/.exec(typeof event.message === 'string' ? event.message : '');
+        const match = /^([a-z]+) #[a-f0-9]{16}\n\n([\s\S]*)$/.exec(typeof event.message === 'string' ? event.message : '');
         return match && Object.hasOwn(APPROVAL_KINDS, match[1]) ? { kind: match[1], detail: match[2] } : null;
     }
+    // Other steps name a tool; the familiar ones read as what they do.
+    const APPROVAL_ACTIONS = { deliver_files: () => translateUi("把文件交给你"), get_attachment: () => translateUi("取出你上传的附件原件"),
+        media_generate: () => translateUi("生成图片、视频或语音") };
 
     function createApprovalCards({ enabled, respond, face: currentFace, name, changed }) {
         const panel = el('section', 'pi-bot-setup pi-bot-approval'); panel.hidden = true;
@@ -610,7 +613,8 @@
             const { event, kind, detail } = current;
             const head = el('header', 'pi-bot-setup-head');
             head.append(currentFace(), el('strong', null, APPROVAL_KINDS[kind](name() || 'Bot')));
-            const body = el('pre', `pi-bot-approval-detail is-${kind}`, detail);
+            const shown = kind === 'action' && Object.hasOwn(APPROVAL_ACTIONS, detail) ? APPROVAL_ACTIONS[detail]() : detail;
+            const body = el('pre', `pi-bot-approval-detail is-${kind}`, shown);
             body.tabIndex = 0;
             const foot = el('footer', 'pi-bot-setup-foot');
             const note = el('p', 'pi-bot-setup-note', waiting > 0 ? translateUi("后面还有 {0} 步等你确认", waiting) : '');

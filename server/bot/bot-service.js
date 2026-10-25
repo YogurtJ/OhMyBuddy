@@ -75,16 +75,20 @@ class BotService extends EventEmitter {
     }
 
     // Where Bot workspaces go: the home folder when it is an allowed project, else the first
-    // allowed project root. Never the service's working directory or the Pivane install
-    // (or anything inside them): that is where the generic default project falls back to.
-    workspaceBase() {
+    // allowed project root. The workspaces themselves (<base>/PivaneBots/…) never land in the
+    // service's working directory or the Pivane install: that is where the generic default
+    // project falls back to.
+    workspaceExcluded(directory) {
         const inside = (child, parent) => child === parent || child.startsWith(parent.endsWith(path.sep) ? parent : parent + path.sep);
         const real = value => { try { return fs.realpathSync.native(value); } catch { return path.resolve(value); } };
-        const avoid = [real(process.cwd()), real(path.resolve(__dirname, '..', '..'))];
+        return [real(process.cwd()), real(path.resolve(__dirname, '..', '..'))].some(blocked => inside(real(directory), blocked));
+    }
+
+    workspaceBase() {
         for (const candidate of [os.homedir(), ...(this.store.roots || [])]) {
             try {
                 const resolved = this.store.resolveProject(candidate);
-                if (avoid.some(blocked => inside(resolved, blocked))) continue;
+                if (this.workspaceExcluded(path.join(resolved, WORKSPACE_PARENT))) continue;
                 fs.accessSync(resolved, fs.constants.R_OK | fs.constants.W_OK | fs.constants.X_OK);
                 return resolved;
             } catch {}
@@ -104,6 +108,7 @@ class BotService extends EventEmitter {
             if (!stat.isDirectory() || stat.isSymbolicLink()) fail('Bot workspace must be a real directory', 409);
         }
         const workspace = this.store.resolveProject(path.join(parent, `bot-${profileId.slice(0, 8)}`));
+        if (this.workspaceExcluded(workspace)) fail('Bot workspace would be inside the Pivane service directory', 409);
         if (process.platform !== 'win32') fs.chmodSync(workspace, 0o700);
         const readme = path.join(workspace, 'README.md');
         const note = language === 'en'

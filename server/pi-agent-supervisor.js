@@ -11,6 +11,7 @@ const { workerLifecycle } = require('./pi-worker-lifecycle');
 const { PiRuntimeControls } = require('./pi-runtime-controls');
 const { PiShellExecution } = require('./pi-shell-execution');
 const subagentRuntime = require('./pi-subagent-runtime');
+const { APPROVAL_TITLE, parseApprovalMessage } = require('./bot/bot-guard');
 const DEFAULT_IDLE_MS = 15 * 60 * 1000;
 // A healthy worker answers get_state in milliseconds. The window is long enough
 // that brief synchronous work in an extension does not cause a replacement.
@@ -836,6 +837,14 @@ class AgentWorker extends EventEmitter {
                         else if (value.event === 'model' && value.status === 'unavailable' && typeof value.provider === 'string'
                             && value.provider.length <= 200 && typeof value.id === 'string' && value.id.length <= 300)
                             this._broadcast({ type: 'gateway_bot_notice', notice: 'model_unavailable', provider: value.provider, id: value.id });
+                        // An approval request ended in the worker (answered, cancelled with its
+                        // call, timed out): one still pending here can no longer be answered.
+                        else if (value.event === 'approval-done' && typeof value.token === 'string' && /^[a-f0-9]{16}$/.test(value.token)) {
+                            for (const [requestId, pending] of [...this.pendingUi]) {
+                                const request = pending.event;
+                                if (request.method === 'confirm' && request.title === APPROVAL_TITLE && parseApprovalMessage(request.message)?.token === value.token) this.resolveUi(requestId);
+                            }
+                        }
                     }
                     return; // Private bridge record; never a browser notification.
                 }
