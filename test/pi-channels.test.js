@@ -316,9 +316,9 @@ test('authenticated optional channel connects, binds and delivers once through t
         service.receive('bot-one', { msgs: [incoming('revoke-during-send')] }); service.pump(); await wait(() => sends.length > beforeRevoke);
         await action('account', { accountId: 'bot-one', enabled: true, allowedUsers: ['other'] });
         releaseSend(); sendHold = null;
-        await wait(() => service.db.value.jobs.at(-1).status === 'uncertain');
+        await wait(() => service.db.value.jobs.at(-1).status === 'partial');
+        assert.equal(service.db.value.jobs.at(-1).reason, 'delivery-revoked');
         assert.equal(sends.length, beforeRevoke + 1, 'revoking access between chunks prevents all remaining sends');
-        await action('acknowledge', { jobId: service.db.value.jobs.at(-1).id });
         await action('account', { accountId: 'bot-one', enabled: true, allowedUsers: ['owner'] });
         replyText = 'Native channel reply';
         hold = new Promise(resolve => { releaseModel = resolve; });
@@ -344,7 +344,11 @@ test('authenticated optional channel connects, binds and delivers once through t
         service.receive('bot-one', { msgs: [incoming('3')] }); service.pump(); await wait(() => service.db.value.jobs.at(-1).status === 'uncertain');
         const count = calls.length, sent = sends.length;
         service.pump(); await delay(100); assert.equal(calls.length, count); assert.equal(sends.length, sent, 'ambiguous delivery is never automatically replayed');
-        await action('acknowledge', { jobId: service.db.value.jobs.at(-1).id });
+        sendFailure = false;
+        service.receive('bot-one', { msgs: [incoming('after-unconfirmed')] }); service.pump();
+        await wait(() => service.db.value.jobs.at(-1).status === 'delivered');
+        assert.equal(calls.length, count + 1, 'an unconfirmed reply does not block the next native task');
+        assert.equal(service.db.value.jobs.at(-2).status, 'uncertain', 'old receipt is retained without claiming review or delivery');
         const cold = await gateway.store.createSession(cwd, 'Cold target');
         await action('bind', { accountId: 'bot-one', peerId: 'owner', cwd, sessionId: cold.id });
         const getWorker = gateway.supervisor.getWorker.bind(gateway.supervisor);

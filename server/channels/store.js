@@ -4,7 +4,10 @@ const { randomUUID } = require('node:crypto');
 const { privateDir, readSafe, atomicJson, hash } = require('../pi-maintenance-files');
 const { openPrivateFileSync, privateFileMode } = require('../pi-private-files');
 const empty = () => ({ version: 1, revision: randomUUID(), accounts: [], bindings: [], peers: [], jobs: [] });
-const pending = job => ['queued', 'dispatching', 'running', 'ready', 'sending', 'uncertain'].includes(job.status);
+// Only an unresolved execution can hold subsequent inputs. An unconfirmed
+// reply is a delivery receipt; it must never freeze this chat or another peer.
+const blocksFollowing = job => job.status === 'uncertain' && !job.sendStarted && !['thread', 'cron', 'notice'].includes(job.kind);
+const pending = job => ['queued', 'dispatching', 'running', 'ready', 'sending'].includes(job.status) || blocksFollowing(job);
 class ChannelStore {
     constructor(directory) { this.directory = directory; this.file = path.join(directory, 'state.json'); this.ownerFile = path.join(directory, 'owner.sqlite'); this.owner = null; this.value = empty(); this.diskHash = null; this.load(); }
     load() {
@@ -26,6 +29,10 @@ class ChannelStore {
                 || b.boundAt !== undefined && (!Number.isFinite(b.boundAt) || b.boundAt < 0)
                 || b.excludedTurnId != null && !/^[a-f0-9]{64}$/.test(b.excludedTurnId))
             || value.jobs.some(j => !j || typeof j.id !== 'string' || typeof j.status !== 'string'
+                || ['retryCount', 'recoveryAttempts', 'readAttempts'].some(key => j[key] !== undefined && (!Number.isSafeInteger(j[key]) || j[key] < 0 || j[key] > 1000))
+                || j.nextAttemptAt !== undefined && (!Number.isFinite(j.nextAttemptAt) || j.nextAttemptAt < 0)
+                || j.platformCode !== undefined && !Number.isSafeInteger(j.platformCode)
+                || j.deliveryError !== undefined && (typeof j.deliveryError !== 'string' || j.deliveryError.length > 64)
                 || j.commandSubmitted !== undefined && typeof j.commandSubmitted !== 'boolean'
                 || j.deliveryIssues !== undefined && (!Array.isArray(j.deliveryIssues) || j.deliveryIssues.length > 20
                     || j.deliveryIssues.some(i => !i || typeof i.name !== 'string' || i.name.length > 120 || typeof i.reason !== 'string' || i.reason.length > 64)))
@@ -80,4 +87,4 @@ class ChannelStore {
         finally { this.lock.close(); this.lock = null; this.owner = null; }
     }
 }
-module.exports = { ChannelStore, pending };
+module.exports = { ChannelStore, pending, blocksFollowing };

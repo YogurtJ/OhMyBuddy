@@ -142,7 +142,7 @@
 
 `GET /api/pi/status.messageChannels=true` 表示消息渠道接口可用，不表示微信组件已安装或账号已连接。以下接口沿用工作台身份、Origin/CSRF、维护准入与 no-store；worker 内部凭据不能管理渠道。
 
-- `GET /api/pi/channels`：返回配置 `revision`、组件 installed/version/availableVersion/sources、脱敏 accounts、bindings、已允许 peers、最近 60 条 jobs（含 `sentChunks`、`sentMedia`、`waiting`、`kind`、有界 `deliveryIssues:[{name,reason}]`）、当前登录的二维码布尔矩阵/status/expiresAt 和 capabilities（`text`、`images`、`files`、`slashCommands`、`typing`、`proactive`、`threadResults`）。没有账号 token、微信 context token、登录验证码或消息正文。
+- `GET /api/pi/channels`：返回配置 `revision`、组件 installed/version/availableVersion/sources、脱敏 accounts、bindings、已允许 peers、最近 60 条 jobs（含 `sentChunks`、`sentMedia`、`waiting`、`kind`、`blocksFollowing`、`retryCount`、`nextAttemptAt`、`deliveryError`、经过筛选的整数 `platformCode`、有界 `deliveryIssues:[{name,reason}]`）、当前登录的二维码布尔矩阵/status/expiresAt 和 capabilities（`text`、`images`、`files`、`slashCommands`、`typing`、`proactive`、`threadResults`）。没有账号 token、微信 context token、登录验证码或消息正文。
 - `POST /api/pi/channels/weixin/actions`：共同字段 `{action, confirmed:true, expectedRevision}`。操作在 await 前预占互斥；冲突 409，其他失败 400，结果不确定不自动重放。当前支持 `install`、`uninstall`、`login`、`cancel-login`、`verify-login`、`account`、`bind`、`unbind`、`stop`、`recover`、`acknowledge`。
 - `cancel-login` 需要 loginId；`verify-login` 需要 loginId/code（1–12 位数字）；登录最多五分钟，通过 GET 查询进度，不由浏览器重复提交登录请求。
 - `account` 需要 accountId/enabled/allowedUsers（最多 100 个 1–256 字符 ID）；启用必须有非空允许列表。`bind` 需要 accountId/peerId/cwd 和 sessionId，或显式 newSession=true；可带 `replyMode:'all'|'wechat'`（默认 all，旧绑定缺失同样为 all），分别接收全部线程最终结果或仅微信发起的回复。绑定保存生效时间与最近已完成轮次边界，接收尚未结束的任务，不补发历史。`unbind` 需要 accountId/peerId。最多 10 个账号、200 条绑定、500 个已允许聊天；临时及管理助手线程不接受绑定。
@@ -152,7 +152,7 @@
 
 `GET /api/pi/cron` 新增 `channelNotifications:{pending,failed,lastError}`；任务的 `weixinNotification:'inherit'|'on'|'off'` 默认为跟随线程；旧任务的默认 false 跟随，原 true 保持推送，显式关闭使用 off。旧客户端提交的布尔 `notifyWeixin` 仍转换为 on/off。`lastError` 仅为 `channel-admission-pending`、`channel-capture-failed` 或 null。运行记录的 `channelNotify.status` 为 `pending`、`accepted` 或 `skipped`；accepted 仅表示渠道持久入队，实际微信送达以渠道 jobs 为准。
 
-状态、队列预算、组件来源与存储见[消息渠道](MESSAGE_CHANNELS.md)。原生私有命令标记 `channels-v1` 不加入公开 RPC 命令白名单；`pivane-channel-message` 是唯一聊天正文，`pivane-channel-turn` 记录运行状态和回复条目 ID。浏览器只按真实回执显示送达，不以模型输出结束推断微信收到。`pivane-thread-turn` 保存普通受管轮次起止、来源及最终回复 ID；`jobs.kind='thread'` 仅持久化原生轮次引用与固定接收绑定，恢复时重读当前原生分支。微信原发起者和定时任务分别沿用既有渠道／调度回执，避免重复投递。网页 `stop_and_recover` 对独占中的微信轮次直接中止，保留其原生结算互斥。
+`blocksFollowing=true` 仅表示尚未确认的任务执行会暂停后续普通输入；发送失败、部分送达及已开始发送的 `uncertain` 不阻塞后续消息。`retryCount` 统计已确定未发送项的自动重试；`deliveryError` 仅保存内部原因标识，不包含供应商正文。`nextAttemptAt` 是原生回复读取／完成核对的最早重试时间。未建立回复上下文的线程／定时结果保持 `ready`，收到上下文后继续。`deliveryIssues` 还区分 `media-upload-failed`、`send-unconfirmed`、`wechat-rejected`、`wechat-rate-limited`、`connection-unavailable`。状态、队列预算、组件来源与存储见[消息渠道](MESSAGE_CHANNELS.md)。原生私有命令标记 `channels-v1` 不加入公开 RPC 命令白名单；`pivane-channel-message` 是唯一聊天正文，`pivane-channel-turn` 记录运行状态和回复条目 ID。浏览器只按真实回执显示送达，不以模型输出结束推断微信收到。`pivane-thread-turn` 保存普通受管轮次起止、来源及最终回复 ID；`jobs.kind='thread'` 仅持久化原生轮次引用与固定接收绑定，恢复时重读当前原生分支。微信原发起者和定时任务分别沿用既有渠道／调度回执，避免重复投递。网页 `stop_and_recover` 对独占中的微信轮次直接中止，保留其原生结算互斥。
 
 ### 办公文档附件（documentUploads）
 

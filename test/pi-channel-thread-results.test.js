@@ -109,7 +109,7 @@ test('late completion notices, revoked permissions and missing reply context do 
     service.admitThreadResult(event);
     assert.equal(service.db.value.jobs.length, 1);
     const job = service.job(digest(['weixin-thread', event.id, 'account', 'one']));
-    assert.equal(job.status, 'ignored'); assert.equal(job.reason, 'reply-context-missing');
+    assert.equal(job.status, 'ready'); assert.equal(job.reason, 'reply-context-missing');
     service.db.change(v => { v.bindings[0].id = 'replacement'; });
     assert.equal(service.bindingFor(job), null, 'fixed binding identity cannot be transferred to a replacement');
 });

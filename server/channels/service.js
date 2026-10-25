@@ -1,7 +1,7 @@
 const path = require('node:path');
 const { randomUUID, createHash } = require('node:crypto');
 const { setTimeout: delay } = require('node:timers/promises');
-const { ChannelStore, pending } = require('./store');
+const { ChannelStore, pending, blocksFollowing } = require('./store');
 const { WeixinComponent } = require('./weixin-component');
 const { WeixinAdapter, createTransport, validId } = require('./weixin-adapter');
 const { outcome } = require('./runtime');
@@ -65,7 +65,12 @@ class ChannelsService {
         return { revision: this.db?.value.revision, error: this.error, busy: this.mutating, component,
             accounts: (this.db?.value.accounts || []).map(({ id, userId, enabled, allowedUsers }) => ({ id, userId, enabled, allowedUsers, connection: this.connections.get(id) || (enabled ? 'starting' : 'disabled') })),
             bindings: this.db?.value.bindings || [], peers: (this.db?.value.peers || []).map(({ accountId, peerId, lastSeenAt }) => ({ accountId, peerId, lastSeenAt })),
-            jobs: (this.db?.value.jobs || []).slice(-60).reverse().map(({ id, accountId, peerId, target, status, reason, at, sentChunks, sentMedia, waiting, sendStarted, kind, deliveryIssues }) => ({ id, accountId, peerId, target, status, reason, at, sentChunks, sentMedia, waiting, kind, deliveryIssues, canRecover: status === 'uncertain' && !sendStarted && kind !== 'slash' })),
+            jobs: (this.db?.value.jobs || []).slice(-60).reverse().map(job => {
+                const { id, accountId, peerId, target, status, reason, at, sentChunks, sentMedia, waiting, sendStarted, kind, deliveryIssues, deliveryError, platformCode, retryCount, nextAttemptAt } = job;
+                return { id, accountId, peerId, target, status, reason, at, sentChunks, sentMedia, waiting, kind, deliveryIssues,
+                    deliveryError, platformCode, retryCount, nextAttemptAt, blocksFollowing: blocksFollowing(job),
+                    canRecover: status === 'uncertain' && !sendStarted && kind !== 'slash' };
+            }),
             login: this.login ? { id: this.login.id, matrix: this.login.matrix, status: this.login.status, expiresAt: this.login.expiresAt } : null,
             typing: require('./typing').typingSnapshot(this),
             capabilities: { text: true, images: true, files: true, slashCommands: true, typing: true, groups: false, proactive: true, threadResults: true } };
@@ -246,7 +251,7 @@ class ChannelsService {
                 if (!peer) { if (v.peers.length >= 500) continue; peer = { accountId, peerId: msg.peerId, contextToken: '' }; v.peers.push(peer); }
                 Object.assign(peer, { ...(msg.contextToken ? { contextToken: msg.contextToken } : {}), lastSeenAt: Date.now() });
                 const binding = v.bindings.find(b => b.accountId === accountId && b.peerId === msg.peerId);
-                const activeCount = v.jobs.filter(j => pending(j) && j.accountId === accountId && j.peerId === msg.peerId).length;
+                const activeCount = v.jobs.filter(j => ['queued', 'dispatching', 'running'].includes(j.status) && j.accountId === accountId && j.peerId === msg.peerId).length;
                 const slash = !msg.images?.length ? parseSlash(msg.text) : null;
                 const isControl = Boolean(slash && ['/stop', '/status', '/help'].includes(slash.command));
                 const isStop = slash?.command === '/stop';
@@ -278,7 +283,7 @@ class ChannelsService {
                 const peer = v.peers.find(p => p.accountId === b.accountId && p.peerId === b.peerId);
                 v.jobs.push({ id, kind: 'thread', turnId: event.id, accountId: b.accountId, peerId: b.peerId,
                     target: { cwd: b.cwd, sessionId: b.sessionId }, bindingId: b.id, at: event.completedAt,
-                    status: peer?.contextToken ? 'ready' : 'ignored', reason: peer?.contextToken ? null : 'reply-context-missing' });
+                    status: 'ready', reason: peer?.contextToken ? null : 'reply-context-missing' });
             }
             this.trimJobs(v);
         });
@@ -334,8 +339,8 @@ class ChannelsService {
                 v.jobs.push({ id, kind: 'cron', followsThread: event.notificationMode === 'inherit', cronRunId: event.runId, cronJobId: event.jobId,
                     accountId: binding.accountId, peerId: binding.peerId,
                     target: { cwd: binding.cwd, sessionId: binding.sessionId }, bindingId: binding.id,
-                    status: reason ? 'ignored' : 'ready', reason, at: Date.now(),
-                    ...(reason ? {} : { directReply: body.slice(0, 60000), deliverables: result.deliverables, mediaPlans: result.mediaPlans }) });
+                    status: 'ready', reason, at: Date.now(),
+                    directReply: body.slice(0, 60000), deliverables: result.deliverables, mediaPlans: result.mediaPlans });
             }
             this.trimJobs(v);
         });
@@ -358,21 +363,48 @@ class ChannelsService {
             const slash = job.status === 'queued' && !job.images?.length ? parseSlash(job.text) : null;
             const control = Boolean(slash && ['/stop', '/status', '/help'].includes(slash.command));
             if (this.runs.size >= (control ? 4 : 3)) continue;
-            if (!['queued', 'ready'].includes(job.status) || this.runs.has(job.id)) continue;
+            const recover = job.status === 'uncertain' && !job.sendStarted && job.kind !== 'slash' && (job.recoveryAttempts || 0) < 5;
+            if ((!['queued', 'ready'].includes(job.status) && !recover) || this.runs.has(job.id) || job.nextAttemptAt > Date.now()) continue;
             const account = this.db.value.accounts.find(a => a.id === job.accountId);
             if (!account?.enabled || !account.allowedUsers.includes(job.peerId)) continue;
             if (job.kind === 'cron' && this.canNotifyScheduled && !this.canNotifyScheduled(job.cronJobId)) {
                 this.updateJob(job.id, { status: 'cancelled', reason: 'notification-revoked', directReply: undefined, deliverables: undefined, mediaPlans: undefined }); continue;
             }
+            if (job.status === 'ready' && !this.db.value.peers.some(p => p.accountId === job.accountId && p.peerId === job.peerId && p.contextToken)) {
+                if (job.reason !== 'reply-context-missing') this.updateJob(job.id, { reason: 'reply-context-missing' });
+                continue;
+            }
             if (!control && ([...this.runs.entries()].some(([id, r]) => same(r.target, job.target)
                 || this.job(id)?.accountId === job.accountId && this.job(id)?.peerId === job.peerId)
-                || this.db.value.jobs.some(j => j.id !== job.id && j.status === 'uncertain'
+                || job.status === 'queued' && this.db.value.jobs.some(j => j.id !== job.id && blocksFollowing(j)
                     && (same(j.target, job.target) || j.accountId === job.accountId && j.peerId === job.peerId)))) continue;
             const run = { target: job.target, worker: null, promise: null }; this.runs.set(job.id, run);
-            run.promise = Promise.resolve().then(() => this.run(job.id, run)).catch(() => {
-                try { this.updateJob(job.id, { status: 'uncertain', reason: 'execution-or-delivery-uncertain' }); }
+            run.promise = Promise.resolve().then(() => recover ? this.recoverCompleted(job.id) : this.run(job.id, run)).catch(() => {
+                try {
+                    if (recover) throw new Error('Recovery receipt could not be saved');
+                    const current = this.job(job.id);
+                    if (current.status === 'ready' && !current.sendStarted) {
+                        const attempts = (current.readAttempts || 0) + 1;
+                        this.updateJob(job.id, { status: attempts < 5 ? 'ready' : 'failed', reason: 'reply-read-pending', readAttempts: attempts, nextAttemptAt: Date.now() + 30000 });
+                    } else if (current.status === 'queued') this.updateJob(job.id, { status: 'failed', reason: 'execution-not-started' });
+                    else if (['dispatching', 'running', 'sending'].includes(current.status)) {
+                        this.updateJob(job.id, { status: 'uncertain', reason: current.sendStarted ? 'delivery-unconfirmed' : 'execution-or-delivery-uncertain' });
+                    }
+                }
                 catch { this.error = '渠道投递记录无法保存，已停止后续投递'; }
             }).finally(() => this.runs.delete(job.id));
+        }
+    }
+    async recoverCompleted(id) {
+        const job = this.job(id);
+        let result;
+        try { result = typeof job.directReply === 'string' ? { status: 'completed' } : await this.readOutcome(job); }
+        catch (error) { if (error.code === 'SESSION_BUSY') return; }
+        if (this.stopping || this.isSuspended() || this.job(id)?.status !== 'uncertain') return;
+        if (result && ['completed', 'error', 'stopped'].includes(result.status)) {
+            this.updateJob(id, { status: 'ready', reason: null, waiting: false, text: undefined, images: undefined, nextAttemptAt: undefined });
+        } else {
+            this.updateJob(id, { recoveryAttempts: (job.recoveryAttempts || 0) + 1, nextAttemptAt: Date.now() + 30000 });
         }
     }
     bindingFor(job) {
@@ -514,28 +546,7 @@ class ChannelsService {
         const warning = this.deliveryWarning(deliveryIssues);
         const text = [baseText, mediaSummary, warning].filter(Boolean).join('\n\n');
         const chunks = Array.from(text.matchAll(/[\s\S]{1,1800}/gu), m => m[0]);
-        this.updateJob(id, { status: 'sending', sendStarted: true, sentChunks: 0, sentMedia: 0, deliveryIssues });
-        for (let i = 0; i < chunks.length; i++) {
-            if (this.stopping || this.isSuspended()) throw fail('Delivery interrupted');
-            const latestAccount = this.db.value.accounts.find(a => a.id === job.accountId);
-            if (!latestAccount?.enabled || !latestAccount.allowedUsers.includes(job.peerId) || !this.bindingFor(job)
-                || job.kind === 'cron' && this.canNotifyScheduled && !this.canNotifyScheduled(job.cronJobId)) throw fail('Delivery permission changed');
-            const peer = this.db.value.peers.find(p => p.accountId === latestAccount.id && p.peerId === job.peerId);
-            const receipt = await this.adapter.send(latestAccount, peer || { peerId: job.peerId }, chunks[i], `pivane-${id}-${i}`);
-            this.updateJob(id, { sentChunks: i + 1, lastPlatformMessageId: receipt?.message_id ? String(receipt.message_id) : null });
-        }
-        for (let i = 0; i < mediaFiles.length; i++) {
-            if (this.stopping || this.isSuspended()) throw fail('Media delivery interrupted');
-            const latestAccount = this.db.value.accounts.find(a => a.id === job.accountId);
-            if (!latestAccount?.enabled || !latestAccount.allowedUsers.includes(job.peerId) || !this.bindingFor(job)
-                || job.kind === 'cron' && this.canNotifyScheduled && !this.canNotifyScheduled(job.cronJobId)) throw fail('Delivery permission changed');
-            const peer = this.db.value.peers.find(p => p.accountId === latestAccount.id && p.peerId === job.peerId);
-            if (typeof this.adapter.sendMedia === 'function') {
-                const receipt = await this.adapter.sendMedia(latestAccount, peer || { peerId: job.peerId }, mediaFiles[i], `pivane-media-${id}-${i}`);
-                this.updateJob(id, { sentMedia: i + 1, lastPlatformMessageId: receipt?.message_id ? String(receipt.message_id) : null });
-            }
-        }
-        this.updateJob(id, { status: isStop ? 'reviewed' : deliveryIssues.length ? 'partial' : 'delivered', reason: isStop ? 'stop-request' : deliveryIssues.length ? 'attachments-incomplete' : null, directReply: undefined, deliverables: undefined, mediaPlans: undefined });
+        await require('./delivery').deliver(this, job, { chunks, mediaFiles, deliveryIssues, isStop });
     }
     summarizeMediaPlans(plans) {
         if (!Array.isArray(plans) || !plans.length || !this.mediaLabService?.chatRequests) return '';
@@ -556,7 +567,9 @@ class ChannelsService {
     deliveryWarning(issues) {
         if (!issues.length) return '';
         const labels = { limit: '超过每次 6 个附件限制', size: '超过 16 MiB', unreadable: '无法读取或校验文件',
-            unavailable: '文件发送组件不可用', pending: '尚在生成，可稍后发送 /confirm 查询', failed: '生成未完成，请在网页查看' };
+            unavailable: '文件发送组件不可用', pending: '尚在生成，可稍后发送 /confirm 查询', failed: '生成未完成，请在网页查看',
+            'media-upload-failed': '上传失败，已尝试恢复', 'send-unconfirmed': '发送回执未确认，为避免重复未重发',
+            'wechat-rejected': '微信拒绝接收', 'wechat-rate-limited': '微信暂时限制发送', 'connection-unavailable': '暂时无法连接微信' };
         const lines = issues.slice(0, 5).map(item => item.name + '：' + (labels[item.reason] || labels.unreadable));
         return '⚠️ 部分附件尚未发送：\n' + lines.join('\n')
             + (issues.length > 5 ? '\n其他未发送附件请在 Pivane 网页查看投递记录。' : '');
