@@ -13,7 +13,8 @@ const settings = require('./bot-settings');
 const { BotWindowRegistry } = require('./bot-window-registry');
 const { WINDOW_ENTRY, windowMarker, readWindowBinding } = require('./bot-window-state');
 const { HANDOFF_MESSAGE, buildHandoff } = require('./bot-handoff');
-const { LEDGER_ENTRY } = require('./bot-ledger');
+const ledger = require('./bot-ledger');
+const { LEDGER_ENTRY } = ledger;
 const { rotationReason } = require('./bot-maintenance');
 const history = require('./bot-history');
 const setup = require('./bot-setup');
@@ -35,6 +36,23 @@ const WORKSPACE_PARENT = 'PivaneBots';
 const MAX_BOTS = 50;
 const PLACEHOLDER = Object.freeze({ 'zh-CN': '新伙伴', en: 'New buddy' });
 const DEFAULT_AVATAR = Object.freeze({ kind: 'emoji', value: '✨' });
+
+// What the notebook panel shows: every note except tombstones, with a short excerpt of the
+// message it came from when that message is in the current generation.
+function notebookView(state, branch, current) {
+    const byId = new Map(branch.map(entry => [entry.id, entry]));
+    const excerpt = source => {
+        if (!source || source.sessionId !== current.sessionId) return null;
+        const message = byId.get(source.entryId)?.message;
+        if (!message || !['user', 'assistant', 'toolResult'].includes(message.role)) return null;
+        const text = (typeof message.content === 'string' ? message.content : Array.isArray(message.content)
+            ? message.content.filter(part => part?.type === 'text').map(part => part.text).join(' ') : '').replace(/\s+/g, ' ').trim();
+        return text ? { role: message.role, text: text.length > 160 ? text.slice(0, 159) + '…' : text } : null;
+    };
+    return { generation: current.generation, version: ledger.ledgerVersion(state),
+        items: state.items.filter(item => item.status !== 'deleted').map(item => ({ id: item.id, kind: item.kind, text: item.text, status: item.status,
+            due: item.due, by: item.by, supersedes: item.supersedes, createdAt: item.createdAt, updatedAt: item.updatedAt, source: excerpt(item.source) })) };
+}
 
 function publicWindow(window) {
     const { id, kind, title, emoji, focus, createdAt, updatedAt, archivedAt, current, generations } = window;
@@ -448,6 +466,59 @@ class BotService extends EventEmitter {
         const main = state.windows.find(item => item.kind === 'main' && item.current);
         if (!main) fail('This Bot has no main chat yet', 409);
         return (await this.resolve(profileId, main.id)).session;
+    }
+
+    // The window notebook (M2-5), replayed from the current generation's verified native file.
+    async notebook(profileId, windowId) {
+        const window = await this.windowRecord(profileId, windowId);
+        if (!window.current) return { generation: null, version: ledger.ledgerVersion(ledger.emptyLedger()), items: [] };
+        return this.store.withSessionRead(window.cwd, window.current.sessionId, (session, read) => {
+            const manager = read.manager(), binding = readWindowBinding(manager);
+            const branch = manager.getBranch();
+            read.validate();
+            if (session.path !== window.current.sessionPath || binding?.windowId !== windowId || binding.generation !== window.current.generation)
+                fail('Window conversation does not match its native marker', 409);
+            return notebookView(ledger.replay(branch), branch, window.current);
+        });
+    }
+
+    // Edits from the notebook panel: change text or due date, mark done/cancelled/open again,
+    // or delete (tombstone). Written by the window's running worker while it is idle, or,
+    // without a worker, appended here with the file reserved. Names the version it saw.
+    editNotebook(profileId, windowId, input = {}) {
+        if (!object(input) || !Number.isSafeInteger(input.expectedGeneration) || typeof input.expectedVersion !== 'string'
+            || !Array.isArray(input.ops) || !input.ops.length || input.ops.length > 20
+            || input.ops.some(op => !object(op) || !['update', 'status', 'delete'].includes(op.op))) fail('Invalid notebook edit');
+        const ops = input.ops.map(op => ({ op: op.op, id: op.id, text: op.text, status: op.status, due: op.due }));
+        return this.profiles.reserve(async () => {
+            const window = await this.windowRecord(profileId, windowId);
+            if (window.rotation) fail(MOVING, 409, 'BOT_WINDOW_ROTATING');
+            if (!window.current || window.current.generation !== input.expectedGeneration) fail('This chat moved on; reload the notebook', 409, 'BOT_WINDOW_STALE');
+            const sessionPath = window.current.sessionPath;
+            const worker = this.supervisor?.getActiveWorker(sessionPath);
+            try {
+                if (worker && !worker.disposed) await worker.botNotebook({ expectedVersion: input.expectedVersion, ops });
+                else await this.supervisor.withSessionEdit(sessionPath, async running => {
+                    if (running) fail('The chat is busy; try again in a moment', 409, 'SESSION_BUSY');
+                    const { SessionManager } = await getSdk();
+                    const session = await this.store.getSession(window.cwd, window.current.sessionId);
+                    if (session.path !== sessionPath) fail('Window conversation does not match its native marker', 409);
+                    const manager = this.store.profileManager(session, SessionManager), binding = readWindowBinding(manager);
+                    if (binding?.windowId !== windowId || binding.generation !== window.current.generation) fail('Window conversation does not match its native marker', 409);
+                    const state = ledger.replay(manager.getBranch());
+                    if (ledger.ledgerVersion(state) !== input.expectedVersion) fail('The notebook changed; reload it', 409, 'NOTEBOOK_CHANGED');
+                    const prepared = ledger.prepareOps(state, ops, { at: new Date().toISOString(), by: 'user' });
+                    manager.appendCustomEntry(LEDGER_ENTRY, { v: 1, ops: prepared.ops });
+                    require('../pi-private-files').privateFileMode(sessionPath);
+                    this.store.sessionLists?.delete(window.cwd);
+                });
+            } catch (error) {
+                if (['SESSION_BUSY', 'NOTEBOOK_CHANGED'].includes(error.code)) error.status = 409;
+                if (error.code === 'LEDGER_INVALID') error.status = 400;
+                throw error;
+            }
+            return this.notebook(profileId, windowId);
+        });
     }
 
     async generations(profileId, windowId) {

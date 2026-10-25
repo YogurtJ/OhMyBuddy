@@ -1,4 +1,5 @@
 'use strict';
+const { createHash } = require('node:crypto');
 // The window notebook ("我记着的事", D-028): decisions, commitments, open questions,
 // window preferences and key references of one Bot window. It lives only in the window's
 // native session entries and is recomputed by replaying the active branch:
@@ -240,7 +241,13 @@ function describeOp(op, state) {
     return `deleted [${op.id}]`;
 }
 
+// Optimistic-concurrency token of a notebook state (panel edits name the version they saw).
+function ledgerVersion(state) {
+    return createHash('sha256').update(JSON.stringify({ nextSeq: state.nextSeq, items: state.items })).digest('hex').slice(0, 16);
+}
+
 module.exports = {
+    ledgerVersion,
     LEDGER_ENTRY, KINDS, STATUSES, MAX_TEXT, MAX_ITEMS,
     emptyLedger, readSnapshot, normalizeOp, applyOp, prepareOps, replay, entryLedger, renderLedger, describeOp, cloneLedger
 };

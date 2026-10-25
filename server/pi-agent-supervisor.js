@@ -491,6 +491,11 @@ class AgentWorker extends EventEmitter {
         return this.exclusive(rpc => this.navigate(rpc, { mode: 'cron', input }, { timeoutMs: 30000 }), { cron: true });
     }
 
+    // A panel edit of a Bot window's notebook, written by this worker while it is idle.
+    async botNotebook(input) {
+        return this.exclusive(rpc => this.navigate(rpc, { mode: 'bot-notebook', input }, { timeoutMs: 15000 }));
+    }
+
     async taskReturn(input) {
         return this.exclusive(rpc => this.navigate(rpc, { mode: 'task-result', input }, { timeoutMs: 30000 }));
     }
@@ -714,6 +719,7 @@ class AgentWorker extends EventEmitter {
             if (payload.mode === 'channel' && !command.description?.includes('channels-v1')) throw new Error('消息渠道接口尚未加载，请在线程空闲后重开运行实例');
             if (payload.mode === 'cron' && !command.description?.includes('cron-v1')) throw new Error('Scheduled task bridge is not loaded; reopen the idle thread');
             if (payload.mode === 'task-result' && !command.description?.includes('task-results-v1')) throw new Error('Task result bridge is not loaded');
+            if (payload.mode === 'bot-notebook' && !command.description?.includes('bot-notebook-v1')) throw new Error('Notebook bridge is not loaded; reopen the chat');
             if (payload.mode === 'agent-message' && !command.description?.includes('agent-messages-v1')) throw new Error('Agent message bridge is not loaded; reopen the thread after it is idle');
             if (payload.mode === 'tree' && !command.description?.includes('tree-v1')) throw new Error('当前实例尚未加载会话树导航，请在任务结束后退出并重新打开线程');
             if (options.beforeSend && !options.beforeSend()) return { cancelled: true };
@@ -721,7 +727,7 @@ class AgentWorker extends EventEmitter {
             await rpc('prompt', { message: `/${command.name} ${JSON.stringify({ ...payload, id, token: this.navigationToken })}` }, options.timeoutMs || 120000);
             const result = this.navigationResults.get(id);
             if (!result) throw new Error('未收到原生回退结果，请重新读取会话状态');
-            if (!result.success) throw new Error(result.error || '会话回退失败');
+            if (!result.success) throw Object.assign(new Error(result.error || '会话回退失败'), typeof result.code === 'string' ? { code: result.code } : {});
             return result.data;
         } catch (error) {
             if (error.code === 'RPC_TIMEOUT') {
