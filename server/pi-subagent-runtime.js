@@ -8,18 +8,32 @@ const STATES = new Set(['queued', 'running', 'complete', 'failed', 'partial', 'p
 const KINDS = new Set(['subagent', 'workflow', 'step', 'host-step']);
 const METHODS = new Set(['status', 'cost', 'steer', 'stop', 'interrupt', 'resume']);
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+const THINKING = new Set(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+const ACTIVITY = new Set(['active_long_running', 'needs_attention']);
+const HOST_KINDS = new Set(['command', 'ci', 'gate']);
+const HOST_STATES = new Set(['pending', 'running', 'done', 'cancelled', 'error']);
+const VERDICTS = new Set(['pass', 'fail', 'inconclusive']);
+const DELIVERY = new Set(['delivered', 'queued']);
 
 const str = (value, limit = 200) => typeof value === 'string' ? value.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, '').slice(0, limit) : undefined;
 const time = value => Number.isFinite(value) && value > 0 && value < 1e14 ? value : undefined;
 const count = value => Number.isInteger(value) && value >= 0 && value < 1e9 ? value : undefined;
 const clean = object => Object.fromEntries(Object.entries(object).filter(([, value]) => value !== undefined));
+const pick = (allowed, value) => allowed.has(value) ? value : undefined;
+
+// Typed host-owned monitor rows (command / CI / gate). Report paths stay private.
+function hostStep(raw) {
+    if (!raw || typeof raw !== 'object' || !HOST_KINDS.has(raw.kind)) return undefined;
+    return clean({ kind: raw.kind, state: pick(HOST_STATES, raw.state), verdict: pick(VERDICTS, raw.verdict),
+        detail: str(raw.detail, 200), stale: typeof raw.stale === 'boolean' ? raw.stale : undefined });
+}
 
 function node(raw, depth) {
     if (!raw || typeof raw !== 'object' || !STATES.has(raw.state) || !KINDS.has(raw.kind)) return null;
     const id = str(raw.id, 256);
     if (!id) return null;
     const activity = raw.activity && typeof raw.activity === 'object' ? clean({
-        state: str(raw.activity.state, 40), currentTool: str(raw.activity.currentTool, 80),
+        state: pick(ACTIVITY, raw.activity.state), currentTool: str(raw.activity.currentTool, 80),
         lastActivityAt: time(raw.activity.lastActivityAt), currentToolStartedAt: time(raw.activity.currentToolStartedAt),
         turnCount: count(raw.activity.turnCount), toolCount: count(raw.activity.toolCount)
     }) : undefined;
@@ -28,8 +42,15 @@ function node(raw, depth) {
     return clean({ id, kind: raw.kind, label: str(raw.label) || id, state: raw.state,
         startedAt: time(raw.startedAt), updatedAt: time(raw.updatedAt), endedAt: time(raw.endedAt),
         activity: activity && Object.keys(activity).length ? activity : undefined,
+        // Step nodes report the role, model and thinking level once the child reports them.
+        agent: str(raw.agent, 80), model: str(raw.model, 160), thinking: pick(THINKING, raw.thinking),
+        hostStep: raw.kind === 'host-step' ? hostStep(raw.hostStep) : undefined,
         children: children.length ? children : undefined });
 }
+
+// The plugin republishes an unchanged snapshot with a new generatedAt every
+// second while work runs; only content changes are worth a broadcast.
+const snapshotKey = snapshot => snapshot ? JSON.stringify({ ...snapshot, generatedAt: 0 }) : 'null';
 
 function normalizeSnapshot(raw) {
     if (!raw || raw.kind !== SNAPSHOT_KIND || raw.version !== 1 || !Array.isArray(raw.runs)) return null;
@@ -48,6 +69,17 @@ function snapshotWidget(event) {
     if (typeof line !== 'string' || !line.startsWith(SNAPSHOT_PREFIX) || line.length > 256 * 1024) return undefined;
     try { const snapshot = normalizeSnapshot(JSON.parse(line.slice(SNAPSHOT_PREFIX.length))); return snapshot ? { snapshot } : { ignore: true }; }
     catch { return { ignore: true }; }
+}
+
+// Host protocol widgets are consumed here and reach browsers only through the
+// controls projection; relaying the raw line would resend it every second.
+function privateWidget(event) {
+    if (event?.type !== 'extension_ui_request' || event.method !== 'setWidget') return false;
+    if (event.widgetKey === INSPECT_WIDGET) return true;
+    if (event.widgetKey !== ASYNC_WIDGET) return false;
+    if (event.widgetLines == null) return true;
+    return Array.isArray(event.widgetLines) && event.widgetLines.length === 1
+        && typeof event.widgetLines[0] === 'string' && event.widgetLines[0].startsWith(SNAPSHOT_PREFIX);
 }
 
 function backgroundWork(raw, sessionId) {
@@ -90,7 +122,11 @@ function controlResult(method, data) {
             children: (Array.isArray(cost.children) ? cost.children : []).slice(0, 100).map(child => ({ label: str(child?.label) || '', agent: str(child?.agent, 80), usage: usage(child?.usage) })) } : null };
     }
     return clean({ text: str(data.text, 256 * 1024), state: str(data.state, 40), isError: data.isError === true || undefined,
+        // Steering is acknowledged as delivered or queued; never report a queued message as delivered.
+        delivery: method === 'steer' ? pick(DELIVERY, data.delivery) : undefined,
+        // Resume starts a new async run; its id lets the panel mark the continuation.
+        runId: method === 'resume' && typeof data.runId === 'string' && ID.test(data.runId) ? data.runId : undefined,
         snapshot: method === 'status' && data.asyncSnapshot ? normalizeSnapshot(data.asyncSnapshot) || undefined : undefined });
 }
 
-module.exports = { snapshotWidget, normalizeSnapshot, backgroundWork, validateControl, controlResult, ASYNC_WIDGET };
+module.exports = { snapshotWidget, normalizeSnapshot, snapshotKey, privateWidget, backgroundWork, validateControl, controlResult, ASYNC_WIDGET };

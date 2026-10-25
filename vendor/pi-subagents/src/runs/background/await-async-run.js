@@ -2,9 +2,8 @@ import * as fs from "node:fs";
 import { readStatus } from "../../shared/utils.js";
 import { workflowAwaitedAsyncResultPath } from "./async-execution.js";
 import { waitForImportedAsyncRoot } from "./chain-root-attachment.js";
-import { currentPidNamespaceScope } from "./pid-namespace.js";
 import { resultPayloadPathForSessionRun, resultSnapshotReplaced, withResultRunLease } from "./result-files.js";
-import { checkPidLiveness } from "./stale-run-reconciler.js";
+import { checkRecordedPidLiveness } from "./stale-run-reconciler.js";
 function errorMessage(error) {
     return error instanceof Error ? error.message : String(error);
 }
@@ -13,11 +12,8 @@ function runnerExitedWithoutResult(asyncDir, runId, resultPath) {
     const status = readStatus(asyncDir);
     if (!status || (status.state !== "running" && status.state !== "queued") || typeof status.pid !== "number")
         return false;
-    const observedScope = currentPidNamespaceScope();
-    if (status.pidNamespaceScope !== undefined && status.pidNamespaceScope !== observedScope)
-        return false;
-    const pidScopeVerified = status.pidNamespaceScope !== undefined && status.pidNamespaceScope === observedScope;
-    if (checkPidLiveness(status.pid, undefined, pidScopeVerified) !== "dead")
+    // A pid from another namespace never reads as dead here, so the runner is not presumed gone.
+    if (checkRecordedPidLiveness({ pid: status.pid, pidNamespaceScope: status.pidNamespaceScope, bootId: status.bootId }) !== "dead")
         return false;
     return !fs.existsSync(resultPath) && !(status.sessionId && resultPayloadPathForSessionRun(asyncDir, status.sessionId, runId));
 }

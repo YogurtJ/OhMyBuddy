@@ -43,6 +43,7 @@ import { createResultWatcher } from "../runs/background/result-watcher.js";
 import { createResultDeliveryOwnership } from "../runs/background/result-delivery-ownership.js";
 import { createScheduledRunManager } from "../runs/background/scheduled-runs.js";
 import { registerSlashCommands } from "../slash/slash-commands.js";
+import { ADMIN_MESSAGE_TYPE } from "../slash/subagents-admin.js";
 import { registerPromptTemplateDelegationBridge } from "../slash/prompt-template-bridge.js";
 import { registerMainWatchdog } from "../watchdog/register-main.js";
 import { registerSlashSubagentBridge } from "../slash/slash-bridge.js";
@@ -72,10 +73,14 @@ import { loadConfig, resolveAsyncByDefault, resolveScheduledStoreRoot } from "./
 import { buildSubagentToolDescription, buildSubagentToolPromptMetadata } from "./tool-description.js";
 import { formatWorkflowPreflightSummary, normalizeWorkflowPreflight } from "../workflows/workflow-preflight.js";
 import { runtimeReplacedAbortReason } from "../workflows/workflow-reuse.js";
+import { autoResumeFailureText, cancelPendingWorkflowAutoResumes, finishWorkflowAutoResume, planWorkflowAutoResumes, WORKFLOW_AUTO_RESUME_MESSAGE_TYPE } from "../workflows/workflow-auto-resume.js";
+import { recordWorkflowResumeRefusal, releaseWorkflowResumeClaim, resumedRunStarted } from "../workflows/workflow-resume-claim.js";
+import { workflowResumeRefusal } from "../workflows/workflow-resume.js";
 import { finalizeToolResult } from "./tool-result.js";
 import { flattenSubagentToolOptions } from "./subagent-options.js";
 import { collectGoalContinuationNotices } from "../missions/goal-driver.js";
 import { restoreForegroundRunHistory } from "../runs/foreground/foreground-history.js";
+import { createInterruptedElsewhereCollector } from "../runs/background/interrupted-elsewhere.js";
 import { resolveMissionStoreLocation } from "../missions/store.js";
 import { listRetainedChildren } from "../runs/background/retained-children.js";
 import { DIRS, DEFAULT_ARTIFACT_CONFIG, SLASH_RESULT_TYPE, SLASH_TEXT_RESULT_TYPE, SUBAGENT_ASYNC_COMPLETE_EVENT, SUBAGENT_ASYNC_STARTED_EVENT, SUBAGENT_PROCESS_TERMINAL_EVENT, SUBAGENT_CONTROL_EVENT, SUBAGENT_STEERING_NOTICE_EVENT, WIDGET_KEY, resolveMaxSubagentSpawnsPerSession, } from "../shared/types.js";
@@ -433,6 +438,7 @@ export default function registerSubagentExtension(pi) {
             refreshResultDelivery();
         },
         onJobCleanup: (asyncId) => deliveredRunIds.delete(asyncId),
+        deliveryOwnerId: resultDeliveryOwnership.deliveryOwnerId,
         supervisorRequestState: supervisorChannel.getSupervisorRequestState,
         onJobsChanged: programStatus.sync,
     });
@@ -557,13 +563,32 @@ export default function registerSubagentExtension(pi) {
             return undefined;
         return createSlashResultComponent(details, options, theme, config.mainWindowRenderer, foregroundDetachShortcut, () => state.lastUiContext?.ui.theme ?? theme);
     });
-    // Keep view-only reports in the transcript/RPC stream, but out of model context.
-    // SLASH_RESULT_TYPE carries delegated work and must remain model-visible.
-    pi.on("context", (event) => ({
-        messages: event.messages.filter((message) => message.role !== "custom"
-            || message.customType !== SLASH_TEXT_RESULT_TYPE
-            || message.details?.viewOnly !== true),
-    }));
+    // Pi sends custom messages to the model as plain user messages, so every model-visible
+    // pi-subagents message is wrapped in a marker naming its source. The marker depends only on
+    // the message, so history renders the same bytes every turn and cached prefixes stay valid.
+    const markedMessageTypes = new Set([...SUBAGENT_MESSAGE_TYPES, "subagent-compaction-resume", SLASH_RESULT_TYPE, SLASH_TEXT_RESULT_TYPE, ADMIN_MESSAGE_TYPE]);
+    pi.on("context", (event) => {
+        const messages = [];
+        for (const message of event.messages) {
+            if (message.role !== "custom" || !markedMessageTypes.has(message.customType)) {
+                messages.push(message);
+                continue;
+            }
+            // Keep view-only reports in the transcript/RPC stream, but out of model context.
+            // SLASH_RESULT_TYPE carries delegated work and must remain model-visible.
+            if (message.customType === SLASH_TEXT_RESULT_TYPE && message.details?.viewOnly === true)
+                continue;
+            const open = `<pi_subagents_notice type="${message.customType}" origin="automated message from the pi-subagents extension, not typed by the user">`;
+            const close = "</pi_subagents_notice>";
+            messages.push({
+                ...message,
+                content: typeof message.content === "string"
+                    ? `${open}\n${message.content}\n${close}`
+                    : [{ type: "text", text: `${open}\n` }, ...message.content, { type: "text", text: `\n${close}` }],
+            });
+        }
+        return { messages };
+    });
     pi.registerMessageRenderer(SLASH_TEXT_RESULT_TYPE, (message, _options, _theme) => {
         const content = typeof message.content === "string"
             ? message.content
@@ -576,6 +601,60 @@ export default function registerSubagentExtension(pi) {
     const executeSubagentReady = async (id, params, signal, onUpdate, ctx) => {
         await waitForAdvertisement();
         return (await getExecutor()).executePublic(id, params, signal, onUpdate, ctx);
+    };
+    // Names this runtime's planned auto-resumes in the process-global registry.
+    const autoResumeOwner = {};
+    const postAutoResumeFailure = (sourceRunId, refusal) => {
+        pi.sendMessage({ customType: WORKFLOW_AUTO_RESUME_MESSAGE_TYPE, content: autoResumeFailureText(sourceRunId, refusal), display: true }, { triggerTurn: false });
+    };
+    // Each session start claims its interrupted workflows synchronously, then launches them here, off
+    // session start. Cleanup and the next session start cancel the launches that have not started.
+    const launchWorkflowAutoResume = async (entry, ctx) => {
+        const { prepared } = entry;
+        try {
+            // Let the rest of session start (agent advertisement, other handlers) run first.
+            await new Promise((resolve) => setImmediate(resolve));
+            await waitForAdvertisement();
+            const executor = await getExecutor();
+            if (entry.state !== "pending")
+                return;
+            entry.state = "started";
+            const outcome = await executor.executeWorkflowResume(randomUUID(), prepared, new AbortController().signal, ctx);
+            // The executor has given back the claim and recorded any refusal; nothing below may replace them.
+            // A run launched by a runtime that was cleaned up meanwhile would keep running through its stale context.
+            if (outcome.launched && runtimeCleaned)
+                state.workflowControllers?.get(prepared.newRunId)?.abort(runtimeReplacedAbortReason());
+            // A cleaned-up runtime's pi can no longer post; the refusal stays in the run for its notice.
+            if (outcome.launched || runtimeCleaned)
+                return;
+            try {
+                postAutoResumeFailure(prepared.sourceRunId, outcome.refusal);
+            }
+            catch (error) {
+                console.error(`Failed to post the auto-resume failure of workflow ${prepared.sourceRunId}:`, error);
+            }
+        }
+        catch (error) {
+            // A cancelled launch already gave its claim back.
+            if (entry.state === "cancelled")
+                return;
+            const message = error instanceof Error ? error.message : String(error);
+            console.error(`Failed to auto-resume workflow ${prepared.sourceRunId}:`, error);
+            try {
+                if (resumedRunStarted(prepared.sourceAsyncDir, prepared.newRunId))
+                    return;
+                releaseWorkflowResumeClaim(prepared.sourceAsyncDir, prepared.newRunId);
+                const refusal = workflowResumeRefusal("launch-failed", `launch failed: ${message}`, prepared.sourceRunId);
+                recordWorkflowResumeRefusal(prepared.sourceAsyncDir, { reason: refusal.reason, byHand: refusal.byHand, newRunId: prepared.newRunId });
+                postAutoResumeFailure(prepared.sourceRunId, refusal);
+            }
+            catch (cleanupError) {
+                console.error(`Failed to give back the auto-resume claim of workflow ${prepared.sourceRunId}:`, cleanupError);
+            }
+        }
+        finally {
+            finishWorkflowAutoResume(entry);
+        }
     };
     const executeSubagentCollapsed = (id, params, signal, onUpdate, ctx) => {
         if (ctx.hasUI)
@@ -853,11 +932,30 @@ export default function registerSubagentExtension(pi) {
         resetJobs(ctx);
         logSlowPhase("reset-jobs", phaseStartedAt);
         phaseStartedAt = Date.now();
-        restoreForegroundRunHistory(state, { resultsDir: DIRS.results });
+        // Runs other sessions in this folder left when their Pi died, from what this restore reads anyway.
+        const interruptedElsewhere = ctx.hasUI ? createInterruptedElsewhereCollector({ currentSessionId: state.currentSessionId, cwd: ctx.cwd, now: Date.now() }) : undefined;
+        restoreForegroundRunHistory(state, { resultsDir: DIRS.results, observeForeign: interruptedElsewhere?.observeForegroundRun });
         logSlowPhase("foreground-history", phaseStartedAt);
         phaseStartedAt = Date.now();
-        restoreActiveJobs(ctx);
+        restoreActiveJobs(ctx, interruptedElsewhere?.observeStatus);
         logSlowPhase("active-job-restore", phaseStartedAt);
+        phaseStartedAt = Date.now();
+        // Read-only and UI-only: never sent to the model, so prompts and history are unchanged.
+        if (interruptedElsewhere)
+            for (const line of interruptedElsewhere.lines())
+                ctx.ui.notify(line, "info");
+        logSlowPhase("cross-session-notice", phaseStartedAt);
+        // Before any stored result is delivered, so the interrupted run's notice can name its resume.
+        phaseStartedAt = Date.now();
+        // Launches an earlier session start of this runtime planned and has not started belong to that session.
+        cancelPendingWorkflowAutoResumes((entry) => entry.owner === autoResumeOwner);
+        // Not in a one-shot print run: its turn would then wait on the resumed workflow at settle.
+        if (recovering && ctx.hasUI && config.autoResume !== false) {
+            for (const entry of planWorkflowAutoResumes({ asyncDirRoot: DIRS.async, currentSessionId: state.currentSessionId, now: Date.now(), owner: autoResumeOwner })) {
+                void launchWorkflowAutoResume(entry, ctx);
+            }
+        }
+        logSlowPhase("workflow-auto-resume", phaseStartedAt);
         phaseStartedAt = Date.now();
         scheduledRunManager.bindSession(ctx);
         logSlowPhase("scheduled-runs", phaseStartedAt);
@@ -883,6 +981,8 @@ export default function registerSubagentExtension(pi) {
             if (runtimeCleaned)
                 return;
             runtimeCleaned = true;
+            // Synchronously, so a reload's new runtime finds these runs unclaimed when it scans.
+            cancelPendingWorkflowAutoResumes((entry) => entry.owner === autoResumeOwner);
             programStatus.dispose(shutdownReason);
             releaseHostSessionLiveness();
             releaseHostSessionLiveness = () => { };

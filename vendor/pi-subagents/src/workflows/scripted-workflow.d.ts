@@ -60,7 +60,7 @@ export interface WorkflowScriptChildResult {
     };
     artifactPaths: string[];
     results?: SingleResult[];
-    /** Came from a runtime-replaced run of the same script (and args, unless named by options.reuseFrom): its saved result, or its still-running child re-attached; this run launched nothing. */
+    /** Came from a runtime-replaced or owner-exited run of the same script (and args, unless named by options.reuseFrom): its saved result, or its still-running child re-attached; this run launched nothing. */
     reused?: boolean;
 }
 export interface WorkflowScriptTraceEntry {

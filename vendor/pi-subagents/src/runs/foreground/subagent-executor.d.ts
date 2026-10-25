@@ -15,6 +15,7 @@ import { steerAsyncRun } from "./async-steering-action.ts";
 import type { ChildRuntimeConfig } from "../shared/child-runtime-config.ts";
 import { type MissionLaunchBinding } from "../../missions/lifecycle.ts";
 import { type WorkflowSteerOptions, type WorkflowSteerResult } from "../../workflows/scripted-workflow.ts";
+import { type PreparedWorkflowResume, type WorkflowResumeRefusalReason } from "../../workflows/workflow-resume.ts";
 import { type AcceptanceInput, type AgentContract, type ControlConfig, type Details, type ExtensionConfig, type IntercomBridgeConfig, type JsonSchemaObject, type MaxOutputConfig, type ResolvedControlConfig, type RunFanoutBudgetDescriptor, type SteeringRecoveryDescriptor, type SingleResult, type ToolBudgetConfig, type UsageBudgetConfig, type SubagentState, type ScheduleOrigin } from "../../shared/types.ts";
 export declare function unknownSubagentActionMessage(action: string, disabled?: DisabledFeatureSurface): string;
 interface TaskParam {
@@ -287,6 +288,14 @@ export declare function resolveRevivalControlConfig(input: {
     requestedControl?: ControlConfig;
     recoveryControlConfig?: ResolvedControlConfig;
 }): ResolvedControlConfig;
+type WorkflowResumeOutcome = {
+    result: AgentToolResult<Details>;
+} & ({
+    launched: true;
+} | {
+    launched: false;
+    refusal: WorkflowResumeRefusalReason;
+});
 export declare function createSubagentExecutor(deps: ExecutorDeps): {
     execute: (id: string, params: SubagentParamsLike, signal: AbortSignal, onUpdate: ((r: AgentToolResult<Details>) => void) | undefined, ctx: ExtensionContext) => Promise<AgentToolResult<Details>>;
     /** Public/model-facing execution boundary. Internal direct launch primitives use execute or executeDelegated. */
@@ -299,6 +308,8 @@ export declare function createSubagentExecutor(deps: ExecutorDeps): {
     executeDelegated: (id: string, params: SubagentParamsLike, signal: AbortSignal, onUpdate: ((r: AgentToolResult<Details>) => void) | undefined, ctx: ExtensionContext) => Promise<AgentToolResult<Details>>;
     /** Scheduled launches retain their owning context without replacing the live active session. */
     executeScheduled: (id: string, params: SubagentParamsLike, signal: AbortSignal, ctx: ExtensionContext) => Promise<AgentToolResult<Details>>;
+    /** Relaunches a stopped workflow claimed by prepareWorkflowResume (resume by id and auto-resume); a launch that did not start gives up its claim. */
+    executeWorkflowResume: (id: string, prepared: PreparedWorkflowResume, signal: AbortSignal, ctx: ExtensionContext) => Promise<WorkflowResumeOutcome>;
     /** Scheduled state visible to the current runtime supervisor owner only. */
     getCurrentSupervisorOwnerStates: () => Iterable<SubagentState>;
 };

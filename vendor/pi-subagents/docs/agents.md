@@ -43,7 +43,7 @@ Builtins load at the lowest priority, so a user or project agent with the same n
 | `researcher` | Web/docs research with sources: official docs, specs, benchmarks, recent changes, and a concise research brief. |
 | `evidence-auditor` | Independent evidence review of important claims in an existing research brief. |
 | `worker` | Implementation work, including approved oracle handoffs. It edits files, validates, and escalates unapproved decisions instead of guessing. |
-| `reviewer` | Code review and small fixes. It checks the implementation against the task/plan, tests, edge cases, and simplicity. |
+| `reviewer` | Read-only code review. It checks the implementation against the task/plan, tests, edge cases, and simplicity. |
 | `oracle` | A second opinion before acting. It challenges assumptions, catches drift, and recommends the safest next move without editing. |
 | `delegate` | A lightweight general delegate when you want a child agent that behaves close to the parent session. |
 
@@ -282,6 +282,36 @@ Placed external profiles are one-shot and stop-only: they cannot steer, resume, 
 
 pi-subagents never clones, pulls, or checks out on the machine. Generic `external-cli` commands and managed worktrees are rejected before launch; saved-machine placement accepts native Pi and only the six code-owned external profiles.
 
+## Running a Pi child in a Rex pane on this machine
+
+`machine: "local"` runs a native Pi child as a visible Pi in a new background tab of your own Rex session, labeled `subagent-<run id tail>`. It works wherever `machine` works: frontmatter, settings overrides, the `subagent` tool, workflow `runs.run`, chain, parallel, and dynamic-fanout steps. `local` is reserved and never looks in the Herdr catalog. The parent Pi must run inside Rex: with no `REX_SESSION`, or a session the Rex server does not confirm, the launch fails before anything starts.
+
+The parent drives the child through the same bridge as a Herdr-placed Pi: prompt, steer, follow-up, abort, `contact_supervisor`, and results. The child Pi loads pi-subagents from its own extensions, so it must be installed at the same version. `cwd` is a directory on this machine; a relative path joins the launch directory. pi-subagents finds `rex` in `$REX_BIN_DIR`, then on `PATH`, then in the Rex server app.
+
+A finished child keeps its tab open, with the idle Pi, until you close it; an aborted or stopped child's tab is closed. Limits: native Pi only (Claude Code, Codex, Cursor, and generic `external-cli` agents are rejected), fresh context only, and the same restrictions as a Herdr-placed Pi (no local extension paths, process environment, nested delegation, permission rules, or tool budgets).
+
+## Running a Pi child in a Rex pane on another Mac
+
+Name a Mac you reach over SSH in your user settings (`~/.pi/agent/settings.json`), with its repo root:
+
+```json
+{
+  "subagents": {
+    "machines": {
+      "workmac": { "rex": { "ssh": "100.82.67.118" }, "cwd": "~/dev/app" }
+    }
+  }
+}
+```
+
+`machine: "workmac"` then runs a native Pi child as a visible Pi in a new background tab of the Rex session labeled `subagents` on that Mac. pi-subagents creates the session the first time and reuses it after that; if two sessions there have that label, the launch fails until you close or rename one. Every `rex` command runs on that Mac over SSH, and the bridge socket comes back through an SSH forward, so SSH must work without a prompt (`ssh <target>` once to accept the host key). A name with a `rex` entry never looks in the Herdr catalog, so Herdr does not need to be installed.
+
+Only user settings may name a Rex host: a `rex` entry in a project's `.pi/settings.json` fails the launch, so a cloned repo cannot choose where a task runs. `cwd` can come from project or user settings, as for Herdr machines: a relative step `cwd` joins it, and an absolute or `~` path is used as given. The other Mac needs Rex, Pi on its login shell's `PATH`, and pi-subagents installed at the same version. The child edits that Mac's disk, so its changed files come from that Mac's Git state, as for a Herdr-placed child.
+
+Programs in a Rex tab run under the Rex app's macOS privacy permissions. If Pi on that Mac reads files in Desktop, Documents, or Downloads (for example a package path in its settings), allow Rex there first: open a Rex tab on that Mac, run `ls ~/Documents`, and accept the prompt. Until then Pi waits on the prompt and the launch times out.
+
+To watch the tab, open the `subagents` session in Rex on that Mac. To watch it from this Mac, add that Mac's Rex server to your hosts here once (`rex hosts add workmac <endpoint>`; after `rex server tailscale on` there, `rex whoami` on that Mac shows its Tailscale address). Tab lifecycle and limits are the same as for `machine: "local"`.
+
 ## Sandboxing background children with a launcher
 
 A launcher wraps an agent's background runner in a command you choose, so that agent can run in a different sandbox from the parent session. Define the command in the user config key [`runnerLaunchers`](configuration.md#runnerlaunchers), then name it in the agent file:
@@ -512,6 +542,7 @@ How `tools` behaves:
 - `tools` omitted: the child session gets Pi's normal builtin tools.
 - `tools` present: regular tool names become an explicit allowlist.
 - `tools:` empty: the child session gets no tools.
+- `tools: +codemode` or `tools: -write`: rejected. Pi's `--tools` and `defaultTools` accept `+name`/`-name` entries that edit the default tool set, but a child's `tools` list replaces that set, so name every tool the child needs, or omit `tools` and use `excludeTools` to drop one. A local agent with such an entry fails before launch. A Herdr- or Rex-placed child resolves its agent on that machine, so an entry only there fails when the pane bridge is configured, before the first prompt.
 - `allowNestedSubagents: true`: explicitly enables child-safe nested fanout without turning omitted `tools` into an allowlist. Depth and inherited capability ceilings still apply.
 - `allowedAgents: scout, reviewer`: if nesting is separately enabled, restricts this agent's descendant launches to those names. `allowedAgents:` denies all descendants and omission is unrestricted except for inherited/runtime policy.
 
@@ -619,11 +650,10 @@ The package bundles a `pi-subagents` skill that is automatically available to th
 
 What it covers:
 
-- **Delegation patterns**: how to select a bounded agent and single, parallel, scripted, or async shape after delegation is authorized, including fresh or forked context.
-- **Prompt workflow recipes**: how to apply the packaged techniques directly with `subagent(...)` when the user describes the workflow in natural language instead of invoking a slash command. This includes parallel review, review-loop, parallel research, parallel context-build, parallel handoff-plan, gather-context-and-clarify, and parallel cleanup.
-- **Role-agent prompting guidance**: compact contract prompts instead of long scripts, what to include in role-specific meta prompts, and retrieval budgets for researchers.
-- **Safety boundaries**: child agents must not run subagents unless their resolved builtin tools explicitly include `subagent`, must not invent intercom targets, and must escalate unapproved decisions.
-- **Intercom conventions**: when to ask vs send, and how parent-side supervisor/result delivery works through the native channel.
-- **Control and diagnostics**: attention signals, soft interrupts, status, and the `doctor` action.
+- **Calls**: the common `subagent` calls, workflow script and resume shapes, and async waiting rules.
+- **Delegation rules**: when to delegate at all, what every child brief contains, one writer per worktree, fresh or forked context, and what to do when a lane fails.
+- **Prompt workflow recipes**: how to apply the packaged techniques directly with `subagent(...)` when the user describes the workflow in natural language instead of invoking a slash command: parallel review, review loop, parallel research, gather-context-and-clarify, parallel cleanup, and oracle consultation.
+- **Orchestration**: splitting work into lanes, review loops, finding disposition, and gate-failure triage.
+- **Lookups**: which `guide` section answers each rarer question, so the skill does not copy this reference.
 
 If you are writing an agent that has been asked to orchestrate subagents, the bundled skill helps it behave correctly without guessing the patterns. If you are a human user, you do not need to read it; the README and prompt shortcuts encode the same workflows in user-facing form.

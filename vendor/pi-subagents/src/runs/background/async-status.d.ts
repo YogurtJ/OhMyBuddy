@@ -142,6 +142,10 @@ interface AsyncRunListOptions {
     includeNested?: boolean;
     /** Explicit repair/debug escape hatch. Normal runtime paths must not set this. */
     repairScan?: boolean;
+    /** This process's completion owner, adopted by an owner-exited workflow repair of a run the session owns; needs `sessionId`. */
+    adoptCompletionOwnerId?: string;
+    /** Receives the warning for a skipped corrupt terminal status, so an open TUI can show it as a notice instead of console output. */
+    onCorruptStatus?: (warning: string) => void;
 }
 type TargetedAsyncRunResolution = {
     kind: "exact";

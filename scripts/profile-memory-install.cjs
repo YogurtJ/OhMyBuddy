@@ -7,7 +7,7 @@ const { execFileSync } = require('node:child_process');
 const { createRequire } = require('node:module');
 const { createHash } = require('node:crypto');
 const { REVIEWED_PI_VERSION: piVersion } = require('../server/pi-reviewed-host');
-const LOCK_SHA256 = 'a763f840d56accaa411ca18cdc6dbea833d80ec933734aa40c3870e3f6968750';
+const LOCK_SHA256 = '235b0e77dc56de914f99fe68e9b8da0f9afa450b7b968f5af004467db539708c';
 
 const manifest = {
     name: 'pivane-profile-memory-isolated', version: '1.0.0', private: true,
@@ -15,11 +15,11 @@ const manifest = {
         'pi-hermes-memory': '0.9.10', 'better-sqlite3': '13.0.3',
         '@earendil-works/pi-coding-agent': piVersion, '@earendil-works/pi-ai': piVersion,
         '@earendil-works/pi-tui': piVersion, 'typebox': '1.3.27', 'strip-ansi': '7.2.0',
-        'brace-expansion': '5.0.12', undici: '8.11.2',
+        'brace-expansion': '5.0.12', undici: '8.12.3',
     },
     overrides: { '@earendil-works/pi-tui': piVersion, '@earendil-works/pi-agent-core': piVersion,
         '@earendil-works/pi-codemode': piVersion, '@earendil-works/pi-mcp': piVersion,
-        '@earendil-works/pi-telemetry': piVersion, undici: '8.11.2', 'brace-expansion': '5.0.12' },
+        '@earendil-works/pi-telemetry': piVersion, undici: '8.12.3', 'brace-expansion': '5.0.12' },
 };
 function install(prefix) {
     if (!prefix || !path.isAbsolute(prefix) || !fs.existsSync(path.join(prefix, 'package', 'profile-memory-bundle.mjs')))

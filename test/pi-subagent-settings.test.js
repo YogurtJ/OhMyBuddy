@@ -49,7 +49,7 @@ test('bundled plugin is ready by default and preserves legacy disable filters', 
     fs.writeFileSync(path.join(pkg, 'package.json'), JSON.stringify({ name: 'pi-subagents', version: definition.version, pi: { extensions: ['./index.js'] } }));
     fs.writeFileSync(globalFile, JSON.stringify({ packages: [{ source: pkg, extensions: [] }], preserved: { sentinel: 123 } }));
     snapshot = await service.snapshot(cwd); assert.equal(snapshot.plugin.status, 'disabled');
-    fs.writeFileSync(globalFile, JSON.stringify({ packages: [pkg], preserved: { sentinel: 123 }, subagents: { unknown: { enabled: true }, agentOverrides: { reviewer: { tools: ['read'] } } } }));
+    fs.writeFileSync(globalFile, JSON.stringify({ packages: [pkg], preserved: { sentinel: 123 }, subagents: { machines: { remote: { rex: { ssh: 'fixture-host' }, future: true } }, unknown: { enabled: true }, agentOverrides: { reviewer: { tools: ['read'] } } } }));
     snapshot = await service.snapshot(cwd); assert.equal(snapshot.plugin.status, 'ready'); assert.ok(snapshot.roles.some(role => role.name === 'reviewer'));
 });
 
@@ -60,6 +60,7 @@ test('canonical role/default writes preserve unknown fields, enforce revisions a
     await assert.rejects(service.save(input), /变化/);
     let data = JSON.parse(fs.readFileSync(globalFile));
     assert.equal(data.preserved.sentinel, 123); assert.equal(data.subagents.unknown.enabled, true); assert.deepEqual(data.subagents.agentOverrides.reviewer.tools, ['read']);
+    assert.deepEqual(data.subagents.machines, { remote: { rex: { ssh: 'fixture-host' }, future: true } }, 'role saves preserve placement and unknown machine configuration');
     snapshot = await service.snapshot(cwd);
     await assert.rejects(service.save({ ...input, scope: 'project', expectedRevision: snapshot.revision }), /信任/);
     await assert.rejects(service.save({ ...input, expectedRevision: snapshot.revision, changes: { 'agentOverrides.__proto__.model': 'inherit' } }), /不支持/);

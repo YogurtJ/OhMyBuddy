@@ -13,7 +13,8 @@ export const REVIVAL_ORIGIN_FILE = "workflow-revival-origin.json";
 /** Recording refuses a deeper link, so readers bounded by this always reach the chain's end. */
 const MAX_REVIVAL_DEPTH = 16;
 const KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
-function isRunId(value) {
+/** A run directory name, never a path. */
+export function isRunId(value) {
     return typeof value === "string" && value.length > 0 && value.length <= 255 && path.basename(value) === value && value !== "." && value !== "..";
 }
 function readLink(file) {

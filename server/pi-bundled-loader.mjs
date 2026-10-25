@@ -1,7 +1,14 @@
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import * as sdk from '@earendil-works/pi-coding-agent';
 import bundled from './pi-bundled-resources.js';
 import { nativeExtensionFactories, selectedNativeBuiltins } from './pi-native-mcp.mjs';
+
+// Match the pinned package's declared entry before loading it. Keep the legacy
+// root entry for explicit paths; both must share the wrapper's unbundled factory.
+const subagentManifest = createRequire(import.meta.url)('../vendor/pi-subagents/package.json');
+const subagentEntries = new Set(['./index.js', ...subagentManifest.pi.extensions].map(entry =>
+    fileURLToPath(new URL('../vendor/pi-subagents/' + entry, import.meta.url))));
 
 // Build the same native resource inventory used by Settings, then let Pi load
 // only selected paths. Filtering happens before any third-party factory runs.
@@ -14,7 +21,7 @@ export async function managedLoaderOptions({ cwd, agentDir, settings, parsed }) 
         if (!entry) return true;
         return entry.mode === 'package' && bundled.packageAt(file)?.root === fileURLToPath(new URL('../vendor/' + entry.name, import.meta.url));
     });
-    const extensionPath = file => file === fileURLToPath(new URL('../vendor/pi-subagents/index.js', import.meta.url))
+    const extensionPath = file => subagentEntries.has(file)
         ? fileURLToPath(new URL('./pi-bundled-subagents.mjs', import.meta.url)) : file;
     return { settingsView, options: {
         noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true,

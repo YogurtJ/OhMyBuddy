@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { catalog, packagePath } = require('./pi-bundled-capabilities');
 const TYPES = ['extensions', 'skills', 'prompts', 'themes'];
+const subagentExtensionEntry = require('../vendor/pi-subagents/package.json').pi.extensions[0].replace(/^\.\//, '');
 const sourceOf = value => typeof value === 'string' ? value : value?.source;
 function obsoleteMcpAdapter(source, base) {
     if (typeof source !== 'string') return false;
@@ -58,7 +59,15 @@ function projectSettings(config, base, { global = false } = {}) {
         const value = byId.get(entry.id) || (global ? { source: packagePath(entry) } : null);
         if (value || custom) {
             const filters = custom && typeof custom === 'object' ? Object.fromEntries(TYPES.filter(type => Array.isArray(custom[type])).map(type => [type, custom[type]])) : {};
-            rewritten.push({ ...(value || { source: packagePath(entry), autoload: false }), ...filters });
+            const projected = { ...(value || { source: packagePath(entry), autoload: false }), ...filters };
+            // Pi's +/- overrides match exact relative paths, unlike glob filters.
+            // Project the former root entry onto the package's declared entry;
+            // saved settings stay unchanged until an explicit resource toggle.
+            if (entry.id === 'subagents' && Array.isArray(projected.extensions)) {
+                projected.extensions = projected.extensions.map(pattern => typeof pattern === 'string' && /^[+-](?:\.[/\\])?index\.js$/.test(pattern)
+                    ? pattern[0] + subagentExtensionEntry : pattern);
+            }
+            rewritten.push(projected);
         }
     }
     return { ...config, packages: rewritten,

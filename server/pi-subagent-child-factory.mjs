@@ -1,4 +1,4 @@
-// Pi 1.4.0 / pi-subagents 0.80.0 child-session injection seam. Upstream owns
+// Pi 1.4.0 / pi-subagents 0.82.1 child-session injection seam. Upstream owns
 // launch, storage, ownership, cancellation, notifications and disposal; this
 // adapter supplies the resource selection and authorized native tool factories.
 import './pi-subagent-native-loader.mjs';
@@ -20,7 +20,7 @@ class ChildResourceLoader {
             allowedTools: policy?.tools, excludeTools: policy?.excludeTools,
             ambientExtensions: policy?.ambientExtensions, denyExtensions: policy?.runtime?.capabilityCeiling?.denyExtensions });
         if (policy) policy.nativeMcp = nativeFactories.find(entry => entry.name === 'mcp');
-        // 0.80 owns readiness through its MCP wrapper and Codemode metadata.
+        // 0.82 owns readiness through its MCP wrapper and Codemode metadata.
         // Its SDK factory below supplies our filtered MCP implementation; keep
         // those two wrappers for selected tools without loading a second transport.
         const readiness = Boolean(policy?.builtinMcpTools?.length && policy.nativeMcp);
