@@ -102,9 +102,11 @@ test('S4 rotates an idle window that is due and carries the notebook and structu
     manager.appendMessage(assistant([{ type: 'text', text: '已取消报价' }]));
     const before = ledger.replay(SessionManager.open(session.path).getBranch());
     const worker = { loadedBot: { profileId: botId, windowId, generation: 0 }, sessionPath: session.path };
-    assert.equal(await bots.maintainWindow(worker), null, 'a small, young window stays');
+    assert.equal(await bots.maintainWindow(worker, { trigger: 'compaction' }), null, 'a small, young window stays');
     const later = Date.now() + 61 * 24 * 3600 * 1000;
-    const rotated = await bots.maintainWindow(worker, { now: later });
+    // Due, but after an ordinary reply it waits for the worker's idle summary (D-033).
+    assert.equal(await bots.maintainWindow(worker, { now: later }), null);
+    const rotated = await bots.maintainWindow(worker, { now: later, trigger: 'compaction' });
     assert.equal(rotated.window.generation, 1);
     const generations = await bots.generations(botId, windowId);
     assert.equal((await bots.windows.read(botId)).state.windows[0].generations[1].reason, 'age');
@@ -120,16 +122,16 @@ test('S4 rotates an idle window that is due and carries the notebook and structu
     const compaction = require('../server/bot/bot-compaction');
     assert.deepEqual(compaction.earlierSections(branch), sections, 'the next compaction continues from these sections');
     // The old worker's view is stale now: nothing happens; a busy window waits for its next run.
-    assert.equal(await bots.maintainWindow(worker, { now: later }), null);
+    assert.equal(await bots.maintainWindow(worker, { now: later, trigger: 'compaction' }), null);
     const current = { loadedBot: { profileId: botId, windowId, generation: 1 }, sessionPath: rotated.session.path };
     const idle = supervisor.isSessionIdle;
     supervisor.isSessionIdle = () => false;
-    assert.equal(await bots.maintainWindow(current, { now: later + 61 * 24 * 3600 * 1000 }), null);
+    assert.equal(await bots.maintainWindow(current, { now: later + 61 * 24 * 3600 * 1000, trigger: 'compaction' }), null);
     supervisor.isSessionIdle = idle;
     assert.equal(generations.generations.length, 2);
 });
 
-test('S4 after an ordinary reply waits for a summary when the recent part is too long to carry verbatim', { timeout: 60000 }, async t => {
+test('S4 carries what follows the summary verbatim up to its limit', { timeout: 60000 }, async t => {
     const { SessionManager } = await import('@earendil-works/pi-coding-agent');
     const store = new PiSessionStore();
     const profiles = new PiProfileRegistry(store);
@@ -147,7 +149,6 @@ test('S4 after an ordinary reply waits for a summary when the recent part is too
     manager.appendMessage(assistant([{ type: 'text', text: '好的' }]));
     const worker = { loadedBot: { profileId: botId, windowId, generation: 0 }, sessionPath: session.path };
     const later = Date.now() + 61 * 24 * 3600 * 1000;
-    // Without a summary the new generation would lose the long message: wait for the idle summary.
     assert.equal(await bots.maintainWindow(worker, { now: later }), null);
     assert.equal((await bots.windows.read(botId)).state.windows[0].generations.length, 1);
     // The worker's idle summary (S2, due to rotate) is followed by the move.
@@ -158,7 +159,7 @@ test('S4 after an ordinary reply waits for a summary when the recent part is too
     assert.equal(seed.content.includes('旧旧旧'), false, 'what does not fit is left to the summary and recall');
 });
 
-test('S4 after an ordinary reply also waits when older material is still to be summarized', { timeout: 60000 }, async t => {
+test('S4 after an ordinary reply waits even when the recent text would fit', { timeout: 60000 }, async t => {
     const { SessionManager } = await import('@earendil-works/pi-coding-agent');
     const store = new PiSessionStore();
     const profiles = new PiProfileRegistry(store);

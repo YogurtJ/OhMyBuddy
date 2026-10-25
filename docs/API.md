@@ -271,7 +271,7 @@ WebSocket `open_session` 可带 `botWindow:{profileId,windowId}`（Bot 页面打
 
 Bot 设置为“稳妥”或“每次都问”时，需要确认的工具调用在执行前发出 `extension_ui_request` `method:'confirm'`，`title` 固定为 `允许这一步吗？ / Allow this step?`，`message` 为 `<kind> #<token>\n\n<detail>`（`token` 为 16 位十六进制，标识这次请求；`kind` 为 `command`、`delegate`、`outside`、`write`、`memory`、`action` 之一；`detail` 为命令、路径、记忆内容或工具名，最多约 2000 字符）。按普通确认回复 `{type:'extension_ui_response',id,confirmed:true|false}`；拒绝、取消或 30 分钟无回答时该调用被阻止。没有界面或定时运行进行中时不发确认，直接阻止。请求在 worker 内结束（回答、超时、所在的嵌套调用被取消）后，仍挂起的同一请求由服务端撤回并广播 `gateway_ui_resolved`。
 
-Bot 窗口的 worker 另有三个工具：`window_note`（记事本 add/update/done/cancel/reopen，结果 `details.pivaneLedger`）、`window_recall` 与 `window_read`（只读检索和查看本窗口各代原文，带 `readOnlyHint`）。Bot 窗口的压缩由扩展写结构化摘要（`details.pivaneBot` 含 `sections`、记事本对账 `ledger:{ops,snapshot}` 与被拒的变更），失败时回落 Pi 原生摘要。服务端在回复完成或压缩完成约 3 秒后检查换代条件（8 MiB、8000 条或 60 天），规则见 [Bot 模式](BOT_MODE.md#长期聊天的维护)。
+Bot 窗口的 worker 另有三个工具：`window_note`（记事本 add/update/done/cancel/reopen，结果 `details.pivaneLedger`）、`window_recall` 与 `window_read`（只读检索和查看本窗口各代原文，带 `readOnlyHint`）。Bot 窗口的压缩由扩展写结构化摘要（`details.pivaneBot` 含 `sections`、记事本对账 `ledger:{ops,snapshot}` 与被拒的变更），失败时回落 Pi 原生摘要。服务端在压缩完成约 3 秒后检查换代条件（8 MiB、8000 条或 60 天），到期即换代，规则见 [Bot 模式](BOT_MODE.md#长期聊天的维护)。
 
 Bot 窗口会话不能移动或绑定消息渠道。以 Bot 档案为目标的定时任务进入主聊天当前一代，运行期间使用任务准入和计价时选定的模型；`GET /cron` 的 `homes` 中 Bot 的主线程按主聊天当前一代派生（`bot:true`），`PUT /cron/homes/:profileId` 对 Bot 返回 409，不保存也不创建会话。
 

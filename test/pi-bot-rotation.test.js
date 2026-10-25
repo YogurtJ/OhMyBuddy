@@ -409,6 +409,11 @@ test('Bot window workers get a verified identity section that follows edits with
     t.mock.timers.tick(10 * 60 * 1000);
     assert.equal(compacts.length, 2);
     assert.equal(compacts[1].customInstructions, 'pivane-bot-rotate');
+    // A summary made while due also reads the part Pi keeps verbatim (the server moves on right after).
+    reply = JSON.stringify({ topic: 'Greetings', episodes: [], now: { doing: '', next: '', waiting: '' }, notes: [] });
+    const due = await handlers.get('session_before_compact')(compactEvent, ctx);
+    assert.equal(due.compaction.details.pivaneBot.includedKept, true);
+    assert.match(requests.at(-1).request.messages[0].content[0].text, /long 5 /);
     t.mock.timers.reset();
     // A different session in the same worker process is not treated as the Bot window.
     assert.equal(botSection(context, { ...manager, getSessionId: () => 'foreign', getCwd: () => session.cwd, getSessionFile: () => session.path },
