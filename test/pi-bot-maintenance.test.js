@@ -157,3 +157,29 @@ test('S4 after an ordinary reply waits for a summary when the recent part is too
     assert.match(seed.content, /## Most recent messages \(verbatim\)\nAssistant: 收到\n\nUser: 最近的话\n\nAssistant: 好的$/);
     assert.equal(seed.content.includes('旧旧旧'), false, 'what does not fit is left to the summary and recall');
 });
+
+test('S4 after an ordinary reply also waits when older material is still to be summarized', { timeout: 60000 }, async t => {
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+    const store = new PiSessionStore();
+    const profiles = new PiProfileRegistry(store);
+    store.profiles = profiles;
+    const supervisor = new PiAgentSupervisor();
+    t.after(() => supervisor.dispose());
+    const bots = new BotService({ store, profiles, supervisor });
+    const created = await bots.create({ expectedRevision: (await profiles.state()).revision });
+    const botId = created.bot.id, windowId = created.window.id;
+    const { session } = await bots.resolve(botId, windowId);
+    const manager = SessionManager.open(session.path);
+    // Short texts (the tail would be complete) but large early tool outputs: a summary first,
+    // which also brings the notebook up to date with what was said.
+    for (let index = 0; index < 3; index++) {
+        manager.appendMessage({ role: 'user', content: `看看第 ${index} 份报价`, timestamp: Date.now() });
+        manager.appendMessage(assistant([{ type: 'toolCall', id: `q${index}`, name: 'read', arguments: {} }]));
+        manager.appendMessage({ role: 'toolResult', toolCallId: `q${index}`, toolName: 'read', content: [{ type: 'text', text: '价'.repeat(60000) }], isError: false, timestamp: Date.now() });
+        manager.appendMessage(assistant([{ type: 'text', text: `第 ${index} 份看完了` }]));
+    }
+    const worker = { loadedBot: { profileId: botId, windowId, generation: 0 }, sessionPath: session.path };
+    const later = Date.now() + 61 * 24 * 3600 * 1000;
+    assert.equal(await bots.maintainWindow(worker, { now: later }), null);
+    assert.equal((await bots.maintainWindow(worker, { now: later, trigger: 'compaction' })).window.generation, 1);
+});
