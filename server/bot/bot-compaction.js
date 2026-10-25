@@ -16,7 +16,10 @@ const MAX_EPISODES = 40;
 const MAX_EPISODE = 400;
 const MAX_NOW = 600;
 const MAX_TOOL_CHARS = 1200;
-const MAX_MESSAGE_CHARS = 4000;
+// Context notes (other extensions' messages) are clipped; what the user and the assistant
+// said is sent whole, split into numbered parts when one message is too long for a request.
+const MAX_CONTEXT_CHARS = 4000;
+const MAX_DELETED_LINES = 30;
 const MIN_QUOTE = 2, MAX_QUOTE = 300;
 const REQUEST_RESERVE_TOKENS = 12000;
 
@@ -56,8 +59,10 @@ function summarizedEntries(projection, firstKeptEntryId) {
     for (const item of projection) {
         const entry = item.sourceEntry;
         if (!entry || entry.id === firstKeptEntryId) break;
-        // The compaction itself and earlier notebook renderings are passed separately.
-        if (entry.type === 'compaction' || entry.type === 'custom_message' && entry.customType === 'pivane-bot-notebook') continue;
+        // The compaction itself, earlier notebook renderings and a generation seed whose sections
+        // are passed as the earlier memory (its recent part was reconciled before the move) are skipped.
+        if (entry.type === 'compaction' || entry.type === 'custom_message' && (entry.customType === 'pivane-bot-notebook'
+            || entry.customType === 'pivane-bot-handoff' && object(entry.details?.sections))) continue;
         for (const message of item.messages || []) {
             const role = message.role;
             if (role === 'user' || role === 'assistant' || role === 'toolResult' || role === 'custom' || role === 'bashExecution')
@@ -67,20 +72,38 @@ function summarizedEntries(projection, firstKeptEntryId) {
     return result;
 }
 
-// One line block per message; tool output and very long text are clipped (quotes are still
-// checked against the full original text).
-function serializeMessage({ entry, message }) {
+// One line block per message (or per part of a long one, see splitLong). Tool output and
+// context notes are clipped; quotes are checked against the full original text.
+function serializeMessage({ entry, message, part }) {
     const head = `[e:${shortId(entry.id)}] ${stamp(entry, message)}`.trim();
-    if (message.role === 'user') return `${head} User: ${clip(fold(textOf(message.content)), MAX_MESSAGE_CHARS)}`;
+    const label = part ? ` (part ${part.index}/${part.total})` : '';
+    const said = () => part ? part.text : fold(textOf(message.content));
+    if (message.role === 'user') return `${head} User${label}: ${said()}`;
     if (message.role === 'assistant') {
-        const lines = [`${head} Assistant: ${clip(fold(textOf(message.content)), MAX_MESSAGE_CHARS)}`];
-        for (const part of Array.isArray(message.content) ? message.content : [])
-            if (part?.type === 'toolCall') lines.push(`  → ${part.name} ${clip(JSON.stringify(part.arguments ?? {}), 300)}`);
+        const lines = [`${head} Assistant${label}: ${said()}`];
+        if (!part || part.index === part.total) for (const item of Array.isArray(message.content) ? message.content : [])
+            if (item?.type === 'toolCall') lines.push(`  → ${item.name} ${clip(JSON.stringify(item.arguments ?? {}), 300)}`);
         return lines.join('\n');
     }
     if (message.role === 'toolResult') return `${head} Tool result (${message.toolName}${message.isError ? ', failed' : ''}): ${clip(fold(textOf(message.content)), MAX_TOOL_CHARS)}`;
     if (message.role === 'bashExecution') return `${head} Command: ${clip(String(message.command ?? ''), 300)} → ${clip(fold(message.output), MAX_TOOL_CHARS)}`;
-    return `${head} Context note: ${clip(fold(textOf(message.content)), MAX_MESSAGE_CHARS)}`;
+    return `${head} Context note: ${clip(fold(textOf(message.content)), MAX_CONTEXT_CHARS)}`;
+}
+
+// A user or assistant message longer than about half a request becomes numbered parts that
+// keep its entry and speaker, so nothing said is cut before the model reads it.
+function splitLong(messages, budgetTokens) {
+    const size = Math.max(2000, Math.floor(budgetTokens / 2));
+    const result = [];
+    for (const item of messages) {
+        const role = item.message.role;
+        const text = role === 'user' || role === 'assistant' ? fold(textOf(item.message.content)) : '';
+        if (text.length <= size) { result.push(item); continue; }
+        const total = Math.ceil(text.length / size);
+        for (let index = 0; index < total; index++)
+            result.push({ ...item, part: { index: index + 1, total, text: text.slice(index * size, (index + 1) * size) } });
+    }
+    return result;
 }
 
 // Splits the summarized messages into parts that fit one request, at user messages when possible.
@@ -113,18 +136,23 @@ function earlierSections(branch) {
     return readSections(sections);
 }
 
+// Stored sections read back within the limits a summary answer has to meet.
 function readSections(value) {
     if (!object(value)) return null;
-    const topic = typeof value.topic === 'string' ? value.topic : '';
-    const episodes = Array.isArray(value.episodes) ? value.episodes.filter(item => typeof item === 'string') : [];
+    const text = (item, max) => typeof item === 'string' ? item.slice(0, max) : '';
+    const topic = text(value.topic, MAX_TOPIC);
+    const episodes = Array.isArray(value.episodes) ? value.episodes.filter(item => typeof item === 'string').slice(-MAX_EPISODES).map(item => item.slice(0, MAX_EPISODE)) : [];
     const now = object(value.now) ? value.now : {};
-    return { topic, episodes, now: { doing: String(now.doing ?? ''), next: String(now.next ?? ''), waiting: String(now.waiting ?? '') } };
+    return { topic, episodes, now: { doing: text(now.doing, MAX_NOW), next: text(now.next, MAX_NOW), waiting: text(now.waiting, MAX_NOW) } };
 }
 
 function notebookLines(state) {
     const items = state.items.filter(item => item.status !== 'deleted');
-    if (!items.length) return '(empty)';
-    return items.map(item => `[${item.id}] (${item.kind}, ${item.status}${item.due ? `, due ${item.due}` : ''}) ${item.text}`).join('\n');
+    const lines = items.length ? items.map(item => `[${item.id}] (${item.kind}, ${item.status}${item.due ? `, due ${item.due}` : ''}) ${item.text}`) : ['(empty)'];
+    const deleted = state.items.filter(item => item.status === 'deleted' && item.source?.quote).slice(-MAX_DELETED_LINES);
+    if (deleted.length) lines.push('Deleted by the user (do not add these again unless the user brings them up anew):',
+        ...deleted.map(item => `- (${item.kind}) from: "${item.source.quote}"`));
+    return lines.join('\n');
 }
 
 const SYSTEM_PROMPT = 'You maintain the long-term memory of one chat between a user and their personal assistant. '
@@ -176,16 +204,23 @@ function checkText(value, max, name) {
     return text;
 }
 
-function readAnswer(value) {
+// The answer must have every section: a topic, a list of episodes (not empty when the earlier
+// memory had some, and never empty after a conversation), the "now" object and a notes list.
+// Anything less is not a replacement for what the chat remembered, so Pi's own summary is used.
+function readAnswer(value, { earlier = null } = {}) {
     if (!object(value)) throw new Error('The summary was not an object');
     const topic = checkText(value.topic, MAX_TOPIC, 'topic');
-    if (!Array.isArray(value.episodes ?? [])) throw new Error('Summary episodes are not a list');
-    const episodes = (value.episodes ?? []).map((item, index) => checkText(item, MAX_EPISODE, `episodes[${index}]`)).filter(Boolean);
+    if (!topic) throw new Error('The summary has no topic');
+    if (!Array.isArray(value.episodes)) throw new Error('Summary episodes are not a list');
+    const episodes = value.episodes.map((item, index) => checkText(item, MAX_EPISODE, `episodes[${index}]`)).filter(Boolean);
     if (episodes.length > MAX_EPISODES + 10) throw new Error('Too many episodes');
-    const now = object(value.now) ? value.now : {};
+    if (!episodes.length) throw new Error(earlier?.episodes?.length ? 'The summary dropped the earlier episodes' : 'The summary has no episodes');
+    if (!object(value.now)) throw new Error('The summary has no "now" section');
+    if (value.notes !== undefined && !Array.isArray(value.notes)) throw new Error('Summary notes are not a list');
+    const now = value.now;
     return { topic, episodes: episodes.slice(-MAX_EPISODES),
         now: { doing: checkText(now.doing, MAX_NOW, 'now.doing'), next: checkText(now.next, MAX_NOW, 'now.next'), waiting: checkText(now.waiting, MAX_NOW, 'now.waiting') },
-        notes: Array.isArray(value.notes) ? value.notes.slice(0, 64) : [] };
+        notes: (value.notes ?? []).slice(0, 64) };
 }
 
 const QUOTE_ROLES = Object.freeze({
@@ -213,6 +248,10 @@ function checkNote(note, state, byShortId, { at }) {
     if (note.op === 'add') {
         const text = fold(note.text);
         if (state.items.some(item => item.status === 'active' && item.kind === note.kind && fold(item.text) === text)) return { rejected: 'already noted' };
+        // A note the user deleted does not come back from what was said before the deletion.
+        const said = Date.parse(matching.entry.timestamp), hash = ledger.textHash(note.text);
+        if (state.items.some(item => item.status === 'deleted' && !(said > Date.parse(item.updatedAt))
+            && (item.hash === hash || item.kind === note.kind && item.source?.entryId === matching.entry.id))) return { rejected: 'deleted by the user' };
         raw = { op: 'add', kind: note.kind, text: note.text, due: note.due || null, supersedes: note.replaces || undefined };
     } else if (note.op === 'update') raw = { op: 'update', id: note.id, text: note.text, due: note.due || undefined };
     else if (note.op === 'done' || note.op === 'cancel') raw = { op: 'status', id: note.id, status: note.op === 'done' ? 'done' : 'cancelled' };
@@ -268,7 +307,10 @@ async function structuredCompaction({ branch, projection, firstKeptEntryId, prev
     let earlier = earlierSections(branch);
     const nativeSummary = previousSummary && !branch.some(entry => entry.type === 'compaction' && entry.summary === previousSummary
         && entry.details?.pivaneBot) ? previousSummary : '';
-    const chunks = chunkMessages(messages, requestBudget(model));
+    // What every request carries besides the conversation part.
+    const budget = Math.max(4000, requestBudget(model) - estimateTokens(notebookLines(state)) - estimateTokens(JSON.stringify(earlier ?? {}))
+        - estimateTokens(clip(nativeSummary, 20000)));
+    const chunks = chunkMessages(splitLong(messages, budget), budget);
     const ops = [], rejected = [], usage = [];
     let sections = null;
     for (const [index, chunk] of chunks.entries()) {
@@ -277,12 +319,13 @@ async function structuredCompaction({ branch, projection, firstKeptEntryId, prev
         if (response.usage) usage.push(response.usage);
         if (response.stopReason === 'length') throw new Error('The summary was cut off');
         if (response.stopReason === 'error' || response.stopReason === 'aborted') throw new Error(response.errorMessage || 'The summary request failed');
-        const answer = readAnswer(parseJson(response.text));
+        const answer = readAnswer(parseJson(response.text), { earlier });
         const applied = applyNotes(answer.notes, state, indexSources(chunk, sessionId), { at: now });
         state = applied.state; ops.push(...applied.ops); rejected.push(...applied.rejected);
         sections = { topic: answer.topic, episodes: answer.episodes, now: answer.now };
         earlier = sections;
     }
+    if (!ledger.storable(state)) throw new Error('The notebook could not be stored');
     const summary = summaryText(sections, state, now);
     return {
         summary,
@@ -311,5 +354,5 @@ function mergeUsage(list) {
 
 module.exports = {
     SUMMARY_SCHEMA, SYSTEM_PROMPT, estimateTokens, summarizedEntries, serializeMessage, chunkMessages, requestBudget,
-    earlierSections, readSections, requestText, parseJson, readAnswer, checkNote, applyNotes, indexSources, summaryText, structuredCompaction, summaryReasoning
+    earlierSections, readSections, requestText, splitLong, notebookLines, parseJson, readAnswer, checkNote, applyNotes, indexSources, summaryText, structuredCompaction, summaryReasoning
 };

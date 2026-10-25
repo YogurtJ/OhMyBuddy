@@ -142,7 +142,7 @@ test('the window_note tool writes branch-following operations and the model sees
     // A panel edit is reported as a change, not a full re-render.
     manager.appendCustomEntry(ledger.LEDGER_ENTRY, { v: 1, ops: [{ op: 'status', id: 'n1', status: 'cancelled', at: T2, by: 'user' }] });
     notice = notebook.notebookNotice(manager.getBranch(), T2);
-    assert.match(notice.content, /user changed the notebook[^]*marked \[n1\] cancelled/);
+    assert.match(notice.content, /user changed these notes[^]*\[n1\] \(decision, cancelled\) 瓷砖哑光灰/);
     // A native (non-Bot) compaction hides the summary's notebook: render again.
     manager.appendCustomMessageEntry(notice.customType, notice.content, false, notice.details);
     manager.appendCompaction('native summary', manager.getLeafId(), 10);
@@ -152,4 +152,58 @@ test('the window_note tool writes branch-following operations and the model sees
     assert.equal(notebook.notebookNotice(manager.getBranch(), T2), null);
     // An empty notebook says nothing.
     assert.equal(notebook.notebookNotice(SessionManager.inMemory('/tmp').getBranch(), T2), null);
+});
+
+test('a full notebook with deletions is stored and carried over intact, and ids never repeat', () => {
+    let state = ledger.emptyLedger();
+    for (let start = 0; start < ledger.MAX_ITEMS; start += 50)
+        state = ledger.prepareOps(state, Array.from({ length: 50 }, (_, index) => ({ op: 'add', kind: 'ref', text: `编号 ${start + index}` })), { at: T0, by: 'bot' }).state;
+    assert.throws(() => ledger.prepareOps(state, [{ op: 'add', kind: 'ref', text: '满了' }], { at: T0, by: 'bot' }), /full/);
+    state = ledger.prepareOps(state, [{ op: 'delete', id: 'n1' }], { at: T1, by: 'user' }).state;
+    state = ledger.prepareOps(state, [{ op: 'add', kind: 'ref', text: '新的' }], { at: T1, by: 'bot' }).state;
+    assert.equal(state.items.length, ledger.MAX_ITEMS + 1);
+    assert.equal(ledger.storable(state), true, 'live notes and tombstones have their own limits');
+    const seeded = ledger.replay([{ type: 'custom', customType: ledger.LEDGER_ENTRY, data: { v: 1, snapshot: JSON.parse(JSON.stringify(state)) } }]);
+    assert.equal(ledger.ledgerVersion(seeded), ledger.ledgerVersion(state), 'a seed restores exactly this state');
+    assert.equal(seeded.nextSeq, ledger.MAX_ITEMS + 2);
+    assert.match(seeded.items[0].hash, /^[0-9a-f]{16}$/, 'a tombstone keeps a hash of what it said, not the text');
+    assert.equal(seeded.items[0].text, '');
+    // Tombstones are bounded: the oldest go first, the next id still continues.
+    let churn = ledger.emptyLedger();
+    for (let round = 0; round < 35; round++) {
+        const added = ledger.prepareOps(churn, Array.from({ length: 32 }, (_, index) => ({ op: 'add', kind: 'open', text: `问题 ${round}-${index}` })),
+            { at: new Date(Date.parse(T0) + round * 60000).toISOString(), by: 'bot' });
+        churn = ledger.prepareOps(added.state, added.ops.map(op => ({ op: 'delete', id: op.id })),
+            { at: new Date(Date.parse(T0) + round * 60000 + 1000).toISOString(), by: 'user' }).state;
+    }
+    assert.equal(churn.items.length, ledger.MAX_TOMBSTONES);
+    assert.equal(churn.items.some(item => item.id === 'n1'), false, 'the oldest tombstones were dropped');
+    assert.equal(churn.nextSeq, 35 * 32 + 1);
+    assert.equal(ledger.storable(churn), true);
+    assert.equal(ledger.readSnapshot({ ...churn, items: [...churn.items, { ...churn.items[0], id: 'n9999' }], nextSeq: 10000 }), null, 'too many tombstones');
+});
+
+test('panel edits reach the model as the notes stand now, every one of them', () => {
+    const file = require('node:path').join(__dirname, '../server/bot/bot-notebook.ts');
+    const notebook = require(process.env.PIVANE_TEST_PI_JITI).createJiti(file)(file);
+    let { state } = ledger.prepareOps(ledger.emptyLedger(), [{ op: 'add', kind: 'commitment', text: '交三家报价', due: '2026-03-06' },
+        ...Array.from({ length: 45 }, (_, index) => ({ op: 'add', kind: 'ref', text: `门牌 ${index}` }))], { at: T0, by: 'bot' });
+    const branch = [{ type: 'custom', customType: ledger.LEDGER_ENTRY, data: { v: 1, snapshot: state } },
+        { type: 'custom_message', customType: notebook.NOTEBOOK_MESSAGE, details: { v: 1 } }];
+    const edit = raw => { const prepared = ledger.prepareOps(state, raw, { at: T1, by: 'user' }); state = prepared.state;
+        branch.push({ type: 'custom', customType: ledger.LEDGER_ENTRY, data: { v: 1, ops: prepared.ops } }); };
+    edit([{ op: 'update', id: 'n1', due: '2026-03-09' }]);
+    assert.match(notebook.notebookNotice(branch, T1).content, /stand now:\n- \[n1\] \(commitment, active, due 2026-03-09\) 交三家报价$/, 'a changed date is seen');
+    edit([{ op: 'update', id: 'n1', due: null }]);
+    assert.match(notebook.notebookNotice(branch, T1).content, /- \[n1\] \(commitment, active, no due date\) 交三家报价$/, 'so is a removed one');
+    for (let index = 2; index <= 22; index++) edit([{ op: 'status', id: `n${index}`, status: 'done' }]);
+    edit([{ op: 'delete', id: 'n23' }]);
+    const notice = notebook.notebookNotice(branch, T1);
+    assert.equal(notice.content.split('\n').length, 1 + 23, 'no change is left out');
+    assert.match(notice.content, /- \[n22\] \(ref, done\) 门牌 20\n- \[n23\] deleted by the user/);
+    for (let index = 24; index <= 45; index++) edit([{ op: 'status', id: `n${index}`, status: 'done' }]);
+    const many = notebook.notebookNotice(branch, T1);
+    assert.match(many.content, /^Notebook of this chat/, 'many changes: the whole notebook again');
+    assert.equal(many.details.reason, 'user-edits');
+    assert.equal(notebook.notebookNotice([...branch, { type: 'custom_message', customType: notebook.NOTEBOOK_MESSAGE, details: { v: 1 } }], T1), null);
 });

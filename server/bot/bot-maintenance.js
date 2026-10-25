@@ -106,4 +106,21 @@ function rotationReason({ bytes, entries, startedAt, now }) {
     return null;
 }
 
-module.exports = { PRUNE, IDLE, ROTATE, STUB_PREFIX, pruneDrafts, stubFor, idleDelay, keptSplit, summarizableTokens, idleCompactionWanted, rotationReason };
+// D-033: an automatic move to a new generation needs native proof that the latest compaction
+// on the branch is a Bot summary that also read the part Pi keeps verbatim, and that nothing
+// was said after it (a Pi fallback summary or a later turn means: wait for the next summary).
+const CONVERSATION = new Set(['message', 'custom_message', 'branch_summary']);
+function freshRotationSummary(branch) {
+    for (let index = (branch || []).length - 1; index >= 0; index--) {
+        const entry = branch[index];
+        if (entry?.type === 'compaction') {
+            const bot = entry.details?.pivaneBot;
+            return Boolean(bot && bot.ledger && bot.includedKept === true);
+        }
+        if (CONVERSATION.has(entry?.type)) return false;
+    }
+    return false;
+}
+
+module.exports = { PRUNE, IDLE, ROTATE, STUB_PREFIX, pruneDrafts, stubFor, idleDelay, keptSplit, summarizableTokens, idleCompactionWanted, rotationReason,
+    freshRotationSummary };

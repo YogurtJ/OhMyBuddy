@@ -97,7 +97,7 @@ test('S4 rotates an idle window that is due and carries the notebook and structu
         { op: 'add', kind: 'commitment', text: '周五前给报价', due: '2026-03-06' }], { at: new Date().toISOString(), by: 'summary' });
     const sections = { topic: '装修', episodes: ['2026-03-01: 定了瓷砖'], now: { doing: '', next: '报价', waiting: '' } };
     manager.appendCompaction('bot summary', manager.getLeafId(), 10, { pivaneBot: { v: 1, sections, ledger: { ops, snapshot: state } } }, true);
-    manager.appendMessage({ role: 'user', content: '报价不急了，取消吧', timestamp: Date.now() });
+    const cancel = manager.appendMessage({ role: 'user', content: '报价不急了，取消吧', timestamp: Date.now() });
     manager.appendCustomEntry(ledger.LEDGER_ENTRY, { v: 1, ops: [{ op: 'status', id: 'n2', status: 'cancelled', at: new Date().toISOString(), by: 'user' }] });
     manager.appendMessage(assistant([{ type: 'text', text: '已取消报价' }]));
     const before = ledger.replay(SessionManager.open(session.path).getBranch());
@@ -106,6 +106,10 @@ test('S4 rotates an idle window that is due and carries the notebook and structu
     const later = Date.now() + 61 * 24 * 3600 * 1000;
     // Due, but after an ordinary reply it waits for the worker's idle summary (D-033).
     assert.equal(await bots.maintainWindow(worker, { now: later }), null);
+    // A compaction event whose summary is followed by a finished turn waits for the next summary.
+    assert.equal(await bots.maintainWindow(worker, { now: later, trigger: 'compaction' }), null, 'a turn after the summary waits');
+    // The summary made while due, which also read the kept part, lets the window move on.
+    manager.appendCompaction('bot summary', cancel, 10, { pivaneBot: { v: 1, sections, includedKept: true, ledger: { ops: [], snapshot: before } } }, true);
     const rotated = await bots.maintainWindow(worker, { now: later, trigger: 'compaction' });
     assert.equal(rotated.window.generation, 1);
     const generations = await bots.generations(botId, windowId);
@@ -143,10 +147,12 @@ test('S4 carries what follows the summary verbatim up to its limit', { timeout: 
     const botId = created.bot.id, windowId = created.window.id;
     const { session } = await bots.resolve(botId, windowId);
     const manager = SessionManager.open(session.path);
-    manager.appendMessage({ role: 'user', content: '旧'.repeat(70000), timestamp: Date.now() });
+    const first = manager.appendMessage({ role: 'user', content: '旧'.repeat(70000), timestamp: Date.now() });
     manager.appendMessage(assistant([{ type: 'text', text: '收到' }]));
     manager.appendMessage({ role: 'user', content: '最近的话', timestamp: Date.now() });
     manager.appendMessage(assistant([{ type: 'text', text: '好的' }]));
+    const sections = { topic: '闲聊', episodes: ['2026-03-01: 发来很长一段'], now: { doing: '', next: '', waiting: '' } };
+    manager.appendCompaction('bot summary', first, 10, { pivaneBot: { v: 1, sections, includedKept: true, ledger: { ops: [], snapshot: ledger.emptyLedger() } } }, true);
     const worker = { loadedBot: { profileId: botId, windowId, generation: 0 }, sessionPath: session.path };
     const later = Date.now() + 61 * 24 * 3600 * 1000;
     assert.equal(await bots.maintainWindow(worker, { now: later }), null);
@@ -182,5 +188,16 @@ test('S4 after an ordinary reply waits even when the recent text would fit', { t
     const worker = { loadedBot: { profileId: botId, windowId, generation: 0 }, sessionPath: session.path };
     const later = Date.now() + 61 * 24 * 3600 * 1000;
     assert.equal(await bots.maintainWindow(worker, { now: later }), null);
+    const last = manager.getBranch().filter(entry => entry.type === 'message' && entry.message.role === 'user').at(-1).id;
+    // Pi's own summary (the structured one failed) never reconciled the kept part: wait.
+    manager.appendCompaction('native summary', last, 10, undefined, false);
+    assert.equal(await bots.maintainWindow(worker, { now: later, trigger: 'compaction' }), null, 'a fallback summary waits');
+    // A Bot summary made without the kept part (not due when it ran) waits too.
+    const sections = { topic: '报价', episodes: ['2026-03-01: 看了三份报价'], now: { doing: '', next: '', waiting: '' } };
+    manager.appendCompaction('bot summary', last, 10, { pivaneBot: { v: 1, sections, ledger: { ops: [], snapshot: ledger.emptyLedger() } } }, true);
+    assert.equal(await bots.maintainWindow(worker, { now: later, trigger: 'compaction' }), null, 'a summary without the kept part waits');
+    manager.appendCompaction('bot summary', last, 10, { pivaneBot: { v: 1, sections, includedKept: true, ledger: { ops: [], snapshot: ledger.emptyLedger() } } }, true);
     assert.equal((await bots.maintainWindow(worker, { now: later, trigger: 'compaction' })).window.generation, 1);
+    // The rotation path checks the same proof under the reservation.
+    assert.equal(require('../server/bot/bot-maintenance').freshRotationSummary(SessionManager.open(session.path).getBranch()), true);
 });

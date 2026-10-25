@@ -128,3 +128,78 @@ test('before the window moves on, the part Pi keeps verbatim is reconciled too',
     assert.deepEqual(moving.details.pivaneBot.ledger.ops.map(op => [op.op, op.id, op.status]), [['status', 'n1', 'cancelled']]);
     assert.equal(moving.details.pivaneBot.includedKept, true);
 });
+
+test('a note the user deleted does not come back from what was said before the deletion', async () => {
+    const { manager, ids } = await conversation();
+    const short = id => id.slice(0, 8);
+    const source = { sessionId: manager.getSessionId(), entryId: ids.user1, role: 'user', quote: '瓷砖就定 60×120 哑光灰吧' };
+    const added = ledger.prepareOps(ledger.replay(manager.getBranch()), [{ op: 'add', kind: 'decision', text: '瓷砖 60×120 哑光灰', source }], { at: new Date().toISOString(), by: 'bot' });
+    manager.appendCustomEntry(ledger.LEDGER_ENTRY, { v: 1, ops: added.ops });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    const removed = ledger.prepareOps(added.state, [{ op: 'delete', id: 'n2' }], { at: new Date().toISOString(), by: 'user' });
+    manager.appendCustomEntry(ledger.LEDGER_ENTRY, { v: 1, ops: removed.ops });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    const fresh = manager.appendMessage({ role: 'user', content: '想了想还是记下：瓷砖 60×120 哑光灰', timestamp: Date.now() });
+    const notes = [
+        { op: 'add', kind: 'decision', text: '瓷砖定为 60×120 哑光灰', entry: short(ids.user1), quote: '瓷砖就定 60×120 哑光灰吧' },
+        { op: 'add', kind: 'decision', text: '瓷砖 60×120 哑光灰', entry: short(ids.user2), quote: '就按这个来' },
+        { op: 'add', kind: 'decision', text: '瓷砖 60×120 哑光灰', entry: short(fresh), quote: '还是记下' }];
+    let request = '';
+    const result = await compaction.structuredCompaction({ branch: manager.getBranch(), projection: manager.buildSessionProjection().entries,
+        firstKeptEntryId: ids.kept, sessionId: manager.getSessionId(), model: { provider: 'fixture', id: 'small', contextWindow: 128000 },
+        now: NOW, reason: 'threshold', includeKept: true, complete: async ({ text }) => { request = text; return { text: answerWith(notes), stopReason: 'stop', usage }; } });
+    assert.match(request, /Deleted by the user[^\n]*\n- \(decision\) from: "瓷砖就定 60×120 哑光灰吧"/);
+    const bot = result.details.pivaneBot;
+    assert.deepEqual(bot.rejected.map(item => item.reason), ['deleted by the user', 'deleted by the user'], 'same message, or same text said before');
+    assert.deepEqual(bot.ledger.ops.map(op => [op.op, op.id, op.source.entryId]), [['add', 'n3', fresh]], 'said anew after the deletion: noted again');
+});
+
+test('an answer missing a section is not taken as the summary; Pi\'s own summary is used instead', async () => {
+    const now = { doing: '', next: '', waiting: '' };
+    for (const bad of [{}, { topic: '装修', now }, { topic: '装修', episodes: ['a'], now: null }, { topic: ' ', episodes: ['a'], now },
+        { topic: '装修', episodes: [], now }, { topic: '装修', episodes: ['a'], now, notes: 'n1 done' }])
+        assert.throws(() => compaction.readAnswer(bad), /summary/i, JSON.stringify(bad));
+    assert.throws(() => compaction.readAnswer({ topic: '装修', episodes: [' '], now }, { earlier: { episodes: ['2026-03-01: 定了瓷砖'] } }), /dropped the earlier episodes/);
+    assert.deepEqual(compaction.readAnswer({ topic: '装修', episodes: ['a'], now: {} }), { topic: '装修', episodes: ['a'], now, notes: [] });
+    const { manager, ids } = await conversation();
+    await assert.rejects(compaction.structuredCompaction({ branch: manager.getBranch(), projection: manager.buildSessionProjection().entries,
+        firstKeptEntryId: ids.kept, sessionId: manager.getSessionId(), model: { provider: 'fixture', id: 'small', contextWindow: 128000 },
+        now: NOW, reason: 'threshold', complete: async () => ({ text: '{}', stopReason: 'stop', usage }) }), /no topic/);
+});
+
+test('long messages reach the summary whole, in parts that keep their entry and speaker', async () => {
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+    const manager = SessionManager.inMemory('/tmp');
+    const { state: seed } = ledger.prepareOps(ledger.emptyLedger(), [{ op: 'add', kind: 'commitment', text: '周五前整理三家报价' }], { at: '2026-03-01T00:00:00Z', by: 'bot' });
+    manager.appendCustomEntry(ledger.LEDGER_ENTRY, { v: 1, snapshot: seed });
+    const long = manager.appendMessage({ role: 'user', content: '规格说明：' + '细节'.repeat(3000) + '。另外，报价那件事取消了，不用整理了。', timestamp: Date.now() });
+    const kept = manager.appendMessage(assistant([{ type: 'text', text: '好' }]));
+    const requests = [];
+    const notes = [{ op: 'cancel', id: 'n1', entry: long.slice(0, 8), quote: '报价那件事取消了' }];
+    const result = await compaction.structuredCompaction({ branch: manager.getBranch(), projection: manager.buildSessionProjection().entries,
+        firstKeptEntryId: kept, sessionId: manager.getSessionId(), model: { provider: 'fixture', id: 'tiny', contextWindow: 20000 },
+        now: NOW, reason: 'threshold', complete: async ({ text }) => { requests.push(text); return { text: answerWith(notes), stopReason: 'stop', usage }; } });
+    assert.ok(requests.length >= 2, 'more than one request');
+    const all = requests.join('\n');
+    assert.match(all, new RegExp(`\\[e:${long.slice(0, 8)}\\][^\\n]*User \\(part 1/\\d\\): 规格说明`));
+    assert.match(all, /User \(part (\d)\/\1\): [^\n]*报价那件事取消了，不用整理了。/, 'the end of the message is read');
+    assert.doesNotMatch(all, /…\[\+\d+ chars\]/, 'nothing the user said is clipped');
+    assert.deepEqual(result.details.pivaneBot.ledger.ops.map(op => [op.op, op.id, op.status]), [['status', 'n1', 'cancelled']]);
+});
+
+test('a new generation shows the whole notebook however long it is', async () => {
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+    const { buildHandoff } = require('../server/bot/bot-handoff');
+    const manager = SessionManager.inMemory('/tmp');
+    const { ops, state } = ledger.prepareOps(ledger.emptyLedger(), Array.from({ length: 60 }, (_, index) => ({ op: 'add', kind: 'ref',
+        text: `第 ${index + 1} 条：` + '记'.repeat(480) })), { at: '2026-03-01T00:00:00Z', by: 'bot' });
+    const first = manager.appendMessage({ role: 'user', content: '记下这些', timestamp: Date.now() });
+    manager.appendMessage(assistant([{ type: 'text', text: '记好了' }]));
+    const sections = { topic: '资料', episodes: ['2026-03-01: 记了 60 条'.padEnd(900, '。')], now: { doing: '', next: '', waiting: '' } };
+    manager.appendCompaction('bot summary', first, 10, { pivaneBot: { v: 1, sections, includedKept: true, ledger: { ops, snapshot: state } } }, true);
+    const handoff = buildHandoff(manager, { now: NOW });
+    assert.ok(handoff.text.length > 24000);
+    for (let index = 1; index <= 60; index++) assert.ok(handoff.text.includes(`[n${index}] 第 ${index} 条`), `n${index} is shown`);
+    assert.equal(handoff.sections.episodes[0].length, 400, 'stored sections are read within the answer limits');
+    assert.match(handoff.text, /## Most recent messages \(verbatim\)\nUser: 记下这些\n\nAssistant: 记好了$/);
+});

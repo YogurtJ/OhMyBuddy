@@ -4,7 +4,7 @@
 // Pi has not appended yet.
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
-import { LEDGER_ENTRY, KINDS, replay, prepareOps, renderLedger, describeOp, applyOp, ledgerVersion, sourceQuote } from './bot-ledger.js';
+import { LEDGER_ENTRY, KINDS, replay, prepareOps, renderLedger, describeOp, describeItem, applyOp, ledgerVersion, sourceQuote } from './bot-ledger.js';
 
 export const NOTE_TOOL = 'window_note';
 export const NOTEBOOK_MESSAGE = 'pivane-bot-notebook';
@@ -36,21 +36,26 @@ export function notebookVisibility(branch: any[]) {
     return { visible, userOps };
 }
 
+// Changed notes listed one by one; beyond this the whole notebook is shown again.
+const MAX_NOTICE_NOTES = 40;
+
 // What to tell the model before a run, or null: the full notebook when it is not visible
 // (after a native fallback compaction, or a generation started before notebooks existed),
-// otherwise just the changes the user made in the panel.
+// otherwise how every note the user changed in the panel stands now (all fields, so a
+// changed or removed due date is seen too).
 export function notebookNotice(branch: any[], now: string) {
     const state = replay(branch);
     const { visible, userOps } = notebookVisibility(branch);
-    if (!visible) {
-        if (!state.items.length) return null;
-        return { customType: NOTEBOOK_MESSAGE, display: false, details: { v: 1, reason: 'render' },
-            content: renderLedger(state, { now }) };
-    }
+    const full = (reason: string) => ({ customType: NOTEBOOK_MESSAGE, display: false, details: { v: 1, reason },
+        content: renderLedger(state, { now }) });
+    if (!visible) return state.items.length ? full('render') : null;
     if (!userOps.length) return null;
-    const lines = userOps.slice(-20).map(op => '- ' + describeOp(op, state));
+    const ids = [...new Set(userOps.map(op => op?.id).filter((id: any) => typeof id === 'string'))];
+    const lines = ids.map(id => describeItem(state.items.find((item: any) => item.id === id))).filter(Boolean);
+    if (!lines.length) return null;
+    if (lines.length > MAX_NOTICE_NOTES) return full('user-edits');
     return { customType: NOTEBOOK_MESSAGE, display: false, details: { v: 1, reason: 'user-edits' },
-        content: 'The user changed the notebook of this chat themselves:\n' + lines.join('\n') };
+        content: 'The user changed these notes of this chat themselves; this is how they stand now:\n' + lines.map(line => '- ' + line).join('\n') };
 }
 
 const PANEL_OPS = ['update', 'status', 'delete'];
