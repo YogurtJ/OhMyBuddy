@@ -49,7 +49,7 @@ import { nestedSummaryFromAsyncStatus, projectNestedEvents, resolveNestedAsyncDi
 import { isContextOverflow } from "../shared/model-resolution.js";
 import { processTerminalPath, writeProcessTerminalCandidate } from "./process-terminal.js";
 import { persistRunnerStartupFailure } from "./runner-startup-failure.js";
-import { currentPidNamespaceScope } from "./pid-namespace.js";
+import { currentRecordedPid } from "./boot-id.js";
 import { createSteeringStatus, recordSteeringRequest, steeringStatus, terminalSteeringNoticeState, unconsumedSteerReason, updateSteeringTarget } from "./steering.js";
 import { PROMPT_REDACTED, SUBAGENT_STOPPED_MESSAGE, SUBAGENT_TIMED_OUT_MESSAGE, detectSubagentError, extractTextFromContent, extractToolArgsPreview, formatEmptyTerminalAssistantResponseError, getAgentDir, hasEmptyTerminalAssistantResponse, readStatus } from "../../shared/utils.js";
 import { planAbortRecovery } from "../shared/abort-recovery.js";
@@ -77,6 +77,7 @@ import { resolveCodexExecLaunch } from "../shared/codex-exec-adapter.js";
 import { resolveCursorAgentLaunch } from "../shared/cursor-agent-adapter.js";
 import { resolveExternalCliRunnerStatus } from "../shared/external-cli-contract.js";
 import { formatHerdrMachineHint, prepareHerdrMachineExternalCliRun } from "../shared/herdr-machine.js";
+import { isRexLocalMachine } from "../shared/rex-machine.js";
 import { HerdrExternalNeedsAttentionError, createHerdrExternalAdapter, prepareInternalHerdrExternalAdapter } from "../shared/herdr-external-adapters.js";
 import { runExternalJob } from "../shared/external-job-runner.js";
 import { createOrcaProgressTab } from "../shared/orca-progress-tabs.js";
@@ -522,6 +523,7 @@ export async function runSingleStepInner(step, ctx) {
             capabilityCeiling: step.capabilityCeiling ?? ctx.capabilityCeiling,
             inheritedCapabilityCeiling: ctx.inheritedChildRuntime?.capabilityCeiling,
             requiredExtensions: step.requiredExtensions ?? ctx.inheritedChildRuntime?.requiredExtensions,
+            agentName: step.agent,
             permissionRules: step.permissionRules,
         }));
     }
@@ -608,6 +610,8 @@ export async function runSingleStepInner(step, ctx) {
             return omitUndefinedProperties({ agent: step.agent, context: step.context, output: message, error: message, exitCode: 1, stopped: stopped || undefined, timedOut: stopped ? undefined : true });
         }
         if (step.machine) {
+            if (step.machine.provider !== "herdr")
+                throw new Error("Rex supports native Pi children only.");
             const runner = resolveExternalCliRunnerStatus({ ...step.runner, machine: step.machine });
             const outputSnapshot = captureSingleOutputSnapshot(step.outputPath);
             const placedRunId = `${ctx.id}-${ctx.flatIndex}`;
@@ -781,7 +785,8 @@ export async function runSingleStepInner(step, ctx) {
     let toolBudget = step.toolBudget ? initialToolBudgetState(step.toolBudget) : undefined;
     let toolBudgetBlocked = false;
     let actualLaunchContractDigest = step.launchContractDigest;
-    const mutationSnapshot = step.machine ? { source: "tracked-files", trackedOnly: true, cwd: step.cwd ?? ctx.cwd, dirtyFiles: [], fingerprints: {}, unavailable: "Local Git evidence is not authoritative for a pane-native remote run." } : snapshotTrackedMutations(step.cwd ?? ctx.cwd);
+    // A machine 'local' child edits this disk, so its local Git evidence is authoritative, as for an unplaced run.
+    const mutationSnapshot = step.machine && !isRexLocalMachine(step.machine) ? { source: "tracked-files", trackedOnly: true, cwd: step.cwd ?? ctx.cwd, dirtyFiles: [], fingerprints: {}, unavailable: "Local Git evidence is not authoritative for a pane-native remote run." } : snapshotTrackedMutations(step.cwd ?? ctx.cwd);
     let finalMutationEvidence = collectTrackedMutationEvidence(mutationSnapshot, step.cwd ?? ctx.cwd);
     let contextOverflow = false;
     let launchWarningsEmitted = false;
@@ -1004,7 +1009,7 @@ export async function runSingleStepInner(step, ctx) {
             ? formatEmptyTerminalAssistantResponseError(run.messages)
             : undefined;
         const remoteGitChanged = run.nativeMachine?.initialGit && run.nativeMachine.finalGit ? run.nativeMachine.initialGit.head !== run.nativeMachine.finalGit.head || run.nativeMachine.initialGit.dirty !== run.nativeMachine.finalGit.dirty : undefined;
-        const mutationEvidence = run.nativeMachine ? { source: "tracked-files", trackedOnly: true, changedFiles: [], attemptedMutation: remoteGitChanged === true, ...(remoteGitChanged === undefined ? { unavailable: "Remote Git before/after evidence was incomplete." } : {}) } : collectTrackedMutationEvidence(mutationSnapshot, step.cwd ?? ctx.cwd);
+        const mutationEvidence = run.nativeMachine && !isRexLocalMachine(step.machine) ? { source: "tracked-files", trackedOnly: true, changedFiles: [], attemptedMutation: remoteGitChanged === true, ...(remoteGitChanged === undefined ? { unavailable: "Remote Git before/after evidence was incomplete." } : {}) } : collectTrackedMutationEvidence(mutationSnapshot, step.cwd ?? ctx.cwd);
         finalMutationEvidence = mutationEvidence;
         const mutationAttemptObserved = run.observedMutationAttempt === true || mutationEvidence.attemptedMutation === true;
         // Validated structured output is persistable file content even when the final text is only
@@ -1669,6 +1674,7 @@ export async function runSubagent(config, childSessions) {
         ...(config.toolCallId ? { toolCallId: config.toolCallId } : {}),
         ...(config.sessionId ? { sessionId: config.sessionId } : {}),
         ...(config.completionOwnerId ? { completionOwnerId: config.completionOwnerId } : {}),
+        ...(config.completionOwnerProcess ? { completionOwnerProcess: config.completionOwnerProcess } : {}),
         mode: config.resultMode ?? (flatSteps.length > 1 ? "chain" : "single"),
         ...(config.nestedSelf ? { isNested: true } : {}),
         state: "running",
@@ -1680,8 +1686,7 @@ export async function runSubagent(config, childSessions) {
         ...(config.deadlineAt !== undefined ? { deadlineAt: config.deadlineAt } : {}),
         ...(config.toolBudget ? { toolBudget: initialToolBudgetState(config.toolBudget) } : {}),
         ...(config.usageBudget ? { usageBudget: usageBudgetState(config.usageBudget, undefined) } : {}),
-        pid: process.pid,
-        pidNamespaceScope: currentPidNamespaceScope(),
+        ...currentRecordedPid(),
         cwd,
         currentStep: 0,
         chainStepCount: steps.length,
@@ -1909,6 +1914,8 @@ export async function runSubagent(config, childSessions) {
             cwd,
             sessionId: config.sessionId,
             completionOwnerId: config.completionOwnerId,
+            completionOwnerProcess: config.completionOwnerProcess,
+            parentWorkflowRunId: config.parentWorkflowRunId,
             sessionFile: statusPayload.sessionFile ?? latestSessionFile,
         }), (filePath, payload) => publishRunResult(filePath, () => writePendingAsyncResultFile(filePath, payload)));
     };
@@ -4797,6 +4804,7 @@ export async function runSubagent(config, childSessions) {
             runtimeAcknowledgedExtensions: singleRuntimeAcknowledgedExtensions,
             sessionId: config.sessionId,
             completionOwnerId: config.completionOwnerId,
+            completionOwnerProcess: config.completionOwnerProcess,
             sessionFile: effectiveSessionFile,
             intercomTarget: config.controlIntercomTarget,
             shareUrl,

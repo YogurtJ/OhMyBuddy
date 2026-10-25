@@ -10,6 +10,8 @@ import { createReportedChildSessionInput } from "../shared/child-launch.js";
 import { createPartialOutputTracker, formatPartialOutput } from "../shared/partial-output.js";
 import { childSessionHasQueuedMessages, projectChildSessionEventForJson } from "../shared/child-session.js";
 import { reconcileAttemptUsage } from "../shared/usage-reconciliation.js";
+import { isOrdinaryToolForMidToolExit } from "../shared/process-signal.js";
+import { STRUCTURED_OUTPUT_FOLLOW_UP } from "../shared/structured-output.js";
 import { formatSteerMessage } from "../shared/subagent-prompt-runtime.js";
 import { takeMatchingAcceptedSteer, unconsumedSteerReason } from "./steering.js";
 /** Events the child emits while the model streams; not persisted into the diagnostic log. */
@@ -524,7 +526,7 @@ export function runChildSession(input) {
                     toolCount,
                     durationMs: Date.now() - startedAt,
                     model,
-                    nativeMachine: session?.machineEvidence ? { provider: "herdr", machineId: session.machineEvidence.machineId, ...(session.machineEvidence.initial ? { initialGit: session.machineEvidence.initial } : {}), ...(session.machineEvidence.final ? { finalGit: session.machineEvidence.final } : {}) } : undefined,
+                    nativeMachine: session?.machineEvidence ? { provider: session.machineEvidence.provider, machineId: session.machineEvidence.machineId, ...(session.machineEvidence.initial ? { initialGit: session.machineEvidence.initial } : {}), ...(session.machineEvidence.final ? { finalGit: session.machineEvidence.final } : {}) } : undefined,
                     error: stopped ? stopMessage() : timedOut ? (error ?? timeoutMessage()) : interrupted || (forcedDrainAfterFinalSuccess && !forcedDrainAfterEmptyTerminal && !commandError) ? undefined : finalError,
                     finalOutput: (timedOut || stopped) && !finalOutput.trim() ? (stopped ? stopMessage() : error ?? timeoutMessage()) : finalOutput,
                     outputState: finalOutput.trim() ? "present" : "absent",
@@ -616,6 +618,22 @@ export function runChildSession(input) {
                     abortChild();
                 messageBaseline = created.messages.length;
                 await created.prompt(input.prompt);
+                // A structured child that finished normally without calling structured_output gets one more turn (#2997).
+                if (input.launch.session.runtime.structuredOutput
+                    && !structuredOutputToolInvoked
+                    && !settled
+                    && !created.shutDown
+                    && !interrupted
+                    && !timedOut
+                    && !stopped
+                    && !forcedTermination
+                    && !error
+                    && !assistantError
+                    && !input.launch.capture.toolDiagnostic()
+                    && !(currentTool && isOrdinaryToolForMidToolExit(currentTool))) {
+                    applyChildLifecycle("cancel-drain");
+                    await created.prompt(STRUCTURED_OUTPUT_FOLLOW_UP);
+                }
                 promptSettled = true;
                 settle(undefined);
             }

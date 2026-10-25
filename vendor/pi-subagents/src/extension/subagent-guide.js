@@ -19,11 +19,10 @@ export const SUBAGENT_GUIDE_TOPICS = [
 const SUBAGENT_GUIDE_SECTION_MAX_CHARS = 8000;
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 // /council must work under `pi --no-skills`, which drops the package skills from context,
-// so this topic serves the council skill together with the references it tells the model to read.
+// so this topic serves the council skill together with the reference it tells the model to read.
 const COUNCIL_FILES = [
     "skills/council-mode/SKILL.md",
     "skills/council-mode/references/pass-contracts.md",
-    "skills/pi-subagents/references/execution-controls.md",
 ];
 function isGuideTopic(value) {
     return SUBAGENT_GUIDE_TOPICS.includes(value);

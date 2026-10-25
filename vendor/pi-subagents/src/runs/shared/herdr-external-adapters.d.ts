@@ -1,6 +1,7 @@
 import type { HerdrMachineReference, HerdrRemoteGitStatus } from "../../shared/types.ts";
 import { connectHerdrMachine, type HerdrForwardedConnection } from "./herdr-connection.ts";
-import { HerdrPlacedRunOwner, type HerdrReconnectCandidate, type HerdrRunIdentity } from "./herdr-placed-run.ts";
+import { HerdrPlacedRunOwner, type HerdrReconnectCandidate } from "./herdr-pane-host.ts";
+import type { HerdrRunIdentity } from "./herdr-placed-run.ts";
 export type HerdrExternalAdapterId = "claude-code" | "claude-code-writer" | "cursor-agent" | "cursor-agent-writer" | "codex-exec" | "codex-exec-writer";
 export type HerdrExternalKind = "claude" | "cursor" | "codex";
 export interface HerdrExternalCapabilities {
@@ -62,7 +63,7 @@ export interface HerdrExternalAdapter {
 }
 export declare function reconcileHerdrExternalRun(identity: HerdrRunIdentity, candidate: HerdrReconnectCandidate): {
     ok: true;
-    state: import("./herdr-placed-run.ts").HerdrRunSnapshot["state"];
+    state: import("./placement-host.ts").PlacementRunState;
     paneId: string;
     cursor: number;
 } | {

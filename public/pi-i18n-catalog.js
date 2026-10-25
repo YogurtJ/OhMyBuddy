@@ -10112,6 +10112,8 @@
         ["子 Agent 请求受阻", "Subagent request blocked"],
         ["子 Agent 结果尚未答复", "Subagent result unanswered"],
         ["子 Agent 结果尚未处理", "Subagent result unhandled"],
+        ["工作流自动续跑未启动", "Workflow auto-resume did not start"],
+        ["子 Agent 管理", "Subagent administration"],
         ["子 Agent 监督待澄清", "Subagent watchdog needs clarification"]
     );
     rows.push(["媒体状态查询超时", "Media status request timed out"]);

@@ -1,4 +1,5 @@
 import type { HerdrMachineReference } from "../../shared/types.ts";
+import type { PlacementCommandResult, PlacementMachineAccess } from "./placement-host.ts";
 export declare const HERDR_REMOTE_PATH = "$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
 export declare const HERDR_SSH_BASE: readonly ["-T", "-o", "BatchMode=yes", "-o", "NumberOfPasswordPrompts=0", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=10", "-o", "ConnectionAttempts=1", "-o", "ForwardAgent=no", "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4", "-o", "SendEnv=-*", "-o", "SetEnv=PI_SUBAGENTS_SSH_GUARD="];
 export declare function hardenedSshEnv(source?: NodeJS.ProcessEnv): NodeJS.ProcessEnv;
@@ -33,26 +34,28 @@ export interface HerdrForwardedConnection {
     }>;
     close(): Promise<void>;
 }
+type SshTarget = Pick<HerdrMachineReference, "target">;
 export declare function decodeHerdrJsonLine(line: Buffer): unknown;
 export declare function shellQuoteRemote(value: string): string;
 export declare function remoteShellCommand(script: string, args?: string[]): string;
-export declare function runHerdrRemoteCommand(machine: HerdrMachineReference, command: string, options?: {
+export declare function runHerdrRemoteCommand(machine: SshTarget, command: string, options?: {
     sshBin?: string;
     env?: NodeJS.ProcessEnv;
     timeout?: number;
     maxBuffer?: number;
 }): import("child_process").SpawnSyncReturns<string>;
-export declare function runHerdrRemoteCommandAsync(machine: HerdrMachineReference, command: string, options?: {
+export declare function runHerdrRemoteCommandAsync(machine: SshTarget, command: string, options?: {
     sshBin?: string;
     env?: NodeJS.ProcessEnv;
     timeout?: number;
     maxBuffer?: number;
-}): Promise<{
-    status: number | null;
-    stdout: string;
-    stderr: string;
-    error?: Error;
-}>;
+}): Promise<PlacementCommandResult>;
+/** Spawns one process with bounded output and a SIGTERM-then-SIGKILL timeout; never rejects. */
+export declare function runBoundedCommand(file: string, args: string[], options: {
+    env: NodeJS.ProcessEnv;
+    timeout?: number;
+    maxBuffer?: number;
+}): Promise<PlacementCommandResult>;
 export declare function parseHerdrEndpoint(value: string, expectedSession?: string): HerdrEndpoint;
 export declare function discoverHerdrEndpoint(machine: HerdrMachineReference, options?: {
     sshBin?: string;
@@ -64,7 +67,13 @@ export declare class SocketRpcClient implements HerdrRpcClient {
     call<T>(method: string, params?: Record<string, unknown>, timeoutMs?: number): Promise<T>;
     subscribe(subscriptions: unknown[], listener: (event: unknown) => void, onDisconnect?: (error: Error) => void): Promise<() => void>;
 }
+/** SSH machine access: hardened ssh commands and StreamLocal forwards that share one private local directory per socket scope. */
+export declare function sshMachineAccess(machine: SshTarget, options?: {
+    sshBin?: string;
+    env?: NodeJS.ProcessEnv;
+}): PlacementMachineAccess;
 export declare function connectHerdrMachine(machine: HerdrMachineReference, options?: {
     sshBin?: string;
     env?: NodeJS.ProcessEnv;
 }): Promise<HerdrForwardedConnection>;
+export {};

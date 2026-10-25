@@ -34,6 +34,7 @@ interface CapacityOptions {
     abandonedSlotReleaseAfterMs?: number | false;
     pidLiveness?: (pid: number) => PidLiveness;
     pidNamespaceScope?: () => string | undefined;
+    bootId?: () => string | undefined;
     afterSlotRename?: (releasedDir: string) => void;
     writeOwner?: (filePath: string, owner: ActiveAsyncCapacityOwner) => void;
 }

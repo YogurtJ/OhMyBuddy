@@ -353,6 +353,33 @@ Results:
 
 Live update events are bounded progress snapshots, not patches, so consumers should replace the prior snapshot rather than merge it as a delta. Structured delegation coalesces heartbeats whose delegation-visible progress and recent output are unchanged; a duration-only heartbeat therefore does not produce another update. The terminal response remains authoritative for the complete result, error, and final usage details.
 
+Both `:update` and terminal `:response` optionally include one bounded `providerDiagnostics` snapshot:
+
+```ts
+{
+  errorCount: number,
+  lastError?: {
+    kind: "rate_limited" | "transient_other" | "unknown",
+    message: string,
+    at: number,
+  },
+  retry?: {
+    phase: "backoff" | "in_flight",
+    attempt: number,
+    maxAttempts: number,
+    delayMs: number,
+    scheduledAt: number,
+  },
+}
+```
+
+- Coverage is **observed assistant-request errors and Pi retries**, not every provider-internal HTTP attempt. Healthy long reasoning does not invent diagnostics; absence means no observation, not proof that no internal retry happened.
+- `errorCount` increments once per failed assistant `message_end` (`stopReason: "error"`), including repeated identical errors and errors without an `errorMessage`. It does not count retry scheduling, tool failures, aborts, or compaction. The first error is reported immediately, even with no output or tokens and before Pi schedules any retry.
+- Only the failed message's `errorMessage` is classified, never assistant content or tool text. `rate_limited` requires explicit throttling evidence. Text that mentions quota or billing, or says credits, balance, or an account or usage limit is exhausted, is reported as `unknown`, even when it also carries throttling or transient wording, so account exhaustion never looks like transient throttling. Other Pi-recognized transient errors use `transient_other`; anything else uses `unknown`. This classification is observational and does not change Pi's retry policy or the delegation's status/error behavior.
+- `lastError.message` is a short fixed safe description, **not** the raw provider error/body. Raw diagnostics remain in existing child artifacts. No HTTP status or provider code is inferred or exposed here. `at` and `scheduledAt` are observation-time Unix timestamps in milliseconds.
+- `auto_retry_start` schedules `backoff`; `attempt` is the 1-based retry attempt, `maxAttempts` is Pi's retry budget, and `delayMs` is Pi's planned delay, **not** a claimed server `Retry-After`. The next `agent_start`/`turn_start` changes the phase to `in_flight`. `auto_retry_end` ends the sequence after success, exhaustion, or cancellation; it is not a backoff-finished event.
+- Cumulative error history survives recovery and unrelated replacement updates. `retry` is active-only and is absent from every terminal response, including cancellation and timeout. Historical errors alone do not turn a recovered completed result into a failure.
+
 Bounds:
 
 - Schemas are capped at 64 KiB; tasks and returned text/structured values are capped at 1 MiB, with smaller bounds on identity/configuration strings and a maximum `timeoutMs` of 2,147,483,647.

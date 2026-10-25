@@ -43,6 +43,8 @@ export interface SubagentNotifyDetails {
     /** The finished run's id; for a workflow it equals workflowRunId. */
     runId?: string;
     workflowRunId?: string;
+    /** What happens next to a workflow that Pi's exit or a runtime replacement stopped; decided once at delivery. */
+    resumeNotice?: string;
     childRuns?: Array<{
         runId: string;
         workflowKey?: string;
