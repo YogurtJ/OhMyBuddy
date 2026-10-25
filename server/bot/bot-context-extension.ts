@@ -19,6 +19,7 @@ import { APPROVAL_TITLE, BLOCKED, PRESETS, approvalFor, approvalMessage, newToke
 import { safeFile as readDocument } from '../profile-memory/management.js';
 import { registerNotebook, notebookNotice } from './bot-notebook.ts';
 import { structuredCompaction } from './bot-compaction.js';
+import { pruneDrafts, idleDelay, idleCompactionWanted } from './bot-maintenance.js';
 import { Type } from 'typebox';
 
 export const BOT_SECTION = 'pivane_bot';
@@ -250,6 +251,33 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
                 error: String(error?.message || error).slice(0, 200) });
             return undefined;
         }
+    });
+    const isBot = (ctx: any) => managed(ctx) && Boolean(botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir()));
+    // S1 (D-030): at the end of a completed run, old large tool outputs become short stubs when
+    // that saves a lot. Earlier drafts of other extensions are kept as they are.
+    pi.on('agent_before_settle', (event: any, ctx: any) => {
+        if (event.outcome !== 'completed' || !isBot(ctx)) return;
+        const drafts = pruneDrafts(event.context?.contextEntries || [], ctx.getContextUsage());
+        return drafts.length ? { entries: [...(event.entries || []), ...drafts] } : undefined;
+    });
+    // S2 (D-030): once the prompt cache has gone cold, a still idle and fairly full window is
+    // summarized in the background, so the user does not wait for it in their next message.
+    let idleTimer: ReturnType<typeof setTimeout> | null = null;
+    const stopIdle = () => { if (idleTimer) clearTimeout(idleTimer); idleTimer = null; };
+    pi.on('agent_start', stopIdle);
+    pi.on('session_shutdown', stopIdle);
+    pi.on('agent_settled', (_event: any, ctx: any) => {
+        stopIdle();
+        if (!isBot(ctx)) return;
+        idleTimer = setTimeout(() => {
+            idleTimer = null;
+            try {
+                if (!ctx.isIdle() || ctx.hasPendingMessages() || scheduledRunActive(ctx.sessionManager) || !isBot(ctx)
+                    || !idleCompactionWanted(ctx.getContextUsage())) return;
+                ctx.compact({ customInstructions: 'pivane-bot-idle', onError: () => {} });
+            } catch { /* Best effort: the native threshold still applies. */ }
+        }, idleDelay(ctx.model));
+        (idleTimer as any).unref?.();
     });
     pi.on('before_agent_start', async (event: any, ctx: any) => {
         if (!managed(ctx)) return;

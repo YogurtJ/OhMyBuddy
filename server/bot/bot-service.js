@@ -13,11 +13,21 @@ const settings = require('./bot-settings');
 const { BotWindowRegistry } = require('./bot-window-registry');
 const { WINDOW_ENTRY, windowMarker, readWindowBinding } = require('./bot-window-state');
 const { HANDOFF_MESSAGE, buildHandoff } = require('./bot-handoff');
+const { LEDGER_ENTRY } = require('./bot-ledger');
+const { rotationReason } = require('./bot-maintenance');
 const history = require('./bot-history');
 const setup = require('./bot-setup');
 const { EventEmitter } = require('node:events');
 
 const MOVING = '这段聊天正在换到新的记录文件，请稍后再试';
+// Entries of a native JSONL file (one per line after the header), read in bounded chunks.
+function countLines(file) {
+    const fd = fs.openSync(file, 'r'), buffer = Buffer.alloc(1024 * 1024);
+    let lines = 0, read;
+    try { while ((read = fs.readSync(fd, buffer, 0, buffer.length, null)) > 0) for (let i = 0; i < read; i++) if (buffer[i] === 10) lines++; }
+    finally { fs.closeSync(fd); }
+    return Math.max(0, lines - 1);
+}
 const fail = (message, status = 400, code) => { throw Object.assign(new Error(message), { status, ...(code ? { code } : {}) }); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const UUID = /^[a-f0-9-]{36}$/;
@@ -38,6 +48,7 @@ class BotService extends EventEmitter {
         this.store = store;
         this.profiles = profiles;
         this.supervisor = supervisor;
+        this.maintaining = new Set();
         this.documents = documents;
         this.catalog = catalog;
         this.getAgentDir = getAgentDir || (async () => fs.realpathSync.native((await getSdk()).getAgentDir()));
@@ -259,8 +270,12 @@ class BotService extends EventEmitter {
                 return this.store.createSession(window.cwd, '', { agentProfileId: profileId, initializeSession: manager => {
                     if (handoff.model) manager.appendModelChange(handoff.model.provider, handoff.model.modelId);
                     if (handoff.thinkingLevel) manager.appendThinkingLevelChange(handoff.thinkingLevel);
+                    // The notebook continues from its snapshot; the seed message also shows it to the model.
+                    if (handoff.snapshot) manager.appendCustomEntry(LEDGER_ENTRY, { v: 1, snapshot: handoff.snapshot });
                     if (handoff.text) manager.appendCustomMessageEntry(HANDOFF_MESSAGE, handoff.text, false,
-                        { version: 1, fromSessionId: from.sessionId, fromGeneration: from.generation });
+                        { version: 1, fromSessionId: from.sessionId, fromGeneration: from.generation,
+                            ...(handoff.sections ? { sections: handoff.sections } : {}),
+                            ...(handoff.sections || handoff.notebook ? { pivaneNotebook: true } : {}) });
                     // Last initial entry: its presence proves the seed above was written.
                     manager.appendCustomEntry(WINDOW_ENTRY, windowMarker({ sessionId: manager.getSessionId(), profileId, windowId,
                         kind: window.kind, generation: toGeneration, predecessor: { sessionId: from.sessionId, lastEntryId: handoff.lastEntryId } }));
@@ -273,6 +288,30 @@ class BotService extends EventEmitter {
         const committed = await this.commitRotationLocked(profileId, windowId, requestId, from, { sessionId: session.id, sessionPath: session.path });
         this.emit('windowRotated', { profileId, windowId, from, to: committed.current });
         return { ok: true, window: publicWindow(committed), session: { cwd: window.cwd, id: session.id, path: session.path } };
+    }
+
+    // S4 (D-030): after a Bot window run settles or compacts, move the window to a new
+    // generation when its file is large, long or old. Only an idle window rotates; a busy one
+    // is tried again after its next run. Never throws; returns the rotation or null.
+    async maintainWindow(worker, { now = Date.now() } = {}) {
+        const loaded = worker?.loadedBot, sessionPath = worker?.sessionPath;
+        if (!loaded || typeof sessionPath !== 'string' || !this.supervisor) return null;
+        const key = `${loaded.profileId}/${loaded.windowId}`;
+        if (this.maintaining.has(key)) return null;
+        this.maintaining.add(key);
+        try {
+            const { state } = await this.windows.read(loaded.profileId);
+            const window = state.windows.find(item => item.id === loaded.windowId);
+            if (!window?.current || window.rotation || window.current.sessionPath !== sessionPath || window.current.generation !== loaded.generation) return null;
+            const started = window.generations.find(item => item.generation === window.current.generation)?.startedAt ?? window.createdAt;
+            const bytes = fs.statSync(sessionPath).size;
+            const reason = rotationReason({ bytes, entries: bytes >= 1024 * 1024 ? countLines(sessionPath) : 0, startedAt: started, now });
+            if (!reason || !this.supervisor.isSessionIdle(sessionPath)) return null;
+            return await this.rotate(loaded.profileId, loaded.windowId, { reason, expectedGeneration: loaded.generation });
+        } catch (error) {
+            if (error?.status !== 409) console.error(`Bot window maintenance failed: ${error?.message || error}`);
+            return null;
+        } finally { this.maintaining.delete(key); }
     }
 
     async commitRotationLocked(profileId, windowId, requestId, from, to) {
