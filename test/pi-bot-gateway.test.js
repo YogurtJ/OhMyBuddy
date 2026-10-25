@@ -179,13 +179,17 @@ test('notebook edits are written by the running worker, or with the file reserve
     const manager = SessionManager.open(current.path);
     const userEntry = manager.appendMessage({ role: 'user', content: '瓷砖定哑光灰，周五前给我报价', timestamp: Date.now() });
     const { state } = ledger.prepareOps(ledger.emptyLedger(), [{ op: 'add', kind: 'decision', text: '瓷砖哑光灰' },
-        { op: 'add', kind: 'commitment', text: '周五前给报价', due: '2026-03-06' }], { at: new Date().toISOString(), by: 'bot', source: { sessionId: current.id, entryId: userEntry } });
+        { op: 'add', kind: 'commitment', text: '周五前给报价', due: '2026-03-06' },
+        // Carried over from an earlier generation: only its kept quote can be shown.
+        { op: 'add', kind: 'ref', text: '物业电话 6123', source: { sessionId: 'earlier-generation', entryId: 'e9', role: 'toolResult', quote: '物业服务中心 6123' } }],
+        { at: new Date().toISOString(), by: 'bot', source: { sessionId: current.id, entryId: userEntry } });
     manager.appendCustomEntry(ledger.LEDGER_ENTRY, { v: 1, snapshot: state });
     const url = `/bots/${botId}/windows/${windowId}/notebook`;
     let book = await rest('GET', url);
     assert.equal(book.generation, 0);
-    assert.deepEqual(book.items.map(item => [item.id, item.kind, item.status]), [['n1', 'decision', 'active'], ['n2', 'commitment', 'active']]);
+    assert.deepEqual(book.items.map(item => [item.id, item.kind, item.status]), [['n1', 'decision', 'active'], ['n2', 'commitment', 'active'], ['n3', 'ref', 'active']]);
     assert.deepEqual(book.items[0].source, { role: 'user', text: '瓷砖定哑光灰，周五前给我报价' });
+    assert.deepEqual(book.items[2].source, { role: 'toolResult', text: '物业服务中心 6123' });
     // No worker: appended with the file reserved.
     book = await rest('POST', url, { expectedGeneration: 0, expectedVersion: book.version, ops: [{ op: 'status', id: 'n2', status: 'done' }] });
     assert.equal(book.items[1].status, 'done');
@@ -195,7 +199,7 @@ test('notebook edits are written by the running worker, or with the file reserve
     await page.call('open_session', { cwd: current.cwd, sessionId: current.id, token: TOKEN, botWindow });
     const worker = await deadline(() => gateway.supervisor.getActiveWorker(current.path)?.loadedBot && gateway.supervisor.getActiveWorker(current.path));
     book = await rest('POST', url, { expectedGeneration: 0, expectedVersion: book.version, ops: [{ op: 'update', id: 'n1', text: '瓷砖改成浅灰' }, { op: 'delete', id: 'n2' }] });
-    assert.deepEqual(book.items.map(item => [item.id, item.text]), [['n1', '瓷砖改成浅灰']], 'a deleted note leaves the panel');
+    assert.deepEqual(book.items.map(item => [item.id, item.text]), [['n1', '瓷砖改成浅灰'], ['n3', '物业电话 6123']], 'a deleted note leaves the panel');
     assert.equal(gateway.supervisor.getActiveWorker(current.path), worker, 'the page keeps its runtime');
     const written = SessionManager.open(current.path).getEntries().filter(entry => entry.customType === ledger.LEDGER_ENTRY && entry.data.ops);
     assert.deepEqual(written.map(entry => entry.data.ops.map(op => `${op.by}:${op.op}:${op.id}`)), [['user:status:n2'], ['user:update:n1', 'user:delete:n2']]);

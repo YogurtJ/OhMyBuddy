@@ -37,11 +37,12 @@ const MAX_BOTS = 50;
 const PLACEHOLDER = Object.freeze({ 'zh-CN': '新伙伴', en: 'New buddy' });
 const DEFAULT_AVATAR = Object.freeze({ kind: 'emoji', value: '✨' });
 
-// What the notebook panel shows: every note except tombstones, with a short excerpt of the
-// message it came from when that message is in the current generation.
+// What the notebook panel shows: every note except tombstones, with the quote it came from
+// (kept with the note), or else a short excerpt of the message when it is in the current generation.
 function notebookView(state, branch, current) {
     const byId = new Map(branch.map(entry => [entry.id, entry]));
     const excerpt = source => {
+        if (source?.quote) return { role: source.role, text: source.quote };
         if (!source || source.sessionId !== current.sessionId) return null;
         const message = byId.get(source.entryId)?.message;
         if (!message || !['user', 'assistant', 'toolResult'].includes(message.role)) return null;

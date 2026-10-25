@@ -52,7 +52,7 @@ test('notebook changes are kept only when the quote is real and comes from the r
     const bot = result.details.pivaneBot;
     assert.deepEqual(bot.ledger.ops.map(op => [op.op, op.id, op.kind ?? op.status]),
         [['add', 'n2', 'decision'], ['add', 'n3', 'commitment'], ['add', 'n4', 'ref'], ['status', 'n1', 'done']]);
-    assert.deepEqual(bot.ledger.ops[0].source, { sessionId: manager.getSessionId(), entryId: ids.user1 });
+    assert.deepEqual(bot.ledger.ops[0].source, { sessionId: manager.getSessionId(), entryId: ids.user1, role: 'user', quote: '瓷砖就定 60×120 哑光灰吧' });
     assert.deepEqual(bot.rejected.map(item => item.reason), ['quote from the wrong speaker', 'quote not found', 'No note n9', 'already noted', 'unknown entry', 'quote length']);
     assert.deepEqual(bot.ledger.snapshot, ledger.replay([...manager.getBranch(), { type: 'compaction', details: result.details }]));
     assert.match(result.summary, /## Notebook\nNotebook of this chat[^]*### Decided\n- \[n2\] 瓷砖 60×120 哑光灰[^]*Recently closed[^]*\[n1\] done/);
