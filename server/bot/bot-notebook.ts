@@ -4,7 +4,7 @@
 // Pi has not appended yet.
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
-import { LEDGER_ENTRY, KINDS, replay, prepareOps, renderLedger, describeOp, applyOp, ledgerVersion } from './bot-ledger.js';
+import { LEDGER_ENTRY, KINDS, replay, prepareOps, renderLedger, describeOp, applyOp, ledgerVersion, sourceQuote } from './bot-ledger.js';
 
 export const NOTE_TOOL = 'window_note';
 export const NOTEBOOK_MESSAGE = 'pivane-bot-notebook';
@@ -54,6 +54,22 @@ export function notebookNotice(branch: any[], now: string) {
 }
 
 const PANEL_OPS = ['update', 'status', 'delete'];
+
+// A note the Bot takes points at the user's message that led to it (the leaf is usually the
+// assistant message holding the tool call, which often has no text of its own).
+function noteSource(manager: any) {
+    const branch = manager.getBranch();
+    for (let index = branch.length - 1; index >= 0; index--) {
+        const message = branch[index]?.type === 'message' ? branch[index].message : null;
+        if (message?.role !== 'user') continue;
+        const text = typeof message.content === 'string' ? message.content : Array.isArray(message.content)
+            ? message.content.filter((part: any) => part?.type === 'text').map((part: any) => part.text).join(' ') : '';
+        const quote = sourceQuote(text);
+        return quote ? { sessionId: manager.getSessionId(), entryId: branch[index].id, role: 'user', quote }
+            : { sessionId: manager.getSessionId(), entryId: branch[index].id };
+    }
+    return { sessionId: manager.getSessionId(), entryId: manager.getLeafId() };
+}
 
 // An edit from the notebook panel, applied by the worker that owns the session file (the
 // Supervisor only sends it while the session is idle). The panel names the version it saw.
@@ -107,7 +123,7 @@ export function registerNotebook(pi: ExtensionAPI, isBotWindow: (ctx: any) => bo
             if (!isBotWindow(ctx)) throw new Error('The notebook is only available in a Bot chat');
             const manager = ctx.sessionManager, state = current(manager);
             const { ops, state: next } = prepareOps(state, [noteOperation(input)], { at: new Date().toISOString(), by: 'bot',
-                source: { sessionId: manager.getSessionId(), entryId: manager.getLeafId() } });
+                source: noteSource(manager) });
             pending.push({ toolCallId, ops });
             const text = ops.map((op: any) => describeOp(op, next)).join('\n');
             return { content: [{ type: 'text' as const, text: `Notebook ${text}` }], details: { pivaneLedger: { v: 1, ops } } };

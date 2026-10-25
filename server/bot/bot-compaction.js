@@ -206,7 +206,7 @@ function checkNote(note, state, byShortId, { at }) {
     if (!roles) return { rejected: 'unknown kind' };
     const matching = sources.find(source => roles.includes(source.message.role) && fold(source.text).includes(quote));
     if (!matching) return { rejected: sources.some(source => fold(source.text).includes(quote)) ? 'quote from the wrong speaker' : 'quote not found' };
-    const source = { sessionId: matching.sessionId, entryId: matching.entry.id };
+    const source = { sessionId: matching.sessionId, entryId: matching.entry.id, role: matching.message.role, quote };
     let raw;
     if (note.op === 'add') {
         const text = fold(note.text);

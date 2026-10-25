@@ -28,7 +28,10 @@ test('notebook operations validate, assign ids in order and keep tombstones', ()
         [{ op: 'status', id: 'n2', status: 'done' }, 'bot', /already done/],
         [{ op: 'update', id: 'n3', due: '2026-04-01' }, 'bot', /already says/],
         [{ op: 'delete', id: 'n3' }, 'bot', /Only the user/],
-        [{ op: 'add', kind: 'decision', text: 'y', supersedes: 'n1' }, 'bot', /No current note n1/]
+        [{ op: 'add', kind: 'decision', text: 'y', supersedes: 'n1' }, 'bot', /No current note n1/],
+        [{ op: 'add', kind: 'ref', text: 'x', source: { sessionId: 's1', entryId: 'e1', role: 'user' } }, 'bot', /source/],
+        [{ op: 'add', kind: 'ref', text: 'x', source: { sessionId: 's1', entryId: 'e1', role: 'system', quote: 'hi' } }, 'bot', /source/],
+        [{ op: 'add', kind: 'ref', text: 'x', source: { sessionId: 's1', entryId: 'e1', role: 'user', quote: 'q'.repeat(301) } }, 'bot', /source/]
     ]) assert.throws(() => ledger.prepareOps(state, [raw], { at: T2, by }), pattern);
     // A batch is all or nothing.
     assert.throws(() => ledger.prepareOps(state, [{ op: 'add', kind: 'ref', text: 'ok' }, { op: 'status', id: 'n77', status: 'done' }], { at: T2, by: 'bot' }));
@@ -37,6 +40,12 @@ test('notebook operations validate, assign ids in order and keep tombstones', ()
     assert.equal(deleted.status, 'deleted'); assert.equal(deleted.text, '', 'a tombstone keeps no text');
     assert.throws(() => ledger.prepareOps(state, [{ op: 'update', id: 'n3', text: 'again' }], { at: T2, by: 'user' }), /No note n3/);
     assert.equal(state.nextSeq, 4, 'ids are never reused');
+    // A source may carry who said it and a short quote; long text is cut to a quote that fits.
+    const quote = ledger.sourceQuote('长'.repeat(400));
+    assert.equal(quote.length, ledger.MAX_QUOTE); assert.ok(quote.endsWith('…'));
+    ({ state } = ledger.prepareOps(state, [{ op: 'add', kind: 'ref', text: '物业电话 6123', source: { sessionId: 's1', entryId: 'e2', role: 'toolResult', quote } }], { at: T2, by: 'bot' }));
+    assert.deepEqual(state.items.at(-1).source, { sessionId: 's1', entryId: 'e2', role: 'toolResult', quote });
+    ({ state } = ledger.prepareOps(state, [{ op: 'delete', id: 'n4' }], { at: T2, by: 'user' }));
     assert.deepEqual(ledger.readSnapshot(JSON.parse(JSON.stringify(state))), state, 'snapshots round-trip');
     assert.equal(ledger.readSnapshot({ ...state, nextSeq: 2 }), null, 'an id at or above nextSeq is rejected');
 });
@@ -95,7 +104,7 @@ test('the window_note tool writes branch-following operations and the model sees
     const file = require.resolve('../server/bot/bot-notebook.ts');
     const notebook = require(process.env.PIVANE_TEST_PI_JITI).createJiti(file)(file);
     const manager = SessionManager.inMemory('/tmp');
-    manager.appendMessage({ role: 'user', content: '周五前把报价发我，瓷砖就定哑光灰', timestamp: Date.now() });
+    const userId = manager.appendMessage({ role: 'user', content: '周五前把报价发我，瓷砖就定哑光灰', timestamp: Date.now() });
     const tools = new Map(), handlers = new Map();
     const pi = { registerTool(tool) { tools.set(tool.name, tool); }, on(name, fn) { handlers.set(name, fn); } };
     let bot = true;
@@ -109,12 +118,12 @@ test('the window_note tool writes branch-following operations and the model sees
     };
     // Two calls in one assistant message, before Pi appended either result: distinct ids.
     manager.appendMessage(assistant([{ type: 'toolCall', id: 't1', name: 'window_note', arguments: {} }, { type: 'toolCall', id: 't2', name: 'window_note', arguments: {} }]));
-    const leaf = manager.getLeafId();
     const first = await call('t1', { action: 'add', kind: 'decision', text: '瓷砖哑光灰' });
     const second = await call('t2', { action: 'add', kind: 'commitment', text: '周五前发报价', due: '2026-03-06' });
     assert.match(first.content[0].text, /added \[n1\] \(decision\): 瓷砖哑光灰/);
     assert.equal(second.details.pivaneLedger.ops[0].id, 'n2');
-    assert.deepEqual(first.details.pivaneLedger.ops[0].source, { sessionId: manager.getSessionId(), entryId: leaf });
+    // The note points at the user's words that led to it, not at the tool-call message.
+    assert.deepEqual(first.details.pivaneLedger.ops[0].source, { sessionId: manager.getSessionId(), entryId: userId, role: 'user', quote: '周五前把报价发我，瓷砖就定哑光灰' });
     for (const [id, result] of [['t1', first], ['t2', second]])
         manager.appendMessage({ role: 'toolResult', toolCallId: id, toolName: 'window_note', content: result.content, details: result.details, isError: false, timestamp: Date.now() });
     await handlers.get('agent_settled')({});

@@ -16,6 +16,8 @@ const STATUSES = Object.freeze(['active', 'done', 'cancelled', 'superseded', 'de
 const ACTORS = Object.freeze(['bot', 'user', 'summary']);
 const OPS = Object.freeze(['add', 'update', 'status', 'delete']);
 const MAX_TEXT = 500;
+const MAX_QUOTE = 300;
+const SOURCE_ROLES = Object.freeze(['user', 'assistant', 'toolResult']);
 const MAX_ITEMS = 1000;
 const MAX_OPS = 64;
 const ID = /^n[1-9]\d{0,6}$/;
@@ -40,11 +42,25 @@ function validDate(value) {
     return value;
 }
 
+// Where a note came from: the entry, plus (optionally) who said it and a short quote so
+// the panel can show it after the entry has moved to an earlier generation.
 function validSource(value) {
     if (value === null || value === undefined) return null;
     if (!object(value) || typeof value.sessionId !== 'string' || typeof value.entryId !== 'string'
         || value.sessionId.length > 80 || value.entryId.length > 80) return undefined;
-    return { sessionId: value.sessionId, entryId: value.entryId };
+    const source = { sessionId: value.sessionId, entryId: value.entryId };
+    if (value.role !== undefined || value.quote !== undefined) {
+        const quote = typeof value.quote === 'string' ? value.quote.replace(/\s+/g, ' ').trim() : '';
+        if (!SOURCE_ROLES.includes(value.role) || !quote || quote.length > MAX_QUOTE) return undefined;
+        source.role = value.role; source.quote = quote;
+    }
+    return source;
+}
+
+// A quote of at most MAX_QUOTE characters from a message's text.
+function sourceQuote(text) {
+    const folded = String(text ?? '').replace(/\s+/g, ' ').trim();
+    return folded.length > MAX_QUOTE ? folded.slice(0, MAX_QUOTE - 1) + '…' : folded;
 }
 
 function validTime(value) {
@@ -248,6 +264,6 @@ function ledgerVersion(state) {
 
 module.exports = {
     ledgerVersion,
-    LEDGER_ENTRY, KINDS, STATUSES, MAX_TEXT, MAX_ITEMS,
-    emptyLedger, readSnapshot, normalizeOp, applyOp, prepareOps, replay, entryLedger, renderLedger, describeOp, cloneLedger
+    LEDGER_ENTRY, KINDS, STATUSES, MAX_TEXT, MAX_ITEMS, MAX_QUOTE,
+    sourceQuote, emptyLedger, readSnapshot, normalizeOp, applyOp, prepareOps, replay, entryLedger, renderLedger, describeOp, cloneLedger
 };
