@@ -240,6 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
         models: [],
         modelCatalogSupported: false,
         modelRefreshOp: null,
+        thinkingChangeOp: null,
         modelRefreshPending: false,
         modelRefreshError: '',
         modelAuthError: false,
@@ -335,8 +336,13 @@ document.addEventListener('DOMContentLoaded', () => {
         return { model, thinking, context };
     })();
 
+    const thinkingPicker = window.PiThinkingPicker ? new window.PiThinkingPicker(elements.thinkingSelect) : null;
+    const mobileThinkingPicker = window.PiThinkingPicker ? new window.PiThinkingPicker(mobileSheet.thinking, { beforeOpen: () => mobileSheet.thinking.closest('dialog')?.close() }) : null;
+
     function syncMobileHeader() {
-        const modelName = state.model?.name || state.model?.id || translateUi('等待会话');
+        const selecting = state.modelRefreshOp?.kind === 'selection' ? state.modelRefreshOp.target : null;
+        const modelName = selecting ? translateUi('切换至 {0}…', selecting.name || selecting.id) : state.model?.name || state.model?.id || translateUi('等待会话');
+        elements.mobileComposerSummary.setAttribute('aria-busy', String(Boolean(selecting)));
         const thinkingName = state.connected && state.session
             ? [...elements.thinkingSelect.options].find(option => option.value === state.thinkingLevel)?.textContent || '' : '';
         const percent = elements.contextPercent.textContent;
@@ -363,6 +369,7 @@ document.addEventListener('DOMContentLoaded', () => {
         mobileSheet.thinking.replaceChildren(...[...elements.thinkingSelect.options].map(option => option.cloneNode(true)));
         mobileSheet.thinking.value = state.thinkingLevel;
         mobileSheet.thinking.disabled = elements.thinkingSelect.disabled;
+        thinkingPicker?.sync(Boolean(state.thinkingChangeOp)); mobileThinkingPicker?.sync(Boolean(state.thinkingChangeOp));
         mobileSheet.context.detail.textContent = elements.contextFraction.textContent;
     }
 
@@ -414,7 +421,7 @@ document.addEventListener('DOMContentLoaded', () => {
     documentStorageOpen.setAttribute('role', 'menuitem'); documentStorageOpen.tabIndex = -1;
     const storageIcon = document.createElement('i'); storageIcon.className = 'fa-solid fa-box-archive'; storageIcon.setAttribute('aria-hidden', 'true');
     const storageCaption = document.createElement('span'); storageCaption.textContent = translateUi('附件管理');
-    const storageHelp = document.createElement('small'); storageHelp.textContent = translateUi('查看原件占用与清理选项'); storageCaption.append(storageHelp);
+    const storageHelp = document.createElement('small'); storageHelp.textContent = translateUi('查找、下载已上传文件与整理空间'); storageCaption.append(storageHelp);
     documentStorageOpen.append(storageIcon, storageCaption); elements.attachButton.after(documentStorageOpen);
     const documentStorageSettings = document.createElement('button');
     documentStorageSettings.id = 'settings-document-storage'; documentStorageSettings.type = 'button'; documentStorageSettings.hidden = true;
@@ -435,6 +442,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const documentStorage = window.PiDocumentStorage?.mount({
         t: translateUi, getContext: () => ({ cwd: state.cwd }), getDraftIds: currentDocumentDraftIds,
+        getSessions: async cwd => (await apiFetch('/api/pi/sessions?cwd=' + encodeURIComponent(cwd))).sessions || [],
+        openSession: target => window.PiChatNavigation.openSession(target),
+        fetchFile: async ({ cwd, item, signal }) => {
+            const query = new URLSearchParams({ cwd, sessionId: item.sessionId, id: item.id });
+            const response = await (window.WorkspaceAccess?.fetch || fetch)('/api/pi/uploads?' + query, { headers: apiHeaders(), signal });
+            if (!response.ok) {
+                const result = await response.json().catch(() => ({}));
+                throw new Error(translateUi(result.error || '附件暂时无法下载，请打开来源对话查看。'));
+            }
+            return response.blob();
+        },
         request: (route, options) => apiFetch('/api/pi' + route, { ...options,
             ...(options.body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(options.body) }) }),
         onDeleted: () => toast(translateUi('已清理附件原件'), 'success')
@@ -2730,6 +2748,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function applySnapshot(snapshot) {
         if (state.modelRefreshOp?.generation !== state.socketGeneration) state.modelRefreshOp = null;
+        if (state.thinkingChangeOp?.generation !== state.socketGeneration) state.thinkingChangeOp = null;
         state.modelAuthError = false;
         state.modelRefreshError = '';
         state.model = snapshot.state?.model || null;
@@ -2834,7 +2853,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const labels = { off: translateUi("不启用"), minimal: translateUi("极简"), low: translateUi("低"), medium: translateUi("中"), high: translateUi("高"), xhigh: translateUi("极高"), max: translateUi("最大") };
         elements.thinkingSelect.innerHTML = state.thinkingLevels.map(level => `<option value="${escapeHtml(level)}">${labels[level] || level}</option>`).join('');
         elements.thinkingSelect.value = state.thinkingLevel;
-        elements.thinkingSelect.disabled = state.thinkingLevels.length <= 1;
+        elements.thinkingSelect.disabled = Boolean(state.modelRefreshOp || state.thinkingChangeOp) || state.thinkingLevels.length <= 1;
         syncThinkingSelectSize();
         syncMobileHeader();
     }
@@ -3435,7 +3454,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderEmptySession();
         state.model = null;
         modelSpeed.reset();
-        state.models = []; state.modelRefreshOp = null; state.modelRefreshPending = false; state.modelRefreshError = ''; state.modelAuthError = false;
+        state.models = []; state.modelRefreshOp = null; state.thinkingChangeOp = null; state.modelRefreshPending = false; state.modelRefreshError = ''; state.modelAuthError = false;
         elements.modelGuidance.hidden = true; elements.modelRefresh.disabled = true;
         state.stats = null;
         state.streaming = false;
@@ -4127,9 +4146,9 @@ document.addEventListener('DOMContentLoaded', () => {
         nativeContext.sync();
         const compacting = state.compacting || state.compactRequested;
         const stopping = nativeControls.value?.stopping || state.controlRequested;
-        const busy = state.treeBusy || state.shellBusy || streaming || compacting || stopping || state.resourceRequested || Boolean(state.modelRefreshOp) || modelSpeed.pending;
+        const busy = state.treeBusy || state.shellBusy || streaming || compacting || stopping || state.resourceRequested || Boolean(state.modelRefreshOp || state.thinkingChangeOp) || modelSpeed.pending;
         if (state.connected && state.shellBusy) { setConnection('working', translateUi("Shell 正在执行")); setAgentState('working', translateUi("Shell 执行中"), state.model?.id || 'Pi Agent'); }
-        const cancellable = !state.modelRefreshOp && !state.treeBusy && !state.shellBusy && state.connected && !state.resourceRequested && (nativeControls.enabled ? busy : streaming && !compacting);
+        const cancellable = !state.modelRefreshOp && !state.thinkingChangeOp && !state.treeBusy && !state.shellBusy && state.connected && !state.resourceRequested && (nativeControls.enabled ? busy : streaming && !compacting);
         elements.stopButton.dataset.cancellable = String(cancellable);
         elements.stopButton.disabled = !state.connected || stopping;
         const stopAction = nativeControls.enabled ? compacting ? translateUi("取消压缩并取回待发文字") : translateUi("停止并取回待发文字") : translateUi("停止当前任务");
@@ -4144,11 +4163,12 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.compactButton.disabled = !state.connected || busy || state.pendingUi.size > 0;
         elements.autoCompact.disabled = !state.connected || state.shellBusy;
         elements.autoRetry.disabled = !state.connected || state.shellBusy;
+        modelPicker.setPending?.(state.modelRefreshOp?.kind === 'selection' ? state.modelRefreshOp.target : null);
         modelPicker.setDisabled(busy || !state.connected || !state.models.length);
         syncModelGuidance();
         elements.thinkingSelect.disabled = busy || !state.connected || state.thinkingLevels.length <= 1;
         modelSpeed.setBlocked(busy || !state.connected || state.pendingUi.size > 0);
-        elements.composerStatus.textContent = !state.connected ? translateUi("未打开会话") : state.shellBusy ? translateUi("Shell 正在执行，可继续编辑草稿；停止请使用命令卡片") : state.treeBusy ? translateUi("正在切换对话位置，请在历史页查看进度或取消") : state.resourceRequested ? translateUi("正在重新加载原生资源") : stopping ? translateUi("正在停止 / 取回，请等待确认") : compacting ? '' : streaming ? (elements.deliveryMode.value === 'follow_up' ? translateUi("运行中 · 新消息在任务完成后送达") : translateUi("运行中 · 新消息在本轮工具后送达")) : '';
+        elements.composerStatus.textContent = !state.connected ? translateUi("未打开会话") : state.modelRefreshOp?.kind === 'selection' ? translateUi('正在切换模型，完成后即可调整思考等级。') : state.thinkingChangeOp ? translateUi('正在设置思考等级…') : state.shellBusy ? translateUi("Shell 正在执行，可继续编辑草稿；停止请使用命令卡片") : state.treeBusy ? translateUi("正在切换对话位置，请在历史页查看进度或取消") : state.resourceRequested ? translateUi("正在重新加载原生资源") : stopping ? translateUi("正在停止 / 取回，请等待确认") : compacting ? '' : streaming ? (elements.deliveryMode.value === 'follow_up' ? translateUi("运行中 · 新消息在任务完成后送达") : translateUi("运行中 · 新消息在本轮工具后送达")) : '';
         historyView.sync();
         archive?.sync();
         timeline?.sync();
@@ -4355,7 +4375,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!args) {
                 if (name === 'model' && !state.models.length) { syncModelGuidance(); elements.modelSetup.focus(); toast(translateUi("请先接入聊天模型；命令草稿已保留"), 'info'); return false; }
                 if (name === 'model') modelPicker.open();
-                else { elements.thinkingSelect.focus(); try { elements.thinkingSelect.showPicker?.(); } catch {} }
+                else {
+                    const picker = innerWidth <= 680 ? mobileThinkingPicker : thinkingPicker;
+                    if (picker) picker.open();
+                    else { elements.thinkingSelect.focus(); try { elements.thinkingSelect.showPicker?.(); } catch {} }
+                }
                 return true;
             }
             if (name === 'model') {
@@ -4384,6 +4408,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (state.attachmentReads) return toast(translateUi("附件正在读取，请稍候"), 'info');
         if (state.treeBusy) return toast(translateUi("正在切换对话位置，请等待结果；可在历史页取消导航"), 'info');
         if (state.modelRefreshOp) return toast(translateUi("正在更新模型目录，请稍候；草稿已保留"), 'info');
+        if (state.thinkingChangeOp) return toast(translateUi('正在设置思考等级，请稍候；草稿已保留'), 'info');
         if (state.resourceRequested) return toast(translateUi("正在重新加载原生资源，请稍候"), 'info');
         const text = elements.input.value.trim();
         const hasQuotes = state.attachmentFiles.some(file => file.kind === 'quote');
@@ -4518,7 +4543,7 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.sendButton.title = shellInput ? translateUi("执行 Shell 命令") : state.streaming ? elements.deliveryMode.value === 'follow_up' ? translateUi("发送后续消息") : translateUi("发送引导消息") : translateUi("发送");
         elements.sendButton.setAttribute('aria-label', elements.sendButton.title);
         elements.sendButton.querySelector('i').className = shellInput ? 'fa-solid fa-terminal' : 'fa-solid fa-arrow-up';
-        elements.sendButton.disabled = Boolean(state.modelRefreshOp) || state.treeBusy || !state.connected || (state.shellBusy && elements.input.value.trim() !== '/quit') || (shellInput && (state.streaming || state.pendingUi.size > 0)) || state.resourceRequested || nativeControls.value?.stopping || state.controlRequested || state.compacting || state.compactRequested || pending || unconfirmed || submitting || (!elements.input.value.trim() && !state.attachmentFiles.length);
+        elements.sendButton.disabled = Boolean(state.modelRefreshOp || state.thinkingChangeOp) || state.treeBusy || !state.connected || (state.shellBusy && elements.input.value.trim() !== '/quit') || (shellInput && (state.streaming || state.pendingUi.size > 0)) || state.resourceRequested || nativeControls.value?.stopping || state.controlRequested || state.compacting || state.compactRequested || pending || unconfirmed || submitting || (!elements.input.value.trim() && !state.attachmentFiles.length);
         elements.attachButton.disabled = !state.connected || submitting;
         for (const button of [documentStorageOpen, documentStorageSettings]) button.disabled = !state.documentStorageSupported || !state.cwd;
         cronAddButton.disabled = !state.connected || !state.session || Boolean(state.session.ephemeral);
@@ -4681,7 +4706,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!state.models.some(model => model.provider === selection?.provider && model.id === selection?.id)) return;
         const { provider, id: modelId } = selection;
         const generation = state.socketGeneration;
-        const operation = { generation, kind: 'selection' };
+        const operation = { generation, kind: 'selection', target: selection };
         operation.finished = new Promise(resolve => { operation.finish = resolve; });
         state.modelRefreshOp = operation;
         setStreaming(state.streaming);
@@ -4714,23 +4739,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function changeThinking() {
+        if (elements.thinkingSelect.disabled || state.modelRefreshOp || state.thinkingChangeOp || !state.connected) return;
         const level = elements.thinkingSelect.value;
-        elements.thinkingSelect.disabled = true;
-        mobileSheet.thinking.disabled = true;
-        const generation = state.socketGeneration;
+        if (!state.thinkingLevels.includes(level)) return;
+        const generation = state.socketGeneration, operation = { generation };
+        state.thinkingChangeOp = operation; setStreaming(state.streaming);
         try {
             await requestRpc('set_thinking_level', { level });
             if (generation !== state.socketGeneration) return;
             state.thinkingLevel = level;
-            toast(translateUi("思考等级：{0}", elements.thinkingSelect.selectedOptions[0].textContent), 'success');
+            toast(translateUi("思考等级：{0}", [...elements.thinkingSelect.options].find(option => option.value === level)?.textContent || level), 'success');
         } catch (error) {
             if (generation === state.socketGeneration) toast(error.message, 'error');
         } finally {
+            if (state.thinkingChangeOp === operation) state.thinkingChangeOp = null;
             if (generation === state.socketGeneration) {
-                elements.thinkingSelect.disabled = state.streaming || state.compacting || !state.connected || state.thinkingLevels.length <= 1;
                 elements.thinkingSelect.value = state.thinkingLevel;
-                syncThinkingSelectSize();
-                syncMobileHeader();
+                syncThinkingSelectSize(); setStreaming(state.streaming);
             }
         }
     }

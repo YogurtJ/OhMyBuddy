@@ -10255,5 +10255,38 @@
         ['请等待消息投递完成；文件未上传，文字或名称已保留', 'Wait for message delivery. Files were not uploaded; text or filenames were preserved.'],
         ['请先打开会话；文件未上传，文字或名称已保留', 'Open a session first. Files were not uploaded; text or filenames were preserved.']
     );
+    rows.push(
+        ['设置中…', 'Applying…'],
+        ['切换至 {0}…', 'Switching to {0}…'],
+        ['正在切换模型，完成后即可调整思考等级。', 'Switching model. Thinking levels will be available when it finishes.'],
+        ['正在设置思考等级…', 'Applying thinking level…'],
+        ['正在设置思考等级，请稍候；草稿已保留', 'Applying thinking level. Please wait; your draft is kept.'],
+        ['查找、下载已上传文件与整理空间', 'Find and download uploads, or free up space'],
+        ['附件暂时无法下载，请打开来源对话查看。', 'This attachment cannot be downloaded right now. Open its source conversation.'],
+        ['查看当前项目的已上传原件，下载文件或整理空间。', 'Browse uploaded originals in this project, download files or free up space.'],
+        ['搜索文件名或来源对话', 'Search files or source conversations'],
+        ['搜索附件', 'Search attachments'], ['附件状态', 'Attachment status'],
+        ['全部附件', 'All attachments'], ['可清理', 'Can be removed'], ['使用中', 'In use'],
+        ['会话和草稿正在使用的附件会保留。', 'Attachments used by conversations and drafts are kept.'],
+        ['清理前，请在各线程菜单中选择“退出运行实例”，再从设置 → 用量统计打开附件管理。对话和附件会保留。', 'Before cleanup, use Exit runtime in each thread menu, then reopen attachment storage from Settings → Usage. Conversations and attachments are kept.'],
+        ['部分文件需要核对', 'Some files need review'],
+        ['暂时无法清理，原件仍可查看和下载', 'Cleanup unavailable; originals can still be viewed and downloaded'],
+        ['有未完成的清理记录，相关文件继续保留。', 'Some cleanup records are unresolved. Those files are kept.'],
+        ['系统尚未确认全部附件的使用情况，已保留原件。可稍后刷新；持续出现时，请检查历史项目是否仍可访问。', 'Usage references could not be fully verified, so originals are kept. Refresh later; if this persists, check whether historical projects are still accessible.'],
+        ['查看原因与清理说明', 'Why this happens and how cleanup works'],
+        ['清理仅删除没有保存引用的原件。执行前需退出已打开的运行实例，并核对其他页面的草稿和保存的附件链接。', 'Cleanup only removes originals with no saved references. Exit open runtimes first and check drafts in other tabs and saved attachment links.'],
+        ['查看来源对话', 'Open source conversation'], ['来源对话', 'Source conversation'],
+        ['清理待确认', 'Cleanup unconfirmed'], ['检查并清理', 'Review cleanup'],
+        ['没有匹配的附件', 'No matching attachments'], ['当前项目还没有已上传附件', 'No uploaded attachments in this project'],
+        ['试试其他文件名或切换附件状态。', 'Try another filename or attachment status.'],
+        ['通过输入框的“添加附件”上传后，可以在这里查看原件。', 'Upload with Add attachment in the composer to see originals here.'],
+        ['正在检查文件是否可以清理…', 'Checking whether this file can be removed…'],
+        ['将永久删除这个原件，释放空间：', 'This original will be permanently deleted, freeing: '],
+        ['我已核对其他页面的草稿及附件链接，停止使用同一数据的外部 Pi 进程，并确认删除原件。', 'I checked drafts and attachment links in other tabs, stopped external Pi processes using the same data, and confirm deletion of the original.'],
+        ['确认清理', 'Confirm cleanup'],
+        ['没有发现已保存的引用。其他页面尚未发送的草稿、或在别处保存的链接可能会失效。', 'No saved references were found. Unsent drafts in other tabs or links saved elsewhere may stop working.'],
+        ['个附件', 'attachments'], ['全部附件占用', 'Total storage used'], ['容量上限', 'Storage limit'],
+        ['可清理空间', 'Space to reclaim'], ['等待引用核对', 'Waiting for reference checks']
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

@@ -27,11 +27,15 @@ async function run(browser, base, width) {
         throw new Error('Unexpected storage call ' + endpoint);
     });
     await page.goto(base, { waitUntil: 'load' });
+    if (width === 393) await page.evaluate(() => { for (const [key, value] of Object.entries({ '--text-main': '#e3e9e5', '--text-muted': '#a8b6ae', '--text-secondary': '#becbc3', '--surface-1': '#18241e', '--surface-2': '#101b15', '--line': '#3b5044', '--primary': '#77c69a', '--primary-soft': '#203b2b' })) document.documentElement.style.setProperty(key, value); });
     await page.evaluate(() => {
-        window.currentCwd = '/project'; window.drafts = []; window.deletedIds = [];
+        window.currentCwd = '/project'; window.drafts = []; window.deletedIds = []; window.downloadRequests = []; window.openedSources = [];
         window.manager = PiDocumentStorage.mount({
             getContext: () => ({ cwd: currentCwd }), getDraftIds: () => drafts,
             onDeleted: ids => deletedIds.push(...ids),
+            getSessions: async () => [{ id: 'source-thread', name: '方案讨论' }],
+            openSession: async target => { openedSources.push(target); },
+            fetchFile: async ({ cwd, item }) => { downloadRequests.push({ cwd, id: item.id, sessionId: item.sessionId }); return new Blob(['synthetic original']); },
             request: async (endpoint, options) => {
                 if (window.holdUsage && endpoint.endsWith('/usage')) return new Promise(resolve => { window.releaseHeldUsage = resolve; });
                 const response = await fetch('/api/pi' + endpoint, { method: options.method, signal: options.signal,
@@ -42,7 +46,8 @@ async function run(browser, base, width) {
     });
     const dialog = page.locator('.pi-document-storage'); await dialog.locator('[data-document-id]').first().waitFor();
     assert.equal(await dialog.locator('img').count(), 0, 'unsafe filenames render as text');
-    assert.equal(await dialog.getByRole('button', { name: '预览清理', exact: true }).nth(1).isDisabled(), true);
+    assert.equal(await dialog.getByRole('button', { name: '检查并清理', exact: true }).count(), 1, 'only reclaimable files offer cleanup');
+    assert.equal(await dialog.locator('.pi-storage-badge').filter({ hasText: '使用中' }).count(), 31);
     assert.equal(await dialog.locator('[data-storage-content]').evaluate(n => n.scrollHeight > n.clientHeight), true, 'list scrolls internally');
     const measure = async () => {
         const result = await dialog.evaluate(n => ({ width: n.getBoundingClientRect().width, scroll: n.scrollWidth, client: n.clientWidth,
@@ -52,7 +57,16 @@ async function run(browser, base, width) {
         assert.equal(await page.evaluate(() => document.body.scrollWidth > innerWidth), false);
     };
     await measure();
-    await dialog.getByRole('button', { name: '预览清理', exact: true }).first().click();
+    await dialog.getByRole('searchbox').fill('saved.docx'); assert.equal(await dialog.locator('[data-document-id]').count(), 1);
+    await dialog.getByRole('searchbox').fill('方案讨论'); assert.equal(await dialog.locator('[data-document-id]').count(), 32);
+    await dialog.getByRole('searchbox').fill('');
+    await dialog.getByLabel('附件状态', { exact: true }).selectOption('not-found'); assert.equal(await dialog.locator('[data-document-id]').count(), 1);
+    const download = page.waitForEvent('download');
+    await dialog.getByRole('button', { name: '下载原件', exact: true }).first().click(); await download;
+    assert.deepEqual(await page.evaluate(() => downloadRequests), [{ cwd: '/project', id, sessionId: 'source-thread' }]);
+    await dialog.getByLabel('附件状态', { exact: true }).selectOption('all');
+    await page.screenshot({ path: `/tmp/pivane-document-storage-${width}.png` });
+    await dialog.getByRole('button', { name: '检查并清理', exact: true }).first().click();
     await dialog.getByRole('checkbox').waitFor(); assert.equal(await dialog.getByRole('button', { name: '永久删除原件' }).isDisabled(), true); await measure();
     await dialog.getByRole('button', { name: '取消', exact: true }).click(); await dialog.locator('[data-document-id]').first().waitFor(); assert.equal(cleanupCount, 0);
     // A late, uncancellable read from another project must never replace the
@@ -64,31 +78,39 @@ async function run(browser, base, width) {
     await page.evaluate(data => releaseHeldUsage(data), usage('/late'));
     assert.equal(await dialog.getByText('fresh-project.docx', { exact: true }).count(), 1);
     assert.equal(await dialog.getByText(ref.name, { exact: true }).count(), 0);
-    await dialog.getByRole('button', { name: '预览清理', exact: true }).first().click(); await dialog.getByRole('checkbox').waitFor();
+    await dialog.getByRole('button', { name: '检查并清理', exact: true }).first().click(); await dialog.getByRole('checkbox').waitFor();
     await dialog.getByRole('checkbox').check(); await page.evaluate(() => { drafts = ['d'.repeat(64)]; }); lose = true;
     // Dispatch duplicate clicks synchronously: only one irreversible request.
     await dialog.getByRole('button', { name: '永久删除原件' }).evaluate(n => { n.click(); n.click(); });
     await dialog.getByRole('button', { name: '查询清理结果', exact: true }).waitFor(); assert.equal(cleanupCount, 1);
     await dialog.getByRole('button', { name: '查询清理结果', exact: true }).click();
-    await dialog.getByText('当前项目没有办公附件。', { exact: true }).waitFor(); assert.equal(cleanupCount, 1); assert.deepEqual(await page.evaluate(() => deletedIds), [id]);
+    await dialog.getByText('当前项目还没有已上传附件', { exact: true }).waitFor(); assert.equal(cleanupCount, 1); assert.deepEqual(await page.evaluate(() => deletedIds), [id]);
     assert.equal(calls.filter(c => c.endpoint === 'status').length, 1);
     failScan = true; deleted = false;
-    await dialog.getByRole('button', { name: '刷新用量', exact: true }).click(); await dialog.getByText('无法完整核对保存引用，暂不能清理附件', { exact: true }).waitFor();
-    assert.equal(await dialog.getByRole('button', { name: '预览清理', exact: true }).first().isDisabled(), true);
+    await dialog.getByRole('button', { name: '刷新用量', exact: true }).click(); await dialog.getByText('暂时无法清理，原件仍可查看和下载', { exact: true }).waitFor();
+    assert.equal(await dialog.getByRole('button', { name: '检查并清理', exact: true }).count(), 0);
+    assert.equal(await dialog.getByRole('button', { name: '下载原件', exact: true }).first().isEnabled(), true);
+    await dialog.locator('.pi-storage-notice summary').click(); await dialog.getByText('无法完整核对保存引用，暂不能清理附件', { exact: true }).waitFor();
     await measure(); assert.deepEqual(errors, []);
     failScan = false; pendingResidue = true;
     await dialog.getByRole('button', { name: '刷新用量', exact: true }).click();
+    await dialog.getByText('部分文件需要核对', { exact: true }).waitFor();
+    await dialog.locator('.pi-storage-notice summary').click();
     await dialog.getByText('附件清理残留待核对，仍保守计入用量；不会自动继续清理。', { exact: true }).waitFor();
-    assert.equal(await dialog.getByRole('button', { name: '预览清理', exact: true }).first().isDisabled(), true);
+    assert.equal(await dialog.getByRole('button', { name: '检查并清理', exact: true }).count(), 0);
     assert.equal(cleanupCount, 1, 'refreshing a pending residue never replays cleanup');
     assert.deepEqual(await page.evaluate(() => drafts), ['d'.repeat(64)]); await measure(); assert.deepEqual(errors, []);
+    await dialog.getByRole('button', { name: '方案讨论', exact: true }).first().click();
+    assert.deepEqual(await page.evaluate(() => openedSources), [{ cwd: '/fresh', sessionId: 'source-thread' }]);
+    assert.equal(await dialog.isVisible(), false);
+    await page.evaluate(() => manager.open()); await dialog.locator('[data-document-id]').first().waitFor();
     await dialog.getByRole('button', { name: '关闭', exact: true }).click(); assert.equal(await dialog.isVisible(), false);
     console.log(`attachment storage ${width}: confirmation/cancel, protected/incomplete, duplicate click, lost response/status, late project read, safe DOM, inner scroll and 16px controls passed`);
     await context.close();
 }
 (async () => {
     const app = express();
-    app.get('/', (req, res) => res.type('html').send('<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><title>Storage fixture</title><script src="/pi-document-storage.js"></script>'));
+    app.get('/', (req, res) => res.type('html').send('<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><title>Storage fixture</title><link rel="stylesheet" href="/pi-native-controls.css"><script src="/pi-document-storage.js"></script>'));
     app.use(express.static(path.join(root, 'public')));
     const server = http.createServer(app); server.listen(0, '127.0.0.1'); await once(server, 'listening');
     const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });

@@ -19,6 +19,8 @@ async function check(browser, base, width, language, theme) {
     const page = await context.newPage(), errors = [], calls = [];
     const favorites = new WorkspacePreferencesService({ filePath: path.join(favoritesRoot, `${width}-${language}.json`) });
     let chosen = models[0], available = [...models], thinkingLevel = 'off', usagePercent = null, failThinking = false, running = false, socket, fail = false, held, hold = false;
+    let holdThinking = false, finishThinking;
+    const levels = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
     const stats = () => usagePercent === null ? {} : { contextUsage: { percent: usagePercent, tokens: usagePercent * 320, contextWindow: 32000 } };
     page.on('pageerror', error => errors.push(error.message));
     await page.addInitScript(({ cwd, language, theme }) => {
@@ -46,11 +48,16 @@ async function check(browser, base, width, language, theme) {
             const cmd = JSON.parse(raw); calls.push(cmd);
             const reply = (data, success = true) => { if (!closed) ws.send(JSON.stringify({ type: 'response', id: cmd.id, command: cmd.type, success, data, error: success ? undefined : 'Fixture selection failed' })); };
             const state = { model: chosen, thinkingLevel, isStreaming: running };
-            if (cmd.type === 'open_session') return reply({ session: sessions.find(s => s.id === cmd.sessionId), state, models: { models: available }, messages: { messages: [{ role: 'assistant', content: [{ type: 'toolCall', id: 'tool', name: 'bash', arguments: { command: 'fixture' } }] }, { role: 'toolResult', toolCallId: 'tool', toolName: 'bash', content: [{ type: 'text', text: 'Synthetic output' }] }] }, thinkingLevels: { levels: ['off', 'high'] }, stats: stats(), commands: { commands: [] } });
+            if (cmd.type === 'open_session') return reply({ session: sessions.find(s => s.id === cmd.sessionId), state, models: { models: available }, messages: { messages: [{ role: 'assistant', content: [{ type: 'toolCall', id: 'tool', name: 'bash', arguments: { command: 'fixture' } }] }, { role: 'toolResult', toolCallId: 'tool', toolName: 'bash', content: [{ type: 'text', text: 'Synthetic output' }] }] }, thinkingLevels: { levels }, stats: stats(), commands: { commands: [] } });
             if (cmd.type === 'get_state') return reply(state);
             if (cmd.type === 'get_session_stats') return reply(stats());
-            if (cmd.type === 'get_available_thinking_levels') return reply({ levels: ['off', 'high'] });
-            if (cmd.type === 'set_thinking_level') { if (failThinking) return reply(null, false); thinkingLevel = cmd.level; return reply({}); }
+            if (cmd.type === 'get_available_thinking_levels') return reply({ levels });
+            if (cmd.type === 'set_thinking_level') {
+                if (failThinking) return reply(null, false);
+                const finish = () => { thinkingLevel = cmd.level; reply({}); };
+                if (holdThinking) { finishThinking = finish; return; }
+                return finish();
+            }
             if (cmd.type === 'refresh_models') return reply({ models: available });
             if (cmd.type === 'get_messages') return reply({ messages: [] });
             if (cmd.type === 'set_model') {
@@ -187,19 +194,20 @@ async function check(browser, base, width, language, theme) {
         assert.equal(await page.locator('#pi-mobile-composer-summary').isVisible(), true);
         assert.ok((await page.locator('#pi-mobile-composer-model').textContent()).includes('Special'));
         await page.locator('#pi-mobile-context-trigger').click();
-        const thinkingStyle = await page.locator('#pi-mobile-thinking').evaluate(node => ({ borderWidth: getComputedStyle(node).borderTopWidth, appearance: getComputedStyle(node).appearance, fontSize: getComputedStyle(node).fontSize,
+        const thinkingStyle = await page.locator('#pi-mobile-thinking-trigger').evaluate(node => ({ borderWidth: getComputedStyle(node).borderTopWidth, appearance: getComputedStyle(node).appearance, fontSize: getComputedStyle(node).fontSize,
             width: node.getBoundingClientRect().width, sheetWidth: document.querySelector('#pi-mobile-session-dialog').getBoundingClientRect().width }));
         assert.equal(thinkingStyle.borderWidth, '0px');
-        assert.equal(thinkingStyle.appearance, 'none');
+        assert.equal(thinkingStyle.appearance, 'auto');
         assert.ok(parseFloat(thinkingStyle.fontSize) >= 16 && thinkingStyle.width < thinkingStyle.sheetWidth / 2, JSON.stringify(thinkingStyle));
         assert.ok((await page.locator('#pi-mobile-composer-thinking').textContent()).includes('不启用') || (await page.locator('#pi-mobile-composer-thinking').textContent()).includes('Off'));
         assert.equal(await page.locator('#pi-mobile-project').count(), 0);
         assert.equal(await page.locator('#pi-mobile-files').count(), 0);
         assert.equal(await page.locator('#pi-mobile-history').count(), 0);
-        await page.locator('#pi-mobile-thinking').selectOption('high');
+        await page.locator('#pi-mobile-thinking-trigger').click();
+        await page.locator('#pi-mobile-thinking-dialog [data-level="high"]').click();
         await page.waitForFunction(() => document.querySelector('#pi-mobile-composer-thinking').textContent.includes('高') || document.querySelector('#pi-mobile-composer-thinking').textContent.includes('High'));
         assert.equal(calls.filter(c => c.type === 'set_thinking_level').length, 1);
-        await page.locator('#pi-mobile-session-dialog .pi-mobile-sheet-head button').click();
+        assert.equal(await page.locator('#pi-mobile-session-dialog').isVisible(), false, 'thinking choices return to the conversation');
         await page.locator('#pi-input').focus();
         const levelBounds = await page.locator('#pi-mobile-composer-thinking').evaluate(node => ({
             left: node.getBoundingClientRect().left, right: node.getBoundingClientRect().right,
@@ -208,10 +216,12 @@ async function check(browser, base, width, language, theme) {
         assert.ok(levelBounds.width > 0 && levelBounds.left >= 0 && levelBounds.right <= levelBounds.parentRight + 1, JSON.stringify(levelBounds));
         await page.locator('#pi-mobile-context-trigger').click();
         failThinking = true;
-        await page.locator('#pi-mobile-thinking').selectOption('off');
+        await page.locator('#pi-mobile-thinking-trigger').click();
+        await page.locator('#pi-mobile-thinking-dialog [data-level="off"]').click();
         await page.locator('.pi-toast').filter({ hasText: 'Fixture selection failed' }).waitFor();
         assert.equal(await page.locator('#pi-mobile-thinking').inputValue(), 'high', 'failed change restores confirmed level');
         failThinking = false;
+        await page.locator('#pi-mobile-context-trigger').click();
         const sheet = page.locator('#pi-mobile-session-dialog');
         const bounds = await sheet.evaluate(node => ({ width: node.scrollWidth, client: node.clientWidth, bottom: node.getBoundingClientRect().bottom }));
         assert.ok(bounds.width <= bounds.client + 1 && bounds.bottom <= 901, JSON.stringify(bounds));
@@ -264,17 +274,46 @@ async function check(browser, base, width, language, theme) {
     await page.waitForFunction(() => !document.querySelector('#pi-model-select').disabled);
     hold = true; await openPicker(); await search.fill('provider-a model/17'); await search.press('Enter');
     assert.ok(held, 'selection request held');
+    assert.equal(await button.getAttribute('aria-busy'), 'true');
+    assert.match(await button.textContent(), /Model 17/);
+    assert.equal(await page.locator('#pi-thinking-select-trigger').isDisabled(), true);
+    assert.ok((await page.locator('#pi-composer-status').textContent()).includes(language === 'en' ? 'Switching model' : '正在切换模型'));
+    if (width <= 680) assert.equal(await page.locator('#pi-mobile-composer-summary').getAttribute('aria-busy'), 'true');
+    await page.screenshot({ path: `/tmp/pivane-model-switch-${width}.png` });
     if (width < 900) { await page.locator('#pi-toggle-sessions').click(); await page.locator('#pi-session-pane.open').waitFor(); }
     await page.locator('[data-session-id="two"] .pi-session-main').click();
     await page.waitForFunction(() => !document.querySelector('#pi-model-select').disabled);
     held();
     assert.ok((await button.textContent()).includes('Special'), 'late switch from prior socket cannot replace selection');
+    assert.equal(await button.getAttribute('aria-busy'), 'false', 'the new session clears old switching feedback');
     assert.ok(!(await page.evaluate(() => localStorage.getItem('pivane.models.recent'))).includes('model/17'));
     hold = false;
     await page.locator('#pi-input').fill('/model provider-a/model/1');
     await page.locator('#pi-input').press('Enter');
     await page.waitForFunction(() => document.querySelector('#pi-model-select .pi-model-trigger-label').textContent === 'Model 1');
     assert.equal(chosen.id, 'model/1');
+    if (width <= 680) await page.locator('#pi-mobile-context-trigger').click();
+    const thinkingTrigger = page.locator(width <= 680 ? '#pi-mobile-thinking-trigger' : '#pi-thinking-select-trigger');
+    await thinkingTrigger.click();
+    const thinkingMenu = page.locator('.pi-thinking-dialog[open]');
+    const menu = await thinkingMenu.evaluate(n => ({ height: n.clientHeight, scroll: n.scrollHeight, top: n.getBoundingClientRect().top, bottom: n.getBoundingClientRect().bottom,
+        options: [...n.querySelectorAll('[role="option"]')].map(option => ({ level: option.dataset.level, top: option.getBoundingClientRect().top, bottom: option.getBoundingClientRect().bottom })) }));
+    assert.equal(menu.options.length, 7); assert.ok(menu.scroll <= menu.height + 1, JSON.stringify(menu));
+    await page.screenshot({ path: `/tmp/pivane-thinking-menu-${width}.png` });
+    for (const item of menu.options) assert.ok(item.top >= menu.top && item.bottom <= menu.bottom, JSON.stringify(menu));
+    await page.keyboard.press('End'); assert.equal(await page.locator(':focus').getAttribute('data-level'), 'max');
+    holdThinking = true;
+    await thinkingMenu.locator('[data-level="xhigh"]').click();
+    assert.ok(finishThinking);
+    assert.equal(await thinkingTrigger.getAttribute('aria-busy'), 'true');
+    assert.equal(await page.locator('#pi-stop-button').getAttribute('data-cancellable'), 'false');
+    const promptCount = calls.filter(c => c.type === 'prompt').length;
+    await page.locator('#pi-input').fill('Keep draft during thinking change'); await page.locator('#pi-input').press('Enter');
+    assert.equal(calls.filter(c => c.type === 'prompt').length, promptCount);
+    assert.equal(await page.locator('#pi-input').inputValue(), 'Keep draft during thinking change');
+    finishThinking(); holdThinking = false;
+    await page.waitForFunction(() => document.querySelector('#pi-thinking-select').value === 'xhigh' && !document.querySelector('#pi-thinking-select-trigger').disabled);
+    assert.equal(thinkingLevel, 'xhigh');
     assert.deepEqual(errors, []);
     console.log(JSON.stringify({ width, language, theme, status: 'passed', models: models.length, overflow }));
     await context.close();
