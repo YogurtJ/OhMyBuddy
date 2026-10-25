@@ -44,7 +44,7 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
             const page = await context.newPage(), errors = [], opened = [];
             let bots = [], revision = 'r0', generation = 0, sessionId = 'gen-0', socket = null, phase = 'greeting', name = '新伙伴', face = '🦊';
             let history = [], prompts = [], responses = [], setupBodies = [], historyReads = [], second = false, known2 = undefined, aboutBodies = [];
-            let modelCount = 0;
+            let modelCount = 0, profileList = [];
             let patchBodies = [], settingsReads = 0, model = null, preset = 'free', quietHours = { start: '23:00', end: '08:00' }, soul = '温柔耐心，说话简短。';
             const botOpens = []; let lagging = null;
             const bot = () => ({ id: BOT, name, description: '', avatar: { kind: 'emoji', value: face }, enabled: true, profileRevision: 'p',
@@ -62,7 +62,7 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
             await page.route(/https:\/\/(fonts\.googleapis\.com|fonts\.gstatic\.com)\//, route => route.abort());
             await page.route('**/api/**', async route => {
                 const url = new URL(route.request().url()), pathname = url.pathname, method = route.request().method();
-                if (pathname === '/api/pi/status') return route.fulfill({ json: { ok: true, bots: true, agentProfiles: true, deliverables: true, filePreviews: true, fileViewer: true,
+                if (pathname === '/api/pi/status') return route.fulfill({ json: { ok: true, bots: true, agentProfiles: true, assistantProjects: true, deliverables: true, filePreviews: true, fileViewer: true,
                     projectRoots: ['/fixture'], defaultProject: geek } });
                 if (pathname === '/api/pi/deliverables') return route.fulfill({ json: { name: '计划.md', mime: 'text/markdown', size: 40, kind: 'markdown',
                     createdAt: '2026-10-24T06:03:05Z', revision: 'f'.repeat(64),
@@ -142,7 +142,7 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                 if (pathname === '/api/pi/projects') return route.fulfill({ json: { projects: [{ cwd: geek, name: 'project' }], roots: ['/fixture'] } });
                 if (pathname === '/api/pi/sessions') return route.fulfill({ json: { sessions: [] } });
                 if (pathname === '/api/pi/activity') return route.fulfill({ json: { runtimes: [], pinnedProjects: [], hiddenProjects: [], replyNotices: [] } });
-                if (pathname === '/api/pi/profiles') return route.fulfill({ json: { version: 1, revision: 'p', profiles: [] } });
+                if (pathname === '/api/pi/profiles') return route.fulfill({ json: { version: 1, revision: 'p', profiles: profileList } });
                 return route.fulfill({ json: pathname.startsWith('/api/pi/') ? {} : [] });
             });
             await page.routeWebSocket('**/api/pi/ws', ws => {
@@ -260,7 +260,7 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                 assert.equal(await page.locator('.pi-message.assistant.streaming > header > strong').textContent(), '小狸');
                 assert.equal(await page.locator('.pi-message.assistant.streaming > header .pi-bot-face').count(), 1);
                 socket.send(JSON.stringify({ type: 'tool_execution_start', toolCallId: 'call-2', toolName: 'bash', args: { command: 'ls -la' } }));
-                socket.send(JSON.stringify({ type: 'extension_ui_request', id: 'ui-2', method: 'confirm', title: APPROVAL, message: 'command\n\nls -la' }));
+                socket.send(JSON.stringify({ type: 'extension_ui_request', id: 'ui-2', method: 'confirm', title: APPROVAL, message: `command #${'1'.repeat(16)}\n\nls -la` }));
                 await page.locator('.pi-bot-approval:not([hidden])').waitFor({ timeout: 8000 });
                 assert.equal(await page.locator('#pi-request-dialog[open]').count(), 0, 'no generic dialog for an approval');
                 assert.equal(await page.locator('.pi-bot-approval header strong').textContent(), '小狸 想运行一条命令');
@@ -271,14 +271,15 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                 assert.deepEqual(responses.at(-1), { type: 'extension_ui_response', id: 'ui-2', confirmed: true });
                 socket.send(JSON.stringify({ type: 'gateway_ui_resolved', id: 'ui-2' }));
                 await page.waitForFunction(() => document.querySelector('.pi-bot-approval').hidden);
-                socket.send(JSON.stringify({ type: 'extension_ui_request', id: 'ui-3', method: 'confirm', title: APPROVAL, message: 'outside\n\n/home/me/notes.md' }));
-                socket.send(JSON.stringify({ type: 'extension_ui_request', id: 'ui-4', method: 'confirm', title: APPROVAL, message: 'memory\n\n叫我小王' }));
+                socket.send(JSON.stringify({ type: 'extension_ui_request', id: 'ui-3', method: 'confirm', title: APPROVAL, message: `outside #${'2'.repeat(16)}\n\n/home/me/notes.md` }));
+                socket.send(JSON.stringify({ type: 'extension_ui_request', id: 'ui-4', method: 'confirm', title: APPROVAL, message: `action #${'3'.repeat(16)}\n\ndeliver_files` }));
                 await page.waitForFunction(() => /后面还有 1 步/.test(document.querySelector('.pi-bot-approval:not([hidden])')?.textContent || ''));
                 assert.equal(await page.locator('.pi-bot-approval header strong').textContent(), '小狸 想改工作目录以外的文件');
                 await page.locator('.pi-bot-approval .pi-bot-setup-later').click();
                 assert.deepEqual(responses.at(-1), { type: 'extension_ui_response', id: 'ui-3', confirmed: false });
                 socket.send(JSON.stringify({ type: 'gateway_ui_resolved', id: 'ui-3' }));
-                await page.waitForFunction(() => document.querySelector('.pi-bot-approval header strong')?.textContent === '小狸 想记下这件事');
+                await page.waitForFunction(() => document.querySelector('.pi-bot-approval header strong')?.textContent === '小狸 想做这一步');
+                assert.equal(await page.locator('.pi-bot-approval .pi-bot-approval-detail').textContent(), '把文件交给你', 'a familiar step reads as what it does');
                 socket.send(JSON.stringify({ type: 'gateway_ui_resolved', id: 'ui-4' }));
                 await page.waitForFunction(() => document.querySelector('.pi-bot-approval').hidden);
                 socket.send(JSON.stringify({ type: 'tool_execution_end', toolCallId: 'call-2', toolName: 'bash', result: { content: [{ type: 'text', text: 'README.md' }] }, isError: false }));
@@ -407,6 +408,19 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                     await page.locator('#workspace-more-toggle').click();
                     assert.ok(cells.every(cell => Math.abs(cell - cells[0]) <= 1), `equal bottom-bar cells ${JSON.stringify(cells)}`);
                 }
+                // 7. An assistant-conversation link to a Bot opens the Bot; a disabled Bot stays unavailable there.
+                profileList = [bot()];
+                await page.evaluate(id => window.PiWorkspaceRoute.navigate('assistant', { profileId: id }), BOT);
+                await page.waitForFunction(() => location.hash.startsWith('#/bot') && document.querySelector('#chat-tab').classList.contains('pi-bot-mode'), null, { timeout: 8000 });
+                await page.evaluate(() => window.PiWorkspaceRoute.navigate('chat'));
+                await page.waitForFunction(() => !document.querySelector('#chat-tab').classList.contains('pi-bot-mode'));
+                profileList = [{ ...bot(), enabled: false }];
+                await page.evaluate(id => window.PiWorkspaceRoute.navigate('assistant', { profileId: id }), BOT);
+                await page.waitForFunction(() => /当前身份不可用/.test(document.querySelector('#pi-assistant-profile-status')?.textContent || ''), null, { timeout: 8000 });
+                assert.ok((await page.evaluate(() => location.hash)).startsWith('#/assistant'), 'no redirect to another Bot');
+                assert.equal(await page.locator('#pi-assistant-profile option[value]:not([value=""])').count(), 0, 'Bots are not listed as assistant identities');
+                await page.evaluate(() => window.PiWorkspaceRoute.navigate('chat'));
+
                 assert.deepEqual(errors, []);
                 assert.equal(await page.evaluate(() => document.body.scrollWidth <= innerWidth), true, 'no horizontal overflow');
                 console.log(JSON.stringify({ width, status: 'passed', opened }));

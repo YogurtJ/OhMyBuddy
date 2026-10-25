@@ -3,52 +3,74 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { approvalFor, approvalMessage, parseApprovalMessage, insideWorkspace, KINDS } = require('../server/bot/bot-guard');
+const { pathToFileURL } = require('node:url');
+const { approvalFor, approvalMessage, parseApprovalMessage, insideWorkspace, resolvePiPath, newToken, KINDS } = require('../server/bot/bot-guard');
 
 const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-bot-guard-test-')));
 const workspace = path.join(root, 'bot'), outside = path.join(root, 'outside');
 fs.mkdirSync(workspace); fs.mkdirSync(outside);
 fs.symlinkSync(outside, path.join(workspace, 'link'));
+fs.symlinkSync(outside, path.join(workspace, 'out dir'));
+fs.symlinkSync(path.join(outside, 'new.md'), path.join(workspace, 'dangling.md'));
+fs.symlinkSync(path.join(workspace, 'loop-b'), path.join(workspace, 'loop-a'));
+fs.symlinkSync(path.join(workspace, 'loop-a'), path.join(workspace, 'loop-b'));
+fs.writeFileSync(path.join(outside, 'shared.md'), 'x');
+fs.linkSync(path.join(outside, 'shared.md'), path.join(workspace, 'hardlink.md'));
+fs.writeFileSync(path.join(workspace, 'plan.md'), 'x');
 test.after(() => fs.rmSync(root, { recursive: true, force: true }));
 
 const ask = (preset, toolName, input = {}, annotations) => approvalFor({ preset, toolName, input, cwd: workspace, annotations });
 
-test('workspace writes are judged like Pi resolves them, through symlinks', () => {
-    for (const target of ['plan.md', './notes/new/deep.md', '@plan.md', path.join(workspace, 'a.md')]) assert.equal(insideWorkspace(workspace, target), true, target);
-    for (const target of ['../outside/a.md', path.join(outside, 'a.md'), 'link/a.md', 'link/new/dir/a.md', '~/a.md', '', null]) assert.equal(insideWorkspace(workspace, target), false, String(target));
+test('paths resolve exactly like the Pi write and edit tools', async () => {
+    // Pi does not export its resolver; the installed copy is the reference.
+    const paths = path.join(__dirname, '../node_modules/@earendil-works/pi-coding-agent/dist/core/tools/path-utils.js');
+    const { resolveToCwd } = await import(pathToFileURL(paths).href);
+    const inputs = ['plan.md', './a/../b.md', '@plan.md', '@@x.md', ' plan.md ', '~', '~/notes.md', '~\\notes.md', 'file:///tmp/outside/note.md',
+        `file://${outside}/a.md`, 'out\u00a0dir/a.md', 'a\u3000b.md', '/abs/path.md', '../up.md', 'C:\\x.md', '/mnt/c/x.md', ''];
+    for (const input of inputs) assert.equal(resolvePiPath(input, workspace), resolveToCwd(input, workspace), JSON.stringify(input));
+});
+
+test('outside writes are recognised through URLs, spaces, symlinks and hard links', () => {
+    for (const target of ['plan.md', './notes/new/deep.md', '@plan.md', path.join(workspace, 'a.md'), pathToFileURL(path.join(workspace, 'a.md')).href])
+        assert.equal(insideWorkspace(workspace, target), true, target);
+    for (const target of ['../outside/a.md', path.join(outside, 'a.md'), 'link/a.md', 'link/new/dir/a.md', '~/a.md', null,
+        'file:///tmp/outside/note.md', pathToFileURL(path.join(outside, 'a.md')).href, 'out\u00a0dir/a.md', 'dangling.md', 'loop-a', 'loop-a/x.md', 'hardlink.md', 'file://host/x'])
+        assert.equal(insideWorkspace(workspace, target), false, JSON.stringify(target));
 });
 
 test('careful presets decide which steps ask first', () => {
     assert.equal(ask('free', 'bash', { command: 'rm -rf x' }), null, 'hands-off stays guidance only');
     assert.equal(ask(undefined, 'bash', { command: 'ls' }), null);
     assert.deepEqual(ask('balanced', 'bash', { command: 'ls' }), { kind: 'command', detail: 'ls' });
+    assert.deepEqual(ask('balanced', 'powershell', { command: 'Get-ChildItem' }), { kind: 'command', detail: 'Get-ChildItem' });
     assert.deepEqual(ask('balanced', 'agent_thread', { message: 'Do it' }), { kind: 'delegate', detail: 'Do it' });
     assert.deepEqual(ask('balanced', 'write', { path: 'link/a.md' }), { kind: 'outside', detail: 'link/a.md' });
+    assert.deepEqual(ask('balanced', 'write', { path: 'file:///tmp/outside/note.md' }), { kind: 'outside', detail: 'file:///tmp/outside/note.md' });
     assert.equal(ask('balanced', 'edit', { path: 'plan.md' }), null);
-    assert.equal(ask('balanced', 'memory_add', { content: 'x' }), null);
-    assert.equal(ask('balanced', 'mcp_tool', {}), null);
+    for (const tool of ['memory_add', 'deliver_files', 'get_attachment', 'mcp_tool']) assert.equal(ask('balanced', tool, { content: 'x' }), null, tool);
     assert.deepEqual(ask('balanced', 'mcp_tool', {}, { destructiveHint: true }), { kind: 'action', detail: 'mcp_tool' });
     assert.deepEqual(ask('ask', 'edit', { path: 'plan.md' }), { kind: 'write', detail: 'plan.md' });
     assert.deepEqual(ask('ask', 'memory_replace', { old_text: 'a', content: 'b' }), { kind: 'memory', detail: 'b' });
-    assert.deepEqual(ask('ask', 'media_generate', {}), { kind: 'action', detail: 'media_generate' });
+    for (const tool of ['media_generate', 'deliver_files', 'get_attachment']) assert.deepEqual(ask('ask', tool, {}), { kind: 'action', detail: tool }, tool);
     assert.equal(ask('ask', 'mcp_reader', {}, { readOnlyHint: true }), null);
-    for (const tool of ['read', 'grep', 'web_search', 'memory_search', 'bot_setup_propose', 'ask_user_question', 'codemode', 'deliver_files'])
+    for (const tool of ['read', 'grep', 'web_search', 'memory_search', 'bot_setup_propose', 'ask_user_question', 'codemode'])
         assert.equal(ask('ask', tool), null, tool);
     assert.equal(ask('balanced', 'bash', { command: 'x'.repeat(3000) }).detail.length, 2001, 'long details are clipped');
 });
 
-test('the approval message round-trips and rejects other confirms', () => {
-    for (const kind of KINDS) assert.deepEqual(parseApprovalMessage(approvalMessage({ kind, detail: 'a\n\nb' })), { kind, detail: 'a\n\nb' });
-    assert.equal(parseApprovalMessage('Allow?'), null);
-    assert.equal(parseApprovalMessage('unknown\n\nx'), null);
-    assert.equal(parseApprovalMessage(undefined), null);
+test('the approval message carries a token, round-trips and rejects other confirms', () => {
+    const token = newToken();
+    assert.match(token, /^[a-f0-9]{16}$/);
+    assert.notEqual(newToken(), token);
+    for (const kind of KINDS) assert.deepEqual(parseApprovalMessage(approvalMessage({ kind, detail: 'a\n\nb', token })), { kind, token, detail: 'a\n\nb' });
+    for (const message of ['Allow?', `unknown #${token}\n\nx`, 'command\n\nx', `command #${token.slice(1)}\n\nx`, undefined]) assert.equal(parseApprovalMessage(message), null);
 });
 
 test('Bot workspaces never land in the service directory, even when it is inside a project root', { timeout: 30000 }, async t => {
-    const projects = path.join(root, 'projects'), app = path.join(projects, 'pivane');
-    fs.mkdirSync(app, { recursive: true });
+    const projects = path.join(root, 'projects'), app = path.join(projects, 'pivane'), other = path.join(root, 'other');
+    fs.mkdirSync(app, { recursive: true }); fs.mkdirSync(other);
     const prior = { roots: process.env.PI_PROJECT_ROOTS, agent: process.env.PI_CODING_AGENT_DIR, cwd: process.cwd(), offline: process.env.PI_OFFLINE };
-    process.env.PI_PROJECT_ROOTS = projects; process.env.PI_CODING_AGENT_DIR = path.join(root, 'agent'); process.env.PI_OFFLINE = '1';
+    process.env.PI_PROJECT_ROOTS = `${projects}${path.delimiter}${other}`; process.env.PI_CODING_AGENT_DIR = path.join(root, 'agent'); process.env.PI_OFFLINE = '1';
     fs.mkdirSync(process.env.PI_CODING_AGENT_DIR, { recursive: true });
     process.chdir(app);
     t.after(() => {
@@ -67,4 +89,8 @@ test('Bot workspaces never land in the service directory, even when it is inside
     const workspace = bots.prepareWorkspace('12345678-0000-4000-8000-000000000000', 'Test', 'en');
     assert.equal(path.dirname(workspace), path.join(projects, 'PivaneBots'));
     assert.equal(fs.existsSync(path.join(app, 'PivaneBots')), false);
+    // The service runs from <root>/PivaneBots itself: workspaces there would be inside it.
+    process.chdir(path.join(projects, 'PivaneBots'));
+    assert.equal(bots.workspaceBase(), other, 'the next root is used');
+    assert.equal(path.dirname(bots.prepareWorkspace('22345678-0000-4000-8000-000000000000', 'Test', 'en')), path.join(other, 'PivaneBots'));
 });

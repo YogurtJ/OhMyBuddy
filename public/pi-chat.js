@@ -1748,9 +1748,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const profiles = await apiFetch('/api/pi/profiles');
         if (epoch !== state.assistantEpoch || !state.assistantMode) return;
         if (profiles?.version !== 1 || !Array.isArray(profiles.profiles)) throw new Error(translateUi('助手身份数据不可用'));
-        // Bots are chatted with on the Bot page; a link here for one of them goes there.
+        // Bots are chatted with on the Bot page; a link here for a usable one goes there. A
+        // disabled Bot stays an unavailable identity here instead of opening another Bot.
         const isBot = profile => Boolean(profile?.bot) && typeof profile.bot === 'object';
-        const requestedBot = requested.profileId ? profiles.profiles.find(profile => profile.id === requested.profileId && isBot(profile)) : null;
+        const requestedBot = requested.profileId ? profiles.profiles.find(profile => profile.id === requested.profileId && isBot(profile)
+            && profile.enabled && profile.bot.enabled !== false) : null;
         if (requestedBot && document.body.classList.contains('pv-bots-on')) {
             window.PiWorkspaceRoute?.navigate('bot', { profileId: requestedBot.id }, true); return;
         }
