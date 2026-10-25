@@ -72,15 +72,23 @@ function messageChars(message) {
         : part?.type === 'toolCall' ? JSON.stringify(part.arguments ?? {}).length : part?.type === 'image' ? 4800 : 0), 0);
 }
 
-// About how many real tokens a compaction would take in now: everything before the part Pi
-// keeps verbatim, with the measured context split in proportion to characters.
-function summarizableTokens(projection, usage, keepRecentTokens = IDLE.keepRecentTokens) {
-    if (!usage || !Number.isFinite(usage.tokens) || !Array.isArray(projection)) return 0;
-    const sizes = projection.map(item => (item.messages || []).reduce((total, message) => total + messageChars(message), 0));
+// Characters of the model-visible messages before the part Pi keeps verbatim at a compaction
+// (about keepRecentTokens of its chars/4 estimate from the end), and in total. Earlier
+// summaries are not counted: summarizing them again frees nothing.
+function keptSplit(projection, keepRecentTokens = IDLE.keepRecentTokens) {
+    const sizes = (Array.isArray(projection) ? projection : []).map(item => (item.messages || []).reduce((total, message) => total + messageChars(message), 0));
     const total = sizes.reduce((sum, size) => sum + size, 0);
     let kept = 0, index = sizes.length;
     while (index > 0 && kept / 4 < keepRecentTokens) kept += sizes[--index];
-    return total ? Math.round(usage.tokens * (total - kept) / total) : 0;
+    return { before: total - kept, total };
+}
+
+// About how many real tokens a compaction would take in now, with the measured context split
+// in proportion to characters.
+function summarizableTokens(projection, usage, keepRecentTokens = IDLE.keepRecentTokens) {
+    if (!usage || !Number.isFinite(usage.tokens) || !Array.isArray(projection)) return 0;
+    const { before, total } = keptSplit(projection, keepRecentTokens);
+    return total ? Math.round(usage.tokens * before / total) : 0;
 }
 
 function idleCompactionWanted(usage, projection) {
@@ -98,4 +106,4 @@ function rotationReason({ bytes, entries, startedAt, now }) {
     return null;
 }
 
-module.exports = { PRUNE, IDLE, ROTATE, STUB_PREFIX, pruneDrafts, stubFor, idleDelay, summarizableTokens, idleCompactionWanted, rotationReason };
+module.exports = { PRUNE, IDLE, ROTATE, STUB_PREFIX, pruneDrafts, stubFor, idleDelay, keptSplit, summarizableTokens, idleCompactionWanted, rotationReason };
