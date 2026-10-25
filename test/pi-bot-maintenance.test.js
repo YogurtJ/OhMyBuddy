@@ -244,3 +244,47 @@ test('after a manual move the next summary reads the carried messages and can ci
     assert.deepEqual(bot.rejected.map(item => item.reason), ['quote from the wrong speaker'], 'speakers are checked for carried messages too');
     assert.deepEqual(bot.sections.episodes.at(-1), '2026-03-02: 门牌改成 12 号');
 });
+
+test('a note deleted before a manual move does not come back from the carried messages', { timeout: 60000 }, async t => {
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+    const compaction = require('../server/bot/bot-compaction');
+    const store = new PiSessionStore();
+    const profiles = new PiProfileRegistry(store);
+    store.profiles = profiles;
+    const supervisor = new PiAgentSupervisor();
+    t.after(() => supervisor.dispose());
+    const bots = new BotService({ store, profiles, supervisor });
+    const created = await bots.create({ expectedRevision: (await profiles.state()).revision });
+    const botId = created.bot.id, windowId = created.window.id;
+    const { session } = await bots.resolve(botId, windowId);
+    const manager = SessionManager.open(session.path);
+    const said = manager.appendMessage({ role: 'user', content: '对了，门牌改成 12 号了', timestamp: Date.now() });
+    manager.appendMessage(assistant([{ type: 'text', text: '记住了，12 号' }]));
+    const noted = ledger.prepareOps(ledger.emptyLedger(), [{ op: 'add', kind: 'ref', text: '门牌 12 号',
+        source: { sessionId: manager.getSessionId(), entryId: said, role: 'user', quote: '对了，门牌改成 12 号了' } }], { at: new Date().toISOString(), by: 'bot' });
+    manager.appendCustomEntry(ledger.LEDGER_ENTRY, { v: 1, ops: noted.ops });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    manager.appendCustomEntry(ledger.LEDGER_ENTRY, { v: 1, ops: ledger.prepareOps(noted.state, [{ op: 'delete', id: 'n1' }], { at: new Date().toISOString(), by: 'user' }).ops });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    const rotated = await bots.rotate(botId, windowId, { expectedGeneration: 0 });
+    const next = SessionManager.open(rotated.session.path);
+    const seed = next.getBranch().find(entry => entry.customType === HANDOFF_MESSAGE);
+    assert.equal(seed.details.tail[0].entryId, said, 'carried messages keep the entry they had');
+    const fresh = next.appendMessage({ role: 'user', content: '还是记一下：门牌 12 号', timestamp: Date.now() });
+    const latest = next.appendMessage(assistant([{ type: 'text', text: '好的' }]));
+    const cite = seed.id.slice(0, 8);
+    const answer = { topic: '装修', episodes: ['2026-03-02: 门牌改成 12 号'], now: { doing: '', next: '', waiting: '' }, notes: [
+        { op: 'add', kind: 'ref', text: '门牌 12 号', entry: cite, quote: '门牌改成 12 号了' },
+        { op: 'add', kind: 'ref', text: '门牌号是 12', entry: cite, quote: '门牌改成 12 号了' },
+        { op: 'add', kind: 'ref', text: '门牌 12 号', entry: fresh.slice(0, 8), quote: '还是记一下' }] };
+    const result = await compaction.structuredCompaction({ branch: next.getBranch(), projection: next.buildSessionProjection().entries,
+        firstKeptEntryId: latest, sessionId: next.getSessionId(), model: { provider: 'fixture', id: 'small', contextWindow: 128000 },
+        now: new Date().toISOString(), reason: 'threshold', complete: async () => ({ text: JSON.stringify(answer), stopReason: 'stop', usage: usageRecord }) });
+    const bot = result.details.pivaneBot;
+    assert.deepEqual(bot.rejected.map(item => item.reason), ['deleted by the user', 'deleted by the user'], 'same text, or same original message');
+    assert.deepEqual(bot.ledger.ops.map(op => [op.op, op.text, op.source.entryId]), [['add', '门牌 12 号', fresh]], 'a new statement after the deletion counts');
+    // A carried message without its time is not taken as newer than the deletion.
+    const unknown = compaction.checkNote(answer.notes[0], ledger.replay(next.getBranch()),
+        new Map([[cite, [{ entry: seed, message: { role: 'user' }, text: '对了，门牌改成 12 号了', sessionId: 's', origin: { entryId: null, at: null } }]]]), { at: new Date().toISOString() });
+    assert.equal(unknown.rejected, 'deleted by the user');
+});

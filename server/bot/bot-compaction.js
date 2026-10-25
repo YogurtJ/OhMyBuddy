@@ -79,8 +79,9 @@ function summarizedEntries(projection, firstKeptEntryId) {
 // What a generation seed adds to the summarized part. Its sections are the earlier memory
 // already. When the summary before the move also read the verbatim part (reconciled), nothing
 // else; otherwise (a manual move, or a seed of an older version) the carried messages are read
-// as what the user and the assistant said (citable, with the seed as their entry), and the
-// seed's own summary when it has no sections (Pi's summary after a fallback).
+// as what the user and the assistant said (citable, with the seed as their entry; origin keeps
+// the entry and time they had, so a deletion made after them still holds), and the seed's own
+// summary when it has no sections (Pi's summary after a fallback).
 function seedItems(entry, message) {
     const details = object(entry.details) ? entry.details : {};
     const sections = object(details.sections);
@@ -92,7 +93,8 @@ function seedItems(entry, message) {
     }
     if (Array.isArray(details.tail)) {
         for (const item of details.tail) if (object(item) && (item.role === 'user' || item.role === 'assistant') && typeof item.text === 'string' && item.text.trim())
-            items.push({ entry, message: { role: item.role, content: item.text, ...(Number.isFinite(item.at) ? { timestamp: item.at } : {}) } });
+            items.push({ entry, message: { role: item.role, content: item.text, ...(Number.isFinite(item.at) ? { timestamp: item.at } : {}) },
+                origin: { entryId: typeof item.entryId === 'string' ? item.entryId : null, at: Number.isFinite(item.at) ? item.at : null } });
     } else if (cut >= 0) items.push({ entry, message: { role: 'custom', content: text.slice(cut) }, whole: true });
     return items;
 }
@@ -273,10 +275,13 @@ function checkNote(note, state, byShortId, { at }) {
     if (note.op === 'add') {
         const text = fold(note.text);
         if (state.items.some(item => item.status === 'active' && item.kind === note.kind && fold(item.text) === text)) return { rejected: 'already noted' };
-        // A note the user deleted does not come back from what was said before the deletion.
-        const said = Date.parse(matching.entry.timestamp), hash = ledger.textHash(note.text);
+        // A note the user deleted does not come back from what was said before the deletion. A
+        // message carried in a generation seed counts from when it was said (unknown: not newer).
+        const origin = matching.origin;
+        const said = origin ? (origin.at ?? NaN) : Date.parse(matching.entry.timestamp), hash = ledger.textHash(note.text);
+        const entries = [matching.entry.id, origin?.entryId].filter(Boolean);
         if (state.items.some(item => item.status === 'deleted' && !(said > Date.parse(item.updatedAt))
-            && (item.hash === hash || item.kind === note.kind && item.source?.entryId === matching.entry.id))) return { rejected: 'deleted by the user' };
+            && (item.hash === hash || item.kind === note.kind && entries.includes(item.source?.entryId)))) return { rejected: 'deleted by the user' };
         raw = { op: 'add', kind: note.kind, text: note.text, due: note.due || null, supersedes: note.replaces || undefined };
     } else if (note.op === 'update') raw = { op: 'update', id: note.id, text: note.text, due: note.due || undefined };
     else if (note.op === 'done' || note.op === 'cancel') raw = { op: 'status', id: note.id, status: note.op === 'done' ? 'done' : 'cancelled' };
@@ -305,7 +310,7 @@ function indexSources(chunk, sessionId) {
         const text = item.message.role === 'toolResult' ? textOf(item.message.content) : item.message.role === 'bashExecution'
             ? String(item.message.output ?? '') : textOf(item.message.content);
         if (!byShortId.has(key)) byShortId.set(key, []);
-        byShortId.get(key).push({ entry: item.entry, message: item.message, text, sessionId });
+        byShortId.get(key).push({ entry: item.entry, message: item.message, text, sessionId, ...(item.origin ? { origin: item.origin } : {}) });
     }
     return byShortId;
 }

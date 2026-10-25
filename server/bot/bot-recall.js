@@ -37,11 +37,11 @@ function readVerified(file, directory, maxBytes) {
     if (!listed.isFile() || listed.isSymbolicLink() || fs.realpathSync.native(file) !== file) throw new Error('Generation file is outside this chat');
     if (listed.size > BigInt(maxBytes)) throw new Error('Generation file is too large to search');
     const fd = io.openReadSync(file);
+    let offset = 0;
     try {
         const opened = fs.fstatSync(fd, { bigint: true }), identity = io.identity(fd);
         if (!opened.isFile() || stampOf(opened) !== stampOf(listed) || descriptorPathSync(fd) !== file || !io.sameIdentityAtPath(file, identity)) throw changed();
         const size = Number(opened.size), buffer = Buffer.alloc(size);
-        let offset = 0;
         while (offset < size) {
             const read = fs.readSync(fd, buffer, offset, size - offset, offset);
             if (!read) break;
@@ -49,9 +49,13 @@ function readVerified(file, directory, maxBytes) {
         }
         if (offset !== size || stampOf(fs.fstatSync(fd, { bigint: true })) !== stampOf(opened)
             || stampOf(fs.lstatSync(file, { bigint: true })) !== stampOf(opened) || descriptorPathSync(fd) !== file
-            || !io.sameIdentityAtPath(file, identity) || fs.realpathSync.native(file) !== file) throw Object.assign(changed(), { bytesRead: offset });
+            || !io.sameIdentityAtPath(file, identity) || fs.realpathSync.native(file) !== file) throw changed();
         return buffer.toString('utf8');
-    } finally { fs.closeSync(fd); }
+    } catch (error) {
+        // Whatever ends the read after data came in, the bytes read are reported (recall's budget).
+        if (offset && error && typeof error === 'object') error.bytesRead = offset;
+        throw error;
+    } finally { try { fs.closeSync(fd); } catch { /* read-only descriptor */ } }
 }
 
 // The window's generations, newest first, each with the branch entries of a verified file.
