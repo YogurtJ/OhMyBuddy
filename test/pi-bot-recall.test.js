@@ -99,6 +99,19 @@ test('recall searches every generation of the window and reads around an entry',
     assert.deepEqual(changing.skipped, [0, 1]);
     assert.equal(changing.bytes, sizes[1], 'the refused read was counted');
     assert.equal(reads, 1, 'what is left of the total no longer fits the older file, so it is not read');
+    // The same when a check after the read throws (the path removed in between).
+    const sizesNow = [first.path, second.path].map(file => fs.statSync(file).size);
+    const lstatSync = fs.lstatSync;
+    let checks = 0;
+    fs.lstatSync = (file, ...rest) => { if (file === second.path && ++checks === 2) throw Object.assign(new Error('gone'), { code: 'ENOENT' }); return lstatSync(file, ...rest); };
+    let removed;
+    try {
+        removed = recall.windowGenerations({ agentDir, context, current: third, pi: { SessionManager, parseSessionEntries },
+            limits: { ...recall.LIMITS, totalBytes: sizesNow[0] + sizesNow[1] - 1 } });
+    } finally { fs.lstatSync = lstatSync; }
+    assert.equal(checks, 2);
+    assert.deepEqual(removed.skipped, [0, 1]);
+    assert.equal(removed.bytes, sizesNow[1], 'bytes read before a throwing check are counted');
 });
 
 test('earlier generation files are read only through a descriptor that matches the path', () => {

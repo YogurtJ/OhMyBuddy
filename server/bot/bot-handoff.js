@@ -60,13 +60,13 @@ function buildHandoff(manager, { now = new Date().toISOString() } = {}) {
         if (tail.length >= MAX_TAIL_MESSAGES || used + line.length > MAX_TAIL_CHARS) {
             if (!tail.length) {
                 tail.unshift(clip(line, MAX_TAIL_CHARS));
-                messages.unshift({ role: entry.message.role, text: clip(text, MAX_TAIL_CHARS), ...(Number.isFinite(at) ? { at } : {}) });
+                messages.unshift({ role: entry.message.role, text: clip(text, MAX_TAIL_CHARS), entryId: entry.id, ...(Number.isFinite(at) ? { at } : {}) });
             }
             complete = false;
             break;
         }
         tail.unshift(line); used += line.length;
-        messages.unshift({ role: entry.message.role, text, ...(Number.isFinite(at) ? { at } : {}) });
+        messages.unshift({ role: entry.message.role, text, entryId: entry.id, ...(Number.isFinite(at) ? { at } : {}) });
     }
     const sectionsText = [];
     if (sections) sectionsText.push(summaryText(sections, state, now));
@@ -78,8 +78,9 @@ function buildHandoff(manager, { now = new Date().toISOString() } = {}) {
         ...sectionsText];
     if (tail.length) parts.push(TAIL_HEADING + '\n' + tail.join('\n\n'));
     const hasContent = sectionsText.length > 0 || tail.length > 0;
-    // tail: the verbatim part as messages, kept in the seed's details so the next summary can read
-    // (and cite) them when the summary before the move did not already cover them.
+    // tail: the verbatim part as messages (with the entry and time they had), kept in the seed's
+    // details so the next summary can read (and cite) them when the summary before the move did
+    // not already cover them.
     return { model, thinkingLevel, lastEntryId: manager.getLeafId(), snapshot: state.items.length ? state : null,
         sections, notebook: state.items.length > 0, complete, tail: messages, text: hasContent ? parts.join('\n\n') : '' };
 }
