@@ -22,8 +22,9 @@ const SHRINKWRAP_FIXES = [{
     name: 'brace-expansion', owner: '@earendil-works/pi-coding-agent', consumer: 'minimatch', fixed: '5.0.12',
     vulnerable: version => /^4\.\d+\.\d+$/.test(version) || /^5\.0\.(\d|1[01])$/.test(version),
 }, {
-    name: 'undici', owner: '@earendil-works/pi-coding-agent', consumer: '@earendil-works/pi-ai', fixed: '8.11.2',
-    vulnerable: version => ['8.10.0', '8.10.2'].includes(version),
+    // GHSA-xjj6-f33q-929c affects 8.0.0 up to (not including) 8.12.2.
+    name: 'undici', owner: '@earendil-works/pi-coding-agent', consumer: '@earendil-works/pi-ai', fixed: '8.12.3',
+    vulnerable: version => /^8\.(?:\d|1[01])\.\d+$/.test(version) || /^8\.12\.[01]$/.test(version),
 }];
 function packageVersion(directory) {
     const stat = fs.lstatSync(directory);

@@ -35,7 +35,7 @@ Channels supporting Fast or Ultrafast show a separate Speed control with cost mu
 
 ### Use subagents
 
-Ask the main Agent explicitly to delegate. The **Subagents** chip above the composer shows status, models, tools and usage. Steer sends guidance, Stop requests cancellation, and Continue is offered for eligible runs. Actual availability depends on the run's state. Check uncertain outcomes before repeating an action.
+Ask the main Agent explicitly to delegate. The **Subagents** chip above the composer shows the number of runs and workflow progress (such as `1/3`). Open it to see one card per run: task rows show role, model, thinking level, the current tool and elapsed time, and a long stretch without activity is highlighted in amber. Steer, Stop (with a confirmation) and, for eligible runs, Continue are in the card's **⋯** menu. Completed and stopped runs fold under **Finished**, and the footer shows the subagent cost total (read when the panel opens, at most every 30 seconds). Steering reports delivery only when the subagent confirms it; queued or unconfirmed guidance says so. Actual availability depends on the run's state. Refresh and check uncertain outcomes before repeating an action.
 
 Subagents ship with Pivane. Global/project defaults and role overrides are saved in Models & capabilities; an override does not create a role definition. Saving leaves active tasks unchanged, and an idle runtime reopen applies new settings. See [bundled capabilities](../BUNDLED_CAPABILITIES.md).
 
