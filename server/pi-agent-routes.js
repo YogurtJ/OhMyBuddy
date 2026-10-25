@@ -122,7 +122,7 @@ function createPiAgentGateway(options = {}) {
     supervisor.on('completion', (notice, worker) => {
         if (worker) { void titles.auto(worker); void learning?.register(worker, 'settled'); }
         // Bot windows: a large, long or old generation moves on once the reply is shown (D-030).
-        if (worker?.loadedBot) setTimeout(() => { void bots.maintainWindow(worker); }, 3000).unref?.();
+        if (worker?.loadedBot) setTimeout(() => { void bots.maintainWindow(worker, { trigger: 'completion' }); }, 3000).unref?.();
         if (worker?.cronRun) return;
         void notifications.notify(notice);
         try { preferences.recordReplyNotice(notice); }
@@ -133,7 +133,7 @@ function createPiAgentGateway(options = {}) {
         // Do not subscribe: a subscriber keeps the worker from being reclaimed.
         worker.on('compaction', () => {
             void learning?.register(worker, 'compaction');
-            if (worker.loadedBot) setTimeout(() => { void bots.maintainWindow(worker); }, 3000).unref?.();
+            if (worker.loadedBot) setTimeout(() => { void bots.maintainWindow(worker, { trigger: 'compaction' }); }, 3000).unref?.();
         });
         worker.once('disposed', () => { void learning?.register(worker, 'exit'); });
         worker.once('exit', () => { void learning?.register(worker, 'exit'); });

@@ -2,14 +2,18 @@
 // Maintenance decisions of a long-lived Bot window (D-030), as pure functions:
 //   S1 prune old large tool outputs with context edits (only when it saves a lot, since
 //      it invalidates the cached prompt from the first edited entry on)
-//   S2 summarize in the background once the prompt cache has gone cold anyway
+//   S2 summarize in the background once the prompt cache has gone cold anyway (also when the
+//      generation is due to move on, so the new one starts from a fresh summary)
 //   S3 Pi's native threshold/overflow compaction (summarized by the same Bot logic)
 //   S4 move the window to a new generation when the file gets large, long or old
 const { estimateTokens } = require('./bot-compaction');
 
 const STUB_PREFIX = '[Earlier output of ';
 const PRUNE = Object.freeze({ keepUserTurns: 3, minChars: 4000, minPercent: 35, minSaveTokens: 10000, minSaveShare: 0.2 });
-const IDLE = Object.freeze({ minDelayMs: 10 * 60 * 1000, minPercent: 55 });
+// minSummarize*: an idle summary must take in a good part of the context, not just re-summarize
+// what Pi keeps verbatim anyway (Pi keeps about keepRecentTokens of chars/4 from the end, which
+// for Chinese text is several times more real tokens).
+const IDLE = Object.freeze({ minDelayMs: 10 * 60 * 1000, minPercent: 55, minSummarizeTokens: 20000, minSummarizeShare: 0.2, keepRecentTokens: 20000 });
 const ROTATE = Object.freeze({ bytes: 8 * 1024 * 1024, entries: 8000, ageMs: 60 * 24 * 3600 * 1000 });
 // Tools whose results carry notebook or setup state the model should keep seeing as is.
 const KEEP_TOOLS = new Set(['window_note', 'bot_setup_propose']);
@@ -60,8 +64,29 @@ function idleDelay(model) {
     return Math.max(IDLE.minDelayMs, ttl * 1000);
 }
 
-function idleCompactionWanted(usage) {
-    return Boolean(usage && Number.isFinite(usage.percent) && usage.percent >= IDLE.minPercent);
+function messageChars(message) {
+    if (!message || ['compactionSummary', 'branchSummary'].includes(message.role)) return 0;
+    if (typeof message.content === 'string') return message.content.length;
+    if (!Array.isArray(message.content)) return 0;
+    return message.content.reduce((total, part) => total + (part?.type === 'text' ? part.text.length : part?.type === 'thinking' ? String(part.thinking ?? '').length
+        : part?.type === 'toolCall' ? JSON.stringify(part.arguments ?? {}).length : part?.type === 'image' ? 4800 : 0), 0);
+}
+
+// About how many real tokens a compaction would take in now: everything before the part Pi
+// keeps verbatim, with the measured context split in proportion to characters.
+function summarizableTokens(projection, usage, keepRecentTokens = IDLE.keepRecentTokens) {
+    if (!usage || !Number.isFinite(usage.tokens) || !Array.isArray(projection)) return 0;
+    const sizes = projection.map(item => (item.messages || []).reduce((total, message) => total + messageChars(message), 0));
+    const total = sizes.reduce((sum, size) => sum + size, 0);
+    let kept = 0, index = sizes.length;
+    while (index > 0 && kept / 4 < keepRecentTokens) kept += sizes[--index];
+    return total ? Math.round(usage.tokens * (total - kept) / total) : 0;
+}
+
+function idleCompactionWanted(usage, projection) {
+    if (!usage || !Number.isFinite(usage.percent) || usage.percent < IDLE.minPercent) return false;
+    const window = Number.isFinite(usage.contextWindow) && usage.contextWindow > 0 ? usage.contextWindow : usage.tokens * 100 / usage.percent;
+    return summarizableTokens(projection, usage) >= Math.max(IDLE.minSummarizeTokens, window * IDLE.minSummarizeShare);
 }
 
 // S4: why the current generation should move to a new one, or null.
@@ -73,4 +98,4 @@ function rotationReason({ bytes, entries, startedAt, now }) {
     return null;
 }
 
-module.exports = { PRUNE, IDLE, ROTATE, STUB_PREFIX, pruneDrafts, stubFor, idleDelay, idleCompactionWanted, rotationReason };
+module.exports = { PRUNE, IDLE, ROTATE, STUB_PREFIX, pruneDrafts, stubFor, idleDelay, summarizableTokens, idleCompactionWanted, rotationReason };

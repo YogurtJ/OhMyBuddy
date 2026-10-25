@@ -19,8 +19,8 @@ import { APPROVAL_TITLE, BLOCKED, PRESETS, approvalFor, approvalMessage, newToke
 import { safeFile as readDocument } from '../profile-memory/management.js';
 import { registerNotebook, notebookNotice, editNotebook } from './bot-notebook.ts';
 import { registerRecall } from './bot-recall-tools.ts';
-import { structuredCompaction } from './bot-compaction.js';
-import { pruneDrafts, idleDelay, idleCompactionWanted } from './bot-maintenance.js';
+import { structuredCompaction, summaryReasoning } from './bot-compaction.js';
+import { pruneDrafts, idleDelay, idleCompactionWanted, rotationReason } from './bot-maintenance.js';
 import { Type } from 'typebox';
 
 export const BOT_SECTION = 'pivane_bot';
@@ -246,9 +246,11 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
                 firstKeptEntryId: event.preparation.firstKeptEntryId, previousSummary: event.preparation.previousSummary,
                 sessionId: ctx.sessionManager.getSessionId(), model, now: new Date().toISOString(), reason: event.reason, signal: event.signal,
                 complete: async ({ systemPrompt, text, signal }: any) => {
-                    const response = await ctx.modelRegistry.complete(model, { systemPrompt,
+                    // Request options as in Pi's own summaries: the chat's thinking level when the model
+                    // reasons (some reasoning models reject a request without one), no cache writes.
+                    const response = await ctx.modelRegistry.streamSimple(model, { systemPrompt,
                         messages: [{ role: 'user', content: [{ type: 'text', text }], timestamp: Date.now() }] },
-                    { maxTokens: 16000, signal, cacheRetention: 'none', sessionId: randomUUID() });
+                    { maxTokens: 16000, signal, cacheRetention: 'none', sessionId: randomUUID(), ...summaryReasoning(model, pi.getThinkingLevel()) }).result();
                     const answer = (response.content || []).filter((part: any) => part?.type === 'text').map((part: any) => part.text).join('\n');
                     return { text: answer, usage: response.usage, stopReason: response.stopReason, errorMessage: response.errorMessage };
                 }
@@ -276,6 +278,16 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
     });
     // S2 (D-030): once the prompt cache has gone cold, a still idle and fairly full window is
     // summarized in the background, so the user does not wait for it in their next message.
+    // A generation that is due to move on (S4) is summarized too: the server rotates after a
+    // compaction, so the next generation starts from a fresh summary.
+    const rotationDue = (manager: any) => {
+        try {
+            const file = manager.getSessionFile();
+            const bytes = file ? fs.statSync(file).size : 0;
+            return rotationReason({ bytes, entries: bytes >= 1024 * 1024 ? manager.getEntries().length : 0,
+                startedAt: manager.getHeader?.()?.timestamp, now: Date.now() });
+        } catch { return null; }
+    };
     let idleTimer: ReturnType<typeof setTimeout> | null = null;
     const stopIdle = () => { if (idleTimer) clearTimeout(idleTimer); idleTimer = null; };
     pi.on('agent_start', stopIdle);
@@ -286,9 +298,10 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
         idleTimer = setTimeout(() => {
             idleTimer = null;
             try {
-                if (!ctx.isIdle() || ctx.hasPendingMessages() || scheduledRunActive(ctx.sessionManager) || !isBot(ctx)
-                    || !idleCompactionWanted(ctx.getContextUsage())) return;
-                ctx.compact({ customInstructions: 'pivane-bot-idle', onError: () => {} });
+                if (!ctx.isIdle() || ctx.hasPendingMessages() || scheduledRunActive(ctx.sessionManager) || !isBot(ctx)) return;
+                const rotating = Boolean(rotationDue(ctx.sessionManager));
+                if (!rotating && !idleCompactionWanted(ctx.getContextUsage(), ctx.sessionManager.buildSessionProjection().entries)) return;
+                ctx.compact({ customInstructions: rotating ? 'pivane-bot-rotate' : 'pivane-bot-idle', onError: () => {} });
             } catch { /* Best effort: the native threshold still applies. */ }
         }, idleDelay(ctx.model));
         (idleTimer as any).unref?.();
