@@ -8,7 +8,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const express = require('express');
 const { schema: nativeSettingsSchema } = require('../../server/pi-native-service');
 const root = path.resolve(__dirname, '../..');
-const evidence = '/tmp/pivane-feedback/agent-a';
+const evidence = process.env.PI_I18N_EVIDENCE || path.join(require('node:os').tmpdir(), 'pivane-i18n-evidence');
 const cwd = '/fixture/中文项目';
 const session = { id: 'language-fixture', cwd, name: '保存', messageCount: 2, modified: '2026-09-11T00:00:00Z' };
 const model = { provider: 'fixture', id: 'fixture-model', name: '模型', input: ['text', 'image'], contextWindow: 32000, available: true, thinkingLevels: ['off'] };
@@ -42,6 +42,10 @@ async function run(browser, base, width, language) {
     await page.addInitScript(({ cwd }) => {
         localStorage.setItem('pi.web.cwd', cwd); localStorage.setItem('pi.web.session:' + cwd, 'language-fixture');
     }, { cwd });
+    // A catalog reordering must preserve all static bindings, not just a
+    // hand-maintained list of numeric IDs for the affected controls.
+    await page.route('**/pi-i18n-catalog.js', route => route.fulfill({ contentType: 'text/javascript', body:
+        fs.readFileSync(path.join(root, 'public/pi-i18n-catalog.js'), 'utf8') + '\nwindow.PiI18nCatalog = [...window.PiI18nCatalog].reverse();' }));
     await page.route(/https:\/\/(fonts\.googleapis\.com|fonts\.gstatic\.com)\//, r => r.abort());
     await page.route('**/api/**', async route => {
         const req = route.request(), url = new URL(req.url());
@@ -77,6 +81,11 @@ async function run(browser, base, width, language) {
     const english = language.startsWith('en');
     assert.equal(await page.locator('html').getAttribute('lang'), english ? 'en' : 'zh-CN');
     assert.equal(await page.locator('#workspace-settings-toggle').getAttribute('title'), english ? 'Workspace settings' : '工作台设置');
+    assert.equal(await page.locator('#workspace-profiles-toggle > span:not(.workspace-nav-short)').textContent(), english ? 'Assistant profiles' : '助手身份');
+    assert.equal(await page.locator('#workspace-profiles-toggle').getAttribute('title'), english ? 'Assistant profiles' : '助手身份');
+    assert.equal(await page.locator('[data-more-tab="profiles"] span').textContent(), english ? 'Assistant profiles' : '助手身份');
+    assert.equal(await page.locator('[data-delivery-mode="steer"] small').textContent(), english ? 'Delivered after this tool step' : '本轮工具后送达');
+    assert.equal(await page.locator('[data-delivery-mode="follow_up"] small').textContent(), english ? 'Delivered after the current task' : '当前任务完成后送达');
     const transcript = await page.locator('#pi-transcript-content').innerText();
     assert.ok(transcript.includes('保存') && transcript.includes('设置') && transcript.includes('原始代码：保存'));
     assert.equal(await page.evaluate(() => Boolean(window.i18nXss)), false);
@@ -128,6 +137,9 @@ async function run(browser, base, width, language) {
     if (width < 900) await page.locator('#pi-close-inspector').click();
     await page.locator('#workspace-settings-toggle').click();
     await page.locator('[data-settings-tab="models"]').click();
+    assert.equal(await page.locator('#settings-message-view-title').textContent(), english ? 'Message display' : '消息显示');
+    assert.equal(await page.locator('[data-transcript-mode="compact"]').textContent(), english ? 'Compact' : '简洁');
+    assert.equal(await page.locator('#appearance-font-title').textContent(), english ? 'Font size' : '字体大小');
     await page.waitForFunction(() => document.getElementById('settings-media-agent-model').options.length > 0);
     await overflow(['.workspace-settings-dialog', '.workspace-settings-body', '.workspace-settings-content', '.workspace-settings-nav', '.workspace-settings-panel.active', '.workspace-language-card', '#workspace-language', '#settings-media-agent-form']);
     assert.equal(await page.locator('#workspace-language').inputValue(), 'system');
@@ -136,7 +148,7 @@ async function run(browser, base, width, language) {
         await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
         await overflow(['.workspace-language-card', '.workspace-settings-nav']);
     }
-    await page.screenshot({ path: `/tmp/pivane-i18n-${language}-${width}-preferences.png` });
+    await page.screenshot({ path: path.join(evidence, `preferences-${language}-${width}.png`) });
     await page.locator('[data-settings-tab="usage"]').click();
     await page.locator('.pi-usage-table-scroll').first().waitFor();
     assert.ok((await page.locator('#settings-usage-result').innerText()).includes(english ? 'Daily usage' : '每日用量'));
@@ -198,7 +210,7 @@ async function run(browser, base, width, language) {
     assert.ok((await page.locator('#lab-review-warnings').textContent()).includes(english ? 'External services' : '外部服务'));
     assert.equal(await page.locator('#lab-review-cost').textContent(), english ? 'Pricing depends on the selected backend; a reliable estimate is not currently available.' : '费用由所选后端决定；当前无法提供可靠报价。');
     await overflow(['.lab-header', '.lab-workspace', '.lab-editor', '.lab-results', '.lab-dialog[open]', '.lab-dialog[open] .lab-dialog-scroll', '#lab-review-fields']);
-    await page.screenshot({ path: `/tmp/pivane-i18n-${language}-${width}-review.png` });
+    await page.screenshot({ path: path.join(evidence, `review-${language}-${width}.png`) });
     assert.deepEqual(writes, ['/api/pi/media/lab/review']);
     assert.ok(!calls.includes('prompt') && !calls.includes('set_model'));
     await navigationCheck(() => page.reload({ waitUntil: 'domcontentloaded' }));

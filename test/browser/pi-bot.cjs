@@ -27,7 +27,7 @@ const messages = [
     try {
         browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium' });
         for (const width of [1440, 393]) {
-            const context = await browser.newContext({ viewport: { width, height: 860 } });
+            const context = await browser.newContext({ viewport: { width, height: 860 }, locale: 'zh-CN' });
             const page = await context.newPage(), errors = [], opened = [];
             let bots = [], revision = 'r0', generation = 0, sessionId = 'gen-0', socket = null, phase = 'greeting', name = '新伙伴', face = '🦊';
             let history = [], prompts = [], responses = [], setupBodies = [], historyReads = [], second = false, known2 = undefined, aboutBodies = [];
