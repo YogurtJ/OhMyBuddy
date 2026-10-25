@@ -20,6 +20,8 @@ const MAX_TOOL_CHARS = 1200;
 // said is sent whole, split into numbered parts when one message is too long for a request.
 const MAX_CONTEXT_CHARS = 4000;
 const MAX_DELETED_LINES = 30;
+const HANDOFF_MESSAGE = 'pivane-bot-handoff';
+const TAIL_HEADING = '## Most recent messages (verbatim)';
 const MIN_QUOTE = 2, MAX_QUOTE = 300;
 const REQUEST_RESERVE_TOKENS = 12000;
 
@@ -59,10 +61,12 @@ function summarizedEntries(projection, firstKeptEntryId) {
     for (const item of projection) {
         const entry = item.sourceEntry;
         if (!entry || entry.id === firstKeptEntryId) break;
-        // The compaction itself, earlier notebook renderings and a generation seed whose sections
-        // are passed as the earlier memory (its recent part was reconciled before the move) are skipped.
-        if (entry.type === 'compaction' || entry.type === 'custom_message' && (entry.customType === 'pivane-bot-notebook'
-            || entry.customType === 'pivane-bot-handoff' && object(entry.details?.sections))) continue;
+        // The compaction itself and earlier notebook renderings are passed separately.
+        if (entry.type === 'compaction' || entry.type === 'custom_message' && entry.customType === 'pivane-bot-notebook') continue;
+        if (entry.type === 'custom_message' && entry.customType === HANDOFF_MESSAGE) {
+            for (const message of item.messages || []) result.push(...seedItems(entry, message));
+            continue;
+        }
         for (const message of item.messages || []) {
             const role = message.role;
             if (role === 'user' || role === 'assistant' || role === 'toolResult' || role === 'custom' || role === 'bashExecution')
@@ -72,9 +76,30 @@ function summarizedEntries(projection, firstKeptEntryId) {
     return result;
 }
 
+// What a generation seed adds to the summarized part. Its sections are the earlier memory
+// already. When the summary before the move also read the verbatim part (reconciled), nothing
+// else; otherwise (a manual move, or a seed of an older version) the carried messages are read
+// as what the user and the assistant said (citable, with the seed as their entry), and the
+// seed's own summary when it has no sections (Pi's summary after a fallback).
+function seedItems(entry, message) {
+    const details = object(entry.details) ? entry.details : {};
+    const sections = object(details.sections);
+    if (sections && details.reconciled === true) return [];
+    const text = textOf(message.content), cut = text.indexOf(TAIL_HEADING), items = [];
+    if (!sections) {
+        const head = (cut >= 0 ? text.slice(0, cut) : text).trim();
+        if (head) items.push({ entry, message: { role: 'custom', content: head }, whole: true });
+    }
+    if (Array.isArray(details.tail)) {
+        for (const item of details.tail) if (object(item) && (item.role === 'user' || item.role === 'assistant') && typeof item.text === 'string' && item.text.trim())
+            items.push({ entry, message: { role: item.role, content: item.text, ...(Number.isFinite(item.at) ? { timestamp: item.at } : {}) } });
+    } else if (cut >= 0) items.push({ entry, message: { role: 'custom', content: text.slice(cut) }, whole: true });
+    return items;
+}
+
 // One line block per message (or per part of a long one, see splitLong). Tool output and
 // context notes are clipped; quotes are checked against the full original text.
-function serializeMessage({ entry, message, part }) {
+function serializeMessage({ entry, message, part, whole }) {
     const head = `[e:${shortId(entry.id)}] ${stamp(entry, message)}`.trim();
     const label = part ? ` (part ${part.index}/${part.total})` : '';
     const said = () => part ? part.text : fold(textOf(message.content));
@@ -87,7 +112,7 @@ function serializeMessage({ entry, message, part }) {
     }
     if (message.role === 'toolResult') return `${head} Tool result (${message.toolName}${message.isError ? ', failed' : ''}): ${clip(fold(textOf(message.content)), MAX_TOOL_CHARS)}`;
     if (message.role === 'bashExecution') return `${head} Command: ${clip(String(message.command ?? ''), 300)} → ${clip(fold(message.output), MAX_TOOL_CHARS)}`;
-    return `${head} Context note: ${clip(fold(textOf(message.content)), MAX_CONTEXT_CHARS)}`;
+    return `${head} Context note${label}: ${part ? part.text : whole ? fold(textOf(message.content)) : clip(fold(textOf(message.content)), MAX_CONTEXT_CHARS)}`;
 }
 
 // A user or assistant message longer than about half a request becomes numbered parts that
@@ -97,7 +122,7 @@ function splitLong(messages, budgetTokens) {
     const result = [];
     for (const item of messages) {
         const role = item.message.role;
-        const text = role === 'user' || role === 'assistant' ? fold(textOf(item.message.content)) : '';
+        const text = role === 'user' || role === 'assistant' || item.whole ? fold(textOf(item.message.content)) : '';
         if (text.length <= size) { result.push(item); continue; }
         const total = Math.ceil(text.length / size);
         for (let index = 0; index < total; index++)
@@ -216,11 +241,11 @@ function readAnswer(value, { earlier = null } = {}) {
     if (episodes.length > MAX_EPISODES + 10) throw new Error('Too many episodes');
     if (!episodes.length) throw new Error(earlier?.episodes?.length ? 'The summary dropped the earlier episodes' : 'The summary has no episodes');
     if (!object(value.now)) throw new Error('The summary has no "now" section');
-    if (value.notes !== undefined && !Array.isArray(value.notes)) throw new Error('Summary notes are not a list');
+    if (!Array.isArray(value.notes)) throw new Error('The summary has no notes list');
     const now = value.now;
     return { topic, episodes: episodes.slice(-MAX_EPISODES),
         now: { doing: checkText(now.doing, MAX_NOW, 'now.doing'), next: checkText(now.next, MAX_NOW, 'now.next'), waiting: checkText(now.waiting, MAX_NOW, 'now.waiting') },
-        notes: (value.notes ?? []).slice(0, 64) };
+        notes: value.notes.slice(0, 64) };
 }
 
 const QUOTE_ROLES = Object.freeze({

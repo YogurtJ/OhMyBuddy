@@ -36,7 +36,8 @@ export function notebookVisibility(branch: any[]) {
     return { visible, userOps };
 }
 
-// Changed notes listed one by one; beyond this the whole notebook is shown again.
+// Beyond this many changed notes the whole notebook is shown again as well (the changed ones
+// are always listed: the rendering leaves out deleted and older closed notes).
 const MAX_NOTICE_NOTES = 40;
 
 // What to tell the model before a run, or null: the full notebook when it is not visible
@@ -53,9 +54,9 @@ export function notebookNotice(branch: any[], now: string) {
     const ids = [...new Set(userOps.map(op => op?.id).filter((id: any) => typeof id === 'string'))];
     const lines = ids.map(id => describeItem(state.items.find((item: any) => item.id === id))).filter(Boolean);
     if (!lines.length) return null;
-    if (lines.length > MAX_NOTICE_NOTES) return full('user-edits');
+    const changes = 'The user changed these notes of this chat themselves; this is how they stand now:\n' + lines.map(line => '- ' + line).join('\n');
     return { customType: NOTEBOOK_MESSAGE, display: false, details: { v: 1, reason: 'user-edits' },
-        content: 'The user changed these notes of this chat themselves; this is how they stand now:\n' + lines.map(line => '- ' + line).join('\n') };
+        content: lines.length > MAX_NOTICE_NOTES ? renderLedger(state, { now }) + '\n\n' + changes : changes };
 }
 
 const PANEL_OPS = ['update', 'status', 'delete'];

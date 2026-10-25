@@ -78,6 +78,27 @@ test('recall searches every generation of the window and reads around an entry',
     const exact = recall.windowGenerations({ agentDir, context, current: live, pi: { SessionManager, parseSessionEntries },
         limits: { ...recall.LIMITS, totalBytes: size } });
     assert.deepEqual(exact.skipped, []);
+    assert.equal(exact.bytes, size);
+    // Bytes read count even when the file is refused afterwards (changed while it was read).
+    await bots.rotate(botId, windowId, { expectedGeneration: 1 });
+    const third = SessionManager.open((await bots.resolve(botId, windowId)).session.path);
+    const sizes = [first.path, second.path].map(file => fs.statSync(file).size);
+    const readSync = fs.readSync;
+    let reads = 0;
+    const inodes = [first.path, second.path].map(file => fs.statSync(file).ino);
+    fs.readSync = (fd, buffer, ...rest) => {
+        const read = readSync(fd, buffer, ...rest);
+        if (inodes.includes(fs.fstatSync(fd).ino)) { reads++; fs.appendFileSync(second.path, '\n'); }
+        return read;
+    };
+    let changing;
+    try {
+        changing = recall.windowGenerations({ agentDir, context, current: third, pi: { SessionManager, parseSessionEntries },
+            limits: { ...recall.LIMITS, totalBytes: sizes[0] + sizes[1] - 1 } });
+    } finally { fs.readSync = readSync; }
+    assert.deepEqual(changing.skipped, [0, 1]);
+    assert.equal(changing.bytes, sizes[1], 'the refused read was counted');
+    assert.equal(reads, 1, 'what is left of the total no longer fits the older file, so it is not read');
 });
 
 test('earlier generation files are read only through a descriptor that matches the path', () => {
@@ -93,9 +114,11 @@ test('earlier generation files are read only through a descriptor that matches t
     assert.throws(() => recall.readVerified(path.join(elsewhere, 'b.jsonl'), dir, 1024), /outside this chat/);
     assert.throws(() => recall.readVerified(real, dir, 4), /too large/);
     // A special file put in place of a generation is refused before anything blocks on it.
-    const fifo = path.join(dir, 'fifo.jsonl');
-    require('node:child_process').execFileSync('mkfifo', [fifo]);
-    assert.throws(() => recall.readVerified(fifo, dir, 1024), /outside this chat/);
+    if (process.platform !== 'win32') {
+        const fifo = path.join(dir, 'fifo.jsonl');
+        require('node:child_process').execFileSync('mkfifo', [fifo]);
+        assert.throws(() => recall.readVerified(fifo, dir, 1024), /outside this chat/);
+    }
     // A file written to while it is read is refused (full identity compared after the read).
     const growing = path.join(dir, 'growing.jsonl');
     fs.writeFileSync(growing, '{"type":"session"}\n');

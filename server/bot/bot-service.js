@@ -297,7 +297,10 @@ class BotService extends EventEmitter {
                     if (handoff.text) manager.appendCustomMessageEntry(HANDOFF_MESSAGE, handoff.text, false,
                         { version: 1, fromSessionId: from.sessionId, fromGeneration: from.generation,
                             ...(handoff.sections ? { sections: handoff.sections } : {}),
-                            ...(handoff.sections || handoff.notebook ? { pivaneNotebook: true } : {}) });
+                            ...(handoff.sections || handoff.notebook ? { pivaneNotebook: true } : {}),
+                            // reconciled: the summary before the move read the verbatim part (D-033 proof);
+                            // otherwise (a manual move) the next summary reads the carried messages.
+                            tail: handoff.tail, ...(requireSummary ? { reconciled: true } : {}) });
                     // Last initial entry: its presence proves the seed above was written.
                     manager.appendCustomEntry(WINDOW_ENTRY, windowMarker({ sessionId: manager.getSessionId(), profileId, windowId,
                         kind: window.kind, generation: toGeneration, predecessor: { sessionId: from.sessionId, lastEntryId: handoff.lastEntryId } }));

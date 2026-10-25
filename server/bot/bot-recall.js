@@ -49,7 +49,7 @@ function readVerified(file, directory, maxBytes) {
         }
         if (offset !== size || stampOf(fs.fstatSync(fd, { bigint: true })) !== stampOf(opened)
             || stampOf(fs.lstatSync(file, { bigint: true })) !== stampOf(opened) || descriptorPathSync(fd) !== file
-            || !io.sameIdentityAtPath(file, identity) || fs.realpathSync.native(file) !== file) throw changed();
+            || !io.sameIdentityAtPath(file, identity) || fs.realpathSync.native(file) !== file) throw Object.assign(changed(), { bytesRead: offset });
         return buffer.toString('utf8');
     } finally { fs.closeSync(fd); }
 }
@@ -80,10 +80,14 @@ function windowGenerations({ agentDir, context, current, pi, only = null, now = 
             if (manager.getSessionId() !== item.sessionId || binding?.windowId !== context.windowId || binding.profileId !== context.profileId
                 || binding.generation !== item.generation) throw new Error('marker');
             result.push({ generation: item.generation, sessionId: item.sessionId, branch: manager.getBranch() });
-        } catch { skipped.push(item.generation); }
+        } catch (error) {
+            // What was read counts against the total even when the file is then refused.
+            if (Number.isSafeInteger(error?.bytesRead)) bytes += error.bytesRead;
+            skipped.push(item.generation);
+        }
     }
     for (const item of list.slice(limits.generations)) skipped.push(item.generation);
-    return { generations: result, skipped: skipped.sort((a, b) => a - b), total: window.generations.length };
+    return { generations: result, skipped: skipped.sort((a, b) => a - b), total: window.generations.length, bytes };
 }
 
 function messagesOf(generation) {

@@ -7,6 +7,7 @@ const ledger = require('./bot-ledger');
 const { readSections, summaryText } = require('./bot-compaction');
 
 const HANDOFF_MESSAGE = 'pivane-bot-handoff';
+const TAIL_HEADING = '## Most recent messages (verbatim)';
 // The recent part is carried verbatim: a rotation follows a summary, so this is about what Pi
 // kept after it (its keepRecentTokens), which the model was seeing anyway.
 const MAX_TAIL_CHARS = 64000;
@@ -46,7 +47,7 @@ function buildHandoff(manager, { now = new Date().toISOString() } = {}) {
     if (!ledger.storable(state)) throw Object.assign(new Error('The notebook of this chat cannot be carried over'), { status: 409 });
     // The model-visible projection after the latest compaction; only plain user/assistant text is carried.
     // complete: every user/assistant text since the latest summary is in the tail.
-    const tail = [];
+    const tail = [], messages = [];
     let used = 0, complete = true;
     const entries = manager.buildContextEntries();
     for (let index = entries.length - 1; index >= 0; index--) {
@@ -55,12 +56,17 @@ function buildHandoff(manager, { now = new Date().toISOString() } = {}) {
         const text = textOf(entry.message.content).trim();
         if (!text) continue;
         const line = `${entry.message.role === 'user' ? 'User' : 'Assistant'}: ${text}`;
+        const at = Number.isFinite(entry.message.timestamp) ? entry.message.timestamp : Date.parse(entry.timestamp);
         if (tail.length >= MAX_TAIL_MESSAGES || used + line.length > MAX_TAIL_CHARS) {
-            if (!tail.length) tail.unshift(clip(line, MAX_TAIL_CHARS));
+            if (!tail.length) {
+                tail.unshift(clip(line, MAX_TAIL_CHARS));
+                messages.unshift({ role: entry.message.role, text: clip(text, MAX_TAIL_CHARS), ...(Number.isFinite(at) ? { at } : {}) });
+            }
             complete = false;
             break;
         }
         tail.unshift(line); used += line.length;
+        messages.unshift({ role: entry.message.role, text, ...(Number.isFinite(at) ? { at } : {}) });
     }
     const sectionsText = [];
     if (sections) sectionsText.push(summaryText(sections, state, now));
@@ -70,10 +76,12 @@ function buildHandoff(manager, { now = new Date().toISOString() } = {}) {
     }
     const parts = ['[Continuation] This chat window continues from earlier conversation with the same user. Carry on naturally; do not mention any change of storage or session.',
         ...sectionsText];
-    if (tail.length) parts.push('## Most recent messages (verbatim)\n' + tail.join('\n\n'));
+    if (tail.length) parts.push(TAIL_HEADING + '\n' + tail.join('\n\n'));
     const hasContent = sectionsText.length > 0 || tail.length > 0;
+    // tail: the verbatim part as messages, kept in the seed's details so the next summary can read
+    // (and cite) them when the summary before the move did not already cover them.
     return { model, thinkingLevel, lastEntryId: manager.getLeafId(), snapshot: state.items.length ? state : null,
-        sections, notebook: state.items.length > 0, complete, text: hasContent ? parts.join('\n\n') : '' };
+        sections, notebook: state.items.length > 0, complete, tail: messages, text: hasContent ? parts.join('\n\n') : '' };
 }
 
-module.exports = { HANDOFF_MESSAGE, buildHandoff };
+module.exports = { HANDOFF_MESSAGE, TAIL_HEADING, buildHandoff };
