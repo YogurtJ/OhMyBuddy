@@ -51,7 +51,8 @@
             this.all = false;
             this.limit = 60;
             this.label = node('strong', 'pi-model-trigger-label', t('等待会话'));
-            button.replaceChildren(this.label, node('b', 'pi-model-trigger-chevron', '⌄'));
+            this.progress = node('span', 'pi-spinner pi-model-trigger-progress'); this.progress.hidden = true; this.progress.setAttribute('aria-hidden', 'true');
+            button.replaceChildren(this.progress, this.label, node('b', 'pi-model-trigger-chevron', '⌄'));
             button.setAttribute('aria-haspopup', 'dialog');
             button.setAttribute('aria-expanded', 'false');
             button.setAttribute('aria-controls', id);
@@ -194,13 +195,21 @@
             this.models = models;
             this.current = current;
             if (current && keyOf(current) !== previous) this.remember(current);
-            const model = models.find(item => current && keyOf(item) === keyOf(current)) || current;
-            this.label.textContent = model?.name || model?.id || placeholder || t(models.length ? '请选择已接入的模型' : '尚无可用模型');
-            this.button.title = model ? `${model.name || model.id}\n${model.provider} / ${model.id}` : this.label.textContent;
-            this.button.setAttribute('aria-label', `${t('选择模型')}：${this.label.textContent}`);
+            this.placeholder = placeholder;
+            this.renderTrigger();
             this.setDisabled(disabled);
             if (models.length && !this.started) { this.started = true; void this.refreshFavorites(); }
             if (this.dialog.open) this.render();
+        }
+        setPending(selection) { this.pendingSelection = selection; this.renderTrigger(); }
+        renderTrigger() {
+            const model = this.pendingSelection || this.models.find(item => this.current && keyOf(item) === keyOf(this.current)) || this.current;
+            const name = model?.name || model?.id;
+            this.label.textContent = this.pendingSelection ? t('切换至 {0}…', name) : name || this.placeholder || t(this.models.length ? '请选择已接入的模型' : '尚无可用模型');
+            this.progress.hidden = !this.pendingSelection;
+            this.button.setAttribute('aria-busy', String(Boolean(this.pendingSelection)));
+            this.button.title = this.pendingSelection ? this.label.textContent : model ? `${name}\n${model.provider} / ${model.id}` : this.label.textContent;
+            this.button.setAttribute('aria-label', `${t('选择模型')}：${this.label.textContent}`);
         }
         setDisabled(disabled) {
             this.button.disabled = disabled;
@@ -324,4 +333,85 @@
         }
     }
     window.PiModelPicker = PiModelPicker;
+})();
+
+/* A complete, keyboard-accessible thinking menu driven by the runtime select. */
+(() => {
+    const t = globalThis.PiI18n?.t || ((text, ...values) => text.replace(/\{(\d+)\}/g, (_, i) => values[i] ?? ''));
+    class PiThinkingPicker {
+        constructor(select, { beforeOpen = () => {} } = {}) {
+            this.select = select; this.beforeOpen = beforeOpen;
+            this.button = document.createElement('button'); this.button.type = 'button'; this.button.className = 'pi-thinking-trigger';
+            this.button.id = select.id + '-trigger';
+            this.button.setAttribute('aria-haspopup', 'listbox'); this.button.setAttribute('aria-expanded', 'false');
+            select.hidden = true; select.after(this.button); select.closest('.pi-thinking-field, .pi-mobile-thinking-choice')?.classList.add('has-thinking-picker');
+            this.dialog = document.createElement('dialog'); this.dialog.className = 'pi-thinking-dialog'; this.dialog.id = select.id + '-dialog';
+            this.dialog.setAttribute('aria-label', t('思考等级')); this.button.setAttribute('aria-controls', this.dialog.id);
+            const header = document.createElement('div'); header.className = 'pi-thinking-heading';
+            const title = document.createElement('strong'); title.textContent = t('思考等级');
+            const close = document.createElement('button'); close.type = 'button'; close.textContent = '×'; close.setAttribute('aria-label', t('关闭')); close.addEventListener('click', () => this.close());
+            header.append(title, close);
+            this.list = document.createElement('div'); this.list.className = 'pi-thinking-options'; this.list.setAttribute('role', 'listbox'); this.list.setAttribute('aria-label', t('思考等级'));
+            this.dialog.append(header, this.list); document.body.append(this.dialog);
+            this.button.addEventListener('click', () => this.open());
+            this.button.addEventListener('keydown', event => { if (['ArrowUp', 'ArrowDown'].includes(event.key)) { event.preventDefault(); this.open(); } });
+            this.dialog.addEventListener('cancel', event => { event.preventDefault(); this.close(); });
+            this.dialog.addEventListener('click', event => {
+                if (event.target !== this.dialog) return;
+                const r = this.dialog.getBoundingClientRect();
+                if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) this.close();
+            });
+            this.dialog.addEventListener('close', () => {
+                this.button.setAttribute('aria-expanded', 'false');
+                (this.button.getClientRects().length ? this.button : document.getElementById('pi-mobile-context-trigger'))?.focus({ preventScroll: true });
+            });
+            this.list.addEventListener('keydown', event => {
+                const items = [...this.list.querySelectorAll('[role="option"]')], index = items.indexOf(document.activeElement);
+                if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+                const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+                items[next]?.focus();
+            });
+            window.addEventListener('resize', () => this.close());
+            this.sync();
+        }
+        sync(pending = false) {
+            this.button.disabled = this.select.disabled;
+            this.button.setAttribute('aria-busy', String(pending));
+            const label = this.select.selectedOptions[0]?.textContent || t('不启用');
+            this.button.textContent = pending ? t('设置中…') : label;
+            this.button.setAttribute('aria-label', t('思考等级：{0}', label));
+            if (this.button.disabled) this.close();
+        }
+        open() {
+            if (this.select.disabled || this.dialog.open) return;
+            this.beforeOpen(); this.list.replaceChildren();
+            for (const option of this.select.options) {
+                const button = document.createElement('button'); button.type = 'button'; button.setAttribute('role', 'option');
+                button.dataset.level = option.value; button.setAttribute('aria-selected', String(option.value === this.select.value));
+                const name = document.createElement('span'); name.textContent = option.textContent;
+                const code = document.createElement('small'); code.textContent = option.value;
+                const mark = document.createElement('b'); mark.textContent = option.value === this.select.value ? '✓' : ''; mark.setAttribute('aria-hidden', 'true');
+                button.append(name, code, mark);
+                button.addEventListener('click', () => {
+                    if (this.select.disabled || ![...this.select.options].some(current => current.value === option.value && !current.disabled)) return;
+                    const changed = this.select.value !== option.value;
+                    this.select.value = option.value; this.close(); this.sync();
+                    if (changed) this.select.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+                this.list.append(button);
+            }
+            this.dialog.style.removeProperty('left'); this.dialog.style.removeProperty('top');
+            this.dialog.showModal();
+            if (innerWidth > 680) {
+                const r = this.button.getBoundingClientRect(), height = this.dialog.offsetHeight;
+                this.dialog.style.left = `${Math.max(8, Math.min(r.left, innerWidth - this.dialog.offsetWidth - 8))}px`;
+                this.dialog.style.top = `${Math.max(8, r.top >= height + 8 ? r.top - height - 8 : Math.min(r.bottom + 8, innerHeight - height - 8))}px`;
+            }
+            this.button.setAttribute('aria-expanded', 'true');
+            this.list.querySelector('[aria-selected="true"]')?.focus({ preventScroll: true });
+        }
+        close() { if (this.dialog.open) this.dialog.close(); }
+    }
+    window.PiThinkingPicker = PiThinkingPicker;
 })();

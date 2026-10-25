@@ -58,3 +58,31 @@
     .pi-model-star { flex-basis: 44px; }
     .pi-model-all { min-height: 44px; }
 }
+.pi-model-trigger-progress { flex: 0 0 12px; width: 12px; height: 12px; }
+.pi-model-trigger-progress[hidden] { display: none; }
+#pi-model-select[aria-busy="true"] { opacity: 1; color: var(--text-secondary, var(--text-muted)); }
+#pi-mobile-composer-summary[aria-busy="true"] #pi-mobile-composer-model::before { content: ''; display: inline-block; width: 10px; height: 10px; margin-right: 5px; border: 1.5px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: pi-thinking-spin .8s linear infinite; vertical-align: -1px; }
+.pi-thinking-field.has-thinking-picker::after, .pi-mobile-thinking-choice.has-thinking-picker > i { display: none; }
+.pi-thinking-trigger { display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 9px; border: 0; border-radius: 6px; background: transparent; color: var(--text-main); font: inherit; font-size: .74rem; white-space: nowrap; cursor: pointer; }
+.pi-thinking-trigger::after { content: ''; width: 5px; height: 5px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); margin: -3px 2px 0; }
+.pi-thinking-trigger:hover { background: var(--surface-3); }
+.pi-thinking-trigger:disabled { opacity: .55; cursor: default; }
+.pi-thinking-trigger:focus-visible, .pi-thinking-dialog button:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: -2px; }
+.pi-thinking-dialog { position: fixed; inset: auto; margin: 0; width: min(260px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); box-sizing: border-box; padding: 6px; border: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface-1); color: var(--text-main); box-shadow: 0 12px 36px #0003; overflow: auto; overscroll-behavior: contain; }
+.pi-thinking-dialog::backdrop { background: #0001; }
+.pi-thinking-heading { display: flex; align-items: center; justify-content: space-between; padding: 3px 9px 7px; font-size: .8rem; }
+.pi-thinking-heading button { border: 0; background: transparent; color: var(--text-muted); font-size: 22px; width: 32px; height: 32px; cursor: pointer; }
+.pi-thinking-options { display: grid; gap: 2px; }
+.pi-thinking-options button { display: grid; grid-template-columns: 1fr auto 20px; align-items: center; gap: 12px; min-height: 38px; border: 0; border-radius: 7px; padding: 8px 10px; text-align: left; background: transparent; color: inherit; font: inherit; font-size: .85rem; cursor: pointer; }
+.pi-thinking-options button:hover { background: var(--surface-3); }
+.pi-thinking-options button[aria-selected="true"] { background: var(--primary-soft, var(--green-soft)); }
+.pi-thinking-options small { color: var(--text-muted); font-size: .75rem; }
+.pi-thinking-options b { color: var(--primary, var(--green)); }
+@keyframes pi-thinking-spin { to { transform: rotate(360deg); } }
+@media (max-width: 900px) { .pi-thinking-trigger { font-size: 16px; } }
+@media (max-width: 680px) {
+    .pi-thinking-dialog { inset: auto 8px 8px; margin: 0 auto; width: min(360px, calc(100vw - 16px)); padding-bottom: max(6px, env(safe-area-inset-bottom)); }
+    .pi-thinking-options button { min-height: 44px; font-size: 16px; }
+    .pi-mobile-thinking-choice .pi-thinking-trigger { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { #pi-mobile-composer-summary[aria-busy="true"] #pi-mobile-composer-model::before { animation: none; } }
