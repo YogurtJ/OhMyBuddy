@@ -209,7 +209,8 @@ test('Bot window workers get a verified identity section that follows edits with
     const pi = { on(name, fn) { handlers.set(name, fn); }, registerTool() {},
         async setModel(model) { calls.push(['model', model.id]); if (model.provider === 'nokey') return false; ctx.model = model; return true; },
         getThinkingLevel: () => thinking, setThinkingLevel(level) { calls.push(['thinking', level]); thinking = level; } };
-    registerBotContext(pi, () => agentDir);
+    let agentRoot = agentDir;
+    registerBotContext(pi, () => agentRoot);
     const ctx = { mode: 'rpc', cwd: session.cwd, sessionManager: manager, model: models['fixture/small'],
         modelRegistry: { find: (provider, id) => models[`${provider}/${id}`] }, ui: { notify: text => notices.push(JSON.parse(text)) } };
     await handlers.get('session_start')({}, ctx);
@@ -312,6 +313,15 @@ test('Bot window workers get a verified identity section that follows edits with
     assert.equal(await botPreset(context, { ...manager, getSessionId: () => 'foreign' }, session.cwd, agentDir), null);
     assert.equal(await botPreset(context, manager, '/elsewhere', agentDir), 'ask');
     assert.equal(await botPreset(context, manager, session.cwd, agentDir), 'balanced');
+    // The parent ends while the preset is still being read (the read retries): nothing is asked.
+    agentRoot = broken;
+    const before = asked.length, retiredBefore = retired().length;
+    const late = handlers.get('tool_call')({ type: 'tool_call', toolCallId: 'parent-2/1', parentToolCallId: 'parent-2', toolName: 'bash', input: { command: 'pwd' } }, ctx);
+    handlers.get('tool_execution_end')({ type: 'tool_execution_end', toolCallId: 'parent-2' });
+    assert.match((await late).reason, /did not approve/);
+    assert.equal(asked.length, before, 'no approval opens for an already cancelled call');
+    assert.equal(retired().length, retiredBefore);
+    agentRoot = agentDir;
     // An unavailable model keeps the current one and is reported once.
     const reported = new Set(), sent = [];
     assert.equal(await alignModel(pi, ctx, { provider: 'nokey', id: 'x' }, value => sent.push(value), reported), 'unavailable');

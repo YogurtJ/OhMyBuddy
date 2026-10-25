@@ -191,24 +191,29 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
     });
     pi.on('tool_call', async (event: any, ctx: any) => {
         if (!managed(ctx)) return;
-        const preset = await botPreset(context, ctx.sessionManager, ctx.cwd, getAgentDir());
-        if (!preset) return;
-        let annotations;
-        try { annotations = pi.getAllTools().find((tool: any) => tool.name === event.toolName)?.annotations; } catch { annotations = undefined; }
-        const approval = approvalFor({ preset, toolName: event.toolName, input: event.input, cwd: context.cwd, annotations });
-        if (!approval) return;
-        if (!ctx.hasUI || scheduledRunActive(ctx.sessionManager)) return { block: true, reason: BLOCKED.unattended };
-        const token = newToken(), controller = new AbortController(), parent = event.parentToolCallId;
+        // Tracked from the start: the parent can end while the preset is still being read.
+        const controller = new AbortController(), parent = event.parentToolCallId;
         if (parent) { if (!nested.has(parent)) nested.set(parent, new Set()); nested.get(parent)!.add(controller); }
-        const signal = ctx.signal ? AbortSignal.any([controller.signal, ctx.signal]) : controller.signal;
-        let allowed = false;
-        try { allowed = await ctx.ui.confirm(APPROVAL_TITLE, approvalMessage({ ...approval, token }), { signal, timeout: 30 * 60 * 1000 }); }
-        finally {
+        try {
+            const preset = await botPreset(context, ctx.sessionManager, ctx.cwd, getAgentDir());
+            if (!preset) return;
+            let annotations;
+            try { annotations = pi.getAllTools().find((tool: any) => tool.name === event.toolName)?.annotations; } catch { annotations = undefined; }
+            const approval = approvalFor({ preset, toolName: event.toolName, input: event.input, cwd: context.cwd, annotations });
+            if (!approval) return;
+            if (!ctx.hasUI || scheduledRunActive(ctx.sessionManager)) return { block: true, reason: BLOCKED.unattended };
+            // Already cancelled with its parent: nothing to ask about.
+            if (controller.signal.aborted) return { block: true, reason: BLOCKED.not_approved };
+            const token = newToken();
+            const signal = ctx.signal ? AbortSignal.any([controller.signal, ctx.signal]) : controller.signal;
+            let allowed = false;
+            // However it ends, the request is over: the Supervisor drops it if still pending.
+            try { allowed = await ctx.ui.confirm(APPROVAL_TITLE, approvalMessage({ ...approval, token }), { signal, timeout: 30 * 60 * 1000 }); }
+            finally { notifier(ctx)({ event: 'approval-done', token }); }
+            return allowed && !controller.signal.aborted ? undefined : { block: true, reason: BLOCKED.not_approved };
+        } finally {
             if (parent) { nested.get(parent)?.delete(controller); if (!nested.get(parent)?.size) nested.delete(parent); }
-            // However it ended, the request is over: the Supervisor drops it if still pending.
-            notifier(ctx)({ event: 'approval-done', token });
         }
-        return allowed && !controller.signal.aborted ? undefined : { block: true, reason: BLOCKED.not_approved };
     });
     pi.on('before_agent_start', async (event: any, ctx: any) => {
         if (!managed(ctx)) return;
