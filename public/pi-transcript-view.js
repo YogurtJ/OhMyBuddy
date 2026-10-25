@@ -17,8 +17,11 @@
     };
 
     class PiTranscriptView {
-        constructor({ content, controls, scroll }) {
+        // plain(): true where the reader is not looking at a workbench (Bot mode); process
+        // summaries then use everyday words instead of tool-call counts.
+        constructor({ content, controls, scroll, plain }) {
             Object.assign(this, { content, controls, scroll });
+            this.plain = typeof plain === 'function' ? plain : () => false;
             this.groups = new Map();
             this.turnGroups = new Map();
             this.regions = new Map();
@@ -216,8 +219,13 @@
                     if (member.dataset.state === 'running') running++;
                     if (member.dataset.state === 'error' || member.matches('.pi-bash-message.error')) failed++;
                 }
-                const label = [translateUi("执行记录"), tools ? translateUi("{0} 次工具调用", tools) : '', thinking ? translateUi("{0} 段思考", thinking) : ''].filter(Boolean).join(' · ');
-                const status = [running ? translateUi("{0} 执行中", running) : '', failed ? translateUi("{0} 工具失败", failed) : ''].filter(Boolean).join(' · ');
+                const plain = this.plain();
+                const label = plain
+                    ? [translateUi("过程"), tools ? translateUi("{0} 个步骤", tools) : ''].filter(Boolean).join(' · ')
+                    : [translateUi("执行记录"), tools ? translateUi("{0} 次工具调用", tools) : '', thinking ? translateUi("{0} 段思考", thinking) : ''].filter(Boolean).join(' · ');
+                const status = plain
+                    ? [running ? translateUi("进行中") : '', failed ? translateUi("{0} 步没成功", failed) : ''].filter(Boolean).join(' · ')
+                    : [running ? translateUi("{0} 执行中", running) : '', failed ? translateUi("{0} 工具失败", failed) : ''].filter(Boolean).join(' · ');
                 const labelNode = group.element.querySelector('.pi-process-label');
                 const statusNode = group.element.querySelector('.pi-process-status');
                 if (labelNode.textContent !== label) labelNode.textContent = label;
@@ -335,10 +343,11 @@
                 const tools = processNodes.reduce((count, node) => count
                     + (node.matches('.pi-tool-row, .pi-bash-message') ? 1 : 0)
                     + (node.querySelectorAll ? node.querySelectorAll('.pi-tool-row, .pi-bash-message').length : 0), 0);
+                const plain = this.plain();
                 const label = [
                     duration != null ? translateUi("用时 {0}", this.formatDuration(duration)) : '',
-                    tools ? translateUi("{0} 次工具调用", tools) : ''
-                ].filter(Boolean).join(' · ') || translateUi("执行记录");
+                    tools ? (plain ? translateUi("{0} 个步骤", tools) : translateUi("{0} 次工具调用", tools)) : ''
+                ].filter(Boolean).join(' · ') || (plain ? translateUi("过程") : translateUi("执行记录"));
                 const finalMessage = nodes[finalIndex]._piAssistantMessage || {};
                 const failedTools = processNodes.reduce((count, node) => count
                     + (node.dataset.state === 'error' || node.matches('.pi-bash-message.error') ? 1 : 0)
@@ -346,7 +355,7 @@
                 const status = [
                     finalMessage.stopReason === 'aborted' ? translateUi("回复已停止") : '',
                     finalMessage.errorMessage || finalMessage.stopReason === 'error' ? translateUi("回复失败") : '',
-                    failedTools ? translateUi("{0} 工具失败", failedTools) : ''
+                    failedTools ? (plain ? translateUi("{0} 步没成功", failedTools) : translateUi("{0} 工具失败", failedTools)) : ''
                 ].filter(Boolean).join(' · ');
                 const labelNode = group.element.querySelector('.pi-turn-label');
                 const statusNode = group.element.querySelector('.pi-turn-status');

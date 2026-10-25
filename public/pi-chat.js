@@ -116,13 +116,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const transcriptView = new window.PiTranscriptView({
         content: elements.transcript,
         controls: $('pi-transcript-modes'),
-        scroll: transcriptScroll
+        scroll: transcriptScroll,
+        plain: () => state.botMode
     });
 
     // What Pi is doing before visible output arrives, and the last compaction result, at the tail.
     const activityRoot = $('pi-transcript-activity');
     const transcriptActivity = activityRoot && window.PiTranscriptActivity?.create({ root: activityRoot, content: elements.transcript,
-        onChange: () => transcriptScroll.update(), locateSummary: () => locateCompactionSummary() }) || null;
+        onChange: () => transcriptScroll.update(), locateSummary: () => locateCompactionSummary(),
+        plain: () => state.botMode, waiting: () => state.pendingUi.size > 0 }) || null;
     if (activityRoot) transcriptScroll.resizeObserver?.observe(activityRoot);
     function locateCompactionSummary() {
         const notice = [...elements.transcript.querySelectorAll(':scope > .pi-summary-notice.compactionSummary')].at(-1);
@@ -551,7 +553,16 @@ document.addEventListener('DOMContentLoaded', () => {
         changed: () => renderPendingBanner()
     });
     if (botSetup) document.querySelector('.pi-composer-wrap > .pi-composer')?.before(botSetup.element);
-    const panelOwns = event => userQuestions.owns(event) || Boolean(botSetup?.owns(event));
+    // Careful presets: the Bot's approval requests become an inline card in Bot mode.
+    const botApproval = window.PiBot?.approvalCards({
+        enabled: () => state.botMode,
+        respond: payload => sendExtensionResponse(payload),
+        face: () => botUi?.face('sm') || document.createElement('span'),
+        name: () => botUi?.identity()?.name || '',
+        changed: () => renderPendingBanner()
+    });
+    if (botApproval) document.querySelector('.pi-composer-wrap > .pi-composer')?.before(botApproval.element);
+    const panelOwns = event => userQuestions.owns(event) || Boolean(botSetup?.owns(event)) || Boolean(botApproval?.owns(event));
     const questionReceipts = window.PiUserQuestion.receipts();
     const resultCards = message => [deliveryCards.render(message), questionReceipts.render(message)].filter(Boolean);
     const turnEdits = new window.PiTurnEdits({
@@ -946,6 +957,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const chatKnowledge = window.PiChatKnowledge?.create({ root: document.getElementById('pi-chat-knowledge'), fetch: apiFetch,
         transcript: elements.transcript, anchors: () => state.messageAnchors,
+        agentName: () => state.botMode ? botUi?.identity()?.name || '' : '',
         scope: () => state.connected && state.session?.agentProfile?.id && !state.session.ephemeral && state.profileLearningSupported
             ? { cwd: state.cwd, sessionId: state.session.id, profileId: state.session.agentProfile.id, generation: state.socketGeneration, busy: knowledgeBusy() } : null });
     // Media plans become confirmation cards in the conversation (chat is the main media entry).
@@ -1029,6 +1041,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let restored = false;
             const savedProject = localStorage.getItem('pi.web.cwd');
             $('workspace-bot-toggle').hidden = status.bots !== true;
+            document.body.classList.toggle('pv-bots-on', status.bots === true);
             if (!state.assistantMode && !state.botMode && transfer.movesEnabled && initialParams?.get('cwd') && initialParams?.get('sessionId')) {
                 const result = await apiFetch('/api/pi/sessions/' + encodeURIComponent(initialParams.get('sessionId')) + '/resolve?cwd=' + encodeURIComponent(initialParams.get('cwd')));
                 if (selectionEpoch === state.projectSelectionEpoch && !state.assistantMode && !state.botMode) {
@@ -1735,7 +1748,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const profiles = await apiFetch('/api/pi/profiles');
         if (epoch !== state.assistantEpoch || !state.assistantMode) return;
         if (profiles?.version !== 1 || !Array.isArray(profiles.profiles)) throw new Error(translateUi('助手身份数据不可用'));
-        state.assistantProfiles = profiles.profiles.filter(profile => profile.enabled);
+        // Bots are chatted with on the Bot page; a link here for one of them goes there.
+        const isBot = profile => Boolean(profile?.bot) && typeof profile.bot === 'object';
+        const requestedBot = requested.profileId ? profiles.profiles.find(profile => profile.id === requested.profileId && isBot(profile)) : null;
+        if (requestedBot && document.body.classList.contains('pv-bots-on')) {
+            window.PiWorkspaceRoute?.navigate('bot', { profileId: requestedBot.id }, true); return;
+        }
+        state.assistantProfiles = profiles.profiles.filter(profile => profile.enabled && !isBot(profile));
         state.profileInventory = profiles.profiles;
         const selector = $('pi-assistant-profile');
         selector.replaceChildren();
@@ -2970,6 +2989,15 @@ document.addEventListener('DOMContentLoaded', () => {
         return content.filter(block => block.type === 'text').map(block => block.text).join('\n');
     }
 
+    // Bot mode signs every reply with the Bot's face and name, while streaming and after.
+    function signBotReply(header) {
+        const identity = header && state.botMode ? botUi?.identity() : null;
+        if (!identity) return;
+        header.querySelector(':scope > .pi-bot-face')?.remove();
+        header.prepend(botUi.face('xs'));
+        const name = header.querySelector(':scope > strong'); if (name) name.textContent = identity.name;
+    }
+
     function createMessageElement(message, showReplyActions = false, lazyTools = false, options = {}) {
         const element = createMessageContentElement(message, showReplyActions, lazyTools, options);
         if (element && message.role === 'custom') element._piCustomMessage = message;
@@ -3107,7 +3135,7 @@ document.addEventListener('DOMContentLoaded', () => {
             header.append(strong, badge);
         } else {
             header.innerHTML = `<strong>${title}</strong>${model}`;
-            if (botIdentity) header.prepend(botUi.face('xs'));
+            if (botIdentity) signBotReply(header);
         }
         if (role === 'assistant' && message.pivaneSpeed) {
             const speed = document.createElement('span'); speed.className = 'pi-message-speed';
@@ -3829,6 +3857,7 @@ document.addEventListener('DOMContentLoaded', () => {
         article.className = 'pi-message assistant streaming';
         if (message.timestamp != null) article.dataset.messageKey = JSON.stringify([message.role, message.timestamp, '']);
         article.innerHTML = `<header><strong>Pi</strong><span class="pi-stream-label">${translateUi("生成中")}</span></header><div class="pi-message-body"></div>`;
+        signBotReply(article.querySelector(':scope > header'));
         elements.transcript.querySelector('.pi-empty-state')?.remove();
         elements.transcript.appendChild(article);
         state.liveMessage = { article, blocks: new Map(), message, pending: new Map(), frame: null, generation: state.socketGeneration };
@@ -4057,6 +4086,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderPendingUi() {
         userQuestions.sync(state.pendingUi, state.connected);
         botSetup?.sync(state.pendingUi, state.connected);
+        botApproval?.sync(state.pendingUi, state.connected);
+        if (state.botMode) transcriptActivity?.render();
         renderPendingBanner();
         renderActivityBadges();
         setStreaming(state.streaming);
@@ -5196,6 +5227,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     new MutationObserver(() => { if (isViewingSession()) void acknowledgeRenderedReply(); })
         .observe(elements.inspector, { attributes: true, attributeFilter: ['class'] });
+    // Bot mode shows the right panel only as a file preview; any other pane closes it again
+    // (its phone scrim follows the open class, so a hidden pane must not stay open).
+    const closeBotInspector = () => {
+        if (state.botMode && elements.inspector.classList.contains('open') && !elements.inspector.classList.contains('show-changes')) elements.inspector.classList.remove('open');
+    };
+    new MutationObserver(closeBotInspector).observe(elements.inspector, { attributes: true, attributeFilter: ['class'] });
     $('pi-import-session').addEventListener('click', () => { closeProjectDialog(); transfer.openImport(state.cwd); });
     elements.projectButton.addEventListener('click', openProjectDialog);
     elements.projectDialogClose.addEventListener('click', closeProjectDialog);
@@ -5288,6 +5325,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tab === 'bot' && !wasBot) state.botReturnCwd = state.cwd;
         state.botMode = tab === 'bot';
         $('chat-tab').classList.toggle('pi-bot-mode', state.botMode);
+        if (state.botMode && !wasBot) elements.inspector.classList.remove('open');
         if (state.botMode) {
             state.assistantMode = false; state.assistantEpoch++;
             $('pi-assistant-switcher').hidden = true;
@@ -5343,11 +5381,7 @@ document.addEventListener('DOMContentLoaded', () => {
         onChange: kind => {
             // A new name or face shows in the open conversation's replies at once.
             if (kind === 'identity' && state.botMode && elements.transcript.querySelector(':scope > .pi-bot-empty')) renderEmptySession();
-            if (kind === 'identity' && state.botMode) elements.transcript.querySelectorAll('.pi-message.assistant > header').forEach(header => {
-                const identity = botUi.identity(); if (!identity) return;
-                header.querySelector(':scope > .pi-bot-face')?.replaceWith(botUi.face('xs'));
-                const name = header.querySelector(':scope > strong'); if (name) name.textContent = identity.name;
-            });
+            if (kind === 'identity' && state.botMode) elements.transcript.querySelectorAll('.pi-message.assistant > header').forEach(signBotReply);
             if (kind === 'empty' && state.botMode) { disconnectSocket(true); state.session = null; clearSessionView(); }
         } });
     window.addEventListener('workspace:agent-profiles-changed', () => { void botUi?.refresh(); });

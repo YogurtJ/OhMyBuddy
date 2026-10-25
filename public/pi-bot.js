@@ -297,7 +297,7 @@
             void window.PiBotSettings.open({ api: this.api, toast: this.toast, profileId, face,
                 onSaved: async () => { await this.refresh(); },
                 // Memory, about-you notes and learning keep living on the identity page.
-                onMemory: () => window.PiWorkspaceRoute?.navigate('profiles', { profileId }),
+                onMemory: () => window.PiWorkspaceRoute?.navigate('profiles', { profileId, section: 'user' }),
                 // Getting acquainted again happens in the main chat; the Bot starts once asked.
                 onRestart: async () => {
                     const main = this.bot()?.windows.find(item => item.kind === 'main');
@@ -579,6 +579,69 @@
         return { element: panel, owns, sync, hide };
     }
 
+    // ---- approval cards ----------------------------------------------------------------
+    // In the careful presets the worker asks with one native confirm (server/bot/bot-guard.js)
+    // before a gated step runs. The card says what the Bot wants to do; the message carries
+    // the kind on its first line and the detail after a blank line. One request at a time.
+    const APPROVAL_TITLE = '允许这一步吗？ / Allow this step?';
+    const APPROVAL_KINDS = {
+        command: name => translateUi("{0} 想运行一条命令", name),
+        delegate: name => translateUi("{0} 想把这件事交给另一个助手", name),
+        outside: name => translateUi("{0} 想改工作目录以外的文件", name),
+        write: name => translateUi("{0} 想写入文件", name),
+        memory: name => translateUi("{0} 想记下这件事", name),
+        action: name => translateUi("{0} 想做这一步", name)
+    };
+    function parseApproval(event) {
+        if (event?.method !== 'confirm' || event.title !== APPROVAL_TITLE) return null;
+        const match = /^([a-z]+)\n\n([\s\S]*)$/.exec(typeof event.message === 'string' ? event.message : '');
+        return match && Object.hasOwn(APPROVAL_KINDS, match[1]) ? { kind: match[1], detail: match[2] } : null;
+    }
+
+    function createApprovalCards({ enabled, respond, face: currentFace, name, changed }) {
+        const panel = el('section', 'pi-bot-setup pi-bot-approval'); panel.hidden = true;
+        panel.setAttribute('role', 'region'); panel.setAttribute('aria-label', translateUi("等你确认"));
+        let current = null;
+        const owns = event => enabled() && Boolean(parseApproval(event));
+
+        function hide() { if (!current && panel.hidden) return; current = null; panel.hidden = true; panel.replaceChildren(); changed?.(); }
+
+        function render(waiting) {
+            const { event, kind, detail } = current;
+            const head = el('header', 'pi-bot-setup-head');
+            head.append(currentFace(), el('strong', null, APPROVAL_KINDS[kind](name() || 'Bot')));
+            const body = el('pre', `pi-bot-approval-detail is-${kind}`, detail);
+            body.tabIndex = 0;
+            const foot = el('footer', 'pi-bot-setup-foot');
+            const note = el('p', 'pi-bot-setup-note', waiting > 0 ? translateUi("后面还有 {0} 步等你确认", waiting) : '');
+            const deny = el('button', 'pi-bot-setup-later', translateUi("不要")); deny.type = 'button';
+            const allow = el('button', 'pi-bot-primary pi-bot-approval-allow', translateUi("允许")); allow.type = 'button';
+            const answer = confirmed => {
+                if (current?.event.id !== event.id || current.answered) return;
+                current.answered = true; deny.disabled = allow.disabled = true;
+                respond({ id: event.id, confirmed });
+            };
+            deny.addEventListener('click', () => answer(false));
+            allow.addEventListener('click', () => answer(true));
+            foot.append(note, deny, allow);
+            panel.replaceChildren(head, body, foot);
+            panel.hidden = false;
+        }
+
+        // Called whenever pending requests change; the answered request leaves when the
+        // server reports it resolved.
+        function sync(pending, connected) {
+            const requests = connected && enabled() ? [...pending.values()].filter(event => parseApproval(event)) : [];
+            if (!requests.length) { hide(); return; }
+            const event = requests[0];
+            if (current?.event.id !== event.id) current = { event, ...parseApproval(event), answered: false };
+            else if (current.answered) return;
+            render(requests.length - 1); changed?.();
+        }
+
+        return { element: panel, owns, sync, hide };
+    }
+
     // ---- earlier conversation of a window ----------------------------------------------
     // Each earlier generation of the open window is a read-only archive above the live
     // transcript, loaded from the server (no worker). Newest first; older ones on request.
@@ -646,5 +709,6 @@
         return { open, reset };
     }
 
-    window.PiBot = Object.freeze({ create: options => new PiBotUi(options), setupCards: createSetupCards, history: createWindowHistory, face });
+    window.PiBot = Object.freeze({ create: options => new PiBotUi(options), setupCards: createSetupCards, approvalCards: createApprovalCards,
+        history: createWindowHistory, face });
 })();

@@ -606,6 +606,9 @@
     .nav-menu [data-tab="media"],
     .nav-menu [data-tab="profiles"],
     .nav-menu [data-tab="extensions"] { display: none; }
+    /* With Bots available, assistant conversations live in the More menu (D-024). */
+    body.pv-bots-on .nav-menu [data-tab="assistant"] { display: none; }
+    body:not(.pv-bots-on) .workspace-more-menu [data-more-tab="assistant"] { display: none; }
 
     .nav-menu .workspace-more-toggle { display: flex; }
 

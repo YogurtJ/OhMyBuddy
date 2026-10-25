@@ -4,6 +4,7 @@
 // session generation is resolved here. Profile and window writes run under the shared
 // profile/settings reservation (reserved synchronously, before any await).
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { getSdk } = require('../pi-session-store');
@@ -73,10 +74,28 @@ class BotService extends EventEmitter {
         return { profile, bot };
     }
 
+    // Where Bot workspaces go: the home folder when it is an allowed project, else the first
+    // allowed project root. Never the service's working directory or the Pivane install
+    // (or anything inside them): that is where the generic default project falls back to.
+    workspaceBase() {
+        const inside = (child, parent) => child === parent || child.startsWith(parent.endsWith(path.sep) ? parent : parent + path.sep);
+        const real = value => { try { return fs.realpathSync.native(value); } catch { return path.resolve(value); } };
+        const avoid = [real(process.cwd()), real(path.resolve(__dirname, '..', '..'))];
+        for (const candidate of [os.homedir(), ...(this.store.roots || [])]) {
+            try {
+                const resolved = this.store.resolveProject(candidate);
+                if (avoid.some(blocked => inside(resolved, blocked))) continue;
+                fs.accessSync(resolved, fs.constants.R_OK | fs.constants.W_OK | fs.constants.X_OK);
+                return resolved;
+            } catch {}
+        }
+        return null;
+    }
+
     // A private directory inside the allowed project roots; named by ID so renaming a Bot
     // never moves its sessions (a native session cwd is immutable).
     prepareWorkspace(profileId, name, language) {
-        const base = this.store.defaultProject();
+        const base = this.workspaceBase();
         if (!base) fail('No accessible project directory is available for Bot workspaces', 409);
         const parent = path.join(base, WORKSPACE_PARENT);
         for (const directory of [parent, path.join(parent, `bot-${profileId.slice(0, 8)}`)]) {

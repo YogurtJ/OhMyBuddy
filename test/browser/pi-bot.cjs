@@ -17,6 +17,19 @@ const messages = [
         api: 'openai-completions', stopReason: 'stop', usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
         timestamp: Date.parse('2026-10-24T06:02:05Z') }
 ];
+// A turn with one step (a delivered file) before the final reply.
+const DELIVERY = 'd'.repeat(64), usage = messages[1].usage;
+const toolTurn = [
+    { role: 'user', content: '把计划做成文件', timestamp: Date.parse('2026-10-24T06:03:00Z') },
+    { role: 'assistant', content: [{ type: 'toolCall', id: 'tc-1', name: 'deliver_files', arguments: { files: ['计划.md'] } }], model: 'fixture-model', provider: 'fixture',
+        api: 'openai-completions', stopReason: 'toolUse', usage, timestamp: Date.parse('2026-10-24T06:03:04Z') },
+    { role: 'toolResult', toolCallId: 'tc-1', toolName: 'deliver_files', content: [{ type: 'text', text: 'Delivered 1 file' }], isError: false,
+        details: { pivaneDeliverable: { reference: { id: DELIVERY, manifestRevision: 'e'.repeat(64) }, title: '一周学习计划',
+            files: [{ name: '计划.md', size: 40, href: `#pi-delivery=${DELIVERY}/0` }] } }, timestamp: Date.parse('2026-10-24T06:03:05Z') },
+    { role: 'assistant', content: [{ type: 'text', text: '放好啦。' }], model: 'fixture-model', provider: 'fixture',
+        api: 'openai-completions', stopReason: 'stop', usage, timestamp: Date.parse('2026-10-24T06:03:15Z') }
+];
+const APPROVAL = '允许这一步吗？ / Allow this step?';
 
 (async () => {
     const app = express(); app.use(express.static(path.join(__dirname, '../../public')));
@@ -49,7 +62,11 @@ const messages = [
             await page.route(/https:\/\/(fonts\.googleapis\.com|fonts\.gstatic\.com)\//, route => route.abort());
             await page.route('**/api/**', async route => {
                 const url = new URL(route.request().url()), pathname = url.pathname, method = route.request().method();
-                if (pathname === '/api/pi/status') return route.fulfill({ json: { ok: true, bots: true, agentProfiles: true, projectRoots: ['/fixture'], defaultProject: geek } });
+                if (pathname === '/api/pi/status') return route.fulfill({ json: { ok: true, bots: true, agentProfiles: true, deliverables: true, filePreviews: true, fileViewer: true,
+                    projectRoots: ['/fixture'], defaultProject: geek } });
+                if (pathname === '/api/pi/deliverables') return route.fulfill({ json: { name: '计划.md', mime: 'text/markdown', size: 40, kind: 'markdown',
+                    createdAt: '2026-10-24T06:03:05Z', revision: 'f'.repeat(64),
+                    content: '# 一周学习计划\n\n周六 15:00 数学' } });
                 if (pathname === '/api/pi/bots/readiness') return route.fulfill({ json: { models: modelCount } });
                 if (pathname === '/api/pi/bots' && method === 'GET') return route.fulfill({ json: { version: 1, revision, bots } });
                 if (pathname === '/api/pi/bots' && method === 'POST') {
@@ -202,11 +219,11 @@ const messages = [
                 assert.deepEqual(responses.map(item => [item.id, item.value]), [['ui-1', '保存 / Save']], 'Save is answered only after the server saved');
                 await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-who strong')?.textContent === '小狸');
                 // Reopen with a conversation to check replies carry the Bot's identity.
-                history = messages;
+                history = [...messages, ...toolTurn];
                 await page.evaluate(() => window.PiWorkspaceRoute.navigate('chat'));
                 await page.waitForFunction(() => !document.querySelector('#chat-tab').classList.contains('pi-bot-mode'));
                 await page.evaluate(id => window.PiWorkspaceRoute.navigate('bot', { profileId: id }), BOT);
-                await page.locator('.pi-message.assistant').waitFor({ timeout: 8000 });
+                await page.locator('.pi-message.assistant').first().waitFor({ timeout: 8000 });
                 assert.equal(await page.locator('.pi-message.assistant > header > strong').first().textContent(), '小狸');
                 assert.equal(await page.locator('.pi-message.assistant > header .pi-bot-face').first().textContent(), '🦊');
                 assert.equal(await page.locator('.pi-message.assistant > header > span:not(.pi-bot-face)').first().isVisible().catch(() => false), false, 'no model name');
@@ -216,6 +233,57 @@ const messages = [
                 assert.match(await page.locator('#pi-bot-header .pi-bot-who strong').textContent(), /小狸/);
                 await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-status')?.dataset.state === 'connected');
                 assert.deepEqual(opened, ['gen-0', 'gen-0']);
+
+                // 2b. Everyday words for a turn's steps; a delivered file opens the preview panel,
+                // and nothing else of the right panel (or its phone scrim) shows in Bot mode.
+                const turnLabel = await page.locator('.pi-turn-group .pi-turn-label').first().textContent();
+                assert.match(turnLabel, /^用时 .+ · 1 个步骤$/, turnLabel);
+                await page.locator('.pi-delivery-receipt-open').first().click();
+                await page.locator('#pi-inspector.open.show-changes').waitFor({ timeout: 8000 });
+                assert.equal(await page.locator('#pi-inspector').isVisible(), true, 'the file preview shows in Bot mode');
+                for (const selector of ['#pi-inspector-tabs', '#pi-inspector-title', '#pi-files-toolbar', '#pi-file-explorer', '#pi-changes-file-list'])
+                    assert.equal(await page.locator(selector).isVisible(), false, `${selector} stays hidden in the preview`);
+                // The delivered snapshot is read (the fixture page has no Markdown renderer, so the body itself is not checked).
+                await page.waitForFunction(() => /交付快照/.test(document.querySelector('#pi-file-status')?.textContent || ''), null, { timeout: 8000 });
+                assert.equal(await page.locator('#pi-changes-title').textContent(), '计划.md');
+                if (evidence) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(evidence, `bot-preview-${width}.png`) }); }
+                await page.locator('#pi-close-inspector').click();
+                await page.waitForFunction(() => !document.querySelector('#pi-inspector').classList.contains('open'));
+                await page.evaluate(() => { const panel = document.getElementById('pi-inspector'); panel.classList.remove('show-changes'); panel.classList.add('open'); });
+                await page.waitForFunction(() => !document.querySelector('#pi-inspector').classList.contains('open'));
+                assert.equal(await page.locator('.pi-drawer-scrim:not(.hidden)').count(), 0, 'no empty scrim');
+
+                // 2c. A streaming reply is signed by the Bot, and careful-mode approvals are inline cards.
+                socket.send(JSON.stringify({ type: 'agent_start' }));
+                socket.send(JSON.stringify({ type: 'message_start', message: { role: 'assistant', content: [], timestamp: Date.now() } }));
+                await page.locator('.pi-message.assistant.streaming').waitFor({ state: 'attached', timeout: 8000 });
+                assert.equal(await page.locator('.pi-message.assistant.streaming > header > strong').textContent(), '小狸');
+                assert.equal(await page.locator('.pi-message.assistant.streaming > header .pi-bot-face').count(), 1);
+                socket.send(JSON.stringify({ type: 'tool_execution_start', toolCallId: 'call-2', toolName: 'bash', args: { command: 'ls -la' } }));
+                socket.send(JSON.stringify({ type: 'extension_ui_request', id: 'ui-2', method: 'confirm', title: APPROVAL, message: 'command\n\nls -la' }));
+                await page.locator('.pi-bot-approval:not([hidden])').waitFor({ timeout: 8000 });
+                assert.equal(await page.locator('#pi-request-dialog[open]').count(), 0, 'no generic dialog for an approval');
+                assert.equal(await page.locator('.pi-bot-approval header strong').textContent(), '小狸 想运行一条命令');
+                assert.equal(await page.locator('.pi-bot-approval .pi-bot-approval-detail').textContent(), 'ls -la');
+                await page.waitForFunction(() => document.querySelector('#pi-transcript-activity .pi-activity-label')?.textContent === '等你确认');
+                if (evidence) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(evidence, `bot-approval-${width}.png`) }); }
+                await page.locator('.pi-bot-approval-allow').click();
+                assert.deepEqual(responses.at(-1), { type: 'extension_ui_response', id: 'ui-2', confirmed: true });
+                socket.send(JSON.stringify({ type: 'gateway_ui_resolved', id: 'ui-2' }));
+                await page.waitForFunction(() => document.querySelector('.pi-bot-approval').hidden);
+                socket.send(JSON.stringify({ type: 'extension_ui_request', id: 'ui-3', method: 'confirm', title: APPROVAL, message: 'outside\n\n/home/me/notes.md' }));
+                socket.send(JSON.stringify({ type: 'extension_ui_request', id: 'ui-4', method: 'confirm', title: APPROVAL, message: 'memory\n\n叫我小王' }));
+                await page.waitForFunction(() => /后面还有 1 步/.test(document.querySelector('.pi-bot-approval:not([hidden])')?.textContent || ''));
+                assert.equal(await page.locator('.pi-bot-approval header strong').textContent(), '小狸 想改工作目录以外的文件');
+                await page.locator('.pi-bot-approval .pi-bot-setup-later').click();
+                assert.deepEqual(responses.at(-1), { type: 'extension_ui_response', id: 'ui-3', confirmed: false });
+                socket.send(JSON.stringify({ type: 'gateway_ui_resolved', id: 'ui-3' }));
+                await page.waitForFunction(() => document.querySelector('.pi-bot-approval header strong')?.textContent === '小狸 想记下这件事');
+                socket.send(JSON.stringify({ type: 'gateway_ui_resolved', id: 'ui-4' }));
+                await page.waitForFunction(() => document.querySelector('.pi-bot-approval').hidden);
+                socket.send(JSON.stringify({ type: 'tool_execution_end', toolCallId: 'call-2', toolName: 'bash', result: { content: [{ type: 'text', text: 'README.md' }] }, isError: false }));
+                socket.send(JSON.stringify({ type: 'message_end', message: { role: 'assistant', content: [{ type: 'text', text: '好了。' }], stopReason: 'stop', timestamp: Date.now() } }));
+                socket.send(JSON.stringify({ type: 'agent_end', messages: [] }));
                 if (width < 700) {
                     await page.locator('#pi-bot-header .pi-bot-menu').click();
                     await page.locator('#pi-session-pane.open .pi-bot-window[aria-current="page"]').waitFor();
@@ -331,7 +399,12 @@ const messages = [
                 if (width < 700) {
                     const cells = await page.evaluate(() => [...document.querySelectorAll('#workspace-sidebar .nav-btn, #workspace-sidebar .sidebar-tool-button')]
                         .filter(node => node.offsetParent).map(node => Math.round(node.getBoundingClientRect().width)));
-                    assert.equal(cells.length, 6, JSON.stringify(cells));
+                    // Assistant conversations live in More once Bots are available (D-024).
+                    assert.equal(cells.length, 5, JSON.stringify(cells));
+                    assert.equal(await page.locator('.nav-menu [data-tab="assistant"]').isVisible(), false);
+                    await page.locator('#workspace-more-toggle').click();
+                    assert.equal(await page.evaluate(() => document.activeElement?.dataset.moreTab), 'assistant');
+                    await page.locator('#workspace-more-toggle').click();
                     assert.ok(cells.every(cell => Math.abs(cell - cells[0]) <= 1), `equal bottom-bar cells ${JSON.stringify(cells)}`);
                 }
                 assert.deepEqual(errors, []);

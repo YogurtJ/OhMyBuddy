@@ -10321,9 +10321,9 @@
         ["放手", "Hands-off"],
         ["大部分事直接办好。删东西、改工作目录以外的文件、对外发消息、花钱多的事会先问你。", "Gets most things done directly. Asks you first before deleting things, changing files outside its workspace, messaging other people, or spending real money."],
         ["稳妥", "Careful"],
-        ["查资料、记东西、在工作目录里写文件直接做；运行命令前也先问你。", "Looks things up, takes notes and writes files in its workspace directly; also asks before running commands."],
+        ["查资料、记东西、在工作目录里写文件直接做；运行命令、改工作目录以外的文件、交给别的助手前，会弹出确认等你允许。", "Looks things up, takes notes and writes files in its workspace directly; before running a command, changing files outside its workspace or handing work to another assistant, it shows an approval card and waits for you."],
         ["每次都问", "Ask every time"],
-        ["除了看和回答，动手做任何事前都先说一声，等你同意。", "Apart from reading and answering, says what it is about to do and waits for your go-ahead."],
+        ["除了看和回答，每一步动手前都会弹出确认，等你允许。", "Apart from reading and answering, every step shows an approval card and waits for you."],
         ["还有修改没保存。再关一次就放弃这些修改。", "You have unsaved changes. Close again to discard them."],
         ["跟随默认", "Use the default"],
         ["比如：帮我安排生活琐事、陪我练英语", "For example: sort out everyday chores, practise English with me"],
@@ -10333,7 +10333,7 @@
         ["思考程度", "Thinking"],
         ["只影响 {0}，不改其他 Bot 和 Pi Agent。", "Only affects {0}, not your other Bots or Pi Agent."],
         ["暂时读不到模型列表，现在的选择会保留。", "The model list can't be read right now; the current choice is kept."],
-        ["这是 {0} 的做事习惯，不是安全隔离：它能使用这台电脑上的工具。密码、密钥这类东西它一律不碰。", "This is how {0} chooses to work, not a security sandbox: it can use the tools on this computer. It never touches passwords, keys and the like."],
+        ["“稳妥”和“每次都问”会在动手前弹出确认；“放手”靠 {0} 自觉先问。这些都不是安全隔离：它能使用这台电脑上的工具。密码、密钥这类东西它一律不碰。", "“Careful” and “Ask every time” show an approval card before acting; in “Hands-off”, {0} decides when to ask. None of these is a security sandbox: it can use the tools on this computer. It never touches passwords, keys and the like."],
         ["记忆和关于你", "Memory and about you"],
         ["重新互相认识", "Get acquainted again"],
         ["再点一次确认：在主聊天里重新认识", "Tap again to confirm: start over in the main chat"],
@@ -10355,7 +10355,21 @@
         ["这段聊天已经换到新的记录文件", "This chat has moved to a new conversation file."],
         ["Bot 的主线程就是它的主聊天，不能在这里更改", "A Bot's main thread is its main chat and can't be changed here."],
         ["Bot 的主线程就是它的主聊天，定时任务会进入它当前的聊天。", "A Bot's main thread is its main chat. Scheduled tasks go to its current chat."],
-        ["打开主聊天", "Open main chat"]
+        ["打开主聊天", "Open main chat"],
+        ["{0} 想运行一条命令", "{0} wants to run a command"],
+        ["{0} 想把这件事交给另一个助手", "{0} wants to hand this to another assistant"],
+        ["{0} 想改工作目录以外的文件", "{0} wants to change a file outside its workspace"],
+        ["{0} 想写入文件", "{0} wants to write a file"],
+        ["{0} 想记下这件事", "{0} wants to remember this"],
+        ["{0} 想做这一步", "{0} wants to take this step"],
+        ["后面还有 {0} 步等你确认", "{0} more steps waiting for you"],
+        ["不要", "Don't"],
+        ["{0} 记下了", "{0} noted"],
+        ["过程", "Steps"],
+        ["{0} 个步骤", "{0} steps"],
+        ["{0} 步没成功", "{0} steps failed"],
+        ["连接不太顺，正在重试（第 {0} 次）", "Connection hiccup, retrying (attempt {0})"],
+        ["正在处理", "Working on it"]
     );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();
