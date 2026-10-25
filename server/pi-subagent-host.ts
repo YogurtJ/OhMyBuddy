@@ -92,6 +92,11 @@ function publicData(method: string, data: any) {
         unresolvedAsyncChildren: Number.isInteger(data.unresolvedAsyncChildren) ? data.unresolvedAsyncChildren : 0,
         // Child session file paths stay private to the worker.
         children: Array.isArray(data.children) ? data.children.slice(0, 100).map((child: any) => ({ label: text(child?.label), agent: text(child?.agent), usage: child?.usage ?? null })) : [] } } : { cost: null };
+    // Steering receipts distinguish delivered from queued; resume returns the new async run.
+    if (method === 'steer') return { text: text(data.text), isError: data.isError === true,
+        delivery: text(data.details?.steering?.deliveryStatus), state: text(data.details?.steering?.state) };
+    if (method === 'resume') return { text: text(data.text), isError: data.isError === true,
+        runId: text(data.details?.runId ?? data.details?.asyncId) };
     return { text: text(data.text), isError: data.isError === true };
 }
 
