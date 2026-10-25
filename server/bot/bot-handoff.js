@@ -11,6 +11,8 @@ const HANDOFF_MESSAGE = 'pivane-bot-handoff';
 // kept after it (its keepRecentTokens), which the model was seeing anyway.
 const MAX_TAIL_CHARS = 64000;
 const MAX_TAIL_MESSAGES = 400;
+// Pi's own summary (after a fallback) is clipped; structured sections are bounded when read
+// and the notebook is always rendered whole, so the seed can be marked as showing it.
 const MAX_SUMMARY_CHARS = 24000;
 
 function textOf(content) {
@@ -41,6 +43,7 @@ function buildHandoff(manager, { now = new Date().toISOString() } = {}) {
         }
     }
     const state = ledger.replay(branch);
+    if (!ledger.storable(state)) throw Object.assign(new Error('The notebook of this chat cannot be carried over'), { status: 409 });
     // The model-visible projection after the latest compaction; only plain user/assistant text is carried.
     // complete: every user/assistant text since the latest summary is in the tail.
     const tail = [];
@@ -60,7 +63,7 @@ function buildHandoff(manager, { now = new Date().toISOString() } = {}) {
         tail.unshift(line); used += line.length;
     }
     const sectionsText = [];
-    if (sections) sectionsText.push(clip(summaryText(sections, state, now), MAX_SUMMARY_CHARS));
+    if (sections) sectionsText.push(summaryText(sections, state, now));
     else {
         if (summary) sectionsText.push('## Earlier conversation (summary)\n' + clip(summary.trim(), MAX_SUMMARY_CHARS));
         if (state.items.length) sectionsText.push('## Notebook\n' + ledger.renderLedger(state, { now }));

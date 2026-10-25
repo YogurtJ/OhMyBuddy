@@ -7,7 +7,9 @@ const { createHash } = require('node:crypto');
 //   - Bot compactions: details.pivaneBot.ledger = { ops, snapshot } (ops applied, then the full state)
 //   - edits from the notebook panel: custom entries `pivane-bot-ledger` with { v: 1, ops }
 //   - each generation's seed: custom entry `pivane-bot-ledger` with { v: 1, snapshot }
-// A snapshot replaces the state; operations apply in branch order. Deleting leaves a tombstone.
+// A snapshot replaces the state; operations apply in branch order. Deleting leaves a tombstone
+// (kind, source and a hash of the text, so a summary does not bring the note back); at most
+// MAX_TOMBSTONES are kept, oldest dropped first (ids never repeat: nextSeq only grows).
 // Everything here is a pure function: no I/O, no clocks unless a time is passed in.
 
 const LEDGER_ENTRY = 'pivane-bot-ledger';
@@ -19,6 +21,8 @@ const MAX_TEXT = 500;
 const MAX_QUOTE = 300;
 const SOURCE_ROLES = Object.freeze(['user', 'assistant', 'toolResult']);
 const MAX_ITEMS = 1000;
+const MAX_TOMBSTONES = 1000;
+const HASH = /^[0-9a-f]{16}$/;
 const MAX_OPS = 64;
 const ID = /^n[1-9]\d{0,6}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?$/;
@@ -63,6 +67,11 @@ function sourceQuote(text) {
     return folded.length > MAX_QUOTE ? folded.slice(0, MAX_QUOTE - 1) + '…' : folded;
 }
 
+// Hash of a note's text as the program compares texts (spacing, width and case folded).
+function textHash(text) {
+    return createHash('sha256').update(String(text ?? '').normalize('NFKC').replace(/\s+/g, ' ').trim().toLowerCase()).digest('hex').slice(0, 16);
+}
+
 function validTime(value) {
     return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : null;
 }
@@ -78,7 +87,9 @@ function cloneLedger(state) {
 // Validates a snapshot as stored in a seed or compaction entry. Invalid -> null.
 function readSnapshot(value) {
     if (!object(value) || value.version !== 1 || !Number.isSafeInteger(value.nextSeq) || value.nextSeq < 1 || !Array.isArray(value.items)
-        || value.items.length > MAX_ITEMS) return null;
+        || value.items.length > MAX_ITEMS + MAX_TOMBSTONES) return null;
+    const deleted = value.items.filter(item => item?.status === 'deleted').length;
+    if (deleted > MAX_TOMBSTONES || value.items.length - deleted > MAX_ITEMS) return null;
     const seen = new Set(), items = [];
     for (const raw of value.items) {
         if (!object(raw) || !ID.test(raw.id) || seen.has(raw.id) || Number(raw.id.slice(1)) >= value.nextSeq) return null;
@@ -86,9 +97,10 @@ function readSnapshot(value) {
         if (!KINDS.includes(raw.kind) || !STATUSES.includes(raw.status) || !ACTORS.includes(raw.by) || (text === null && raw.status !== 'deleted')
             || due === undefined || source === undefined || !validTime(raw.createdAt) || !validTime(raw.updatedAt)) return null;
         if (raw.supersedes !== undefined && raw.supersedes !== null && !ID.test(raw.supersedes)) return null;
+        if (raw.hash !== undefined && (raw.status !== 'deleted' || !HASH.test(raw.hash))) return null;
         seen.add(raw.id);
-        items.push({ id: raw.id, kind: raw.kind, text: text ?? '', status: raw.status, by: raw.by, due, source,
-            supersedes: raw.supersedes ?? null, createdAt: raw.createdAt, updatedAt: raw.updatedAt });
+        items.push({ id: raw.id, kind: raw.kind, text: raw.status === 'deleted' ? '' : text, status: raw.status, by: raw.by, due, source,
+            supersedes: raw.supersedes ?? null, createdAt: raw.createdAt, updatedAt: raw.updatedAt, ...(raw.hash ? { hash: raw.hash } : {}) });
     }
     return { version: 1, nextSeq: value.nextSeq, items };
 }
@@ -151,7 +163,16 @@ function applyOp(state, op) {
     }
     const item = next.items.find(entry => entry.id === op.id);
     if (!item || item.status === 'deleted') fail(`No note ${op.id}`);
-    if (op.op === 'delete') { item.status = 'deleted'; item.text = ''; item.updatedAt = op.at; return next; }
+    if (op.op === 'delete') {
+        item.hash = textHash(item.text); item.status = 'deleted'; item.text = ''; item.updatedAt = op.at;
+        const tombstones = next.items.filter(entry => entry.status === 'deleted');
+        if (tombstones.length > MAX_TOMBSTONES) {
+            const drop = new Set(tombstones.sort((a, b) => Date.parse(a.updatedAt) - Date.parse(b.updatedAt) || Number(a.id.slice(1)) - Number(b.id.slice(1)))
+                .slice(0, tombstones.length - MAX_TOMBSTONES).map(entry => entry.id));
+            next.items = next.items.filter(entry => !drop.has(entry.id));
+        }
+        return next;
+    }
     if (op.op === 'status') { item.status = op.status; item.updatedAt = op.at; return next; }
     for (const key of ['text', 'kind', 'due']) if (op[key] !== undefined) item[key] = op[key];
     item.updatedAt = op.at;
@@ -247,6 +268,20 @@ function renderLedger(state, { now = null, recentDays = 21, maxClosed = 30 } = {
     return lines.join('\n');
 }
 
+// One note as it stands now, for telling the model what changed (every field it acts on).
+function describeItem(item) {
+    if (!item) return null;
+    if (item.status === 'deleted') return `[${item.id}] deleted by the user (forget it)`;
+    const due = item.due ? `due ${item.due}` : item.kind === 'commitment' ? 'no due date' : '';
+    return `[${item.id}] (${[item.kind, item.status, due].filter(Boolean).join(', ')}) ${item.text}`;
+}
+
+// Whether a state survives being stored and read back (a seed or compaction snapshot).
+function storable(state) {
+    const read = readSnapshot(JSON.parse(JSON.stringify(state)));
+    return Boolean(read) && ledgerVersion(read) === ledgerVersion(state);
+}
+
 // Short human line for a tool result or a notice to the model.
 function describeOp(op, state) {
     const item = state.items.find(entry => entry.id === op.id);
@@ -264,6 +299,6 @@ function ledgerVersion(state) {
 
 module.exports = {
     ledgerVersion,
-    LEDGER_ENTRY, KINDS, STATUSES, MAX_TEXT, MAX_ITEMS, MAX_QUOTE,
-    sourceQuote, emptyLedger, readSnapshot, normalizeOp, applyOp, prepareOps, replay, entryLedger, renderLedger, describeOp, cloneLedger
+    LEDGER_ENTRY, KINDS, STATUSES, MAX_TEXT, MAX_ITEMS, MAX_TOMBSTONES, MAX_QUOTE,
+    sourceQuote, textHash, describeItem, storable, emptyLedger, readSnapshot, normalizeOp, applyOp, prepareOps, replay, entryLedger, renderLedger, describeOp, cloneLedger
 };

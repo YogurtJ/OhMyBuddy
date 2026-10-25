@@ -7,6 +7,8 @@
 // Pi's session parsing is passed in by the worker extension (this module stays CommonJS).
 const fs = require('node:fs');
 const path = require('node:path');
+const io = require('../pi-file-io');
+const { descriptorPathSync } = require('../pi-file-descriptor');
 const { readWindowRecord } = require('./bot-window-registry');
 const { readWindowBinding } = require('./bot-window-state');
 
@@ -20,30 +22,41 @@ function textOf(content) {
     return content.filter(part => part?.type === 'text' && typeof part.text === 'string').map(part => part.text).join('\n');
 }
 
-// Reads a session file through one descriptor whose identity matches the expected path.
+// Full native identity of a file as stat reports it (BigInt, so nothing is rounded).
+const stampOf = stat => [stat.dev, stat.ino, stat.mode, stat.size, stat.mtimeNs, stat.ctimeNs].map(String).join(':');
+
+// Reads a session file through one descriptor, the way session files are read elsewhere:
+// a regular file (not a link) in the expected directory, opened without following links and
+// without blocking, whose kernel path (Linux /proc, macOS F_GETPATH, Windows HANDLE) and full
+// identity match the path before and after the read.
 function readVerified(file, directory, maxBytes) {
-    if (typeof file !== 'string' || !path.isAbsolute(file) || fs.realpathSync.native(file) !== file || path.dirname(file) !== directory)
+    if (typeof file !== 'string' || !path.isAbsolute(file) || path.dirname(file) !== directory)
         throw new Error('Generation file is outside this chat');
-    const fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    const changed = () => new Error('Generation file changed');
+    const listed = fs.lstatSync(file, { bigint: true });
+    if (!listed.isFile() || listed.isSymbolicLink() || fs.realpathSync.native(file) !== file) throw new Error('Generation file is outside this chat');
+    if (listed.size > BigInt(maxBytes)) throw new Error('Generation file is too large to search');
+    const fd = io.openReadSync(file);
     try {
-        const stat = fs.fstatSync(fd), named = fs.statSync(file);
-        if (!stat.isFile() || stat.dev !== named.dev || stat.ino !== named.ino) throw new Error('Generation file changed');
-        if (process.platform === 'linux' && fs.readlinkSync(`/proc/self/fd/${fd}`) !== file) throw new Error('Generation file changed');
-        if (stat.size > maxBytes) throw new Error('Generation file is too large to search');
-        const buffer = Buffer.alloc(stat.size);
+        const opened = fs.fstatSync(fd, { bigint: true }), identity = io.identity(fd);
+        if (!opened.isFile() || stampOf(opened) !== stampOf(listed) || descriptorPathSync(fd) !== file || !io.sameIdentityAtPath(file, identity)) throw changed();
+        const size = Number(opened.size), buffer = Buffer.alloc(size);
         let offset = 0;
-        while (offset < stat.size) {
-            const read = fs.readSync(fd, buffer, offset, stat.size - offset, offset);
+        while (offset < size) {
+            const read = fs.readSync(fd, buffer, offset, size - offset, offset);
             if (!read) break;
             offset += read;
         }
-        return buffer.subarray(0, offset).toString('utf8');
+        if (offset !== size || stampOf(fs.fstatSync(fd, { bigint: true })) !== stampOf(opened)
+            || stampOf(fs.lstatSync(file, { bigint: true })) !== stampOf(opened) || descriptorPathSync(fd) !== file
+            || !io.sameIdentityAtPath(file, identity) || fs.realpathSync.native(file) !== file) throw changed();
+        return buffer.toString('utf8');
     } finally { fs.closeSync(fd); }
 }
 
 // The window's generations, newest first, each with the branch entries of a verified file.
 // current: { manager } for the live generation. pi: { SessionManager, parseSessionEntries }.
-function windowGenerations({ agentDir, context, current, pi, only = null, now = Date.now }) {
+function windowGenerations({ agentDir, context, current, pi, only = null, now = Date.now, limits = LIMITS }) {
     const window = readWindowRecord(agentDir, context.profileId, context.windowId);
     if (!window?.current || window.current.sessionId !== current.getSessionId()) throw new Error('This chat changed; try again');
     const directory = path.dirname(fs.realpathSync.native(current.getSessionFile()));
@@ -51,14 +64,16 @@ function windowGenerations({ agentDir, context, current, pi, only = null, now = 
         .filter(item => only === null || item.generation === only);
     const started = now(), result = [], skipped = [];
     let bytes = 0;
-    for (const item of list.slice(0, LIMITS.generations)) {
+    for (const item of list.slice(0, limits.generations)) {
         if (item.generation === window.current.generation) {
             result.push({ generation: item.generation, sessionId: item.sessionId, branch: current.getBranch() });
             continue;
         }
-        if (now() - started > LIMITS.ms || bytes > LIMITS.totalBytes) { skipped.push(item.generation); continue; }
+        // Each file is read within what is left of the total, so the total is never exceeded.
+        const remaining = limits.totalBytes - bytes;
+        if (now() - started > limits.ms || remaining <= 0) { skipped.push(item.generation); continue; }
         try {
-            const text = readVerified(item.sessionPath, directory, LIMITS.fileBytes);
+            const text = readVerified(item.sessionPath, directory, Math.min(limits.fileBytes, remaining));
             bytes += Buffer.byteLength(text);
             const manager = pi.SessionManager.inMemory(context.cwd, undefined, pi.parseSessionEntries(text));
             const binding = readWindowBinding(manager);
@@ -67,7 +82,7 @@ function windowGenerations({ agentDir, context, current, pi, only = null, now = 
             result.push({ generation: item.generation, sessionId: item.sessionId, branch: manager.getBranch() });
         } catch { skipped.push(item.generation); }
     }
-    for (const item of list.slice(LIMITS.generations)) skipped.push(item.generation);
+    for (const item of list.slice(limits.generations)) skipped.push(item.generation);
     return { generations: result, skipped: skipped.sort((a, b) => a - b), total: window.generations.length };
 }
 

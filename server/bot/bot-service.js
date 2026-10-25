@@ -15,7 +15,7 @@ const { WINDOW_ENTRY, windowMarker, readWindowBinding } = require('./bot-window-
 const { HANDOFF_MESSAGE, buildHandoff } = require('./bot-handoff');
 const ledger = require('./bot-ledger');
 const { LEDGER_ENTRY } = ledger;
-const { rotationReason } = require('./bot-maintenance');
+const { rotationReason, freshRotationSummary } = require('./bot-maintenance');
 const history = require('./bot-history');
 const setup = require('./bot-setup');
 const { EventEmitter } = require('node:events');
@@ -253,7 +253,9 @@ class BotService extends EventEmitter {
     // old file reserved and its worker stopped) create the successor whose window marker
     // is its last initial entry, then commit the index. Any failure leaves routing on the
     // old generation; recovery decides only from native evidence and never replays turns.
-    async rotateLocked(profileId, windowId, { reason = 'manual', expectedGeneration } = {}) {
+    // requireSummary (automatic rotation, D-033): the predecessor's native branch must end with a
+    // Bot summary that reconciled the kept part; checked again here under the reservation.
+    async rotateLocked(profileId, windowId, { reason = 'manual', expectedGeneration, requireSummary = false } = {}) {
         if (!['size', 'entries', 'age', 'manual'].includes(reason)) fail('Invalid rotation reason');
         // The generation the caller saw is required, so a repeated or stale request never rotates again.
         if (!Number.isSafeInteger(expectedGeneration) || expectedGeneration < 0) fail('Expected generation is required');
@@ -280,6 +282,7 @@ class BotService extends EventEmitter {
                 if (worker) await this.supervisor.stopSession(from.sessionPath);
                 const handoff = await this.store.withSessionRead(window.cwd, from.sessionId, (current, read) => {
                     const manager = read.manager(), binding = readWindowBinding(manager);
+                    if (requireSummary && !freshRotationSummary(manager.getBranch())) fail('The window waits for its next summary before moving on', 409);
                     const result = buildHandoff(manager);
                     read.validate();
                     if (current.path !== from.sessionPath || binding?.windowId !== windowId || binding.generation !== from.generation)
@@ -309,13 +312,13 @@ class BotService extends EventEmitter {
         return { ok: true, window: publicWindow(committed), session: { cwd: window.cwd, id: session.id, path: session.path } };
     }
 
-    // S4 (D-030): after a Bot window run settles or compacts, move the window to a new
-    // generation when its file is large, long or old. Only an idle window rotates; a busy one
-    // is tried again after its next run. Never throws; returns the rotation or null.
-    // S4 (D-030/D-033). trigger: 'compaction' right after a summary was written, else 'completion'.
-    // A new generation starts from a fresh summary, which (made while the generation was due)
-    // also reconciled the notebook with the part kept verbatim. So it moves on only after a
-    // compaction; after an ordinary reply the worker's idle summary runs first.
+    // S4 (D-030/D-033): move the window to a new generation when its file is large, long or old.
+    // trigger: 'compaction' right after a summary was written, else 'completion'. A new generation
+    // starts from a fresh Bot summary that (made while the generation was due) also reconciled the
+    // notebook with the part kept verbatim; the native branch has to show it (freshRotationSummary),
+    // so a Pi fallback summary or a turn finished in between waits for the next summary. After an
+    // ordinary reply the worker's idle summary runs first. Only an idle window rotates.
+    // Never throws; returns the rotation or null.
     async maintainWindow(worker, { now = Date.now(), trigger = 'completion' } = {}) {
         const loaded = worker?.loadedBot, sessionPath = worker?.sessionPath;
         if (!loaded || typeof sessionPath !== 'string' || !this.supervisor) return null;
@@ -329,9 +332,14 @@ class BotService extends EventEmitter {
             const started = window.generations.find(item => item.generation === window.current.generation)?.startedAt ?? window.createdAt;
             const bytes = fs.statSync(sessionPath).size;
             const reason = rotationReason({ bytes, entries: bytes >= 1024 * 1024 ? countLines(sessionPath) : 0, startedAt: started, now });
-            if (!reason || !this.supervisor.isSessionIdle(sessionPath)) return null;
-            if (trigger !== 'compaction') return null;
-            return await this.rotate(loaded.profileId, loaded.windowId, { reason, expectedGeneration: loaded.generation });
+            if (!reason || trigger !== 'compaction' || !this.supervisor.isSessionIdle(sessionPath)) return null;
+            const ready = await this.store.withSessionRead(window.cwd, window.current.sessionId, (session, read) => {
+                const fresh = freshRotationSummary(read.manager().getBranch());
+                read.validate();
+                return session.path === sessionPath && fresh;
+            });
+            if (!ready) return null;
+            return await this.rotate(loaded.profileId, loaded.windowId, { reason, expectedGeneration: loaded.generation, requireSummary: true });
         } catch (error) {
             if (error?.status !== 409) console.error(`Bot window maintenance failed: ${error?.message || error}`);
             return null;

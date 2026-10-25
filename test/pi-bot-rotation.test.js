@@ -399,6 +399,12 @@ test('Bot window workers get a verified identity section that follows edits with
     handlers.get('agent_start')({}, ctx);
     t.mock.timers.tick(20 * 60 * 1000);
     assert.equal(compacts.length, 1, 'a new run cancels the idle summary');
+    // S2 counts what Pi keeps verbatim the way Pi's last compaction of this model was prepared.
+    await handlers.get('session_before_compact')({ ...compactEvent, preparation: { ...compactEvent.preparation, settings: { keepRecentTokens: 200000 } } }, ctx);
+    handlers.get('agent_settled')({ aborted: false }, ctx);
+    t.mock.timers.tick(20 * 60 * 1000);
+    assert.equal(compacts.length, 1, 'nothing worth summarizing when Pi keeps all of it');
+    await handlers.get('session_before_compact')({ ...compactEvent, preparation: { ...compactEvent.preparation, settings: { keepRecentTokens: 20000 } } }, ctx);
     ctx.getContextUsage = () => ({ tokens: 1000, contextWindow: 200000, percent: 0.5 });
     handlers.get('agent_settled')({ aborted: false }, ctx);
     t.mock.timers.tick(20 * 60 * 1000);
@@ -410,7 +416,7 @@ test('Bot window workers get a verified identity section that follows edits with
     assert.equal(compacts.length, 2);
     assert.equal(compacts[1].customInstructions, 'pivane-bot-rotate');
     // A summary made while due also reads the part Pi keeps verbatim (the server moves on right after).
-    reply = JSON.stringify({ topic: 'Greetings', episodes: [], now: { doing: '', next: '', waiting: '' }, notes: [] });
+    reply = JSON.stringify({ topic: 'Greetings', episodes: ['2026-03-01: said hello'], now: { doing: '', next: '', waiting: '' }, notes: [] });
     const due = await handlers.get('session_before_compact')(compactEvent, ctx);
     assert.equal(due.compaction.details.pivaneBot.includedKept, true);
     assert.match(requests.at(-1).request.messages[0].content[0].text, /long 5 /);

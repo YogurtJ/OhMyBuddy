@@ -70,6 +70,14 @@ test('recall searches every generation of the window and reads around an entry',
     const slow = recall.windowGenerations({ agentDir, context, current: live, pi: { SessionManager, parseSessionEntries }, now: () => (clock += 5000) });
     assert.deepEqual(slow.skipped, [0]);
     assert.match(recall.recall(slow, '木地板').text, /^Searched 1 of 2 parts of this chat; not searched: 0\./);
+    // The total byte budget is never exceeded: a file larger than what is left is not read.
+    const size = fs.statSync(first.path).size;
+    const tight = recall.windowGenerations({ agentDir, context, current: live, pi: { SessionManager, parseSessionEntries },
+        limits: { ...recall.LIMITS, totalBytes: size - 1 } });
+    assert.deepEqual(tight.skipped, [0]);
+    const exact = recall.windowGenerations({ agentDir, context, current: live, pi: { SessionManager, parseSessionEntries },
+        limits: { ...recall.LIMITS, totalBytes: size } });
+    assert.deepEqual(exact.skipped, []);
 });
 
 test('earlier generation files are read only through a descriptor that matches the path', () => {
@@ -84,4 +92,23 @@ test('earlier generation files are read only through a descriptor that matches t
     fs.writeFileSync(path.join(elsewhere, 'b.jsonl'), 'x');
     assert.throws(() => recall.readVerified(path.join(elsewhere, 'b.jsonl'), dir, 1024), /outside this chat/);
     assert.throws(() => recall.readVerified(real, dir, 4), /too large/);
+    // A special file put in place of a generation is refused before anything blocks on it.
+    const fifo = path.join(dir, 'fifo.jsonl');
+    require('node:child_process').execFileSync('mkfifo', [fifo]);
+    assert.throws(() => recall.readVerified(fifo, dir, 1024), /outside this chat/);
+    // A file written to while it is read is refused (full identity compared after the read).
+    const growing = path.join(dir, 'growing.jsonl');
+    fs.writeFileSync(growing, '{"type":"session"}\n');
+    const readSync = fs.readSync;
+    fs.readSync = (...args) => { const read = readSync(...args); fs.appendFileSync(growing, '{"type":"more"}\n'); return read; };
+    try { assert.throws(() => recall.readVerified(growing, dir, 1024), /changed/); }
+    finally { fs.readSync = readSync; }
+    // A file replaced between the check and the read is refused as well.
+    const swapped = path.join(dir, 'swapped.jsonl');
+    fs.writeFileSync(swapped, '{"type":"session"}\n');
+    const open = require('../server/pi-file-io').openReadSync;
+    const io = require('../server/pi-file-io');
+    io.openReadSync = file => { fs.renameSync(file, file + '.old'); fs.writeFileSync(file, '{"type":"session"}\n'); return open(file); };
+    try { assert.throws(() => recall.readVerified(swapped, dir, 1024), /changed/); }
+    finally { io.openReadSync = open; }
 });

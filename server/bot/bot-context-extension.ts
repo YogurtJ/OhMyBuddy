@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { SettingsManager, type ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { readRegistry } from '../pi-profile-registry.js';
 import { safeFile } from '../pi-native-service.js';
 import { setPromptSection } from '../pi-hook-prompt.js';
@@ -242,6 +242,16 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
                 startedAt: manager.getHeader?.()?.timestamp, now: Date.now() });
         } catch { return null; }
     };
+    // How much Pi keeps verbatim at a compaction (its keepRecentTokens, with model overrides), for
+    // the S2 guard: exactly what the latest compaction of this model was prepared with, else the
+    // user's global setting (a Bot workspace has no project settings of its own).
+    let preparedKeep: { model: string, tokens: number } | null = null;
+    const modelKey = (model: any) => model ? `${model.provider}/${model.id}` : '';
+    const keepRecentTokens = (ctx: any) => {
+        if (preparedKeep && preparedKeep.model === modelKey(ctx.model)) return preparedKeep.tokens;
+        try { return SettingsManager.create(ctx.cwd, getAgentDir(), { projectTrusted: false }).getCompactionKeepRecentTokens(ctx.model); }
+        catch { return undefined; }
+    };
     // Every compaction of a Bot window (idle, threshold, overflow) gets the structured summary with
     // notebook reconciliation (D-029); when the window is about to move on, the part Pi keeps
     // verbatim is reconciled too. Any failure falls back to Pi's own summary; the notebook is
@@ -250,6 +260,8 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
         if (!managed(ctx) || !botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir())) return;
         const model = ctx.model;
         if (!model) return;
+        const keep = event.preparation?.settings?.keepRecentTokens;
+        if (Number.isSafeInteger(keep) && keep >= 0) preparedKeep = { model: modelKey(model), tokens: keep };
         try {
             const result = await structuredCompaction({
                 branch: event.branchEntries, projection: ctx.sessionManager.buildSessionProjection().entries,
@@ -303,7 +315,7 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
             try {
                 if (!ctx.isIdle() || ctx.hasPendingMessages() || scheduledRunActive(ctx.sessionManager) || !isBot(ctx)) return;
                 const rotating = Boolean(rotationDue(ctx.sessionManager));
-                if (!rotating && !idleCompactionWanted(ctx.getContextUsage(), ctx.sessionManager.buildSessionProjection().entries)) return;
+                if (!rotating && !idleCompactionWanted(ctx.getContextUsage(), ctx.sessionManager.buildSessionProjection().entries, keepRecentTokens(ctx))) return;
                 ctx.compact({ customInstructions: rotating ? 'pivane-bot-rotate' : 'pivane-bot-idle', onError: () => {} });
             } catch { /* Best effort: the native threshold still applies. */ }
         }, idleDelay(ctx.model));
