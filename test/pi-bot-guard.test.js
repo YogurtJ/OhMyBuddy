@@ -39,23 +39,23 @@ test('outside writes are recognised through URLs, spaces, symlinks and hard link
 });
 
 test('careful presets decide which steps ask first', () => {
-    assert.equal(ask('free', 'bash', { command: 'rm -rf x' }), null, 'hands-off stays guidance only');
-    assert.equal(ask(undefined, 'bash', { command: 'ls' }), null);
-    assert.deepEqual(ask('balanced', 'bash', { command: 'ls' }), { kind: 'command', detail: 'ls' });
-    assert.deepEqual(ask('balanced', 'powershell', { command: 'Get-ChildItem' }), { kind: 'command', detail: 'Get-ChildItem' });
+    assert.equal(ask('free', 'bash', { command: 'rm -rf x' }).kind, 'command');
+    assert.equal(ask(undefined, 'bash', { command: 'ls' }).kind, 'command');
+    assert.equal(ask('balanced', 'bash', { command: 'ls' }).rule.value, 'ls');
+    assert.equal(ask('balanced', 'powershell', { command: 'Get-ChildItem' }).rule.value, 'Get-ChildItem');
     assert.deepEqual(ask('balanced', 'agent_thread', { message: 'Do it' }), { kind: 'delegate', detail: 'Do it' });
-    assert.deepEqual(ask('balanced', 'write', { path: 'link/a.md' }), { kind: 'outside', detail: 'link/a.md' });
-    assert.deepEqual(ask('balanced', 'write', { path: 'file:///tmp/outside/note.md' }), { kind: 'outside', detail: 'file:///tmp/outside/note.md' });
+    assert.equal(ask('balanced', 'write', { path: 'link/a.md' }).kind, 'outside');
+    assert.equal(ask('balanced', 'write', { path: 'file:///tmp/outside/note.md' }).kind, 'outside');
     assert.equal(ask('balanced', 'edit', { path: 'plan.md' }), null);
     for (const tool of ['memory_add', 'deliver_files', 'get_attachment', 'mcp_tool']) assert.equal(ask('balanced', tool, { content: 'x' }), null, tool);
     assert.deepEqual(ask('balanced', 'mcp_tool', {}, { destructiveHint: true }), { kind: 'action', detail: 'mcp_tool' });
-    assert.deepEqual(ask('ask', 'edit', { path: 'plan.md' }), { kind: 'write', detail: 'plan.md' });
+    assert.equal(ask('ask', 'edit', { path: 'plan.md' }).rule.value, path.join(workspace, 'plan.md'));
     assert.deepEqual(ask('ask', 'memory_replace', { old_text: 'a', content: 'b' }), { kind: 'memory', detail: 'b' });
     for (const tool of ['media_generate', 'deliver_files', 'get_attachment']) assert.deepEqual(ask('ask', tool, {}), { kind: 'action', detail: tool }, tool);
     assert.equal(ask('ask', 'mcp_reader', {}, { readOnlyHint: true }), null);
     for (const tool of ['read', 'grep', 'web_search', 'memory_search', 'bot_setup_propose', 'ask_user_question', 'codemode'])
-        assert.equal(ask('ask', tool), null, tool);
-    assert.equal(ask('balanced', 'bash', { command: 'x'.repeat(3000) }).detail.length, 2001, 'long details are clipped');
+        assert.equal(ask('ask', tool, tool === 'read' ? { path: 'plan.md' } : {}), null, tool);
+    assert.equal(ask('balanced', 'bash', { command: 'echo x; '.repeat(400) }).detail.length, 2001, 'long details are clipped');
 });
 
 test('bot_schedule is reading for list and asks for create and cancel in careful presets', () => {

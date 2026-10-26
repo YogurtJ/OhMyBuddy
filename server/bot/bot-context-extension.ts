@@ -78,26 +78,32 @@ export async function alignModel(pi: any, ctx: any, desired: any, notify: (value
     return 'aligned';
 }
 
-// The permission preset of this worker's Bot, for the approval gate. null only when this
+// Full current permissions of this worker's Bot, for the approval gate. null only when this
 // worker is not running the Bot window it was started for. The gate fails closed: once
 // the session is the Bot's, anything that cannot be verified or read (after a short retry
 // for a profile file being replaced) counts as "Ask every time".
-export async function botPreset(context: any, manager: any, cwd: string, agentDir: string, wait = (ms: number) => new Promise(done => setTimeout(done, ms))) {
+export async function botPermissions(context: any, manager: any, cwd: string, agentDir: string, wait = (ms: number) => new Promise(done => setTimeout(done, ms))) {
     if (!context || manager.getSessionId() !== context.sessionId) return null;
     try {
-        if (cwd !== context.cwd || manager.getCwd() !== context.cwd || fs.realpathSync.native(manager.getSessionFile()) !== context.sessionPath) return 'ask';
+        if (cwd !== context.cwd || manager.getCwd() !== context.cwd || fs.realpathSync.native(manager.getSessionFile()) !== context.sessionPath) return { preset: 'ask', rules: [] };
         const binding = readWindowBinding(manager);
-        if (!binding || binding.profileId !== context.profileId || binding.windowId !== context.windowId) return 'ask';
-    } catch { return 'ask'; }
+        if (!binding || binding.profileId !== context.profileId || binding.windowId !== context.windowId) return { preset: 'ask', rules: [] };
+    } catch { return { preset: 'ask', rules: [] }; }
     for (let attempt = 0; attempt < 3; attempt++) {
         try {
             const profile = readRegistry(safeFile(agentDir, ['pivane-profiles', 'profiles.json'])).state.profiles
                 .find((item: any) => item.id === context.profileId);
-            const preset = profile && profile.trashedAt === undefined ? readBot(profile)?.permissions?.preset : undefined;
-            return PRESETS.includes(preset) ? preset : 'ask';
+            const bot = profile?.enabled && profile.trashedAt === undefined ? readBot(profile) : null;
+            const permissions = bot?.enabled ? bot.permissions : null;
+            return PRESETS.includes(permissions?.preset) ? permissions : { preset: 'ask', rules: [] };
         } catch { if (attempt < 2) await wait(40 * (attempt + 1)); }
     }
-    return 'ask';
+    return { preset: 'ask', rules: [] };
+}
+
+// Compatibility for callers that only need the preset. The gate uses full permissions.
+export async function botPreset(...args: Parameters<typeof botPermissions>) {
+    return (await botPermissions(...args))?.preset ?? null;
 }
 
 // Same rule as the scheduler runtime: a run stays active until it is finished or reviewed,
@@ -225,8 +231,8 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
         // Align at open so the page shows the Bot's model before the first message.
         if (loaded) await alignModel(pi, ctx, loaded.model, notify, reported);
     });
-    // Careful presets: the user approves commands, hand-offs and outside writes ("Ask every
-    // time": everything but reading) before they run. Unattended runs cannot be approved.
+    // Tool-layer policy checks private paths before asking; saved exact grants are re-read
+    // on every call. Unattended runs cannot approve a step that still needs confirmation.
     // A nested call (codemode) is cancelled with its parent tool, so its request is too.
     const nested = new Map<string, Set<AbortController>>();
     pi.on('tool_execution_end', (event: any) => {
@@ -243,21 +249,24 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
         if (parent) { if (!nested.has(parent)) nested.set(parent, new Set()); nested.get(parent)!.add(controller); }
         let keepSchedule = false;
         try {
-            const preset = await botPreset(context, ctx.sessionManager, ctx.cwd, getAgentDir());
-            if (!preset) return;
+            const agentDir = getAgentDir();
+            const permissions = await botPermissions(context, ctx.sessionManager, ctx.cwd, agentDir);
+            if (!permissions) return;
+            const preset = permissions.preset;
             let annotations;
             try { annotations = pi.getAllTools().find((tool: any) => tool.name === event.toolName)?.annotations; } catch { annotations = undefined; }
             const signal = ctx.signal ? AbortSignal.any([controller.signal, ctx.signal]) : controller.signal;
             const scheduled = event.toolName === 'bot_schedule' ? await schedule?.prepareApproval(event, ctx, preset, signal) : undefined;
-            const approval = approvalFor({ preset, toolName: event.toolName, input: scheduled?.input ?? event.input, cwd: context.cwd, annotations });
+            const approval = approvalFor({ permissions, toolName: event.toolName, input: scheduled?.input ?? event.input, cwd: context.cwd, agentDir, annotations });
+            if (approval?.block) return { block: true, reason: approval.reason };
             if (scheduled?.skipApproval || !approval) { keepSchedule = true; return; }
             if (!ctx.hasUI || scheduledRunActive(ctx.sessionManager)) return { block: true, reason: BLOCKED.unattended };
             // Already cancelled with its parent: nothing to ask about.
-            if (controller.signal.aborted) return { block: true, reason: BLOCKED.not_approved };
+            if (signal.aborted) return { block: true, reason: BLOCKED.not_approved };
             const token = newToken();
             let allowed = false;
             // However it ends, the request is over: the Supervisor drops it if still pending.
-            try { allowed = await ctx.ui.confirm(APPROVAL_TITLE, approvalMessage({ ...approval, token }), { signal, timeout: 30 * 60 * 1000 }); }
+            try { allowed = (await ctx.ui.confirm(APPROVAL_TITLE, approvalMessage({ ...approval, token }), { signal, timeout: 30 * 60 * 1000 })) === true; }
             finally { notifier(ctx)({ event: 'approval-done', token }); }
             keepSchedule = allowed && !signal.aborted;
             return keepSchedule ? undefined : { block: true, reason: BLOCKED.not_approved };
