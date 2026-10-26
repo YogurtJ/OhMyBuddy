@@ -1,0 +1,168 @@
+// Real avatar, settings, setup and task-card modules against synthetic APIs; no live identity.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const express = require('express');
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const root = path.join(__dirname, '../../public');
+const styles = [...fs.readFileSync(path.join(root, 'index.html'), 'utf8').matchAll(/<link rel="stylesheet" href="([^"]+)">/g)].map(m => m[1]);
+const BOT = '11111111-1111-4111-8111-111111111111';
+(async () => {
+    const app = express();
+    app.get('/fixture', (_req, res) => res.type('html').send(`<!doctype html><html lang="zh-CN" data-theme="daylight"><head><meta name="viewport" content="width=device-width,initial-scale=1">${styles.map(s => `<link rel="stylesheet" href="/${s}">`).join('')}</head><body><main id="fixture" style="width:min(760px,100%);padding:12px;margin:auto"></main></body></html>`));
+    app.use(express.static(root)); const server = app.listen(0, '127.0.0.1'); await new Promise(r => server.once('listening', r));
+    let browser;
+    try {
+        browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium' });
+        for (const width of [1440, 393]) {
+            const context = await browser.newContext({ viewport: { width, height: 900 }, locale: 'zh-CN', timezoneId: 'Asia/Shanghai' });
+            const page = await context.newPage(), errors = []; page.setDefaultTimeout(8000);
+            page.on('pageerror', e => errors.push(e.message));
+            const base = `http://127.0.0.1:${server.address().port}`;
+            await page.goto(`${base}/fixture`);
+            for (const script of ['pi-avatar-presets.js', 'pi-avatar.js', 'pi-bot-motion.js', 'pi-bot.js', 'pi-bot-settings.js', 'pi-bot-schedule-cards.js'])
+                await page.addScriptTag({ url: `${base}/${script}` });
+            await page.evaluate(id => {
+                window.x = { revision: 'r1', writes: [], fails: 0, responses: [], laterFails: 0,
+                    profile: { id, name: 'CC', avatar: { kind: 'emoji', value: '✨' }, soul: '', bot: { job: '', model: null, permissions: { preset: 'free' }, onboarding: { phase: 'interview', steps: {} } } } };
+                x.api = async (_url, options) => {
+                    if (!options) return { revision: x.revision, bot: structuredClone(x.profile), models: { models: [] } };
+                    const body = JSON.parse(options.body);
+                    if (_url.endsWith('/avatar')) {
+                        x.uploads = (x.uploads || 0) + 1; x.profile.avatar = { kind: 'image', version: 'a'.repeat(64) }; x.revision += 'u';
+                        return { ok: true, revision: x.revision, profile: structuredClone(x.profile) };
+                    }
+                    x.writes.push(body);
+                    if (x.fails-- > 0) { x.revision = 'r2'; x.profile.soul = 'changed elsewhere'; throw Object.assign(new Error('synthetic conflict'), { status: 409 }); }
+                    assertRevision(body.expectedRevision);
+                    Object.assign(x.profile, body.changes); x.revision += 'x'; return { ok: true, revision: x.revision };
+                };
+                function assertRevision(revision) { if (revision !== x.revision) throw new Error('wrong revision'); }
+                x.open = () => PiBotSettings.open({ api: x.api, profileId: id, face: PiBot.face, toast() {} });
+            }, BOT);
+            const sheet = () => page.locator('.pi-bot-sheet[open]');
+            // All presets roundtrip through the same avatar field and preview before Save.
+            for (const id of ['pivane-pebble', 'pivane-bean', 'pivane-tile']) {
+                await page.evaluate(() => x.open());
+                await sheet().locator(`[data-avatar-preset="${id}"]`).click();
+                assert.equal(await sheet().locator('.pi-bot-sheet-avatar-face .pi-preset-svg').getAttribute('data-preset'), id);
+                assert.equal(await page.evaluate(() => x.profile.avatar.kind), id === 'pivane-pebble' ? 'emoji' : 'preset', 'preview does not save');
+                await sheet().locator('.pi-bot-sheet-save').click(); await page.waitForFunction(() => !document.querySelector('.pi-bot-sheet[open]'));
+                assert.deepEqual(await page.evaluate(() => x.writes.at(-1).changes), { avatar: { kind: 'preset', id } });
+            }
+            // Refresh reads the persisted choice; an unrelated name change preserves it.
+            await page.evaluate(() => x.open());
+            assert.equal(await sheet().locator('[data-avatar-preset="pivane-tile"]').getAttribute('aria-pressed'), 'true');
+            await sheet().locator('input[required]').fill('New CC'); await sheet().locator('.pi-bot-sheet-save').click();
+            await page.waitForFunction(() => !document.querySelector('.pi-bot-sheet[open]'));
+            assert.deepEqual(await page.evaluate(() => x.writes.at(-1).changes), { name: 'New CC' });
+            // Cancel warns once, then discards the selected preset.
+            await page.evaluate(() => x.open()); await sheet().locator('[data-avatar-preset="pivane-bean"]').click();
+            await sheet().locator('.pi-bot-sheet-close').click(); assert.equal(await sheet().count(), 1);
+            await sheet().locator('.pi-bot-sheet-close').click();
+            assert.equal(await page.evaluate(() => x.profile.avatar.id), 'pivane-tile');
+            // A conflict preserves the one face draft while untouched fields follow the server.
+            await page.evaluate(() => { x.fails = 1; return x.open(); });
+            await sheet().locator('[data-avatar-preset="pivane-bean"]').click(); await sheet().locator('.pi-bot-sheet-save').click();
+            await sheet().locator('.pi-bot-sheet-status').filter({ hasText: '修改还在' }).waitFor();
+            assert.equal(await sheet().locator('[data-avatar-preset="pivane-bean"]').getAttribute('aria-pressed'), 'true');
+            assert.equal(await sheet().locator('textarea').nth(1).inputValue(), 'changed elsewhere');
+            if (process.env.PI_BOT_EVIDENCE) await page.screenshot({ path: path.join(process.env.PI_BOT_EVIDENCE, `preset-settings-${width}.png`) });
+            await sheet().locator('.pi-bot-sheet-save').click(); await page.waitForFunction(() => !document.querySelector('.pi-bot-sheet[open]'));
+            assert.deepEqual(await page.evaluate(() => x.writes.at(-1).changes), { avatar: { kind: 'preset', id: 'pivane-bean' } });
+            // Emoji and preset never survive as two competing choices.
+            await page.evaluate(() => x.open()); await sheet().locator('[data-sheet-emoji="🦊"]').click();
+            assert.equal(await sheet().locator('[data-avatar-preset][aria-pressed="true"]').count(), 0);
+            await sheet().locator('.pi-bot-sheet-save').click(); await page.waitForFunction(() => !document.querySelector('.pi-bot-sheet[open]'));
+            assert.deepEqual(await page.evaluate(() => x.profile.avatar), { kind: 'emoji', value: '🦊' });
+            const png = Buffer.from(await page.evaluate(() => { const c = document.createElement('canvas'); c.width = c.height = 8; return c.toDataURL().split(',')[1]; }), 'base64');
+            await page.evaluate(() => x.open());
+            await sheet().locator('[data-sheet-picture-file]').setInputFiles({ name: 'face.png', mimeType: 'image/png', buffer: png });
+            await sheet().locator('.pi-bot-sheet-avatar-face img').waitFor();
+            await sheet().locator('[data-avatar-preset="pivane-bean"]').click();
+            await sheet().locator('.pi-bot-sheet-save').click(); await page.waitForFunction(() => !document.querySelector('.pi-bot-sheet[open]'));
+            assert.equal(await page.evaluate(() => x.uploads || 0), 0, 'replacing the local picture with a preset does not upload it');
+            await page.evaluate(() => x.open());
+            await sheet().locator('[data-sheet-picture-file]').setInputFiles({ name: 'face.png', mimeType: 'image/png', buffer: png });
+            await sheet().locator('.pi-bot-sheet-avatar-face img').waitFor();
+            await sheet().locator('.pi-bot-sheet-save').click(); await page.waitForFunction(() => !document.querySelector('.pi-bot-sheet[open]'));
+            assert.deepEqual(await page.evaluate(() => x.profile.avatar), { kind: 'image', version: 'a'.repeat(64) });
+            // The first-meeting card protects a chosen preset, then accepts a user's new choice.
+            await page.evaluate(() => {
+                x.identity = { id: x.profile.id, name: 'CC', avatar: { kind: 'preset', id: 'pivane-pebble' }, chosen: { name: true, avatar: true }, phase: 'interview' };
+                x.card = PiBot.setupCards({ enabled: () => true, calls: () => [{ id: 'setup1', args: { avatar: '✨' } }], identity: () => x.identity,
+                    face: () => PiBot.face(x.identity), respond: value => x.responses.push(value), changed() {},
+                    later: async () => { if (x.laterFails-- > 0) throw new Error('later save failed'); },
+                    save: async (_id, changes) => x.writes.push(changes) });
+                document.querySelector('#fixture').append(x.card.element);
+                x.card.sync(new Map([['select', { id: 'select', method: 'select', title: '保存这些设置？ / Save these settings?', options: ['保存 / Save', '先不改 / Not now'] }]]), true);
+            });
+            assert.equal(await page.locator('[data-setup-use="avatar"]').isChecked(), false);
+            await page.locator('.pi-bot-setup [data-avatar-preset="pivane-tile"]').click();
+            assert.equal(await page.locator('[data-setup-use="avatar"]').isChecked(), true);
+            await page.locator('.pi-bot-setup-save').click();
+            assert.deepEqual(await page.evaluate(() => x.writes.at(-1)), { avatar: { kind: 'preset', id: 'pivane-tile' } });
+            await page.evaluate(() => {
+                x.responses = []; x.laterFails = 1;
+                x.card.sync(new Map([['select2', { id: 'select2', method: 'select', title: '保存这些设置？ / Save these settings?', options: ['保存 / Save', '先不改 / Not now'] }]]), true);
+            });
+            await page.locator('.pi-bot-setup-later').click();
+            await page.locator('.pi-bot-setup-note.is-error').filter({ hasText: 'later save failed' }).waitFor();
+            assert.deepEqual(await page.evaluate(() => x.responses), []);
+            await page.locator('.pi-bot-setup-later').click();
+            assert.deepEqual(await page.evaluate(() => x.responses), [{ id: 'select2', value: '先不改 / Not now' }]);
+            // Personality quick picks fill editable text; the three working modes save only this card's fields.
+            await page.evaluate(() => {
+                x.card.element.remove();
+                x.card = PiBot.setupCards({ enabled: () => true, calls: () => [{ id: 'style', args: { personality: '草稿', workStyle: 'free' } }],
+                    identity: () => ({ ...x.identity, workStyle: 'free' }), face: () => PiBot.face(x.identity), respond() {}, changed() {},
+                    save: async (_id, changes) => x.writes.push(changes) });
+                document.querySelector('#fixture').append(x.card.element);
+                x.card.sync(new Map([['style', { id: 'style', method: 'select', title: '保存这些设置？ / Save these settings?', options: ['保存 / Save', '先不改 / Not now'] }]]), true);
+            });
+            assert.equal(await page.locator('[data-setup-work]').count(), 3);
+            await page.getByRole('button', { name: '温柔耐心', exact: true }).click();
+            await page.locator('[data-setup-field="personality"]').fill('温柔但简短');
+            await page.locator('[data-setup-work="balanced"]').check();
+            await page.locator('.pi-bot-setup-save').click();
+            assert.deepEqual(await page.evaluate(() => x.writes.at(-1)), { personality: '温柔但简短', workStyle: 'balanced' });
+            // Unknown saved references have a static fallback and are not rewritten by rendering.
+            await page.evaluate(() => {
+                const host = document.querySelector('#fixture'); host.replaceChildren();
+                for (const id of ['pivane-pebble', 'pivane-bean', 'pivane-tile', 'pivane-missing'])
+                    for (const size of ['xs', 'sm', 'md', 'lg', 'xl']) host.append(PiBot.face({ avatar: { kind: 'preset', id } }, size));
+            });
+            assert.equal(await page.locator('[data-missing-preset]').count(), 5);
+            assert.equal(await page.locator('[data-avatar-live="true"]').count(), 0, 'list/message copies are static');
+            // Runtime motion, dark theme, reduced motion and badges remain inside the viewport.
+            await page.evaluate(() => {
+                const live = PiBot.face({ avatar: { kind: 'preset', id: 'pivane-pebble' } }, 'xl'); live.id = 'live'; document.querySelector('#fixture').prepend(live);
+                x.motion = PiBotMotion.create({ paint: value => { live.dataset.avatarState = value.state; live.dataset.avatarLive = String(value.live); } });
+                x.motion.update({ key: 'one', connected: true, waiting: true, working: true });
+                document.documentElement.dataset.theme = 'dark';
+            });
+            assert.equal(await page.locator('#live').getAttribute('data-avatar-state'), 'waiting');
+            assert.equal(await page.locator('#live .avatar-badge.is-waiting').evaluate(n => getComputedStyle(n).display), 'inline');
+            assert.equal(await page.locator('#live .avatar-body').evaluate(n => getComputedStyle(n).fill), 'rgb(198, 209, 221)');
+            await page.emulateMedia({ reducedMotion: 'reduce' });
+            assert.equal(await page.locator('#live .avatar-motion').evaluate(n => getComputedStyle(n).animationName), 'none');
+            if (process.env.PI_BOT_EVIDENCE) await page.screenshot({ path: path.join(process.env.PI_BOT_EVIDENCE, `preset-sizes-dark-${width}.png`) });
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+            // A successful schedule tool result produces a card with the real job id and route.
+            await page.evaluate(id => {
+                const job = { id, title: '今晚复习', message: '复习数学第 2 章', schedule: { kind: 'once', at: Date.parse('2026-11-01T19:00:00+08:00'), timeZone: 'Asia/Shanghai' }, enabled: true, revision: 1 };
+                x.routes = []; window.PiWorkspaceRoute = { navigate: (tab, params) => x.routes.push({ tab, params }) };
+                x.cards = PiBotScheduleCards.create({ context: () => 'one', api() {}, notify() {} });
+                const card = x.cards.render({ toolName: 'bot_schedule', toolCallId: 'scheduled1', details: { pivaneBotSchedule: { v: 1, action: 'created', job } } });
+                document.querySelector('#fixture').replaceChildren(card);
+            }, BOT);
+            assert.match(await page.locator('.pi-bot-schedule-card').innerText(), /今晚复习[\s\S]*19:00[\s\S]*Asia\/Shanghai/);
+            await page.getByRole('button', { name: '查看 / 修改' }).click();
+            assert.deepEqual(await page.evaluate(() => x.routes), [{ tab: 'cron', params: { jobId: BOT } }]);
+            if (process.env.PI_BOT_EVIDENCE) await page.screenshot({ path: path.join(process.env.PI_BOT_EVIDENCE, `schedule-card-${width}.png`) });
+            assert.deepEqual(errors, [], 'no browser pageerrors');
+            await context.close();
+        }
+        console.log('Preset selection, conflict/cancel, static rendering, motion and schedule cards passed at 1440/393.');
+    } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
+})().catch(error => { console.error(error); process.exitCode = 1; });

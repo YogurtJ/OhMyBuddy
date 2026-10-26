@@ -5,6 +5,7 @@
     const uuid = value => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 
     function avatar(profile) {
+        if (globalThis.PiAvatar) return globalThis.PiAvatar.render(profile, 'pi-identity-avatar');
         const span = document.createElement('span');
         span.className = 'pi-identity-avatar';
         if (profile?.avatar?.kind === 'emoji') span.textContent = profile.avatar.value;

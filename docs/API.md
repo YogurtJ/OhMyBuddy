@@ -206,7 +206,7 @@
 
 `GET /status.agentProfiles=true` 表示可选助手档案接口可用。`GET /profiles?cwd` 返回 `profiles`（不含回收站身份）、按移入时间从新到旧的 `trash:[{id,name,description,avatar,trashedAt}]`、注册表修订、`profileRevisions`（含回收站的所有档案ID到自身修订的映射）和所选项目默认身份；`PUT /profiles` 接受 `{expectedRevision,profile}` 创建或更新档案，回收站身份拒绝更新（409），须先恢复；`PUT /profiles/default` 接受 `{cwd,profileId,expectedRevision}`，`profileId:null` 清除项目默认身份，仅接受已启用且不在回收站的身份。现有 `POST /sessions` 的可选 `profileId` 省略时使用项目默认，显式 null 创建无档案线程。
 
-`profile.avatar` 是头像选择的唯一持久化字段，可省略（更新时保留原值）、为 null、`{kind:'emoji',value}`、`{kind:'image',version}` 或 `{kind:'preset',id}`。预设新选择只接受共享内置目录中的 `pivane-pebble`（小石）、`pivane-bean`（豆豆）、`pivane-tile`（方方）；预设对象只能含 `kind`、`id`，不接受路径、SVG 正文或混合字段。读取容忍符合 `^pivane-[a-z0-9]+(?:-[a-z0-9]+)*$` 且至多 80 字符的未知 ID，资源暂缺时仍保留引用；保存同一档案的未变未知引用或仅修改其他字段也保留，但不能新选未知 ID。图片仍只接受本档案已上传的当前 PNG 版本，不因预设支持扩大上传格式。列表、回收站、恢复和 Bot 使用同一字段，既有头像不自动替换。
+`profile.avatar` 是头像选择的唯一持久化字段，可省略（更新时保留原值）、为 null、`{kind:'emoji',value}`、`{kind:'image',version}` 或 `{kind:'preset',id}`。预设新选择只接受共享内置目录中的 `pivane-pebble`（小石）、`pivane-bean`（豆豆）、`pivane-tile`（方方）；预设对象只能含 `kind`、`id`，不接受路径、SVG 正文或混合字段。读取容忍符合 `^pivane-[a-z0-9]+(?:-[a-z0-9]+)*$` 且至多 80 字符的未知 ID，资源暂缺时仍保留引用；保存同一档案的未变未知引用或仅修改其他字段也保留，但不能新选未知 ID。图片仍只接受本档案已上传的当前 PNG 版本，不因预设支持扩大上传格式。列表、回收站、恢复和 Bot 使用同一字段，既有头像不自动替换。旧版服务不认识 preset 类型，不能把新配置直接交回旧服务；回退仍须使用对应版本的备份和现有恢复规程，不批量重写头像或历史数据。
 
 - `POST /profiles/:id/trash`：`{expectedRevision}`，原子保存 `trashedAt`（ISO）、`trashedEnabled`（原启用状态）和 `enabled:false`，同时清除所有指向该身份的项目默认值；返回 `{ok:true,profile,revision}`。
 - `POST /profiles/:id/restore`：`{expectedRevision}`，移除回收站元数据并恢复原启用状态，原本停用的身份仍停用，不重设项目默认值；返回 `{ok:true,profile,revision}`。

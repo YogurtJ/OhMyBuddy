@@ -91,6 +91,7 @@ async function run(browser, base, width) {
     assert.equal(await page.locator('.pi-attachment-chip').count(), 0);
     if (width < 900 && !await page.locator('#pi-session-pane').evaluate(el => el.classList.contains('open'))) await page.locator('#pi-toggle-sessions').click();
     await page.locator('[data-session-id="thread-one"] .pi-session-main').click();
+    await page.locator('.pi-attachment-chip').waitFor();
     assert.equal(await page.locator('.pi-attachment-chip').count(), 1);
     const sizes = await page.evaluate(() => ({ width: innerWidth, body: document.documentElement.scrollWidth, chat: document.querySelector('#pi-chat-knowledge').scrollWidth }));
     assert.ok(sizes.body <= sizes.width + 1, JSON.stringify(sizes));

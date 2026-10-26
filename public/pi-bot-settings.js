@@ -58,14 +58,17 @@
         let data = null, controls = null, saving = false, warned = null, initial = null;
         // picture: a picture chosen in this sheet (PNG data URL), uploaded when saving;
         // uploaded: the last one this sheet put up, so a retry does not upload it again.
-        let picture = null, uploaded = null;
-        // What the form shows, field by field; compared with `initial` to know what the user edited.
-        const formValues = () => controls ? { name: controls.name.value, avatar: controls.avatar.value, picture: picture || '', job: controls.job.value, soul: controls.soul.value,
+        let picture = null, uploaded = null, faceChoice = null, fileSerial = 0;
+        // The avatar and picture are one draft value, so rebasing never combines two sources.
+        const formValues = () => controls ? { name: controls.name.value,
+            faceDraft: JSON.stringify({ avatar: faceChoice, picture, text: controls.avatar.value }), job: controls.job.value, soul: controls.soul.value,
             model: controls.model.value, thinking: controls.thinkingWrap.hidden ? '' : controls.thinking.value,
             preset: controls.presets.find(input => input.checked)?.value || '' } : null;
         function applyValues(values) {
-            for (const key of ['name', 'avatar', 'job', 'soul']) if (values[key] !== undefined) controls[key].value = values[key];
-            if (values.picture !== undefined) picture = values.picture || null;
+            for (const key of ['name', 'job', 'soul']) if (values[key] !== undefined) controls[key].value = values[key];
+            if (values.faceDraft !== undefined) {
+                const draft = JSON.parse(values.faceDraft); faceChoice = draft.avatar; picture = draft.picture; controls.avatar.value = draft.text;
+            }
             controls.showFace();
             if (values.model !== undefined && [...controls.model.options].some(option => option.value === values.model)) controls.model.value = values.model;
             const levels = data.models?.models.find(item => modelKey(item) === controls.model.value)?.thinkingLevels || [];
@@ -79,11 +82,16 @@
         // Every way out of the sheet (close, Escape, cancel, the memory page, meeting again): with
         // unsaved edits the first try only warns; the same action again leaves without them.
         const leave = (action, then) => {
+            if (saving) return false;
             if (edited() && warned !== action) {
                 warned = action; status.dataset.tone = 'warn';
                 status.textContent = action === 'close' ? translateUi("还有修改没保存。再关一次就放弃这些修改。")
                     : translateUi("还有修改没保存。再点一次就放弃这些修改并离开。");
                 return false;
+            }
+            if (uploaded && data?.bot.avatar?.kind === 'image' && data.bot.avatar.version === uploaded.version) {
+                options.toast?.(translateUi("上传的图片已经是头像了；要换回可以在设置里改。"), 'info');
+                void options.onSaved?.();
             }
             sheet.close();
             then?.();
@@ -102,6 +110,7 @@
             if (!controls) return;
             const pending = changes();
             save.disabled = saving || !pending || !Object.keys(pending).length;
+            for (const control of body.querySelectorAll('input,textarea,select,button')) control.disabled = saving;
             const model = controls.model.value ? data.models?.models.find(item => modelKey(item) === controls.model.value) : null;
             const levels = model?.thinkingLevels || [];
             controls.thinkingWrap.hidden = !levels.length;
@@ -125,7 +134,7 @@
             const avatar = controls.avatar.value.trim();
             if (avatar.length > LIMITS.avatar) return null;
             if (picture) out.avatar = { kind: 'image' };
-            else if (avatar && !(bot.avatar?.kind === 'emoji' && bot.avatar.value === avatar)) out.avatar = { kind: 'emoji', value: avatar };
+            else if (JSON.stringify(faceChoice) !== JSON.stringify(bot.avatar ?? null)) out.avatar = faceChoice;
             const soul = controls.soul.value.trim();
             if (soul !== (bot.soul || '').trim()) out.soul = soul;
             const job = controls.job.value.trim();
@@ -148,18 +157,22 @@
         function render() {
             const bot = data.bot, current = bot.bot;
             title.textContent = translateUi("{0} 的设置", bot.name);
-            head.querySelector('.pi-bot-sheet-face').replaceWith(Object.assign(options.face(bot, 'md'), { className: 'pi-bot-face is-md pi-bot-sheet-face' }));
+            const headFace = options.face(bot, 'md'); headFace.classList.add('pi-bot-sheet-face');
+            head.querySelector('.pi-bot-sheet-face').replaceWith(headFace);
             const name = el('input'); name.type = 'text'; name.maxLength = LIMITS.name; name.value = bot.name; name.required = true; name.autocomplete = 'off';
             const avatar = el('input'); avatar.type = 'text'; avatar.maxLength = LIMITS.avatar; avatar.className = 'pi-bot-sheet-emoji';
             avatar.value = bot.avatar?.kind === 'emoji' ? bot.avatar.value : ''; avatar.autocomplete = 'off';
             avatar.placeholder = '🙂'; avatar.setAttribute('aria-label', translateUi("自己输入一个表情"));
-            picture = null;
-            // The face as it will be saved: the chosen picture, the typed emoji, or the current face.
+            picture = null; faceChoice = structuredClone(bot.avatar ?? null); fileSerial++;
+            // Preview stays local until Save; every source replaces the same draft.
             const preview = el('span', 'pi-bot-sheet-avatar-face');
+            const facePresets = window.PiAvatar?.choices(faceChoice, value => {
+                fileSerial++; picture = null; faceChoice = value; avatar.value = ''; warned = null; showFace(); refreshState();
+            });
             const showFace = () => {
-                const typed = avatar.value.trim();
                 if (picture) { const img = el('img'); img.src = picture; img.alt = ''; const node = el('span', 'pi-bot-face is-xl'); node.append(img); preview.replaceChildren(node); }
-                else preview.replaceChildren(options.face(typed ? { ...bot, avatar: { kind: 'emoji', value: typed } } : bot, 'xl'));
+                else preview.replaceChildren(options.face({ ...bot, avatar: faceChoice }, 'xl'));
+                for (const item of facePresets?.children || []) item.setAttribute('aria-pressed', String(faceChoice?.kind === 'preset' && faceChoice.id === item.dataset.avatarPreset && !picture));
                 back.hidden = !picture;
                 pick.textContent = picture || bot.avatar?.kind === 'image' ? translateUi("换一张图片") : translateUi("上传图片");
             };
@@ -173,21 +186,29 @@
             const pick = button('pi-bot-chip'); pick.dataset.sheetPicture = 'pick';
             pick.addEventListener('click', () => file.click());
             const back = button('pi-bot-chip', translateUi("不用这张图片")); back.dataset.sheetPicture = 'clear';
-            back.addEventListener('click', () => { picture = null; status.textContent = ''; showFace(); refreshState(); });
+            back.addEventListener('click', () => { fileSerial++; picture = null; status.textContent = ''; showFace(); refreshState(); });
+            const remove = button('pi-bot-chip', translateUi("移除头像"));
+            remove.addEventListener('click', () => { fileSerial++; picture = null; faceChoice = null; avatar.value = ''; warned = null; showFace(); refreshState(); });
             file.addEventListener('change', async () => {
                 const chosen = file.files?.[0]; file.value = '';
-                if (!chosen) return;
+                if (!chosen || saving) return;
+                const request = ++fileSerial;
                 try {
-                    picture = await window.PiBot.pictureData(chosen);
+                    const decoded = await window.PiBot.pictureData(chosen);
+                    if (!sheet.open || request !== fileSerial) return;
+                    picture = decoded; faceChoice = null; avatar.value = '';
                     warned = null; status.textContent = translateUi("图片会在保存时上传"); delete status.dataset.tone;
-                } catch (error) { status.dataset.tone = 'error'; status.textContent = error.message; }
+                } catch (error) { if (sheet.open && request === fileSerial) { status.dataset.tone = 'error'; status.textContent = error.message; } }
+                if (!sheet.open || request !== fileSerial) return;
                 showFace(); refreshState();
             });
-            avatar.addEventListener('input', () => { if (avatar.value.trim()) picture = null; showFace(); });
+            avatar.addEventListener('input', () => { fileSerial++; picture = null; faceChoice = avatar.value.trim() ? { kind: 'emoji', value: avatar.value.trim() } : null; showFace(); });
             const actions = el('div', 'pi-bot-sheet-avatar-actions');
-            actions.append(avatar, pick, back, file);
+            actions.append(avatar, pick, back, remove, file);
             const avatarBox = el('div', 'pi-bot-sheet-avatar');
-            const avatarSide = el('div', 'pi-bot-sheet-avatar-side'); avatarSide.append(grid, actions);
+            const avatarSide = el('div', 'pi-bot-sheet-avatar-side');
+            if (facePresets) avatarSide.append(facePresets);
+            avatarSide.append(grid, actions);
             avatarBox.append(preview, avatarSide);
             const identity = el('div', 'pi-bot-sheet-identity');
             identity.append(avatarBox, field(translateUi("名字"), name));

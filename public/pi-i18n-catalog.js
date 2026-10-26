@@ -10467,5 +10467,44 @@
         ["头像图片没有保存成功，请再试一次", "The picture was not saved; please try again"],
         ["头像刚刚在别处被换掉了；你的修改还在，再点保存会重新上传这张图片", "The face was just changed elsewhere. Your edits are still here; press Save to upload this picture again"]
     );
+    rows.push(
+        ["不用这张图片", "Use another avatar"],
+        ["专业严谨", "Professional"],
+        ["专业严谨，用词准确，说清依据和不确定的地方。", "Be precise and professional; explain the evidence and what is uncertain."],
+        ["以后再说", "Decide later"],
+        ["干脆利落", "Direct"],
+        ["幽默一点", "Playful"],
+        ["快速选一种性格", "Choose a personality"],
+        ["想让它更放手，可以在设置里改。", "You can give it more freedom in settings."],
+        ["打开关于你", "Open About you"],
+        ["换一张图片", "Choose another picture"],
+        ["没有要保存的内容，可以选“{0}”", "There is nothing to save; choose “{0}”."],
+        ["温柔耐心", "Warm and patient"],
+        ["温柔耐心，慢慢解释，多鼓励。", "Be warm and patient, explain at an easy pace, and offer encouragement."],
+        ["称呼、目标、习惯这类关于你的事，{0} 记在“关于你”里，每个聊天都用得上；这里只放这段聊天的事。", "{0} keeps your name, goals and habits in “About you” for every chat. This list holds notes for this chat."],
+        ["自己输入一个表情", "Type an emoji"],
+        ["记到“我记着的事” · {0}", "Saved to chat notes · {0}"],
+        ["说话干脆利落，先给结论，少说客套话。", "Be direct and concise. Lead with the answer and skip formalities."],
+        ["轻松幽默，偶尔开个玩笑，但正事不含糊。", "Keep things light and playful, with an occasional joke, while taking the work seriously."],
+        ["选一个表情", "Choose an emoji"],
+        ["{0} 记到了“关于你”", "{0} saved to “About you”"],
+        ["{0} 记到了长期记忆", "{0} saved to long-term memory"],
+        ["预设形象", "Built-in characters"],
+        ["小石", "Pebble"],
+        ["豆豆", "Bean"],
+        ["方方", "Tile"],
+        ["{0} 想安排或取消定时任务", "{0} wants to schedule or cancel a task"],
+        ["安排：", "Schedule: "],
+        ["取消：", "Cancel: "],
+        ["打开 {0} 的设置", "Open settings for {0}"],
+        ["重复 · {0}", "Repeats · {0}"],
+        ["已安排 · {0}", "Scheduled · {0}"],
+        ["查看 / 修改", "View / edit"],
+        ["取消任务", "Cancel task"],
+        ["取消这项定时任务？", "Cancel this scheduled task?"],
+        ["保留", "Keep"],
+        ["还没有定时任务。", "No scheduled tasks yet."]
+    );
+    rows.push(["这轮回复未完成", "This reply could not finish"], ["这轮回复结束", "This reply has finished"]);
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

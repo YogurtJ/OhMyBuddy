@@ -54,6 +54,7 @@
         const profileDirty = () => Boolean(draft && JSON.stringify(draft) !== original);
         const dirty = () => Boolean(profileDirty() || call(knowledge, 'dirty') || call(learning, 'dirty') || stagedDocuments.size);
         function avatar(profile, className = '') {
+            if (window.PiAvatar) return window.PiAvatar.render(profile, `pi-id-avatar ${className}`.trim());
             const node = el('span', { class: `pi-id-avatar ${className}`.trim() });
             if (profile.avatar?.kind === 'image' && profile.id) node.append(el('img', { src: `/api/pi/profiles/${encodeURIComponent(profile.id)}/avatar?version=${encodeURIComponent(profile.avatar.version)}`, alt: '' }));
             else node.textContent = profile.avatar?.kind === 'emoji' ? profile.avatar.value : profile.name?.trim().slice(0, 1).toUpperCase() || '✦';
@@ -209,6 +210,7 @@
             avatarButton.className = 'pi-id-avatar is-xl'; avatarButton.setAttribute('aria-label', t('更换头像')); avatarButton.replaceChildren(...avatar(draft).childNodes);
             const updateAvatar = value => { draft.avatar = value; renderPersona(); syncSave(); };
             const avatarActions = el('div', { class: 'pi-id-toolbar' }, [button({ label: t('移除头像'), variant: 'ghost', attrs: { id: 'pi-profile-avatar-clear' }, onClick: () => updateAvatar(null) })]);
+            if (window.PiAvatar) picker.append(window.PiAvatar.choices(draft.avatar, updateAvatar));
             picker.append(el('div', { class: 'pi-profile-emoji-grid' }, [...'🍀 🌿 🦉 🧠 🔭 📚 ✍️ 🧪 💡 🎯 🛠️ 🐱 🦊 🌙 ⭐ 🤖'.split(' ')].map(emoji => button({ label: emoji, variant: 'ghost', onClick: () => updateAvatar({ kind: 'emoji', value: emoji }) }))),
                 field('自定义表情', 'emoji', draft.avatar?.kind === 'emoji' ? draft.avatar.value : '', { maxLength: 16 }),
                 avatarActions);

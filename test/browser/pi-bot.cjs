@@ -47,7 +47,7 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
             let modelCount = 0, profileList = [];
             let patchBodies = [], settingsReads = 0, model = null, preset = 'free', quietHours = { start: '23:00', end: '08:00' }, soul = '温柔耐心，说话简短。';
             const botOpens = []; let lagging = null;
-            const bot = () => ({ id: BOT, name, description: '', avatar: { kind: 'emoji', value: face }, enabled: true, profileRevision: 'p',
+            const bot = () => ({ id: BOT, name, description: '', avatar: typeof face === 'string' ? { kind: 'emoji', value: face } : face, enabled: true, profileRevision: 'p',
                 chosen: { name: name !== '新伙伴', avatar: face !== '✨' },
                 bot: { version: 1, enabled: true, order: 0, job: '', model, permissions: { preset, rules: 0 },
                     notify: { quietHours, dailyProactiveLimit: 5 },
@@ -215,14 +215,14 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                 assert.equal(phase, 'interview');
                 assert.equal(await page.locator('#pi-request-dialog[open]').count(), 0, 'no generic dialog for the setup card');
                 assert.equal(await page.locator('.pi-bot-setup [data-setup-field="name"]').inputValue(), '阿狸');
-                assert.equal(await page.locator('.pi-bot-setup [data-setup-field="avatar"]').count(), 0, 'the proposed face is already its face');
+                assert.equal(await page.locator('.pi-bot-setup [data-setup-field="avatar"]').count(), 1, 'the face step always offers presets or a picture');
                 await page.locator('.pi-bot-setup [data-setup-field="name"]').fill('小狸');
                 await page.locator('.pi-bot-setup [data-setup-field="job"]').fill('');
                 if (evidence) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(evidence, `bot-setup-${width}.png`) }); }
                 await page.locator('.pi-bot-setup .pi-bot-setup-save').click();
                 await page.waitForFunction(() => document.querySelector('.pi-bot-setup').hidden);
                 assert.deepEqual(setupBodies.map(body => [body.toolCallId, body.windowId, body.changes]),
-                    [['call-1', MAIN, { name: '小狸', job: null, aboutUser: ['希望被叫做小王'] }]], 'the face it already has is not sent again');
+                    [['call-1', MAIN, { name: '小狸', avatar: null, job: null, aboutUser: ['希望被叫做小王'] }]], 'the chosen face is kept until the user changes it');
                 assert.deepEqual(responses.map(item => [item.id, item.value]), [['ui-1', '保存 / Save']], 'Save is answered only after the server saved');
                 await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-who strong')?.textContent === '小狸');
                 // Reopen with a conversation to check replies carry the Bot's identity.
@@ -232,7 +232,9 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                 await page.evaluate(id => window.PiWorkspaceRoute.navigate('bot', { profileId: id }), BOT);
                 await page.locator('.pi-message.assistant').first().waitFor({ timeout: 8000 });
                 assert.equal(await page.locator('.pi-message.assistant > header > strong').first().textContent(), '小狸');
-                assert.equal(await page.locator('.pi-message.assistant > header .pi-bot-face').first().textContent(), '🦊');
+                assert.equal(await page.locator('.pi-message.assistant > header .pi-bot-face').count(), 0, 'no repeated avatar above replies');
+                assert.equal(await page.locator('#pi-bot-header .pi-bot-identity > .pi-bot-face').textContent(), '🦊');
+                assert.equal(await page.locator('.pi-message.assistant > header').first().isVisible(), false);
                 assert.equal(await page.locator('.pi-message.assistant > header > span:not(.pi-bot-face)').first().isVisible().catch(() => false), false, 'no model name');
                 assert.equal(await page.locator('#pi-input').getAttribute('placeholder'), '给 小狸 发消息');
                 for (const selector of ['.pi-composer-models', '.pi-tool-rail', '#pi-composer-status'])
@@ -268,7 +270,7 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                 socket.send(JSON.stringify({ type: 'message_start', message: { role: 'assistant', content: [], timestamp: Date.now() } }));
                 await page.locator('.pi-message.assistant.streaming').waitFor({ state: 'attached', timeout: 8000 });
                 assert.equal(await page.locator('.pi-message.assistant.streaming > header > strong').textContent(), '小狸');
-                assert.equal(await page.locator('.pi-message.assistant.streaming > header .pi-bot-face').count(), 1);
+                assert.equal(await page.locator('.pi-message.assistant.streaming > header .pi-bot-face').count(), 0);
                 socket.send(JSON.stringify({ type: 'tool_execution_start', toolCallId: 'call-2', toolName: 'bash', args: { command: 'ls -la' } }));
                 socket.send(JSON.stringify({ type: 'extension_ui_request', id: 'ui-2', method: 'confirm', title: APPROVAL, message: `command #${'1'.repeat(16)}\n\nls -la` }));
                 await page.locator('.pi-bot-approval:not([hidden])').waitFor({ timeout: 8000 });
@@ -306,6 +308,41 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                     assert.equal(await page.locator('.pi-bot-window[aria-current="page"] .pi-bot-window-title').textContent(), '主聊天');
                 }
                 if (evidence) { await page.waitForTimeout(400); await page.screenshot({ path: path.join(evidence, `bot-chat-${width}.png`) }); }
+
+                const headerBox = await page.locator('#pi-bot-header').boundingBox(), identityBox = await page.locator('#pi-bot-header .pi-bot-identity').boundingBox();
+                assert.ok(Math.abs(headerBox.x + headerBox.width / 2 - identityBox.x - identityBox.width / 2) < 3, 'the large identity is centered in the chat column');
+                assert.ok((await page.locator('#pi-bot-header .pi-bot-identity > .pi-bot-face').boundingBox()).width >= 64);
+                // Live preset state uses the real WebSocket path; lists remain static.
+                face = { kind: 'preset', id: 'pivane-bean' }; bots = list();
+                await page.evaluate(() => window.dispatchEvent(new Event('workspace:agent-profiles-changed')));
+                await page.locator('#pi-bot-header .pi-preset-svg[data-preset="pivane-bean"]').waitFor();
+                assert.equal(await page.locator('.pi-bot-rail [data-avatar-live="true"]').count(), 0);
+                const pose = () => page.locator('#pi-bot-header .pi-bot-identity > .pi-bot-face').getAttribute('data-avatar-state');
+                socket.send(JSON.stringify({ type: 'agent_start' }));
+                await page.waitForFunction(() => document.querySelector('.pi-bot-identity > .pi-bot-face')?.dataset.avatarState === 'working');
+                socket.send(JSON.stringify({ type: 'tool_execution_end', toolCallId: 'recoverable', toolName: 'read', isError: true, result: { content: [] } }));
+                assert.equal(await pose(), 'working', 'a recoverable tool error does not fail the turn');
+                socket.send(JSON.stringify({ type: 'extension_ui_request', id: 'pose-wait', method: 'confirm', title: APPROVAL, message: `command #${'4'.repeat(16)}\n\npwd` }));
+                await page.waitForFunction(() => document.querySelector('.pi-bot-identity > .pi-bot-face')?.dataset.avatarState === 'waiting');
+                socket.send(JSON.stringify({ type: 'message_end', message: { role: 'assistant', content: [], stopReason: 'stop', timestamp: Date.now() } }));
+                socket.send(JSON.stringify({ type: 'agent_settled' }));
+                await page.waitForFunction(() => document.querySelector('.pi-bot-identity > .pi-bot-face')?.dataset.avatarState === 'waiting');
+                socket.send(JSON.stringify({ type: 'gateway_ui_resolved', id: 'pose-wait' }));
+                await page.waitForFunction(() => document.querySelector('.pi-bot-identity > .pi-bot-face')?.dataset.avatarState === 'idle');
+                socket.send(JSON.stringify({ type: 'agent_start' }));
+                socket.send(JSON.stringify({ type: 'message_end', message: { role: 'assistant', content: [], stopReason: 'stop', timestamp: Date.now() } }));
+                socket.send(JSON.stringify({ type: 'agent_settled' }));
+                await page.waitForFunction(() => document.querySelector('.pi-bot-identity > .pi-bot-face')?.dataset.avatarState === 'done');
+                socket.send(JSON.stringify({ type: 'agent_start' }));
+                await page.waitForFunction(() => document.querySelector('.pi-bot-identity > .pi-bot-face')?.dataset.avatarState === 'working');
+                await page.waitForTimeout(1200);
+                assert.equal(await pose(), 'working', 'new work interrupts the previous celebration timer');
+                socket.send(JSON.stringify({ type: 'message_end', message: { role: 'assistant', content: [], stopReason: 'stop', timestamp: Date.now() } }));
+                socket.send(JSON.stringify({ type: 'agent_settled', aborted: true }));
+                await page.waitForFunction(() => document.querySelector('.pi-bot-identity > .pi-bot-face')?.dataset.avatarState === 'idle');
+                if (evidence) await page.screenshot({ path: path.join(evidence, `bot-preset-header-${width}.png`) });
+                face = '🦊'; bots = list();
+                await page.evaluate(() => window.dispatchEvent(new Event('workspace:agent-profiles-changed')));
 
                 // 3. Rotation: the page opens the new generation and never reconnects to the old one.
                 generation = 1; sessionId = 'gen-1';
