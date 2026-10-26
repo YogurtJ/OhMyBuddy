@@ -7,7 +7,13 @@
 const SETUP_TOOL = 'bot_setup_propose';
 const SETUP_TITLE = '保存这些设置？ / Save these settings?';
 const SAVE = '保存 / Save', DECLINE = '先不改 / Not now';
-const FIELDS = Object.freeze(['name', 'avatar', 'job', 'personality', 'aboutUser', 'finish']);
+const FIELDS = Object.freeze(['name', 'avatar', 'job', 'personality', 'workStyle', 'aboutUser', 'finish']);
+// How the Bot works (its permission preset), from most freedom to most careful. A setup card
+// may keep the current way or make it more careful; more freedom is only set in Bot settings.
+const WORK_STYLES = Object.freeze(['free', 'balanced', 'ask']);
+const moreCareful = (next, current) => WORK_STYLES.indexOf(next) >= WORK_STYLES.indexOf(current);
+// The interview step each proposal field answers (onboarding.steps keys).
+const STEP_OF = Object.freeze({ name: 'name', avatar: 'avatar', job: 'job', personality: 'personality', workStyle: 'work', aboutUser: 'about' });
 const LIMITS = Object.freeze({ name: 40, avatar: 16, job: 300, personality: 6000, aboutItems: 6, aboutItem: 300 });
 
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
@@ -35,6 +41,10 @@ function normalizeProposal(raw, { partial = false } = {}) {
         if (Buffer.byteLength(out.avatar) > 64 || /[<>]/.test(out.avatar) || /[\p{L}\p{N}]/u.test(out.avatar)) fail('avatar must be an emoji');
     }
     if (input.job != null) out.job = line(input.job, LIMITS.job, 'job');
+    if (input.workStyle != null) {
+        if (!WORK_STYLES.includes(input.workStyle)) fail('workStyle must be free, balanced or ask');
+        out.workStyle = input.workStyle;
+    }
     if (input.personality != null) {
         if (typeof input.personality !== 'string' || control.test(input.personality.replace(/\r?\n/g, ''))) fail('Invalid personality');
         const text = input.personality.replace(/\r\n/g, '\n').trim();
@@ -93,4 +103,4 @@ function appendUserEntries(content, items) {
     return { content: [...parts, ...added].join('\n§\n'), added };
 }
 
-module.exports = { SETUP_TOOL, SETUP_TITLE, SAVE, DECLINE, FIELDS, LIMITS, normalizeProposal, pendingProposal, confirmedChanges, userEntries, appendUserEntries };
+module.exports = { SETUP_TOOL, SETUP_TITLE, SAVE, DECLINE, FIELDS, LIMITS, WORK_STYLES, STEP_OF, moreCareful, normalizeProposal, pendingProposal, confirmedChanges, userEntries, appendUserEntries };

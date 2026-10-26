@@ -349,6 +349,7 @@ function receipt(input, id, before, after, indexStatus, provenance, status = 'sa
         itemId: id, status, at: new Date().toISOString(), summary: `${input.operation} ${input.kind}`,
         origin: provenance.origin, ...(provenance.reason ? { learningReason: provenance.reason } : {}),
         preview: receiptPreview(after), ...(after.kind === 'memory' && after.category ? { category: after.category } : {}),
+        ...(after.kind === 'memory' && ['user', 'memory'].includes(after.target) ? { target: after.target } : {}),
         scope: after.scope, ...(after.projectKey ? { projectKey: after.projectKey } : {}),
         ...(input.source ? { source: input.source } : provenance.sessionId ? { source: { sessionId: provenance.sessionId } } : {}),
         ...(before ? { beforeRevision: before.revision } : {}),

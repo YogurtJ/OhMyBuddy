@@ -14,7 +14,7 @@ import { readWindowBinding } from './bot-window-state.js';
 import { readWindowRecord } from './bot-window-registry.js';
 import { readBot } from './bot-settings.js';
 import { botPreamble } from './bot-prompt.js';
-import { SETUP_TOOL, SETUP_TITLE, SAVE, DECLINE, normalizeProposal } from './bot-setup.js';
+import { SETUP_TOOL, SETUP_TITLE, SAVE, DECLINE, STEP_OF, normalizeProposal } from './bot-setup.js';
 import { APPROVAL_TITLE, BLOCKED, PRESETS, approvalFor, approvalMessage, newToken } from './bot-guard.js';
 import { safeFile as readDocument } from '../profile-memory/management.js';
 import { registerNotebook, notebookNotice, editNotebook } from './bot-notebook.ts';
@@ -116,8 +116,9 @@ function identitySnapshot(context: any, agentDir: string) {
     } catch { entries = []; }
     const avatar = profile?.avatar?.kind === 'emoji' ? profile.avatar.value
         : profile?.avatar?.kind === 'image' ? `(picture ${String(profile.avatar.version).slice(0, 8)})` : null;
-    return { name: profile?.name ?? null, avatar, job: readBot(profile)?.job ?? null,
-        personality: typeof profile?.soul === 'string' ? profile.soul : null, phase: readBot(profile)?.onboarding?.phase ?? null, entries };
+    const bot = readBot(profile);
+    return { name: profile?.name ?? null, avatar, job: bot?.job ?? null, personality: typeof profile?.soul === 'string' ? profile.soul : null,
+        workStyle: bot?.permissions?.preset ?? null, phase: bot?.onboarding?.phase ?? null, steps: bot?.onboarding?.steps ?? {}, entries };
 }
 
 // The Bot proposes; the user decides on an editable card in the Bot page, where the server
@@ -126,18 +127,20 @@ function registerSetupTool(pi: ExtensionAPI, context: any, getAgentDir: () => st
     let pending = false;
     pi.registerTool({
         name: SETUP_TOOL, label: 'Propose Bot setup', exposure: 'model-only',
-        description: 'Propose changes to your own name, face (one emoji), main job or personality, or short lasting facts about the user (how to address them, what matters to them). The user sees an editable card and decides; nothing is saved unless they confirm. Include only the fields you are proposing to change and leave the others out. Returns status, what was actually saved (the user can edit or untick fields) and your current identity.',
+        description: 'Propose changes to your own name, face (one emoji), main job, personality or way of working, or short lasting facts about the user (how to address them, what matters to them). The user sees an editable card and decides; nothing is saved unless they confirm. Include only the fields you are proposing to change and leave the others out. Returns status, what was actually saved (the user can edit or untick fields) and your current identity.',
         promptSnippet: 'Propose changes to your own identity or notes about the user for the user to confirm',
         promptGuidelines: [
             'Use bot_setup_propose for your own name, face emoji, main job and personality, and for lasting facts about the user. Propose one coherent step at a time, in the user\'s language.',
             'Put in a card only what the user has just told you or agreed to in this step; leave every other field out (never send empty values or fill fields the user did not talk about). Once your name or face is set, propose it again only when the user asks to change it.',
             'If the user is not sure yet what you should mainly help with or how you should talk, that is fine: say you will start in a general way and learn as you go, propose nothing for it, and carry on with what they need. Later, when their requests or feedback show a clear preference, you may propose an update of that one field.',
-            'Only status "saved" means something changed; then use the returned "current" identity, since the user may have edited or unticked fields. After "declined" or "no_answer", carry on without proposing the same thing again right away.'
+            'workStyle shows the user the three ways you can work (hands-off, careful, ask every time) and lets them pick; propose it in the interview step for it, or when the user asks you to ask first more or less often. A card can keep the current way or make you more careful; for more freedom the user changes it in your settings.',
+            'Only status "saved" means something changed; then use the returned "current" identity, since the user may have edited or unticked fields. After "declined" (the user chose to decide later; "later" lists the steps now skipped) or "no_answer", carry on without proposing the same thing again right away.'
         ],
         parameters: Type.Object({
             name: Type.Optional(Type.String({ maxLength: 40, description: 'Your new name.' })),
             avatar: Type.Optional(Type.String({ maxLength: 16, description: 'One emoji for your face.' })),
             job: Type.Optional(Type.String({ maxLength: 300, description: 'One sentence: what you mainly help this user with.' })),
+            workStyle: Type.Optional(Type.Union([Type.Literal('free'), Type.Literal('balanced'), Type.Literal('ask')], { description: 'How you work: free (hands-off), balanced (careful) or ask (ask every time). The card shows all three and the user picks.' })),
             personality: Type.Optional(Type.String({ maxLength: 6000, description: 'Your personality and way of talking, written as guidance to yourself (second person), a few short paragraphs at most.' })),
             aboutUser: Type.Optional(Type.Array(Type.String({ maxLength: 300 }), { maxItems: 6, description: 'Short, self-contained facts about the user, e.g. how to address them.' })),
             finish: Type.Optional(Type.Boolean({ description: 'true when this completes getting to know each other.' }))
@@ -153,21 +156,27 @@ function registerSetupTool(pi: ExtensionAPI, context: any, getAgentDir: () => st
                 const before = identitySnapshot(context, getAgentDir());
                 const answer = await ctx.ui.select(SETUP_TITLE, [SAVE, DECLINE], { signal, timeout: 30 * 60 * 1000 });
                 if (answer === undefined) return reply({ status: signal?.aborted ? 'aborted' : 'no_answer' });
-                if (answer !== SAVE) return reply({ status: 'declined' });
                 const after = identitySnapshot(context, getAgentDir());
+                // Steps of this card the user left for later (recorded by the Bot page with the answer).
+                const later = (Object.entries(STEP_OF) as [string, string][]).filter(([field, step]) => proposal[field] !== undefined
+                    && after.steps[step] === 'skipped' && before.steps[step] !== 'skipped').map(([field]) => field);
+                if (answer !== SAVE) return reply({ status: 'declined', ...(later.length ? { later } : {}) });
                 const trim = (key: string, value: any) => key === 'personality' && value ? String(value).slice(0, 1500) : value;
                 // What changed now, what the user kept as it was, and the identity as it now stands
                 // (the user may have edited a field back to its current value or unticked it).
                 const saved: any = {}, kept: string[] = [];
-                for (const key of ['name', 'avatar', 'job', 'personality'] as const) {
+                for (const key of ['name', 'avatar', 'job', 'personality', 'workStyle'] as const) {
                     if (proposal[key] === undefined) continue;
-                    if (after[key] !== before[key]) saved[key] = trim(key, after[key]); else kept.push(key);
+                    // A way of working confirmed as it was is still the user's answer.
+                    const confirmed = key === 'workStyle' && after.steps.work === 'done' && before.steps.work !== 'done';
+                    if (after[key] !== before[key] || confirmed) saved[key] = trim(key, after[key]); else kept.push(key);
                 }
                 const added = after.entries.filter((entry: string) => !before.entries.includes(entry));
                 if (proposal.aboutUser && added.length) saved.aboutUser = added;
                 if (proposal.finish && after.phase === 'done' && before.phase !== 'done') saved.finish = true;
                 const status = Object.keys(saved).length ? 'saved' : 'not_saved';
-                const current = { name: after.name, avatar: after.avatar, job: after.job, personality: trim('personality', after.personality), interview: after.phase };
+                const current = { name: after.name, avatar: after.avatar, job: after.job, personality: trim('personality', after.personality),
+                    workStyle: after.workStyle, interview: after.phase };
                 return reply({ status, saved, ...(kept.length ? { kept } : {}), current,
                     ...(status === 'not_saved' ? { note: 'Nothing was changed; "current" is how things stand.' } : {}) });
             } finally { pending = false; }

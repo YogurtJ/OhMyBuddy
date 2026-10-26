@@ -168,7 +168,8 @@
         // The Bot as the setup card compares a proposal with it.
         setupIdentity() {
             const bot = this.bot();
-            return bot ? { id: bot.id, name: bot.name, avatar: bot.avatar, job: bot.bot?.job || '', chosen: bot.chosen || null, steps: bot.bot?.onboarding?.steps || {} } : null;
+            return bot ? { id: bot.id, name: bot.name, avatar: bot.avatar, job: bot.bot?.job || '', workStyle: bot.bot?.permissions?.preset || 'free',
+                phase: bot.bot?.onboarding?.phase || null, chosen: bot.chosen || null, steps: bot.bot?.onboarding?.steps || {} } : null;
         }
 
         // A picture face chosen on a setup card, through the profile avatar service.
@@ -199,6 +200,18 @@
                 if (result.user && result.user.documentSaved === false) this.toast(translateUi("关于你的内容这次没记下：{0}", result.user.error || ''), 'error');
                 return result;
             } finally { await this.refresh(); }
+        }
+
+        // The user leaves a setup card's steps for later; one retry after a revision conflict.
+        async leaveSetupForLater(toolCallId) {
+            const current = this.current();
+            if (!current) return;
+            if (this.revision === null) await this.load();
+            const send = () => this.api(`/api/pi/bots/${encodeURIComponent(current.profileId)}/setup`, { method: 'POST',
+                headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ windowId: current.windowId, toolCallId, later: true, expectedRevision: this.revision }) });
+            try { return await send(); }
+            catch (error) { if (error.status !== 409 || error.code) throw error; await this.load(); return await send(); }
+            finally { await this.refresh(); }
         }
 
         async onboarding(action) {
@@ -323,7 +336,8 @@
             const bot = this.bot(), current = this.current();
             if (!bot || !current || !window.PiBotNotebook) return;
             window.PiBotNotebook.open({ api: this.api, toast: this.toast, profileId: current.profileId, windowId: current.windowId,
-                name: bot.name, face: size => face(bot, size) });
+                name: bot.name, face: size => face(bot, size),
+                onAbout: () => window.PiWorkspaceRoute?.navigate('profiles', { profileId: current.profileId, section: 'user' }) });
         }
 
         openSettings() {
@@ -511,7 +525,21 @@
     // answers Save. Anything it does not recognise stays with the generic request dialog.
     const SETUP_TITLE = '保存这些设置？ / Save these settings?', SAVE = '保存 / Save', DECLINE = '先不改 / Not now';
     const SETUP_FIELDS = [['name', () => translateUi("名字"), 40], ['avatar', () => translateUi("头像"), 16],
-        ['job', () => translateUi("主要帮你做"), 300], ['personality', () => translateUi("性格"), 6000]];
+        ['job', () => translateUi("主要帮你做"), 300], ['personality', () => translateUi("性格"), 6000], ['workStyle', () => translateUi("做事方式"), 0]];
+    // The three ways a Bot works, from most freedom to most careful (same words as Bot settings).
+    const WORK_STYLES = [
+        ['free', () => translateUi("放手"), () => translateUi("大部分事直接办好。删东西、改工作目录以外的文件、对外发消息、花钱多的事会先问你。")],
+        ['balanced', () => translateUi("稳妥"), () => translateUi("查资料、记东西、在工作目录里写文件直接做；运行命令、改工作目录以外的文件、交给别的助手前，会弹出确认等你允许。")],
+        ['ask', () => translateUi("每次都问"), () => translateUi("除了看和回答，每一步动手前都会弹出确认，等你允许。")]
+    ];
+    const workRank = value => WORK_STYLES.findIndex(([key]) => key === value);
+    // Quick personality styles on the card; one click fills the text, which stays editable.
+    const PERSONALITY_STYLES = [
+        [() => translateUi("干脆利落"), () => translateUi("说话干脆利落，先给结论，少说客套话。")],
+        [() => translateUi("温柔耐心"), () => translateUi("温柔耐心，慢慢解释，多鼓励。")],
+        [() => translateUi("幽默一点"), () => translateUi("轻松幽默，偶尔开个玩笑，但正事不含糊。")],
+        [() => translateUi("专业严谨"), () => translateUi("专业严谨，用词准确，说清依据和不确定的地方。")]
+    ];
 
     function setupFits(event) {
         return event?.method === 'select' && event.title === SETUP_TITLE && Array.isArray(event.options)
@@ -536,9 +564,10 @@
         return dataUrl;
     }
 
-    // identity(): { id, name, avatar, job, chosen, steps } of the Bot now; uploadPicture(dataUrl) saves a picture
-    // face and resolves to the avatar service's answer; notify(message) tells the user something in passing.
-    function createSetupCards({ enabled, calls, respond, save, face: currentFace, changed, identity = () => null, uploadPicture = null, notify = null }) {
+    // identity(): { id, name, avatar, job, workStyle, phase, chosen, steps } of the Bot now; uploadPicture(dataUrl) saves
+    // a picture face and resolves to the avatar service's answer; notify(message) tells the user something in passing;
+    // later(toolCallId) records that the user leaves the card's steps for later (during the interview).
+    function createSetupCards({ enabled, calls, respond, save, face: currentFace, changed, identity = () => null, uploadPicture = null, notify = null, later: leaveForLater = null }) {
         const panel = el('section', 'pi-bot-setup'); panel.hidden = true;
         panel.setAttribute('role', 'region'); panel.setAttribute('aria-label', translateUi("请你确认设置"));
         let current = null, retry = 0, retries = 0, serial = 0;
@@ -559,8 +588,19 @@
             const fields = [];
             for (const [key] of SETUP_FIELDS) {
                 const value = typeof args[key] === 'string' ? args[key].trim() : '';
-                if (!value || existing(key) === value) continue;
-                fields.push({ key, value, use: !chosen(key), kept: chosen(key) ? { name: now.name, avatar: now.avatar, id: now.id } : null });
+                if (key === 'workStyle') {
+                    // Always shown when proposed: the point is to let the user pick. Only the current way
+                    // or more careful ones are offered; more freedom is set in Bot settings.
+                    const now_ = workRank(now.workStyle) < 0 ? 'free' : now.workStyle;
+                    if (workRank(value) < 0) continue;
+                    fields.push({ key, value: workRank(value) >= workRank(now_) ? value : now_, use: true, kept: null, floor: now_ });
+                    continue;
+                }
+                // A proposed face is always shown, even the current one, so a picture can be uploaded instead (UAT-14).
+                if (!value || existing(key) === value && key !== 'avatar') continue;
+                // The current face is shown beside a different proposed one, so keeping it is a visible choice.
+                const show = chosen(key) || key === 'avatar' && now.avatar && existing(key) !== value;
+                fields.push({ key, value, use: !chosen(key), kept: show ? { name: now.name, avatar: now.avatar, id: now.id } : null });
             }
             const facts = [...new Set((Array.isArray(args.aboutUser) ? args.aboutUser : []).filter(item => typeof item === 'string' && item.trim()))]
                 .map(text => ({ text, checked: true }));
@@ -569,7 +609,27 @@
             return { fields, facts, picture: null, pictureVersion: null, uploaded: null };
         }
 
+        // The three ways of working as choices; ones freer than now are left out (with a pointer to settings).
+        function workRow(field) {
+            const row = el('div', 'pi-bot-setup-field is-workStyle');
+            const group = el('fieldset', 'pi-bot-setup-work');
+            group.append(el('legend', 'pi-bot-setup-label', translateUi("做事方式")));
+            for (const [key, title, detail] of WORK_STYLES) {
+                if (workRank(key) < workRank(field.floor)) continue;
+                const option = el('label', 'pi-bot-setup-work-option'), radio = el('input');
+                radio.type = 'radio'; radio.name = `pi-bot-setup-${serial}-work`; radio.value = key; radio.checked = field.value === key; radio.dataset.setupWork = key;
+                radio.addEventListener('change', () => { if (radio.checked) field.value = key; });
+                const text = el('span'); text.append(el('strong', null, title()), el('small', null, detail()));
+                option.append(radio, text);
+                group.append(option);
+            }
+            if (workRank(field.floor) > 0) group.append(el('p', 'pi-bot-setup-work-note', translateUi("想让它更放手，可以在设置里改。")));
+            row.append(group);
+            return row;
+        }
+
         function fieldRow(field, draft) {
+            if (field.key === 'workStyle') return workRow(field);
             const [, label, max] = SETUP_FIELDS.find(([key]) => key === field.key);
             const row = el('div', `pi-bot-setup-field is-${field.key}`);
             const id = `pi-bot-setup-${serial}-${field.key}`;
@@ -582,6 +642,15 @@
             let toggle = null;
             const use = on => { field.use = on; row.classList.toggle('is-kept', !on); if (toggle) toggle.checked = on; };
             input.addEventListener('input', () => { field.value = input.value; if (!field.use) use(true); });
+            if (field.key === 'personality') {
+                const styles = el('div', 'pi-bot-setup-styles'); styles.setAttribute('role', 'group'); styles.setAttribute('aria-label', translateUi("快速选一种性格"));
+                for (const [title, text] of PERSONALITY_STYLES) {
+                    const chip = el('button', 'pi-bot-chip', title()); chip.type = 'button'; chip.dataset.setupStyle = '';
+                    chip.addEventListener('click', () => { input.value = field.value = text(); use(true); input.focus(); });
+                    styles.append(chip);
+                }
+                body.append(styles);
+            }
             if (field.key === 'avatar' && draft.picture) {
                 const preview = el('span', 'pi-bot-setup-picture'), img = el('img');
                 img.src = draft.picture; img.alt = translateUi("新头像图片"); preview.append(img);
@@ -646,22 +715,36 @@
             const note = el('p', 'pi-bot-setup-note'); note.setAttribute('role', 'status'); note.setAttribute('aria-live', 'polite');
             if (current.error) { note.textContent = current.error; note.classList.add('is-error'); }
             else if (pictured) note.textContent = translateUi("图片会在保存时上传");
-            const later = el('button', 'pi-bot-setup-later', translateUi("先不改")); later.type = 'button';
+            const later = el('button', 'pi-bot-setup-later', laterLabel()); later.type = 'button';
             const confirm = el('button', 'pi-bot-primary pi-bot-setup-save', current.saving ? translateUi("正在保存…") : nothing && args.finish !== true ? translateUi("好") : translateUi("保存"));
             confirm.type = 'button';
             later.disabled = confirm.disabled = Boolean(current.saving);
             later.hidden = nothing && args.finish !== true;
-            later.addEventListener('click', () => {
-                // A picture this card uploaded stays the face even though the rest is not saved.
-                const face = identity()?.avatar;
-                if (draft.uploaded && (!face || face.kind === 'image' && face.version === draft.uploaded))
-                    notify?.(translateUi("上传的图片已经是头像了；要换回可以在设置里改。"));
-                respond({ id: event.id, value: DECLINE }); hide();
-            });
+            later.addEventListener('click', () => void decline());
             confirm.addEventListener('click', () => void submit());
             foot.append(note, later, confirm);
             panel.replaceChildren(head, form, foot);
             panel.hidden = false;
+        }
+
+        // While getting to know each other every card can be left for later; that is recorded, so
+        // the Bot does not ask the same step again (UAT-14). Afterwards it is simply "not now".
+        const interviewing = () => ['greeting', 'interview'].includes(identity()?.phase);
+        const laterLabel = () => interviewing() ? translateUi("以后再说") : translateUi("先不改");
+        async function decline() {
+            if (!current || current.saving) return;
+            const target = current, draft = target.draft;
+            if (interviewing() && leaveForLater) {
+                target.saving = true; target.error = ''; render();
+                // Best effort: the answer below is given either way.
+                try { await leaveForLater(target.call.id); } catch {}
+                if (current !== target) return;
+            }
+            // A picture this card uploaded stays the face even though the rest is not saved.
+            const face = identity()?.avatar;
+            if (draft.uploaded && (!face || face.kind === 'image' && face.version === draft.uploaded))
+                notify?.(translateUi("上传的图片已经是头像了；要换回可以在设置里改。"));
+            respond({ id: target.event.id, value: DECLINE }); hide();
         }
 
         // The user's choices, from the draft: a field left unticked or emptied is not saved (null).
@@ -685,7 +768,7 @@
             const meaningful = picture || Object.entries(changes).some(([key, value]) => key !== 'finish' && value !== null);
             // Nothing proposed differs from what the Bot already has: answer without saving.
             if (!draft.fields.length && !draft.facts.length && changes.finish !== true) { respond({ id: target.event.id, value: SAVE }); hide(); return; }
-            if (!meaningful && changes.finish !== true) { target.error = translateUi("没有要保存的内容，可以选“先不改”"); render(); return; }
+            if (!meaningful && changes.finish !== true) { target.error = translateUi("没有要保存的内容，可以选“{0}”", laterLabel()); render(); return; }
             target.saving = true; target.error = ''; render();
             try {
                 if (picture && !draft.pictureVersion) {
@@ -862,5 +945,5 @@
     }
 
     window.PiBot = Object.freeze({ create: options => new PiBotUi(options), setupCards: createSetupCards, approvalCards: createApprovalCards,
-        history: createWindowHistory, face });
+        history: createWindowHistory, face, pictureData });
 })();

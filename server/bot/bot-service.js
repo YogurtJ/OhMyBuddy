@@ -38,13 +38,16 @@ const PLACEHOLDER = Object.freeze({ 'zh-CN': '新伙伴', en: 'New buddy' });
 const DEFAULT_AVATAR = Object.freeze({ kind: 'emoji', value: '✨' });
 // Whether the user has picked the name and the face, kept across a new interview: recorded when
 // they save one on a setup card or in Bot settings (bot.chosen), else inferred (older records,
-// the identity page) from the interview's identity step or a value a new Bot does not start with.
-// A later setup card keeps these unless the user asks (UAT-03).
+// the identity page) from the interview's name/face step (or the older combined identity step)
+// or a value a new Bot does not start with. A later setup card keeps these unless the user asks (UAT-03).
 function chosenIdentity(profile, bot) {
-    const done = bot.onboarding?.steps?.identity === 'done', avatar = profile.avatar;
-    return { name: bot.chosen?.name === true || done || !Object.values(PLACEHOLDER).includes(profile.name),
-        avatar: bot.chosen?.avatar === true || done || Boolean(avatar) && !(avatar.kind === DEFAULT_AVATAR.kind && avatar.value === DEFAULT_AVATAR.value) };
+    const steps = bot.onboarding?.steps || {}, both = steps.identity === 'done', avatar = profile.avatar;
+    return { name: bot.chosen?.name === true || both || steps.name === 'done' || !Object.values(PLACEHOLDER).includes(profile.name),
+        avatar: bot.chosen?.avatar === true || both || steps.avatar === 'done'
+            || Boolean(avatar) && !(avatar.kind === DEFAULT_AVATAR.kind && avatar.value === DEFAULT_AVATAR.value) };
 }
+// Interview steps answered elsewhere count as settled; the older combined step covers name and face.
+const settled = (steps, step) => Boolean(steps[step]) || (step === 'name' || step === 'avatar') && steps.identity === 'done';
 
 // What the notebook panel shows: every note except tombstones, with the quote it came from
 // (kept with the note), or else a short excerpt of the message when it is in the current generation.
@@ -578,6 +581,11 @@ class BotService extends EventEmitter {
     // picture: the version of the picture the user answered a proposed face with, which the
     // card has just saved through the avatar service; the profile's face must still be exactly
     // that picture (another client may have changed it in between).
+    // later: the user answered the card with "later": nothing is saved, and the interview steps
+    // it asked about are recorded as skipped, so the Bot does not ask them again (UAT-14).
+    // Each step is its own: saving only a name leaves the face step open. A proposed field the
+    // user left out (unticked or emptied) records its step as skipped unless already settled.
+    // workStyle may keep the current way of working or make it more careful, never freer.
     setup(profileId, input = {}) {
         return this.profiles.reserve(async () => {
             if (!object(input) || typeof input.expectedRevision !== 'string' || typeof input.windowId !== 'string') fail('Invalid setup confirmation');
@@ -591,12 +599,14 @@ class BotService extends EventEmitter {
                     fail('Window conversation does not match its native marker', 409);
                 return found;
             });
-            const changes = setup.confirmedChanges(proposal, input.changes ?? proposal);
+            if (input.later !== undefined && (input.later !== true || input.changes !== undefined || input.picture !== undefined)) fail('Invalid setup confirmation');
+            const later = input.later === true;
+            const changes = later ? {} : setup.confirmedChanges(proposal, input.changes ?? proposal);
             if (input.picture !== undefined && (typeof input.picture !== 'string' || !/^[a-f0-9]{64}$/.test(input.picture))) fail('Invalid setup confirmation');
             const picture = input.picture !== undefined;
             if (picture && !Object.hasOwn(proposal, 'avatar')) fail('Only the proposed fields can be saved');
             if (picture) delete changes.avatar;
-            if (!Object.keys(changes).length && !picture) fail('Nothing to save');
+            if (!later && !Object.keys(changes).length && !picture) fail('Nothing to save');
             const now = new Date().toISOString();
             const saved = await this.profiles.mutate(input.expectedRevision, state => {
                 const index = state.profiles.findIndex(profile => profile.id === profileId);
@@ -607,15 +617,22 @@ class BotService extends EventEmitter {
                 const base = validateProfile({ name: changes.name ?? previous.name, description: previous.description,
                     soul: changes.personality ?? previous.soul, enabled: previous.enabled, memory: previous.memory, skills: previous.skills,
                     ...(changes.avatar ? { avatar: { kind: 'emoji', value: changes.avatar } } : {}) }, previous);
+                if (changes.workStyle && !setup.moreCareful(changes.workStyle, bot.permissions.preset))
+                    fail('A setup card can only make the Bot more careful; give it more freedom in Bot settings', 409, 'BOT_WORK_STYLE_FREER');
                 const onboarding = { ...bot.onboarding, steps: { ...bot.onboarding.steps } };
-                if (changes.name || changes.avatar || picture) onboarding.steps.identity = 'done';
-                if (changes.job) onboarding.steps.job = 'done';
-                if (changes.personality) onboarding.steps.personality = 'done';
-                if (changes.aboutUser) onboarding.steps.about = 'done';
+                // A proposed value the Bot already has is left off the card; that step is answered.
+                const has = { name: previous.name, avatar: previous.avatar?.kind === 'emoji' ? previous.avatar.value : null, job: bot.job,
+                    personality: previous.soul, workStyle: bot.permissions.preset };
+                for (const [field, step] of Object.entries(setup.STEP_OF)) {
+                    if (!Object.hasOwn(proposal, field)) continue;
+                    if (changes[field] !== undefined || field === 'avatar' && picture) onboarding.steps[step] = 'done';
+                    else if (!settled(onboarding.steps, step)) onboarding.steps[step] = !later && has[field] === proposal[field] ? 'done' : 'skipped';
+                }
                 if (onboarding.phase === 'greeting') onboarding.phase = 'interview';
                 if (changes.finish && !['done', 'skipped'].includes(onboarding.phase)) { onboarding.phase = 'done'; onboarding.completedAt = now; }
                 const chosen = { ...bot.chosen, ...(changes.name ? { name: true } : {}), ...(changes.avatar || picture ? { avatar: true } : {}) };
-                const nextBot = settings.normalizeBot({ ...bot, job: changes.job ?? bot.job, onboarding, chosen });
+                const permissions = changes.workStyle ? { ...bot.permissions, preset: changes.workStyle } : bot.permissions;
+                const nextBot = settings.normalizeBot({ ...bot, job: changes.job ?? bot.job, permissions, onboarding, chosen });
                 const record = { ...previous, ...base, bot: { ...previous.bot, ...nextBot }, updatedAt: now };
                 state.profiles[index] = record;
                 return { bot: { id: record.id, name: record.name, avatar: record.avatar ?? null, bot: this.publicBot(nextBot) } };
@@ -637,7 +654,8 @@ class BotService extends EventEmitter {
                 } catch (error) { user = { added: [], documentSaved: false, error: error.message }; }
             }
             this.emit('botChanged', { profileId });
-            return { ok: true, revision: saved.revision, bot: saved.bot, saved: { ...changes, ...(picture ? { picture: true } : {}) }, ...(user ? { user } : {}) };
+            return { ok: true, revision: saved.revision, bot: saved.bot, saved: { ...changes, ...(picture ? { picture: true } : {}) },
+                ...(later ? { later: true } : {}), ...(user ? { user } : {}) };
         });
     }
 
@@ -743,9 +761,18 @@ class BotService extends EventEmitter {
                 const patched = botPatch === undefined ? bot : settings.applyBotPatch(bot, botPatch);
                 // A name or face set here is the user's choice, even one that looks like a new Bot's.
                 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+                // A picture is uploaded first and then saved here as the face (it is already the
+                // current face by then), which is the user's choice too.
+                const faced = avatar !== undefined && (!same(base.avatar, previous.avatar) || base.avatar?.kind === 'image');
                 const chosen = { ...patched.chosen, ...(name !== undefined && base.name !== previous.name ? { name: true } : {}),
-                    ...(avatar !== undefined && !same(base.avatar, previous.avatar) ? { avatar: true } : {}) };
-                const nextBot = settings.normalizeBot({ ...patched, chosen });
+                    ...(faced ? { avatar: true } : {}) };
+                // What the user sets here during the interview is not asked again there.
+                const onboarding = { ...patched.onboarding, steps: { ...patched.onboarding.steps } };
+                const answered = { name: base.name !== previous.name, avatar: faced,
+                    job: patched.job !== bot.job, personality: base.soul !== previous.soul, work: patched.permissions.preset !== bot.permissions.preset };
+                if (['greeting', 'interview'].includes(onboarding.phase))
+                    for (const [step, changed] of Object.entries(answered)) if (changed && onboarding.steps[step] !== 'done' && !settled({ identity: onboarding.steps.identity }, step)) onboarding.steps[step] = 'done';
+                const nextBot = settings.normalizeBot({ ...patched, chosen, onboarding });
                 const record = { ...previous, ...base, bot: { ...previous.bot, ...nextBot }, updatedAt: new Date().toISOString() };
                 state.profiles[index] = record;
                 return { ok: true, bot: { id: record.id, name: record.name, avatar: record.avatar ?? null, bot: this.publicBot(nextBot) },
