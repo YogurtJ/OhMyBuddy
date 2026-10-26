@@ -58,7 +58,7 @@
         let data = null, controls = null, saving = false, warned = null, initial = null;
         // picture: a picture chosen in this sheet (PNG data URL), uploaded when saving;
         // uploaded: the last one this sheet put up, so a retry does not upload it again.
-        let picture = null, uploaded = null, faceChoice = null, fileSerial = 0;
+        let picture = null, uploaded = null, faceChoice = null, fileSerial = 0, decoding = false;
         // The avatar and picture are one draft value, so rebasing never combines two sources.
         const formValues = () => controls ? { name: controls.name.value,
             faceDraft: JSON.stringify({ avatar: faceChoice, picture, text: controls.avatar.value }), job: controls.job.value, soul: controls.soul.value,
@@ -109,7 +109,7 @@
         function refreshState() {
             if (!controls) return;
             const pending = changes();
-            save.disabled = saving || !pending || !Object.keys(pending).length;
+            save.disabled = saving || decoding || !pending || !Object.keys(pending).length;
             for (const control of body.querySelectorAll('input,textarea,select,button')) control.disabled = saving;
             const model = controls.model.value ? data.models?.models.find(item => modelKey(item) === controls.model.value) : null;
             const levels = model?.thinkingLevels || [];
@@ -163,11 +163,11 @@
             const avatar = el('input'); avatar.type = 'text'; avatar.maxLength = LIMITS.avatar; avatar.className = 'pi-bot-sheet-emoji';
             avatar.value = bot.avatar?.kind === 'emoji' ? bot.avatar.value : ''; avatar.autocomplete = 'off';
             avatar.placeholder = '🙂'; avatar.setAttribute('aria-label', translateUi("自己输入一个表情"));
-            picture = null; faceChoice = structuredClone(bot.avatar ?? null); fileSerial++;
+            picture = null; faceChoice = structuredClone(bot.avatar ?? null); fileSerial++; decoding = false;
             // Preview stays local until Save; every source replaces the same draft.
             const preview = el('span', 'pi-bot-sheet-avatar-face');
             const facePresets = window.PiAvatar?.choices(faceChoice, value => {
-                fileSerial++; picture = null; faceChoice = value; avatar.value = ''; warned = null; showFace(); refreshState();
+                fileSerial++; decoding = false; picture = null; faceChoice = value; avatar.value = ''; warned = null; showFace(); refreshState();
             });
             const showFace = () => {
                 if (picture) { const img = el('img'); img.src = picture; img.alt = ''; const node = el('span', 'pi-bot-face is-xl'); node.append(img); preview.replaceChildren(node); }
@@ -186,23 +186,25 @@
             const pick = button('pi-bot-chip'); pick.dataset.sheetPicture = 'pick';
             pick.addEventListener('click', () => file.click());
             const back = button('pi-bot-chip', translateUi("不用这张图片")); back.dataset.sheetPicture = 'clear';
-            back.addEventListener('click', () => { fileSerial++; picture = null; status.textContent = ''; showFace(); refreshState(); });
+            back.addEventListener('click', () => { fileSerial++; decoding = false; picture = null; status.textContent = ''; showFace(); refreshState(); });
             const remove = button('pi-bot-chip', translateUi("移除头像"));
-            remove.addEventListener('click', () => { fileSerial++; picture = null; faceChoice = null; avatar.value = ''; warned = null; showFace(); refreshState(); });
+            remove.addEventListener('click', () => { fileSerial++; decoding = false; picture = null; faceChoice = null; avatar.value = ''; warned = null; showFace(); refreshState(); });
             file.addEventListener('change', async () => {
                 const chosen = file.files?.[0]; file.value = '';
                 if (!chosen || saving) return;
                 const request = ++fileSerial;
+                decoding = true; refreshState();
                 try {
                     const decoded = await window.PiBot.pictureData(chosen);
                     if (!sheet.open || request !== fileSerial) return;
                     picture = decoded; faceChoice = null; avatar.value = '';
                     warned = null; status.textContent = translateUi("图片会在保存时上传"); delete status.dataset.tone;
                 } catch (error) { if (sheet.open && request === fileSerial) { status.dataset.tone = 'error'; status.textContent = error.message; } }
+                finally { if (request === fileSerial) decoding = false; }
                 if (!sheet.open || request !== fileSerial) return;
                 showFace(); refreshState();
             });
-            avatar.addEventListener('input', () => { fileSerial++; picture = null; faceChoice = avatar.value.trim() ? { kind: 'emoji', value: avatar.value.trim() } : null; showFace(); });
+            avatar.addEventListener('input', () => { fileSerial++; decoding = false; picture = null; faceChoice = avatar.value.trim() ? { kind: 'emoji', value: avatar.value.trim() } : null; showFace(); });
             const actions = el('div', 'pi-bot-sheet-avatar-actions');
             actions.append(avatar, pick, back, remove, file);
             const avatarBox = el('div', 'pi-bot-sheet-avatar');
@@ -280,23 +282,24 @@
 
         form.addEventListener('submit', async event => {
             event.preventDefault();
-            if (saving || !controls) return;
+            if (saving || decoding || !controls) return;
             const pending = changes();
             if (!pending) { status.dataset.tone = 'error'; status.textContent = translateUi("名字不能为空"); return; }
             if (!Object.keys(pending).length) return;
             saving = true; refreshState(); status.textContent = translateUi("正在保存…"); delete status.dataset.tone;
             try {
                 let revision = data.revision;
+                const submittedPicture = picture;
                 if (pending.avatar?.kind === 'image') {
                     // The picture goes up first (the avatar service keeps the file); saving it here
                     // then records it as the face the user chose.
                     const face = data.bot.avatar;
-                    if (!(uploaded?.picture === picture && face?.kind === 'image' && face.version === uploaded.version)) {
+                    if (!(uploaded?.picture === submittedPicture && face?.kind === 'image' && face.version === uploaded.version)) {
                         const result = await options.api(`/api/pi/profiles/${encodeURIComponent(options.profileId)}/avatar`, { method: 'POST',
-                            headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expectedRevision: revision, dataUrl: picture }) });
+                            headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expectedRevision: revision, dataUrl: submittedPicture }) });
                         const version = result?.profile?.avatar?.version;
                         if (!/^[a-f0-9]{64}$/.test(version || '') || typeof result.revision !== 'string') throw new Error(translateUi("头像图片没有保存成功，请再试一次"));
-                        uploaded = { picture, version }; revision = result.revision;
+                        uploaded = { picture: submittedPicture, version }; revision = result.revision;
                         data.bot.avatar = result.profile.avatar; data.revision = revision;
                     }
                     pending.avatar = { kind: 'image', version: uploaded.version };

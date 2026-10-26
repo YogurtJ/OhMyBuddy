@@ -29,6 +29,7 @@ const BOT = '11111111-1111-4111-8111-111111111111';
                     if (!options) return { revision: x.revision, bot: structuredClone(x.profile), models: { models: [] } };
                     const body = JSON.parse(options.body);
                     if (_url.endsWith('/avatar')) {
+                        x.uploadData = body.dataUrl;
                         x.uploads = (x.uploads || 0) + 1; x.profile.avatar = { kind: 'image', version: 'a'.repeat(64) }; x.revision += 'u';
                         return { ok: true, revision: x.revision, profile: structuredClone(x.profile) };
                     }
@@ -78,15 +79,38 @@ const BOT = '11111111-1111-4111-8111-111111111111';
             const png = Buffer.from(await page.evaluate(() => { const c = document.createElement('canvas'); c.width = c.height = 8; return c.toDataURL().split(',')[1]; }), 'base64');
             await page.evaluate(() => x.open());
             await sheet().locator('[data-sheet-picture-file]').setInputFiles({ name: 'face.png', mimeType: 'image/png', buffer: png });
-            await sheet().locator('.pi-bot-sheet-avatar-face img').waitFor();
+            await sheet().locator('.pi-bot-sheet-avatar-face img[src^="data:"]').waitFor();
             await sheet().locator('[data-avatar-preset="pivane-bean"]').click();
             await sheet().locator('.pi-bot-sheet-save').click(); await page.waitForFunction(() => !document.querySelector('.pi-bot-sheet[open]'));
             assert.equal(await page.evaluate(() => x.uploads || 0), 0, 'replacing the local picture with a preset does not upload it');
             await page.evaluate(() => x.open());
             await sheet().locator('[data-sheet-picture-file]').setInputFiles({ name: 'face.png', mimeType: 'image/png', buffer: png });
-            await sheet().locator('.pi-bot-sheet-avatar-face img').waitFor();
+            await sheet().locator('.pi-bot-sheet-avatar-face img[src^="data:"]').waitFor();
             await sheet().locator('.pi-bot-sheet-save').click(); await page.waitForFunction(() => !document.querySelector('.pi-bot-sheet[open]'));
             assert.deepEqual(await page.evaluate(() => x.profile.avatar), { kind: 'image', version: 'a'.repeat(64) });
+            // Review R1: decoding a second image reserves the draft before any await.
+            const secondPng = Buffer.from(await page.evaluate(() => { const c = document.createElement('canvas'); c.width = c.height = 8; c.getContext('2d').fillRect(0, 0, 8, 8); return c.toDataURL().split(',')[1]; }), 'base64');
+            await page.evaluate(() => {
+                x.originalBitmap = window.createImageBitmap; x.bitmap = window.createImageBitmap.bind(window);
+                window.createImageBitmap = async file => { if (file.name === 'second.png') await new Promise(resolve => { x.decodeSecond = resolve; }); return x.bitmap(file); };
+                x.fails = 1; return x.open();
+            });
+            await sheet().locator('[data-sheet-picture-file]').setInputFiles({ name: 'first.png', mimeType: 'image/png', buffer: png });
+            await sheet().locator('.pi-bot-sheet-avatar-face img[src^="data:"]').waitFor();
+            const beforeUploads = await page.evaluate(() => x.uploads);
+            await sheet().locator('[data-sheet-picture-file]').setInputFiles({ name: 'second.png', mimeType: 'image/png', buffer: secondPng });
+            assert.equal(await sheet().locator('.pi-bot-sheet-save').isDisabled(), true, 'Save waits for the selected picture to decode');
+            await sheet().locator('form').evaluate(form => form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+            assert.equal(await page.evaluate(() => x.uploads), beforeUploads, 'a direct submit cannot bypass decoding reservation');
+            await page.evaluate(() => x.decodeSecond());
+            await page.waitForFunction(() => !document.querySelector('.pi-bot-sheet[open] .pi-bot-sheet-save').disabled);
+            const selectedPicture = await sheet().locator('.pi-bot-sheet-avatar-face img').getAttribute('src');
+            await sheet().locator('.pi-bot-sheet-save').click();
+            await sheet().locator('.pi-bot-sheet-status').filter({ hasText: '修改还在' }).waitFor();
+            assert.equal(await page.evaluate(() => x.uploadData), selectedPicture, 'the uploaded bytes identify the selected picture');
+            await sheet().locator('.pi-bot-sheet-save').click(); await page.waitForFunction(() => !document.querySelector('.pi-bot-sheet[open]'));
+            assert.equal(await page.evaluate(() => x.uploads), beforeUploads + 1, 'the retry uses only the matching submitted picture/version cache');
+            await page.evaluate(() => { window.createImageBitmap = x.originalBitmap; });
             // The first-meeting card protects a chosen preset, then accepts a user's new choice.
             await page.evaluate(() => {
                 x.identity = { id: x.profile.id, name: 'CC', avatar: { kind: 'preset', id: 'pivane-pebble' }, chosen: { name: true, avatar: true }, phase: 'interview' };
@@ -151,14 +175,32 @@ const BOT = '11111111-1111-4111-8111-111111111111';
             // A successful schedule tool result produces a card with the real job id and route.
             await page.evaluate(id => {
                 const job = { id, title: '今晚复习', message: '复习数学第 2 章', schedule: { kind: 'once', at: Date.parse('2026-11-01T19:00:00+08:00'), timeZone: 'Asia/Shanghai' }, enabled: true, revision: 1 };
-                x.routes = []; window.PiWorkspaceRoute = { navigate: (tab, params) => x.routes.push({ tab, params }) };
-                x.cards = PiBotScheduleCards.create({ context: () => 'one', api() {}, notify() {} });
-                const card = x.cards.render({ toolName: 'bot_schedule', toolCallId: 'scheduled1', details: { pivaneBotSchedule: { v: 1, action: 'created', job } } });
-                document.querySelector('#fixture').replaceChildren(card);
+                x.routes = []; x.owner = 'one'; x.generation = 1; x.taskWrites = [];
+                window.PiWorkspaceRoute = { navigate: (tab, params) => x.routes.push({ tab, params }) };
+                window.PiProfileDialog = { confirm: async () => true };
+                x.cards = PiBotScheduleCards.create({ context: () => x.owner, generation: () => x.generation, api: async (_url, options) => {
+                    if (!options) { if (x.holdTaskRead) await new Promise(resolve => { x.releaseTaskRead = resolve; }); return { jobs: [{ id, name: job.title, revision: 2 }] }; }
+                    x.taskWrites.push(JSON.parse(options.body)); return {};
+                }, notify() {} });
+                x.mountTask = call => {
+                    const card = x.cards.render({ toolName: 'bot_schedule', toolCallId: call, details: { pivaneBotSchedule: { v: 1, action: 'created', job } } });
+                    document.querySelector('#fixture').replaceChildren(card);
+                };
+                x.mountTask('scheduled1');
             }, BOT);
             assert.match(await page.locator('.pi-bot-schedule-card').innerText(), /今晚复习[\s\S]*19:00[\s\S]*Asia\/Shanghai/);
+            await page.evaluate(() => { x.generation++; }); // Same conversation, retained DOM after reconnect.
             await page.getByRole('button', { name: '查看 / 修改' }).click();
             assert.deepEqual(await page.evaluate(() => x.routes), [{ tab: 'cron', params: { jobId: BOT } }]);
+            await page.getByRole('button', { name: '取消任务', exact: true }).click();
+            await page.waitForFunction(() => x.taskWrites.length === 1);
+            assert.deepEqual(await page.evaluate(() => x.taskWrites), [{ revision: 2, action: 'delete' }]);
+            await page.evaluate(() => { x.mountTask('scheduled2'); x.holdTaskRead = true; });
+            await page.getByRole('button', { name: '取消任务', exact: true }).click();
+            await page.waitForFunction(() => typeof x.releaseTaskRead === 'function');
+            await page.evaluate(() => { x.owner = 'other'; x.generation++; x.owner = 'one'; x.generation++; x.releaseTaskRead(); });
+            await page.waitForFunction(() => !document.querySelector('.pi-bot-schedule-cancel').disabled);
+            assert.equal(await page.evaluate(() => x.taskWrites.length), 1, 'a switch away/back cannot revive an old cancellation operation');
             if (process.env.PI_BOT_EVIDENCE) await page.screenshot({ path: path.join(process.env.PI_BOT_EVIDENCE, `schedule-card-${width}.png`) });
             assert.deepEqual(errors, [], 'no browser pageerrors');
             await context.close();

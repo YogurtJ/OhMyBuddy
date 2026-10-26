@@ -44,7 +44,7 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
             const page = await context.newPage(), errors = [], opened = [];
             let bots = [], revision = 'r0', generation = 0, sessionId = 'gen-0', socket = null, phase = 'greeting', name = '新伙伴', face = '🦊';
             let history = [], prompts = [], responses = [], setupBodies = [], historyReads = [], second = false, known2 = undefined, aboutBodies = [];
-            let modelCount = 0, profileList = [];
+            let modelCount = 0, profileList = [], reconnectHistory = null, scheduleDeletes = [];
             let patchBodies = [], settingsReads = 0, model = null, preset = 'free', quietHours = { start: '23:00', end: '08:00' }, soul = '温柔耐心，说话简短。';
             const botOpens = []; let lagging = null;
             const bot = () => ({ id: BOT, name, description: '', avatar: typeof face === 'string' ? { kind: 'emoji', value: face } : face, enabled: true, profileRevision: 'p',
@@ -140,6 +140,10 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                     bots = list();
                     return route.fulfill({ json: { window: bots[0].windows[0], session: row(sessionId) } });
                 }
+                if (pathname === '/api/pi/cron') return route.fulfill({ json: { jobs: [{ id: BOT, name: '今晚复习', revision: 2 }] } });
+                if (pathname === `/api/pi/cron/jobs/${BOT}/actions`) {
+                    scheduleDeletes.push(JSON.parse(route.request().postData())); return route.fulfill({ json: { ok: true } });
+                }
                 if (pathname === '/api/pi/projects') return route.fulfill({ json: { projects: [{ cwd: geek, name: 'project' }], roots: ['/fixture'] } });
                 // Session workflows know the first exchange: the user's retry and the reply's fork both match.
                 if (pathname.endsWith('/workflow')) return route.fulfill({ json: { leafId: 'e2', lastUserId: 'e1', versions: [],
@@ -168,10 +172,10 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                     }
                     if (command.type === 'open_session') {
                         opened.push(command.sessionId);
-                        data = { session: row(command.sessionId), state, messages: { messages: command.sessionId === 'gen-0' ? history : [] }, stats: {},
+                        data = { session: row(command.sessionId), state, messages: { messages: reconnectHistory || (command.sessionId === 'gen-0' ? history : []) }, stats: {},
                             models: { models: [state.model] }, thinkingLevels: { levels: ['off'] }, commands: { commands: [] } };
                     } else if (command.type === 'get_state') data = state;
-                    else if (command.type === 'get_messages') data = { messages: [] };
+                    else if (command.type === 'get_messages') data = { messages: reconnectHistory || [] };
                     ws.send(JSON.stringify({ type: 'response', id: command.id, command: command.type, success: true, data }));
                     if (command.type === 'prompt') {
                         prompts.push(command.message);
@@ -388,6 +392,30 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                 await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-status')?.dataset.state === 'connected', null, { timeout: 15000 });
                 for (let i = 0; i < 50 && historyReads.length < 4; i++) await page.waitForTimeout(100);
                 assert.deepEqual(historyReads.filter(([, view]) => view === 'index').map(([g]) => g), ['3', '2', '1', '0']);
+
+                // Review R1: a persisted task receipt remains actionable through a same-session reconnect.
+                reconnectHistory = [{ role: 'toolResult', toolName: 'bot_schedule', toolCallId: 'schedule-reconnect', timestamp: Date.now(),
+                    content: [{ type: 'text', text: '{}' }], details: { pivaneBotSchedule: { v: 1, action: 'created', job: {
+                        id: BOT, title: '今晚复习', message: '复习数学', schedule: { kind: 'once', at: Date.parse('2026-11-01T19:00:00+08:00'), timeZone: 'Asia/Shanghai' },
+                        revision: 1, enabled: true } } } }];
+                await socket.close({ code: 1012, reason: 'load persisted task' });
+                await page.locator('.pi-bot-schedule-card').waitFor({ timeout: 15000 });
+                await page.locator('.pi-bot-schedule-card').evaluate(node => { window.retainedTask = node; });
+                const opensBeforeReconnect = opened.length;
+                await socket.close({ code: 1012, reason: 'same-session reconnect' });
+                for (let i = 0; i < 150 && opened.length <= opensBeforeReconnect; i++) await page.waitForTimeout(100);
+                assert.equal(opened.length, opensBeforeReconnect + 1, 'the new socket actually reopened the same session');
+                await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-status')?.dataset.state === 'connected', null, { timeout: 15000 });
+                assert.equal(await page.evaluate(() => window.retainedTask === document.querySelector('.pi-bot-schedule-card')), true, 'unchanged history keeps the original card node');
+                await page.locator('.pi-bot-schedule-card .pi-bot-chip').click();
+                await page.waitForFunction(id => location.hash.includes(`jobId=${id}`), BOT);
+                // Return to the same Bot, then cancel using the scheduler's fresh revision.
+                await page.evaluate(id => window.PiWorkspaceRoute.navigate('bot', { profileId: id }), BOT);
+                await page.locator('.pi-bot-schedule-cancel').click();
+                await page.locator('.pi-profile-confirm[open] button').filter({ hasText: '取消任务' }).click();
+                await page.waitForFunction(() => document.querySelector('.pi-bot-schedule-card small')?.textContent === '已取消');
+                assert.deepEqual(scheduleDeletes, [{ revision: 2, action: 'delete' }]);
+                reconnectHistory = null;
 
                 // 4. Settings: one sheet; only what changed is saved, and a conflict keeps the edits.
                 if (width < 700) {
