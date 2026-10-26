@@ -12,7 +12,7 @@ const PRESET_GUIDANCE = Object.freeze({
     free: 'Hands-off mode. Act without asking on routine work: reading, web search, memory, images and speech, and reading, '
         + `writing and running commands inside your workspace. Ask first before ${ASK_FIRST}.`,
     balanced: 'Careful mode. Act without asking on reading, web search, memory, images and speech, and writing files inside your '
-        + 'workspace. Every command, every hand-off to another agent and every file write outside your workspace is shown to the user on an '
+        + 'workspace. Every command, every hand-off to another agent, creating or cancelling a scheduled task, and every file write outside your workspace is shown to the user on an '
         + 'approval card automatically when you call the tool, so just call it (do not ask in a separate message first); if it is not approved, '
         + `do not retry or work around it. Also ask first before ${ASK_OTHER}.`,
     ask: 'Ask-every-time mode. Reading and answering need no confirmation. Every other tool call is shown to the user on an approval card '
@@ -87,17 +87,17 @@ function botPreamble({ name, bot, cwd, window }) {
         `Your workspace folder is ${cwd}. Save files you create there unless the user names another place. `
             + 'When the user should receive a file, hand it over with the file delivery tool.',
         '',
-        'Remembering, and saying where:',
+        'Remembering and scheduled tasks:',
         '- Lasting facts about the user (how to address them, goals, background, habits, preferences that hold in every chat) go to memory as '
             + 'about-user facts. This chat\'s decisions, promises (with the deadline if one was said), questions still waiting for an answer, '
             + 'and exact names, numbers and dates for the work at hand go to window_note. Something can belong in both, e.g. an exam date that '
             + 'is a fact about them and a deadline you follow here.',
         '- When you tell the user you saved something, say where in their words: in "about you" (lasting, every chat) or in "my notes for '
             + 'this chat" (the notebook). Say it is saved or done only after the tool succeeded.',
-        '- You cannot schedule messages or reminders yourself yet. When the user asks for one, ask whether they mean once or repeating if '
-            + 'that is not clear, say plainly that you cannot set it up from the chat, and point them to the Scheduled tasks page, where they '
-            + 'can create a task that sends its message to you. If they want, note it with window_note as an open question saying it is not '
-            + 'set up yet; never say a reminder is set when it is not.',
+        '- When the user asks for a reminder or a later action, ask one short question first if once versus repeating, or the day, is unclear. '
+            + 'Then call bot_schedule. Say it is set only after the tool succeeded, with the resolved local time and time zone; never claim '
+            + 'something is scheduled otherwise. Use list to check tasks and the current local time, and cancel to cancel a task. The user can '
+            + 'see and edit tasks on the Scheduled tasks (定时) page. Tasks the user asks for run at the requested time, including quiet hours.',
         '',
         `Permissions: ${PRESET_GUIDANCE[bot?.permissions?.preset] ?? PRESET_GUIDANCE.free} `
             + 'When you ask, say plainly what you will do and why, in one or two lines. ' + ALWAYS,

@@ -25,8 +25,8 @@ function validateJob(input, now) {
     if (input.weixinNotification !== undefined && !['inherit', 'on', 'off'].includes(input.weixinNotification)) fail('Invalid WeChat notification mode');
     if (!input.target || !['thread', 'profile'].includes(input.target.kind)) fail('Choose a target thread or profile');
     const target = input.target.kind === 'thread' ? { kind: 'thread', cwd: input.target.cwd, sessionId: input.target.sessionId }
-        : { kind: 'profile', profileId: input.target.profileId };
-    if (target.kind === 'profile' ? !uuid(target.profileId) : typeof target.cwd !== 'string' || !uuid(target.sessionId)) fail('Invalid task target');
+        : { kind: 'profile', profileId: input.target.profileId, ...(input.target.windowId !== undefined ? { windowId: input.target.windowId } : {}) };
+    if (target.kind === 'profile' ? !uuid(target.profileId) || target.windowId !== undefined && !uuid(target.windowId) : typeof target.cwd !== 'string' || !uuid(target.sessionId)) fail('Invalid task target');
     const schedule = { kind: input.schedule?.kind, timeZone: input.schedule?.timeZone,
         ...(input.schedule?.kind === 'once' ? { at: input.schedule.at } : { expression: parseCron(input.schedule?.expression).expression }) };
     if (schedule.kind === 'once' && (!Number.isFinite(schedule.at) || schedule.at > now + 8 * 366 * 86400000)) fail('Choose an execution time within eight years');
@@ -108,21 +108,22 @@ class CronService {
         }
         return [...homes.filter(home => !ids.has(home.profileId)), ...derived];
     }
-    // A profile's main thread. For a Bot it is its main chat window, resolved to the window's
-    // current native generation every time (it changes when the window rotates).
-    async homeRef(profileId) {
+    // A profile's main thread, or an explicitly targeted Bot window. Resolve the current
+    // native generation every time (it changes when the window rotates).
+    async homeRef(profileId, windowId) {
         const profile = await this.profiles.getProfile(profileId);
         if (!profile?.enabled) fail('Target profile is unavailable');
         if (this.bots && require('./bot/bot-settings').readBot(profile)) {
-            const resolved = await this.bots.mainSession(profileId);
+            const resolved = windowId === undefined ? await this.bots.mainSession(profileId) : (await this.bots.resolve(profileId, windowId)).session;
             return { cwd: resolved.cwd, sessionId: resolved.id, status: 'ready', bot: true };
         }
+        if (windowId !== undefined) fail('Window targets require a Bot profile');
         const ref = this.db.home(profileId);
         if (!ref?.sessionId || ref.status !== 'ready') fail('Choose or create the profile main thread first');
         return ref;
     }
     async target(target) {
-        const ref = target.kind === 'profile' ? await this.homeRef(target.profileId) : target;
+        const ref = target.kind === 'profile' ? await this.homeRef(target.profileId, target.windowId) : target;
         const session = await this.store.getSession(ref.cwd, ref.sessionId);
         if (session.assistant || session.profileAuthoring) fail('Management threads cannot receive scheduled tasks');
         if (session.agentProfile && !session.agentProfile.available) fail('Target profile is disabled or unavailable');
@@ -133,7 +134,12 @@ class CronService {
         return this.reserve(async () => {
             if (!uuid(input.id)) fail('A stable task ID is required');
             const previous = this.db.job(input.id);
-            const job = validateJob(input, this.now());
+            // Older task editors only echo kind/profileId. A same-profile edit must keep
+            // its window destination; an explicit windowId can still select another window.
+            const target = previous?.target.windowId !== undefined && input.target?.kind === 'profile'
+                && input.target.profileId === previous.target.profileId && !Object.hasOwn(input.target, 'windowId')
+                ? { ...input.target, windowId: previous.target.windowId } : input.target;
+            const job = validateJob({ ...input, target }, this.now());
             if (previous?.deleted) fail('This task was deleted; use a new ID', 409);
             if (previous && previous.revision !== input.revision) {
                 if (previous.fingerprint === hash(job)) return previous;
@@ -141,7 +147,7 @@ class CronService {
             }
             if (!previous && this.db.jobs().length >= 100) fail('Task capacity reached');
             if (this.db.activeRuns(input.id).length) fail('Finish or review the active run before editing', 409);
-            if (job.enabled || job.target.kind === 'thread') await this.target(job.target);
+            if (job.enabled || job.target.kind === 'thread' || job.target.windowId !== undefined) await this.target(job.target);
             if (job.model) {
                 const session = await this.target(job.target), catalog = await this.catalog(session.cwd);
                 if (!catalog.models.some(model => model.provider === job.model.provider && model.modelId === job.model.modelId
@@ -317,7 +323,7 @@ class CronService {
                 }
                 if (this.stopping || this.isSuspended() || this.mutating || this.db.run(run.id)?.status !== 'waiting') return;
                 if (job.target.kind === 'profile') {
-                    const home = await this.homeRef(job.target.profileId).catch(() => null);
+                    const home = await this.homeRef(job.target.profileId, job.target.windowId).catch(() => null);
                     if (home?.status !== 'ready' || home.sessionId !== session.id || home.cwd !== session.cwd) return;
                 }
                 run = { ...run, status: 'dispatching', target: { cwd: session.cwd, sessionId: session.id, name: session.name },
