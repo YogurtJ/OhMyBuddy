@@ -4,11 +4,11 @@
 // same request is still waiting; a conflict saves nothing and answers nothing. Protected kinds
 // never offer it. Settings show grants exactly, revoke them as a draft, and keep unknown ones.
 // Moving a Bot to the trash needs an explicit confirmation, keeps the sheet on refusal and goes
-// on to another Bot. Synthetic backend (pi-bot-fixture.cjs); desktop, phone and narrow phone.
+// on to another Bot. Synthetic backend (pi-bot-fixture.js); desktop, phone and narrow phone.
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const { BOT, BOT2, MAIN2, APPROVAL, say, serve, botRecord, windowRecord, botPage, newWorld, layout } = require('./pi-bot-fixture.cjs');
+const { BOT, BOT2, MAIN2, APPROVAL, say, serve, botRecord, windowRecord, botPage, newWorld, layout } = require('./pi-bot-fixture.js');
 
 const CWD = '/fixture/PivaneBots/bot-11111111';
 const grant = (id, tool, value) => ({ v: 1, id, tool, value, cwd: CWD });

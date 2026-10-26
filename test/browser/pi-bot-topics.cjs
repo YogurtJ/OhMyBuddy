@@ -2,11 +2,11 @@
 // windows-revision conflict that keeps the draft, edit only what changed, archive refused while
 // busy and then archived, restore from the archived list, the open-items index, the topic
 // approval card, and the receipt card's explicit "Open topic" (also safe for a stale owner).
-// Synthetic backend (pi-bot-fixture.cjs); desktop, phone and narrow phone; dark and reduced motion.
+// Synthetic backend (pi-bot-fixture.js); desktop, phone and narrow phone; dark and reduced motion.
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const { BOT, MAIN, APPROVAL, say, serve, botRecord, windowRecord, botPage, newWorld, layout } = require('./pi-bot-fixture.cjs');
+const { BOT, MAIN, APPROVAL, say, serve, botRecord, windowRecord, botPage, newWorld, layout } = require('./pi-bot-fixture.js');
 
 const T1 = '55555555-5555-4555-8555-555555555555', T2 = '66666666-6666-4666-8666-666666666666', T3 = '77777777-7777-4777-8777-777777777777';
 const REV = letter => letter.repeat(64);
