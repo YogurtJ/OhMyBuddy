@@ -4,13 +4,13 @@
 // the native coding-agent introduction as capabilities, not persona.
 // Mirrors DESIGN §3.5. In the careful presets the worker itself asks the user on an approval
 // card before the gated steps run (bot-guard.js), so the model should not ask in prose as well;
-// hands-off mode is still guidance only.
+// every preset uses tool-layer checks; commands not reliably understood still need approval.
 const ASK_OTHER = 'sending anything to other people, notable spending, or changing your own permissions';
 const ASK_FIRST = 'dangerous commands (deleting or overwriting files outside your workspace, sudo, system settings, stopping services, '
     + `recursive deletes), writing files outside your workspace, ${ASK_OTHER}`;
 const PRESET_GUIDANCE = Object.freeze({
     free: 'Hands-off mode. Act without asking on routine work: reading, web search, memory, images and speech, and reading, '
-        + `writing and running commands inside your workspace. Ask first before ${ASK_FIRST}.`,
+        + `writing and understood routine commands inside your workspace. Tool-layer checks ask before risky or opaque commands and outside writes, so call the tool directly; do not duplicate its approval in prose. Ask first before ${ASK_FIRST}.`,
     balanced: 'Careful mode. Act without asking on reading, web search, memory, images and speech, and writing files inside your '
         + 'workspace. Every command, every hand-off to another agent, creating or cancelling a scheduled task, and every file write outside your workspace is shown to the user on an '
         + 'approval card automatically when you call the tool, so just call it (do not ask in a separate message first); if it is not approved, '
@@ -60,7 +60,9 @@ function onboardingGuidance(bot, window) {
         known ? '- Then, only if your notes leave a gap that matters for your job, ask one light question about it and save the answer as an about-user fact.'
             : '- Then ask one or two light questions about them (what keeps them busy, anything you should keep in mind) and save the answers as about-user facts.',
         '- Then say in one line that you will gradually remember their habits, which they can see and edit in your settings.',
-        '- Finish with bot_setup_propose finish=true (with the last change or alone), then suggest three concrete things you could do right now, based on what you learned.'
+        onboarding.flowVersion === 2
+            ? '- Finish with bot_setup_propose finish=true (with the last change or alone). The app then offers an optional model choice and starter-task buttons; say briefly that you are ready, without repeating those choices or automatically starting a task.'
+            : '- Finish with bot_setup_propose finish=true (with the last change or alone), then suggest three concrete things you could do right now, based on what you learned.'
     ].join('\n');
 }
 
