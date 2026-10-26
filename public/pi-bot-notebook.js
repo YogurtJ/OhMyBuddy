@@ -67,7 +67,7 @@
 
     let dialog = null;
 
-    // open({ api, toast, profileId, windowId, name, face })
+    // open({ api, toast, profileId, windowId, name, face, onAbout }); onAbout opens the Bot's "about you".
     function open(options) {
         dialog?.close();
         const { api, profileId, windowId } = options;
@@ -259,6 +259,16 @@
                 section.append(el('summary', null, translateUi("已完成或不需要了（{0}）", closed.length)), list);
                 nodes.push(section);
             }
+            // Lasting facts about the user are kept elsewhere; say where, so an empty list is not
+            // read as "nothing was remembered" (UAT-13).
+            const about = el('section', 'pi-bot-notes-about');
+            about.append(el('p', null, translateUi("称呼、目标、习惯这类关于你的事，{0} 记在“关于你”里，每个聊天都用得上；这里只放这段聊天的事。", name)));
+            if (options.onAbout) {
+                const open = button('pi-bot-chip', translateUi("打开关于你")); open.dataset.notesAbout = '';
+                open.addEventListener('click', () => { sheet.close(); options.onAbout(); });
+                about.append(open);
+            }
+            nodes.push(about);
             const scroll = body.scrollTop;
             body.replaceChildren(...nodes);
             body.scrollTop = scroll;

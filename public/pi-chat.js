@@ -555,6 +555,7 @@ document.addEventListener('DOMContentLoaded', () => {
         identity: () => botUi?.setupIdentity?.() || null,
         uploadPicture: dataUrl => botUi.uploadAvatar(dataUrl),
         notify: message => toast(message, 'info'),
+        later: toolCallId => botUi.leaveSetupForLater(toolCallId),
         changed: () => renderPendingBanner()
     });
     if (botSetup) document.querySelector('.pi-composer-wrap > .pi-composer')?.before(botSetup.element);

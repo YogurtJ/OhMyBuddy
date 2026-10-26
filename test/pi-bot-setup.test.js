@@ -72,7 +72,8 @@ test('a confirmed card saves identity, onboarding progress and about-you notes o
     assert.deepEqual(listed.avatar, { kind: 'emoji', value: '🦊' });
     assert.equal(listed.bot.job, '', 'a dropped field is not saved');
     assert.equal(listed.bot.onboarding.phase, 'interview');
-    assert.deepEqual(listed.bot.onboarding.steps, { identity: 'done', about: 'done' });
+    // Each step is its own; the job the user dropped from the card is left for later (UAT-14).
+    assert.deepEqual(listed.bot.onboarding.steps, { name: 'done', avatar: 'done', job: 'skipped', about: 'done' });
     const userFile = path.join(agentDir, 'pivane-profiles', 'data', botId, 'USER.md');
     assert.equal(fs.readFileSync(userFile, 'utf8'), '希望被叫做小王');
 
@@ -127,7 +128,8 @@ test('a confirmed card saves identity, onboarding progress and about-you notes o
     const manual = await bots.create({ expectedRevision: (await profiles.state()).revision });
     await bots.update(manual.bot.id, { expectedRevision: (await profiles.state()).revision, changes: { name: '阿青' } });
     const listedManual = (await bots.list()).bots.find(bot => bot.id === manual.bot.id);
-    assert.deepEqual([listedManual.bot.onboarding.steps, listedManual.chosen], [{}, { name: true, avatar: false }]);
+    assert.deepEqual([listedManual.bot.onboarding.steps, listedManual.chosen], [{ name: 'done' }, { name: true, avatar: false }],
+        'a name set in settings while getting to know each other is not asked again');
     await bots.update(manual.bot.id, { expectedRevision: (await profiles.state()).revision, changes: { avatar: { kind: 'emoji', value: '🐼' } } });
     assert.deepEqual((await bots.list()).bots.find(bot => bot.id === manual.bot.id).chosen, { name: true, avatar: true });
     // An explicit choice that looks like a new Bot's (the other language's placeholder) is recorded,
@@ -184,7 +186,7 @@ test('the setup tool reports only what the Bot page actually saved', { timeout: 
 
     answer = setup.SAVE;
     const initial = (await profiles.getProfile(botId));
-    const now = { name: initial.name, avatar: initial.avatar.value, job: '', personality: initial.soul, interview: 'greeting' };
+    const now = { name: initial.name, avatar: initial.avatar.value, job: '', personality: initial.soul, workStyle: 'free', interview: 'greeting' };
     assert.deepEqual(await run({ name: '阿狸', avatar: '', job: ' ' }), { status: 'not_saved', saved: {}, kept: ['name'], current: now,
         note: 'Nothing was changed; "current" is how things stand.' }, 'answering Save elsewhere saves nothing; empty fields are not proposed');
     await assert.rejects(tool.execute('call', { name: '', avatar: '' }, undefined, undefined, ctx), /at least one change/);

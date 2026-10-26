@@ -46,7 +46,7 @@
         } else if (name === 'bot_setup_propose') title = args.finish === true ? t('完成互相认识') : t('请你确认设置')
         else if (name === 'window_note') {
             const what = text(args.text, 500) || text(args.id, 12);
-            title = ({ add: t('记下了 · {0}', what), update: t('改了记下的事 · {0}', what), done: t('标为完成 · {0}', what),
+            title = ({ add: t('记到“我记着的事” · {0}', what), update: t('改了记下的事 · {0}', what), done: t('标为完成 · {0}', what),
                 cancel: t('标为不需要了 · {0}', what), reopen: t('重新打开 · {0}', what) })[args.action] || t('记事本');
         } else if (name === 'window_recall') title = text(args.query, 200) ? t('翻找之前的聊天 · {0}', args.query) : t('翻找之前的聊天');
         else if (name === 'window_read') title = t('查看之前的聊天');

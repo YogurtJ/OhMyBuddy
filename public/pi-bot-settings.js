@@ -15,6 +15,8 @@
     const THINKING = { off: () => translateUi("不启用"), minimal: () => translateUi("极简"), low: () => translateUi("低"), medium: () => translateUi("中"),
         high: () => translateUi("高"), xhigh: () => translateUi("极高"), max: () => translateUi("最大") };
     const modelKey = model => model ? `${model.provider}\u0000${model.id}` : '';
+    // The same quick faces as the identity page; any emoji can be typed, or a picture uploaded.
+    const EMOJIS = '🍀 🌿 🦉 🧠 🔭 📚 ✍️ 🧪 💡 🎯 🛠️ 🐱 🦊 🌙 ⭐ 🤖'.split(' ');
 
     let dialog = null;
 
@@ -54,12 +56,17 @@
         document.body.append(dialog);
         const sheet = dialog;
         let data = null, controls = null, saving = false, warned = null, initial = null;
+        // picture: a picture chosen in this sheet (PNG data URL), uploaded when saving;
+        // uploaded: the last one this sheet put up, so a retry does not upload it again.
+        let picture = null, uploaded = null;
         // What the form shows, field by field; compared with `initial` to know what the user edited.
-        const formValues = () => controls ? { name: controls.name.value, avatar: controls.avatar.value, job: controls.job.value, soul: controls.soul.value,
+        const formValues = () => controls ? { name: controls.name.value, avatar: controls.avatar.value, picture: picture || '', job: controls.job.value, soul: controls.soul.value,
             model: controls.model.value, thinking: controls.thinkingWrap.hidden ? '' : controls.thinking.value,
             preset: controls.presets.find(input => input.checked)?.value || '' } : null;
         function applyValues(values) {
             for (const key of ['name', 'avatar', 'job', 'soul']) if (values[key] !== undefined) controls[key].value = values[key];
+            if (values.picture !== undefined) picture = values.picture || null;
+            controls.showFace();
             if (values.model !== undefined && [...controls.model.options].some(option => option.value === values.model)) controls.model.value = values.model;
             const levels = data.models?.models.find(item => modelKey(item) === controls.model.value)?.thinkingLevels || [];
             controls.thinkingWrap.hidden = !levels.length;
@@ -117,7 +124,8 @@
             if (name !== bot.name) out.name = name;
             const avatar = controls.avatar.value.trim();
             if (avatar.length > LIMITS.avatar) return null;
-            if (avatar && !(bot.avatar?.kind === 'emoji' && bot.avatar.value === avatar)) out.avatar = { kind: 'emoji', value: avatar };
+            if (picture) out.avatar = { kind: 'image' };
+            else if (avatar && !(bot.avatar?.kind === 'emoji' && bot.avatar.value === avatar)) out.avatar = { kind: 'emoji', value: avatar };
             const soul = controls.soul.value.trim();
             if (soul !== (bot.soul || '').trim()) out.soul = soul;
             const job = controls.job.value.trim();
@@ -144,9 +152,45 @@
             const name = el('input'); name.type = 'text'; name.maxLength = LIMITS.name; name.value = bot.name; name.required = true; name.autocomplete = 'off';
             const avatar = el('input'); avatar.type = 'text'; avatar.maxLength = LIMITS.avatar; avatar.className = 'pi-bot-sheet-emoji';
             avatar.value = bot.avatar?.kind === 'emoji' ? bot.avatar.value : ''; avatar.autocomplete = 'off';
-            avatar.placeholder = bot.avatar?.kind === 'image' ? translateUi("图片") : '🙂';
-            const identity = el('div', 'pi-bot-sheet-row');
-            identity.append(field(translateUi("头像"), avatar), field(translateUi("名字"), name));
+            avatar.placeholder = '🙂'; avatar.setAttribute('aria-label', translateUi("自己输入一个表情"));
+            picture = null;
+            // The face as it will be saved: the chosen picture, the typed emoji, or the current face.
+            const preview = el('span', 'pi-bot-sheet-avatar-face');
+            const showFace = () => {
+                const typed = avatar.value.trim();
+                if (picture) { const img = el('img'); img.src = picture; img.alt = ''; const node = el('span', 'pi-bot-face is-xl'); node.append(img); preview.replaceChildren(node); }
+                else preview.replaceChildren(options.face(typed ? { ...bot, avatar: { kind: 'emoji', value: typed } } : bot, 'xl'));
+                back.hidden = !picture;
+                pick.textContent = picture || bot.avatar?.kind === 'image' ? translateUi("换一张图片") : translateUi("上传图片");
+            };
+            const grid = el('div', 'pi-bot-sheet-emojis'); grid.setAttribute('role', 'group'); grid.setAttribute('aria-label', translateUi("选一个表情"));
+            for (const emoji of EMOJIS) {
+                const choice = button('pi-bot-sheet-emoji-choice', emoji); choice.dataset.sheetEmoji = emoji;
+                choice.addEventListener('click', () => { picture = null; avatar.value = emoji; avatar.dispatchEvent(new Event('input', { bubbles: true })); });
+                grid.append(choice);
+            }
+            const file = el('input'); file.type = 'file'; file.accept = 'image/png,image/jpeg,image/webp,image/gif'; file.hidden = true; file.dataset.sheetPictureFile = '';
+            const pick = button('pi-bot-chip'); pick.dataset.sheetPicture = 'pick';
+            pick.addEventListener('click', () => file.click());
+            const back = button('pi-bot-chip', translateUi("不用这张图片")); back.dataset.sheetPicture = 'clear';
+            back.addEventListener('click', () => { picture = null; status.textContent = ''; showFace(); refreshState(); });
+            file.addEventListener('change', async () => {
+                const chosen = file.files?.[0]; file.value = '';
+                if (!chosen) return;
+                try {
+                    picture = await window.PiBot.pictureData(chosen);
+                    warned = null; status.textContent = translateUi("图片会在保存时上传"); delete status.dataset.tone;
+                } catch (error) { status.dataset.tone = 'error'; status.textContent = error.message; }
+                showFace(); refreshState();
+            });
+            avatar.addEventListener('input', () => { if (avatar.value.trim()) picture = null; showFace(); });
+            const actions = el('div', 'pi-bot-sheet-avatar-actions');
+            actions.append(avatar, pick, back, file);
+            const avatarBox = el('div', 'pi-bot-sheet-avatar');
+            const avatarSide = el('div', 'pi-bot-sheet-avatar-side'); avatarSide.append(grid, actions);
+            avatarBox.append(preview, avatarSide);
+            const identity = el('div', 'pi-bot-sheet-identity');
+            identity.append(avatarBox, field(translateUi("名字"), name));
             const job = el('textarea'); job.rows = 2; job.maxLength = LIMITS.job; job.value = current.job;
             job.placeholder = translateUi("比如：帮我安排生活琐事、陪我练英语");
             const soul = el('textarea'); soul.rows = 5; soul.maxLength = LIMITS.soul; soul.value = bot.soul || '';
@@ -193,7 +237,8 @@
                 if (leaving) await options.onRestart?.();
             });
 
-            controls = { name, avatar, job, soul, model, thinking, thinkingWrap, presets };
+            controls = { name, avatar, job, soul, model, thinking, thinkingWrap, presets, showFace };
+            showFace();
             body.replaceChildren(
                 section(translateUi("名字和样子"), identity),
                 section(translateUi("主要帮你做什么"), job),
@@ -220,8 +265,23 @@
             if (!Object.keys(pending).length) return;
             saving = true; refreshState(); status.textContent = translateUi("正在保存…"); delete status.dataset.tone;
             try {
+                let revision = data.revision;
+                if (pending.avatar?.kind === 'image') {
+                    // The picture goes up first (the avatar service keeps the file); saving it here
+                    // then records it as the face the user chose.
+                    const face = data.bot.avatar;
+                    if (!(uploaded?.picture === picture && face?.kind === 'image' && face.version === uploaded.version)) {
+                        const result = await options.api(`/api/pi/profiles/${encodeURIComponent(options.profileId)}/avatar`, { method: 'POST',
+                            headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expectedRevision: revision, dataUrl: picture }) });
+                        const version = result?.profile?.avatar?.version;
+                        if (!/^[a-f0-9]{64}$/.test(version || '') || typeof result.revision !== 'string') throw new Error(translateUi("头像图片没有保存成功，请再试一次"));
+                        uploaded = { picture, version }; revision = result.revision;
+                        data.bot.avatar = result.profile.avatar; data.revision = revision;
+                    }
+                    pending.avatar = { kind: 'image', version: uploaded.version };
+                }
                 await options.api(`/api/pi/bots/${encodeURIComponent(options.profileId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ expectedRevision: data.revision, changes: pending }) });
+                    body: JSON.stringify({ expectedRevision: revision, changes: pending }) });
                 sheet.close();
                 options.toast?.(translateUi("已保存"), 'success');
                 await options.onSaved?.();
