@@ -42,8 +42,8 @@
             this.motion = window.PiBotMotion?.create({ paint: value => { this.motionValue = value; this.paintMotion(); } });
             this.visibility = () => this.motion?.visibility(document.hidden);
             document.addEventListener('visibilitychange', this.visibility);
-            // The identity belongs to the conversation column on desktop and phone.
-            document.querySelector('.pi-transcript-shell')?.prepend(header);
+            // Keep the floating identity inside the message viewport, below any confirmation banner.
+            document.querySelector('.pi-transcript-viewport')?.prepend(header);
             this.placeholder = input.getAttribute('placeholder') || '';
             pane.hidden = true; header.hidden = true;
             pane.addEventListener('click', event => this.click(event));
@@ -386,6 +386,11 @@
                 const label = pose === 'failed' ? translateUi("这轮回复未完成") : pose === 'done' ? translateUi("这轮回复结束")
                     : this.projection?.label || STATUS[this.statusKind]();
                 line.dataset.state = pose === 'failed' ? 'error' : this.statusKind;
+                // The name badge needs only a dot while idle; work, queues and interruptions stay explicit.
+                line.classList.toggle('is-quiet', this.statusKind === 'connected' && !this.projection?.queued && !this.projection?.stopping
+                    && ['idle', 'greeting', 'sleeping'].includes(pose) && [STATUS.connected(), translateUi("空闲")].includes(label));
+                line.title = label;
+                line.setAttribute('aria-label', label);
                 line.replaceChildren(el('i', 'pi-bot-status-dot'), document.createTextNode(label));
             }
         }

@@ -296,18 +296,11 @@
 .pi-bot-sheet-section:last-child { border-bottom: 0; }
 .pi-bot-sheet-section h3 { margin: 0; font-size: .8rem; font-weight: 600; letter-spacing: .02em; color: var(--text-muted); }
 .pi-bot-sheet-row { display: grid; grid-template-columns: 76px 1fr; gap: 12px; }
-/* Face: a large preview, quick emoji, a typed emoji or an uploaded picture (same choices as the identity page). */
+/* Face: built-in characters first, with picture upload and a custom emoji input. */
 .pi-bot-sheet-identity { display: grid; gap: 14px; }
 .pi-bot-sheet-avatar { display: flex; gap: 14px; align-items: flex-start; }
 .pi-bot-sheet-avatar-face { flex: none; }
 .pi-bot-sheet-avatar-side { display: grid; gap: 8px; min-width: 0; }
-.pi-bot-sheet-emojis { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; }
-.pi-bot-sheet-emoji-choice {
-    display: grid; place-items: center; aspect-ratio: 1; min-width: 0; min-height: 36px; padding: 0; border: 0; border-radius: 10px;
-    background: transparent; font-size: 1.25rem; cursor: pointer;
-}
-.pi-bot-sheet-emoji-choice:hover { background: var(--pv-nav-hover, var(--surface-3)); }
-.pi-bot-sheet-emoji-choice:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
 .pi-bot-sheet-avatar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .pi-bot-sheet .pi-bot-sheet-avatar-actions input.pi-bot-sheet-emoji[type="text"] { width: 64px; }
 .pi-bot-sheet-avatar-actions .pi-bot-chip { margin: 0; min-height: 40px; }
@@ -315,7 +308,7 @@
 @media (max-width: 600px) {
     .pi-bot-sheet-avatar { flex-direction: column; align-items: center; }
     .pi-bot-sheet-avatar-side { width: 100%; }
-    .pi-bot-sheet-emoji-choice, .pi-bot-sheet-avatar-actions .pi-bot-chip { min-height: 44px; }
+    .pi-bot-sheet-avatar-actions .pi-bot-chip { min-height: 44px; }
 }
 .pi-bot-sheet-row[hidden], .pi-bot-sheet-field[hidden] { display: none; }
 .pi-bot-sheet-field { display: grid; gap: 6px; min-width: 0; }
