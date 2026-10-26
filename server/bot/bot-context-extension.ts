@@ -7,7 +7,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import avatarPresets from '../../public/pi-avatar-presets.js';
-import { SettingsManager, type ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { SettingsManager, createGrepToolDefinition, type ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { readRegistry } from '../pi-profile-registry.js';
 import { safeFile } from '../pi-native-service.js';
 import { setPromptSection } from '../pi-hook-prompt.js';
@@ -18,6 +18,7 @@ import { readBot } from './bot-settings.js';
 import { botPreamble } from './bot-prompt.js';
 import { SETUP_TOOL, SETUP_TITLE, SAVE, DECLINE, STEP_OF, normalizeProposal } from './bot-setup.js';
 import { APPROVAL_TITLE, BLOCKED, PRESETS, approvalFor, approvalMessage, newToken } from './bot-guard.js';
+import { createBotGrepExecutor } from './bot-guard-grep.js';
 import { safeFile as readDocument } from '../profile-memory/management.js';
 import { registerNotebook, notebookNotice, editNotebook } from './bot-notebook.ts';
 import { registerRecall } from './bot-recall-tools.ts';
@@ -215,6 +216,7 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
     // Private bridge record: the Supervisor consumes it and never shows it as a notification.
     const notifier = (ctx: any) => (value: any) => ctx.ui.notify(JSON.stringify({ pivaneBot: value, sessionId: ctx.sessionManager.getSessionId() }));
     let toolRegistered = false;
+    let grepRegistered = false;
     let schedule: ReturnType<typeof registerBotSchedule> | undefined;
     pi.on('session_start', async (_event, ctx: any) => {
         if (!managed(ctx)) return;
@@ -223,6 +225,11 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
             toolRegistered = true;
             registerSetupTool(pi, context, getAgentDir);
             const verified = (toolCtx: any) => Boolean(botSection(context, toolCtx.sessionManager, toolCtx.cwd, getAgentDir()));
+            const grep = createGrepToolDefinition(context.cwd);
+            pi.registerTool({ ...grep,
+                description: `${grep.description} In Bot conversations, searches only descriptor-verified UTF-8 text files; protected files and aliases are excluded. Bounded searches report incomplete results; context is limited to 20 lines and limit to 1000.`,
+                execute: createBotGrepExecutor(verified, getAgentDir) });
+            grepRegistered = true;
             schedule = registerBotSchedule(pi, verified, scheduledRunActive);
             registerBotTopic(pi, verified, scheduledRunActive);
             registerNotebook(pi, verified);
@@ -255,6 +262,8 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
             const agentDir = getAgentDir();
             const permissions = await botPermissions(context, ctx.sessionManager, ctx.cwd, agentDir);
             if (!permissions) return;
+            if (event.toolName === 'grep' && !grepRegistered)
+                return { block: true, reason: 'Managed Bot grep is unavailable until this Bot window is verified. No directory search ran.' };
             const preset = permissions.preset;
             let annotations;
             try { annotations = pi.getAllTools().find((tool: any) => tool.name === event.toolName)?.annotations; } catch { annotations = undefined; }
