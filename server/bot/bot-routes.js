@@ -20,6 +20,7 @@ function mountBotRoutes(router, { bots }) {
     router.post('/bots/:id/windows', route(req => bots.createTopic(req.params.id, req.body)));
     router.patch('/bots/:id/windows/:windowId', route(req => bots.updateWindow(req.params.id, req.params.windowId, req.body)));
     router.post('/bots/:id/main-window', route(req => bots.ensureMainWindow(req.params.id)));
+    router.get('/bots/:id/topics/open-items', route(req => bots.topicOpenItems(req.params.id)));
     router.get('/bots/:id/windows/:windowId/session', route(req => bots.resolve(req.params.id, req.params.windowId)));
     router.get('/bots/:id/windows/:windowId/generations', route(req => bots.generations(req.params.id, req.params.windowId)));
     router.get('/bots/:id/windows/:windowId/history', route(req => bots.history(req.params.id, req.params.windowId, req.query)));

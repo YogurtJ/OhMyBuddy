@@ -339,6 +339,18 @@ class BotService extends EventEmitter {
             cwd: main.cwd, directory: path.dirname(worker.sessionPath), supervisor: this.supervisor, pi: await getSdk() });
     }
 
+    // Owner UI reads the same bounded index without opening or starting the main chat.
+    async topicOpenItems(profileId) {
+        const { bot } = await this.bot(profileId);
+        const cwd = this.store.resolveProject(bot.workspace);
+        if (cwd !== bot.workspace) fail('Bot workspace identity changed', 409, 'BOT_WINDOW_STALE');
+        const { state, revision } = await this.windows.read(profileId);
+        const pi = await getSdk();
+        const index = require('./bot-topic-index').openItems({ windows: state.windows, profileId, cwd,
+            directory: pi.SessionManager.create(cwd).getSessionDir(), supervisor: this.supervisor, pi });
+        return { ...index, windowsRevision: revision };
+    }
+
     // Idempotent repair: a Bot without a main window gets one (adopting a marked native
     // session left by an interrupted creation before creating a new one).
     ensureMainWindow(profileId) {
@@ -1001,7 +1013,7 @@ class BotService extends EventEmitter {
                     name: model.name, thinkingLevels: model.thinkingLevels })) };
             } catch (error) { modelsError = error.message; }
         }
-        return { revision, bot: { id: profile.id, name: profile.name, avatar: profile.avatar ?? null, soul: profile.soul, bot: this.publicBot(bot) },
+        return { revision, bot: { id: profile.id, name: profile.name, avatar: profile.avatar ?? null, soul: profile.soul, bot: { ...this.publicBot(bot), permissions: { ...bot.permissions, rules: structuredClone(bot.permissions.rules) } } },
             models, ...(modelsError ? { modelsError } : {}) };
     }
 }

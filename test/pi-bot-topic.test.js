@@ -354,6 +354,11 @@ test('main open-items index is fresh, bounded, profile-isolated and says unknown
     const first = await call({}); assert.equal(first.status, 200, JSON.stringify(first.data));
     assert.deepEqual(first.data.topics[0].items.map(item => item.title), ['Pick a book', 'Finish by Friday']);
     assert.doesNotMatch(JSON.stringify(first.data), /secret|Hidden decision/);
+    const ownerUrl = `/bots/${f.profileId}/topics/open-items`, owner = await f.call('GET', ownerUrl);
+    assert.equal(owner.status, 200); assert.equal(owner.cache, 'no-store');
+    assert.deepEqual(owner.data.topics, first.data.topics); assert.equal(owner.data.windowsRevision, await f.revision());
+    assert.notEqual((await f.call('GET', ownerUrl, undefined, null)).status, 200);
+    assert.notEqual((await f.call('GET', ownerUrl, undefined, w.worker.navigationToken)).status, 200, 'worker tokens cannot enter owner index routes');
     await note(session, [{ op: 'status', id: 'n1', status: 'done' }]);
     assert.deepEqual((await call({})).data.topics[0].items.map(item => item.title), ['Finish by Friday']);
     // The actual before-run hook fetches the fresh projection, without another model request.
@@ -378,5 +383,6 @@ test('main open-items index is fresh, bounded, profile-isolated and says unknown
     assert.equal(openItems(args).topics[0].state, 'unavailable', 'malformed native lines are unknown, not an empty notebook');
     fs.writeFileSync(session.path, original);
     await f.patch(topic.id, { archived: true }); assert.deepEqual((await call({})).data.topics, []);
+    assert.deepEqual((await f.call('GET', ownerUrl)).data.topics, []);
     assert.equal(f.supervisor.workers.size, 1, 'only the synthetic source worker exists; topic reads never start workers');
 });

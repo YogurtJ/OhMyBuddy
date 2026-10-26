@@ -70,6 +70,14 @@ test('legacy completed Bots are not enrolled in new steps; explicit restart pres
     assert.equal(after.bot.onboarding.phase, 'interview'); assert.deepEqual(after.bot.onboarding.steps, {});
     assert.deepEqual(after.bot.chosen, { name: true, avatar: true });
 });
+test('settings expose editable rules while Bot lists keep their compact rule count', async t => {
+    const f = await fixture(t); const opaque = { futureRule: { target: 'keep as data' } };
+    await f.patch(profile => { profile.bot.permissions.rules = [opaque]; });
+    const settings = await f.bots.settings(f.id), listed = (await f.bots.list()).bots.find(bot => bot.id === f.id);
+    assert.deepEqual(settings.bot.bot.permissions.rules, [opaque]); assert.equal(listed.bot.permissions.rules, 1);
+    assert.deepEqual((await f.record()).bot.permissions.rules, [opaque]);
+});
+
 test('model lookup holds the shared reservation before awaiting, and a competing settings save cannot enter', async t => {
     const f = await fixture(t); let release;
     f.bots.catalog = () => new Promise(resolve => { release = resolve; });
