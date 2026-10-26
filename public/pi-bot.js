@@ -180,7 +180,8 @@
                 const result = await this.api(`/api/pi/profiles/${encodeURIComponent(bot.id)}/avatar`, { method: 'POST',
                     headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expectedRevision: this.revision, dataUrl }) });
                 // The upload's answer is the newest state even if the refresh below cannot read the list.
-                if (result?.profile?.avatar) bot.avatar = result.profile.avatar;
+                // A picture face is the user's choice, as the server's list would report it.
+                if (result?.profile?.avatar) { bot.avatar = result.profile.avatar; bot.chosen = { ...(bot.chosen || {}), avatar: true }; }
                 if (typeof result?.revision === 'string') this.revision = result.revision;
                 return result;
             } finally { await this.refresh(); }
