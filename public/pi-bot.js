@@ -33,8 +33,8 @@
     };
 
     class PiBotUi {
-        constructor({ api, toast, open, say, pane, header, input, onChange }) {
-            Object.assign(this, { api, toast, open, say, pane, header, input, onChange });
+        constructor({ api, toast, open, say, pane, header, input, onChange, draft, focusComposer }) {
+            Object.assign(this, { api, toast, open, say, pane, header, input, onChange, draft, focusComposer });
             this.bots = []; this.revision = null; this.profileId = null; this.windowId = null;
             this.active = false; this.epoch = 0; this.loaded = false; this.creating = false; this.error = null;
             this.statusKind = 'connecting';
@@ -51,6 +51,16 @@
             // Number of usable chat models; undefined until known, null when it cannot be read.
             this.models = undefined;
             window.addEventListener('workspace:models-changed', () => { if (this.active) void this.checkModels(); });
+            // The end of getting acquainted, docked above the composer by the chat (pi-bot-onboarding.js).
+            this.closure = window.PiBotOnboarding?.closure({
+                target: () => this.active && this.bot() ? { bot: this.bot(), window: this.window(),
+                    idle: this.statusKind === 'connected' && !this.projection?.queued && !this.projection?.stopping } : null,
+                load: profileId => this.api(`/api/pi/bots/${encodeURIComponent(profileId)}/settings`),
+                submit: (profileId, body) => this.onboardingStep(profileId, body),
+                say: text => this.say?.(text), draft: () => Boolean(this.draft?.()), focusComposer: () => this.focusComposer?.(),
+                notify: message => this.toast(message, 'info'), face: () => this.face('sm'), changed: () => this.onChange?.('panel') }) || null;
+            // Topic ids being restored, and unsettled items per topic (when the server lists them).
+            this.restoring = new Set(); this.topicIndex = null; this.topicIndexMissing = false; this.topicIndexSerial = 0; this.archivedOpen = false;
         }
 
         async checkModels() {
@@ -119,6 +129,7 @@
                 this.render(); this.onChange?.('identity');
                 await this.open({ profileId: bot.id, windowId });
                 this.rotationRetries = 0;
+                void this.loadTopicIndex();
             } catch (error) {
                 if (epoch !== this.epoch) return;
                 // The chat is moving to a new conversation file; that settles in moments.
@@ -134,6 +145,7 @@
 
         deactivate() {
             this.epoch++; this.active = false;
+            this.closure?.hide();
             this.motion?.update({ key: '', connected: false });
             this.pane.closest('#chat-tab')?.classList.remove('pi-bot-welcome');
             this.pane.hidden = true; this.header.hidden = true;
@@ -149,7 +161,25 @@
         // Re-read names, faces and windows (after an edit elsewhere or a window change).
         async refresh() {
             if (!this.active) return;
-            try { await this.load(); this.render(); this.onChange?.('identity'); } catch {}
+            try { await this.load(); this.render(); this.onChange?.('identity'); void this.loadTopicIndex(); } catch {}
+        }
+
+        // Unsettled items in the Bot's topics, shown beside each topic. Asked only when the Bot has
+        // topics; a server without the list (404) is not asked again on this page.
+        async loadTopicIndex() {
+            const bot = this.bot(), serial = ++this.topicIndexSerial;
+            if (!bot || !window.PiBotTopics || this.topicIndexMissing
+                || !bot.windows.some(item => item.kind === 'topic' && !item.archivedAt && item.generation !== null)) {
+                if (this.topicIndex && this.topicIndex.botId !== bot?.id) { this.topicIndex = null; if (this.active) this.renderPane(); }
+                return;
+            }
+            const profileId = bot.id;
+            try {
+                const data = await this.api(`/api/pi/bots/${encodeURIComponent(profileId)}/topics/open-items`);
+                if (serial !== this.topicIndexSerial || this.profileId !== profileId || !this.active) return;
+                this.topicIndex = { botId: profileId, map: window.PiBotTopics.index(data, this.bot()?.windows) };
+                this.renderPane();
+            } catch (error) { if (error.status === 404) this.topicIndexMissing = true; }
         }
 
         go(profileId, windowId) {
@@ -221,6 +251,37 @@
             try { return await send(); }
             catch (error) { if (error.status !== 409 || error.code) throw error; await this.load(); return await send(); }
             finally { await this.refresh(); }
+        }
+
+        // One closing step of getting acquainted (model-choice or first-task, flow 2). A revision
+        // conflict rereads the list and is reported, never retried for the user.
+        async onboardingStep(profileId, body) {
+            if (this.revision === null) await this.load();
+            try {
+                return await this.api(`/api/pi/bots/${encodeURIComponent(profileId)}/onboarding`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...body, expectedRevision: this.revision }) });
+            } catch (error) {
+                if (error.status === 409 && !error.code) await this.load().catch(() => {});
+                throw error;
+            } finally { await this.refresh(); }
+        }
+
+        // "Always allow" from an approval card: read the current grants fresh, append this one and
+        // save against that revision. Other grants (including ones this page does not understand)
+        // and the way of working are kept; a conflict is reported, not retried.
+        async rememberRule(rule) {
+            const profileId = this.profileId;
+            if (!profileId || !window.PiBotRules?.valid(rule)) throw new Error(translateUi("请先打开 Bot 的聊天"));
+            const data = await this.api(`/api/pi/bots/${encodeURIComponent(profileId)}/settings`);
+            const rules = data?.bot?.bot?.permissions?.rules;
+            if (!Array.isArray(rules) || typeof data.revision !== 'string') throw new Error(translateUi("服务暂时不能记住规则，这次可以先只允许一次"));
+            if (!rules.some(item => window.PiBotRules.same(item, rule))) {
+                if (rules.length >= window.PiBotRules.MAX_RULES) throw new Error(translateUi("一直允许的规则已经满了，先在设置里撤销几条"));
+                await this.api(`/api/pi/bots/${encodeURIComponent(profileId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ expectedRevision: data.revision, changes: { bot: { permissions: { rules: [...rules, rule] } } } }) });
+            }
+            await this.refresh();
+            return true;
         }
 
         async onboarding(action) {
@@ -331,6 +392,9 @@
             else if (action === 'known-decline') void this.knownAction('decline');
             else if (action === 'known-source' && this.known) { this.known.sourceId = target.dataset.profileId; this.onChange?.('identity'); }
             else if (action === 'retry') void this.activate(new URLSearchParams(this.profileId ? { profileId: this.profileId } : {}));
+            else if (action === 'topic-add') this.editTopic(null);
+            else if (action === 'topic-edit') this.editTopic(target.dataset.windowId);
+            else if (action === 'topic-restore') void this.restoreTopic(target.dataset.windowId);
             else if (action === 'notes') {
                 if (window.innerWidth <= 900) document.getElementById('pi-session-pane')?.classList.remove('open');
                 this.openNotebook();
@@ -349,11 +413,60 @@
                 onAbout: () => window.PiWorkspaceRoute?.navigate('profiles', { profileId: current.profileId, section: 'user' }) });
         }
 
+        // Create (windowId null) or edit a topic; the main chat has no such sheet.
+        editTopic(windowId) {
+            const bot = this.bot();
+            if (!bot || !window.PiBotTopics) return;
+            const topic = windowId ? bot.windows.find(item => item.id === windowId && item.kind === 'topic' && !item.archivedAt) : null;
+            if (windowId && !topic) return;
+            if (window.innerWidth <= 900) document.getElementById('pi-session-pane')?.classList.remove('open');
+            const profileId = bot.id, epoch = this.epoch;
+            const current = () => this.active && this.epoch === epoch && this.profileId === profileId;
+            window.PiBotTopics.edit({ api: this.api, profileId, name: bot.name, bot, window: topic, current,
+                latest: async () => { await this.load(); if (current()) this.render(); return this.bots.find(item => item.id === profileId) || null; },
+                onSaved: async (result, action) => {
+                    await this.refresh();
+                    if (!current()) return;
+                    if (action === 'created') {
+                        const id = result?.window?.id || result?.id;
+                        if (id) this.go(profileId, id);
+                    } else if (action === 'archived') {
+                        this.toast(translateUi("话题已归档，聊天记录都保留着"), 'success');
+                        const main = this.bot()?.windows.find(item => item.kind === 'main');
+                        if (topic.id === this.windowId && main) this.go(profileId, main.id);
+                    } else this.toast(translateUi("已保存"), 'success');
+                } });
+        }
+
+        // An archived topic comes back with all its history; it is opened from the list again.
+        async restoreTopic(windowId) {
+            const bot = this.bot();
+            const topic = bot?.windows.find(item => item.id === windowId && item.kind === 'topic' && item.archivedAt);
+            if (!topic || !window.PiBotTopics || this.restoring.has(windowId)) return;
+            const profileId = bot.id;
+            this.restoring.add(windowId); this.renderPane();
+            try {
+                await window.PiBotTopics.restore({ api: this.api, profileId, windowId, revision: bot.windowsRevision });
+                if (this.profileId === profileId) this.toast(translateUi("话题已恢复"), 'success');
+            } catch (error) {
+                if (this.profileId === profileId) this.toast(error.status === 409 && !error.code ? translateUi("话题列表刚刚有变化，请再点一次恢复") : error.message, 'error');
+            } finally { this.restoring.delete(windowId); if (this.active) this.renderPane(); await this.refresh(); }
+        }
+
         openSettings() {
             const profileId = this.profileId;
             if (!profileId || !window.PiBotSettings) { window.PiWorkspaceRoute?.navigate('profiles', { profileId }); return; }
             void window.PiBotSettings.open({ api: this.api, toast: this.toast, profileId, face,
                 onSaved: async () => { await this.refresh(); },
+                // Moved to the trash: go on with another Bot, or the welcome page when none is left.
+                onTrashed: async () => {
+                    if (localStorage.getItem(LAST_KEY) === profileId) localStorage.removeItem(LAST_KEY);
+                    if (this.profileId !== profileId || !this.active) return;
+                    try { await this.load(); } catch {}
+                    const next = this.bots.find(item => item.id !== profileId && item.enabled);
+                    if (next) this.go(next.id);
+                    else { window.PiWorkspaceRoute?.navigate('bot', {}, true); void this.activate(new URLSearchParams()); }
+                },
                 // Memory, about-you notes and learning keep living on the identity page.
                 onMemory: () => window.PiWorkspaceRoute?.navigate('profiles', { profileId, section: 'user' }),
                 // Getting acquainted again happens in the main chat; the Bot starts once asked.
@@ -374,6 +487,7 @@
                 greeting: this.bot()?.bot?.onboarding?.phase === 'greeting', greetingKey: `${this.profileId}/${this.windowId}` };
             this.motion?.update(this.projection);
             this.paintMotion();
+            this.closure?.sync();
         }
         paintMotion() {
             const node = this.header.querySelector('.pi-bot-identity > .pi-bot-face');
@@ -409,6 +523,7 @@
             this.renderPane(); this.renderHeader();
             const bot = this.bot();
             this.input.setAttribute('placeholder', bot ? translateUi("给 {0} 发消息", bot.name) : this.placeholder);
+            this.closure?.sync();
         }
 
         renderPane() {
@@ -439,10 +554,16 @@
                 const main = windows.find(item => item.kind === 'main');
                 if (main) list.append(this.windowItem(main, 'fa-comment', translateUi("主聊天")));
                 const topics = windows.filter(item => item.kind === 'topic');
-                if (topics.length) {
-                    list.append(el('p', 'pi-bot-section', translateUi("话题")));
-                    for (const topic of topics) list.append(this.windowItem(topic, null, topic.title, topic.emoji));
-                }
+                // Topics: separate focused chats. Archived ones keep their history and can come back.
+                const heading = el('div', 'pi-bot-section-row');
+                const add = button('pi-bot-topic-add', translateUi("新话题")); add.dataset.botAction = 'topic-add';
+                add.append(icon('fa-plus'));
+                heading.append(el('p', 'pi-bot-section', translateUi("话题")), add);
+                list.append(heading);
+                for (const topic of topics) list.append(this.topicItem(bot, topic));
+                if (!topics.length) list.append(el('p', 'pi-bot-topic-empty', translateUi("想专心聊某件事时，可以单独开一个话题。")));
+                const archived = bot.windows.filter(item => item.kind === 'topic' && item.archivedAt);
+                if (archived.length) list.append(this.archivedList(archived));
                 const foot = el('footer', 'pi-bot-side-foot');
                 const notes = button('pi-bot-notes-link'); notes.dataset.botAction = 'notes';
                 notes.append(icon('fa-thumbtack'), el('span', null, translateUi("我记着的事")));
@@ -470,6 +591,44 @@
             return node;
         }
 
+        topicItem(bot, topic) {
+            const row = el('div', 'pi-bot-topic-row');
+            const open = this.windowItem(topic, 'fa-hashtag', topic.title, topic.emoji);
+            const unsettled = this.topicIndex?.botId === bot.id ? this.topicIndex.map.get(topic.id) : null;
+            if (unsettled) {
+                // Busy topics were not read, so their items are unknown rather than none.
+                const text = unsettled.busy ? translateUi("这个话题正在忙") : translateUi("{0} 件没办完", unsettled.count);
+                const badge = el('span', `pi-bot-topic-badge${unsettled.busy ? ' is-busy' : ''}`, unsettled.busy ? '' : String(unsettled.count));
+                badge.title = [text, ...unsettled.titles].join('\n');
+                badge.prepend(el('i', 'pi-bot-status-dot')); badge.setAttribute('aria-hidden', 'true');
+                open.append(badge, el('span', 'pi-bot-sr', text));
+            }
+            const edit = button('pi-bot-topic-edit', translateUi("编辑话题“{0}”", topic.title));
+            edit.dataset.botAction = 'topic-edit'; edit.dataset.windowId = topic.id;
+            edit.append(icon('fa-pen'));
+            row.append(open, edit);
+            return row;
+        }
+
+        // Archived topics are listed to restore, never opened as a live chat.
+        archivedList(archived) {
+            const box = el('details', 'pi-bot-archived'); box.open = this.archivedOpen;
+            box.addEventListener('toggle', () => { this.archivedOpen = box.open; });
+            box.append(el('summary', null, translateUi("已归档（{0}）", archived.length)));
+            for (const topic of archived) {
+                const row = el('div', 'pi-bot-archived-row');
+                const mark = el('span', 'pi-bot-window-mark'); mark.setAttribute('aria-hidden', 'true');
+                if (topic.emoji) mark.textContent = topic.emoji; else mark.append(icon('fa-box-archive'));
+                const restoring = this.restoring.has(topic.id);
+                const restore = button('pi-bot-chip pi-bot-topic-restore', translateUi("恢复话题“{0}”", topic.title));
+                restore.dataset.botAction = 'topic-restore'; restore.dataset.windowId = topic.id; restore.disabled = restoring;
+                restore.textContent = restoring ? translateUi("正在恢复…") : translateUi("恢复");
+                row.append(mark, el('span', 'pi-bot-window-title', topic.title), restore);
+                box.append(row);
+            }
+            return box;
+        }
+
         renderHeader() {
             const bot = this.bot();
             const menu = button('pi-bot-menu', translateUi("我的 Bot 与聊天")); menu.dataset.botAction = 'menu';
@@ -480,8 +639,10 @@
             const current = this.window();
             const line = el('span', 'pi-bot-status'); line.dataset.state = this.statusKind;
             line.append(el('i', 'pi-bot-status-dot'), document.createTextNode(STATUS[this.statusKind]()));
-            if (current?.kind === 'topic') line.append(document.createTextNode(` · ${current.title}`));
-            who.append(name, line);
+            who.append(name);
+            // In a topic the badge also names it; the status line itself is repainted with each pose.
+            if (current?.kind === 'topic') who.append(el('span', 'pi-bot-who-topic', current.emoji ? `${current.emoji} ${current.title}` : current.title));
+            who.append(line);
             const notes = button('pi-bot-notes-button', translateUi("我记着的事")); notes.dataset.botAction = 'notes';
             notes.append(icon('fa-thumbtack'));
             notes.hidden = !this.windowId;
@@ -551,8 +712,14 @@
                 chips.append(yes, skip); bubble.append(chips);
                 return root;
             }
+            if (window?.kind === 'topic') {
+                // A fresh topic says what it is for.
+                root.append(face(bot, 'xl'), el('h2', null, window.emoji ? `${window.emoji} ${window.title}` : window.title));
+                root.append(el('p', null, window.focus ? translateUi("这个话题专心聊：{0}", window.focus) : translateUi("想聊什么都可以直接说。")));
+                return root;
+            }
             root.append(face(bot, 'xl'), el('h2', null, bot.name));
-            root.append(el('p', null, ['skipped', 'done'].includes(bot.bot?.onboarding?.phase) || window?.kind === 'topic'
+            root.append(el('p', null, ['skipped', 'done'].includes(bot.bot?.onboarding?.phase)
                 ? translateUi("想聊什么都可以直接说。") : translateUi("我们接着刚才的认识聊吧，直接说就好。")));
             return root;
         }
@@ -868,7 +1035,8 @@
     // ---- approval cards ----------------------------------------------------------------
     // In the careful presets the worker asks with one native confirm (server/bot/bot-guard.js)
     // before a gated step runs. The card says what the Bot wants to do; the message carries
-    // "<kind> #<token>" on its first line and the detail after a blank line. One at a time.
+    // "<kind> #<token>" on its first line, optionally "rule <JSON>" (a grant the user may keep)
+    // on the second, and the detail after a blank line. One at a time.
     const APPROVAL_TITLE = '允许这一步吗？ / Allow this step?';
     const APPROVAL_KINDS = {
         command: name => translateUi("{0} 想运行一条命令", name),
@@ -877,18 +1045,24 @@
         write: name => translateUi("{0} 想写入文件", name),
         memory: name => translateUi("{0} 想记下这件事", name),
         action: name => translateUi("{0} 想做这一步", name),
-        schedule: name => translateUi("{0} 想安排或取消定时任务", name)
+        schedule: name => translateUi("{0} 想安排或取消定时任务", name),
+        topic: name => translateUi("{0} 想开一个新话题", name)
     };
     function parseApproval(event) {
         if (event?.method !== 'confirm' || event.title !== APPROVAL_TITLE) return null;
-        const match = /^([a-z]+) #[a-f0-9]{16}\n\n([\s\S]*)$/.exec(typeof event.message === 'string' ? event.message : '');
-        return match && Object.hasOwn(APPROVAL_KINDS, match[1]) ? { kind: match[1], detail: match[2] } : null;
+        const match = /^([a-z]+) #[a-f0-9]{16}(?:\nrule (\{[^\n]*\}))?\n\n([\s\S]*)$/.exec(typeof event.message === 'string' ? event.message : '');
+        if (!match || !Object.hasOwn(APPROVAL_KINDS, match[1])) return null;
+        // Only a valid grant of the matching kind can be kept; otherwise the step is still asked once.
+        const rule = match[2] ? globalThis.PiBotRules?.parse(match[2]) || null : null;
+        return { kind: match[1], detail: match[3], rule: rule && globalThis.PiBotRules.fits(match[1], rule) ? rule : null };
     }
     // Other steps name a tool; the familiar ones read as what they do.
     const APPROVAL_ACTIONS = { deliver_files: () => translateUi("把文件交给你"), get_attachment: () => translateUi("取出你上传的附件原件"),
         media_generate: () => translateUi("生成图片、视频或语音") };
 
-    function createApprovalCards({ enabled, respond, face: currentFace, name, changed }) {
+    // remember(rule): saves a grant the request offered (resolves once saved, throws otherwise);
+    // owner(): the open conversation, so a slow save never answers a request of another one.
+    function createApprovalCards({ enabled, respond, face: currentFace, name, changed, remember = null, owner = () => '', notify = null }) {
         const panel = el('section', 'pi-bot-setup pi-bot-approval'); panel.hidden = true;
         panel.setAttribute('role', 'region'); panel.setAttribute('aria-label', translateUi("等你确认"));
         let current = null;
@@ -897,27 +1071,81 @@
         function hide() { if (!current && panel.hidden) return; current = null; panel.hidden = true; panel.replaceChildren(); changed?.(); }
 
         function render(waiting) {
-            const { event, kind, detail } = current;
+            const target = current, { event, kind, detail, rule } = target;
+            const who = name() || 'Bot';
             const head = el('header', 'pi-bot-setup-head');
-            head.append(currentFace(), el('strong', null, APPROVAL_KINDS[kind](name() || 'Bot')));
+            head.append(currentFace(), el('strong', null, APPROVAL_KINDS[kind](who)));
             const shown = kind === 'action' && Object.hasOwn(APPROVAL_ACTIONS, detail) ? APPROVAL_ACTIONS[detail]()
                 : kind === 'schedule' ? detail.replace(/^Create: /, translateUi("安排：")).replace(/^Cancel: /, translateUi("取消：")) : detail;
             const body = el('pre', `pi-bot-approval-detail is-${kind}`, shown);
             body.tabIndex = 0;
             const foot = el('footer', 'pi-bot-setup-foot');
-            const note = el('p', 'pi-bot-setup-note', waiting > 0 ? translateUi("后面还有 {0} 步等你确认", waiting) : '');
+            const note = el('p', 'pi-bot-setup-note', target.error || (waiting > 0 ? translateUi("后面还有 {0} 步等你确认", waiting) : ''));
+            note.setAttribute('role', 'status'); note.classList.toggle('is-error', Boolean(target.error));
             const deny = el('button', 'pi-bot-setup-later', translateUi("不要")); deny.type = 'button';
-            const allow = el('button', 'pi-bot-primary pi-bot-approval-allow', translateUi("允许")); allow.type = 'button';
+            const keepable = Boolean(rule && remember);
+            const allow = el('button', 'pi-bot-primary pi-bot-approval-allow', keepable ? translateUi("允许这次") : translateUi("允许")); allow.type = 'button';
             const answer = confirmed => {
-                if (current?.event.id !== event.id || current.answered) return;
-                current.answered = true; deny.disabled = allow.disabled = true;
+                if (current !== target || target.answered || target.saving) return;
+                target.answered = true; for (const control of panel.querySelectorAll('button')) control.disabled = true;
                 respond({ id: event.id, confirmed });
             };
             deny.addEventListener('click', () => answer(false));
             allow.addEventListener('click', () => answer(true));
-            foot.append(note, deny, allow);
-            panel.replaceChildren(head, body, foot);
+            const parts = [head, body];
+            if (keepable) {
+                // "Always allow" is a separate, explicit choice: the first click shows exactly what
+                // it covers, the second saves the grant, and only then is this one step allowed.
+                const keep = el('button', 'pi-bot-chip pi-bot-approval-keep', target.saving ? translateUi("正在保存…")
+                    : target.armed ? translateUi("确认以后都允许") : translateUi("以后都允许"));
+                keep.type = 'button'; keep.setAttribute('aria-expanded', String(Boolean(target.armed)));
+                keep.addEventListener('click', () => {
+                    if (current !== target || target.answered || target.saving) return;
+                    if (!target.armed) { target.armed = true; target.error = ''; render(waiting); panel.querySelector('.pi-bot-approval-keep')?.focus(); return; }
+                    void keepRule(target, waiting);
+                });
+                if (target.armed) {
+                    const scope = el('div', 'pi-bot-approval-scope'); scope.setAttribute('role', 'note');
+                    const grant = el('p', 'pi-bot-approval-rule');
+                    grant.append(el('strong', null, globalThis.PiBotRules.label(rule)), el('code', null, rule.value));
+                    const where = globalThis.PiBotRules.place(rule);
+                    if (where) grant.append(el('small', null, where));
+                    scope.append(grant, el('p', null, globalThis.PiBotRules.scope(rule, who)),
+                        el('p', null, translateUi("这条规则只在 Pivane 的工具层生效，不是系统沙箱：允许的命令以 Pivane 服务的权限运行。可以随时在设置的“做事方式”里撤销。")));
+                    parts.push(scope);
+                }
+                foot.append(note, deny, keep, allow);
+            } else foot.append(note, deny, allow);
+            parts.push(foot);
+            panel.replaceChildren(...parts);
+            if (target.saving || target.answered) for (const control of panel.querySelectorAll('button')) control.disabled = true;
             panel.hidden = false;
+        }
+
+        // Save the grant first; allow this step only if the same request of the same conversation is
+        // still waiting. A failed or conflicting save keeps the card and never answers for the user.
+        async function keepRule(target, waiting) {
+            const conversation = owner();
+            target.saving = true; target.error = ''; render(waiting);
+            let saved = false;
+            try { await remember(target.rule); saved = true; }
+            catch (error) {
+                target.error = error.status === 409 ? translateUi("设置刚刚在别处改过，规则还没保存；可以再点一次，或者只允许这次")
+                    : translateUi("规则没有保存：{0}", error.message || translateUi("保存失败"));
+            }
+            target.saving = false;
+            if (current !== target || target.answered) {
+                if (saved) notify?.(translateUi("规则已保存；那一步已经不在等待，没有替你回答。"));
+                return;
+            }
+            if (saved && owner() === conversation) {
+                target.answered = true;
+                for (const control of panel.querySelectorAll('button')) control.disabled = true;
+                respond({ id: target.event.id, confirmed: true });
+                return;
+            }
+            if (saved) target.error = translateUi("规则已保存，但聊天刚刚切换了；这一步没有替你回答");
+            render(waiting);
         }
 
         // Called whenever pending requests change; the answered request leaves when the
@@ -926,7 +1154,7 @@
             const requests = connected && enabled() ? [...pending.values()].filter(event => parseApproval(event)) : [];
             if (!requests.length) { hide(); return; }
             const event = requests[0];
-            if (current?.event.id !== event.id) current = { event, ...parseApproval(event), answered: false };
+            if (current?.event.id !== event.id) current = { event, ...parseApproval(event), answered: false, armed: false, saving: false, error: '' };
             else if (current.answered) return;
             render(requests.length - 1); changed?.();
         }

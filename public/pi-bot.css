@@ -452,3 +452,136 @@
 }
 .pi-bot-needs-model > i { margin-top: 4px; color: var(--primary, var(--green)); }
 .pi-bot-empty .pi-bot-needs-model p, .pi-bot-greeting .pi-bot-needs-model p { margin: 0; font-size: .9rem; line-height: 1.6; color: var(--text-main); }
+
+/* ---- shared ----------------------------------------------------------------------------- */
+.pi-bot-sr { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+/* ---- topics in the session pane: add, edit, unsettled items, archived ------------------ */
+.pi-bot-section-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 10px 0 2px; }
+.pi-bot-section-row .pi-bot-section { margin: 4px 8px; }
+.pi-bot-topic-add, .pi-bot-topic-edit {
+    flex: none; display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px;
+    background: transparent; color: var(--text-muted); font-size: .8rem; cursor: pointer;
+}
+.pi-bot-topic-add:hover, .pi-bot-topic-edit:hover { background: var(--pv-nav-hover, var(--surface-2)); color: var(--text-main); }
+.pi-bot-topic-add:focus-visible, .pi-bot-topic-edit:focus-visible, .pi-bot-archived > summary:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
+.pi-bot-topic-row { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.pi-bot-topic-row > .pi-bot-window { flex: 1; min-width: 0; }
+@media (hover: hover) and (pointer: fine) and (min-width: 901px) {
+    .pi-bot-topic-row:not(:hover):not(:focus-within) .pi-bot-topic-edit { opacity: 0; }
+}
+.pi-bot-topic-badge {
+    flex: none; display: inline-flex; align-items: center; gap: 5px; margin-left: auto; padding: 1px 7px; border-radius: 999px;
+    background: var(--surface-3, var(--surface-2)); color: var(--text-muted); font-size: .72rem; font-weight: 600; line-height: 1.5;
+}
+.pi-bot-topic-badge .pi-bot-status-dot { width: 6px; height: 6px; background: var(--amber); }
+.pi-bot-topic-badge.is-busy .pi-bot-status-dot { background: var(--green); animation: pi-bot-pulse 1.2s ease-in-out infinite; }
+.pi-bot-topic-empty { margin: 2px 10px 6px; color: var(--text-muted); font-size: .78rem; line-height: 1.5; }
+.pi-bot-archived { margin: 10px 0 4px; }
+.pi-bot-archived > summary {
+    width: fit-content; min-height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border-radius: 8px;
+    color: var(--text-muted); font-size: .76rem; font-weight: 600; cursor: pointer; list-style: none;
+}
+.pi-bot-archived > summary::-webkit-details-marker { display: none; }
+.pi-bot-archived > summary::before {
+    content: ""; width: 5px; height: 5px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); transition: transform 120ms ease;
+}
+.pi-bot-archived[open] > summary::before { transform: rotate(45deg); }
+.pi-bot-archived > summary:hover { background: var(--pv-nav-hover, var(--surface-2)); color: var(--text-main); }
+.pi-bot-archived-row { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 4px 4px 4px 10px; color: var(--text-muted); font-size: .84rem; }
+.pi-bot-archived-row .pi-bot-window-title { flex: 1; }
+.pi-bot-archived-row .pi-bot-window-mark i { color: var(--text-muted); }
+.pi-bot-archived-row .pi-bot-chip { flex: none; min-height: 32px; margin: 0; padding: 0 12px; font-size: .8rem; }
+@media (max-width: 900px) {
+    .pi-bot-topic-add, .pi-bot-topic-edit { width: 44px; height: 44px; }
+    .pi-bot-archived > summary { min-height: 44px; }
+    .pi-bot-archived-row .pi-bot-chip { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .pi-bot-topic-badge .pi-bot-status-dot { animation: none !important; } .pi-bot-archived > summary::before { transition: none; } }
+
+/* ---- topic sheet ---------------------------------------------------------------------- */
+.pi-bot-topic-sheet .pi-bot-sheet-body { display: grid; align-content: start; gap: 14px; padding-top: 14px; }
+.pi-bot-topic-intro { margin: 0; }
+.pi-bot-topic-identity { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: end; }
+.pi-bot-sheet .pi-bot-topic-identity input.pi-bot-sheet-emoji[type="text"] { width: 100%; }
+.pi-bot-topic-sheet-mark { font-size: 1.3rem; line-height: 1; }
+.pi-bot-topic-sheet-mark[hidden] { display: none; }
+.pi-bot-topic-sheet .pi-bot-sheet-section { padding-bottom: 0; }
+.pi-bot-sheet-link:disabled { opacity: .55; cursor: default; }
+.pi-bot-sheet-link.is-danger, .pi-bot-sheet-link.is-danger > i:first-child { color: var(--danger); }
+.pi-bot-topic-archive > i:first-child { color: var(--text-muted); }
+
+/* ---- "always allow" grants in Bot settings --------------------------------------------- */
+.pi-bot-sheet-rules { display: grid; gap: 8px; margin-top: 4px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+.pi-bot-sheet-rules h4 { margin: 0; font-size: .86rem; font-weight: 650; color: var(--text-main); }
+.pi-bot-sheet-rule-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.pi-bot-sheet-rule { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--surface-1, var(--surface)); }
+.pi-bot-sheet-rule-copy { flex: 1; min-width: 0; display: grid; gap: 3px; font-size: .82rem; color: var(--text-muted); }
+.pi-bot-sheet-rule-copy strong { color: var(--text-main); font-size: .84rem; font-weight: 600; }
+.pi-bot-sheet-rule-copy code, .pi-bot-approval-rule code {
+    display: block; max-height: 6.5em; overflow: auto; padding: 4px 7px; border-radius: 7px; background: var(--surface-2); color: var(--text-main);
+    font: .8rem/1.5 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.pi-bot-sheet-rule-copy small { overflow-wrap: anywhere; }
+.pi-bot-sheet-rule.is-revoked .pi-bot-sheet-rule-copy > :not(.pi-bot-sheet-rule-state) { opacity: .55; text-decoration: line-through; }
+.pi-bot-sheet-rule-state { color: var(--danger); font-weight: 600; }
+.pi-bot-sheet-rule .pi-bot-chip { flex: none; margin: 0; min-height: 36px; padding: 0 12px; font-size: .82rem; }
+@media (max-width: 600px) {
+    .pi-bot-sheet-rule { flex-wrap: wrap; }
+    .pi-bot-sheet-rule .pi-bot-chip { min-height: 44px; margin-left: auto; }
+    .pi-bot-topic-identity { grid-template-columns: 92px minmax(0, 1fr); }
+}
+
+/* ---- approval card: "always allow" ------------------------------------------------------ */
+.pi-bot-approval .pi-bot-setup-foot { flex-wrap: wrap; justify-content: flex-end; }
+.pi-bot-approval-scope {
+    display: grid; gap: 6px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--line)); border-radius: 12px;
+    background: color-mix(in srgb, var(--amber) 8%, var(--surface-1)); font-size: .84rem; line-height: 1.55;
+}
+.pi-bot-approval-scope p { margin: 0; }
+.pi-bot-approval-rule { display: grid; gap: 4px; }
+.pi-bot-approval-rule small { color: var(--text-muted); overflow-wrap: anywhere; }
+.pi-bot-approval-keep { margin: 0; }
+.pi-bot-approval-keep[aria-expanded="true"] { border-color: var(--amber); }
+@media (max-width: 680px) {
+    .pi-bot-approval .pi-bot-setup-note { flex-basis: 100%; }
+    .pi-bot-approval .pi-bot-setup-note:empty { display: none; }
+    .pi-bot-approval .pi-bot-setup-foot > button { flex: 1 1 auto; min-height: 44px; padding: 0 12px; }
+    .pi-bot-approval .pi-bot-setup-foot > .pi-bot-primary { min-width: 0; }
+}
+
+/* ---- the end of getting acquainted (flow 2) -------------------------------------------- */
+.pi-bot-closure-body { gap: 14px; }
+.pi-bot-closure-facts { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.pi-bot-closure-facts li { display: flex; align-items: flex-start; gap: 10px; font-size: .86rem; line-height: 1.55; color: var(--text-main); }
+.pi-bot-closure-facts li > i { flex: none; width: 18px; margin-top: 4px; text-align: center; color: var(--primary, var(--green)); font-size: .82rem; }
+.pi-bot-closure-model, .pi-bot-closure-tasks { display: grid; gap: 8px; min-width: 0; }
+.pi-bot-closure-label { margin: 0; color: var(--text-muted); font-size: .82rem; }
+.pi-bot-closure-hint { margin: 0; color: var(--text-muted); font-size: .84rem; }
+.pi-bot-closure-saved { display: flex; align-items: center; gap: 8px; margin: 0; font-size: .88rem; }
+.pi-bot-closure-saved > i { color: var(--green); }
+.pi-bot-closure-model-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pi-bot-closure-model-row select {
+    flex: 1 1 140px; max-width: 360px; min-width: 0; min-height: 40px; padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: 10px;
+    background: var(--surface-1, var(--surface)); color: var(--text-main); font: inherit; font-size: .9rem;
+}
+.pi-bot-closure-model-row select[data-closure-thinking] { flex: 0 1 112px; }
+.pi-bot-closure-model-row .pi-bot-chip { flex: none; }
+.pi-bot-closure-model-row select:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
+.pi-bot-closure-model-row .pi-bot-chip, .pi-bot-closure-chips .pi-bot-chip { margin: 0; min-height: 40px; padding: 0 14px; font-size: .88rem; }
+.pi-bot-closure-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.pi-bot-closure-chips [data-closure-task="own"] { border-style: dashed; }
+.pi-bot-closure-chips .pi-bot-setup-later { margin-left: auto; }
+/* The footer only carries a message (an error or a hint); without one it takes no room. */
+.pi-bot-closure .pi-bot-setup-foot:has(.pi-bot-setup-note:empty) { display: none; }
+@media (max-width: 680px) {
+    .pi-bot-closure-model-row select { font-size: 16px; min-height: 44px; }
+    .pi-bot-closure-model-row .pi-bot-chip, .pi-bot-closure-chips .pi-bot-chip, .pi-bot-closure .pi-bot-setup-later { min-height: 44px; }
+    .pi-bot-closure { gap: 10px; padding: 12px 12px 10px; }
+    .pi-bot-closure-body { gap: 10px; }
+    .pi-bot-closure-facts { gap: 5px; }
+    .pi-bot-closure-facts li { font-size: .8rem; line-height: 1.5; }
+    .pi-bot-closure-model-row select[data-closure-thinking] { flex-basis: 92px; }
+    .pi-bot-closure-chips { gap: 6px; }
+    .pi-bot-closure-model-row .pi-bot-chip, .pi-bot-closure-chips .pi-bot-chip { padding: 0 12px; }
+}
