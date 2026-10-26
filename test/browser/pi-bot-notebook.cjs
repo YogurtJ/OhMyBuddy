@@ -121,10 +121,10 @@ const startNotes = () => [
                 assert.match(await page.locator('.pi-turn-group .pi-turn-label').first().textContent(), /2 个步骤 · 记下 2 件事$/);
                 await page.locator('.pi-turn-group > summary').first().click();
                 assert.deepEqual(await page.locator('.pi-tool-row[data-tool-name="window_note"] summary > strong').allTextContents(),
-                    ['记下了 · 卫生间瓷砖用 60×120 哑光灰', '记下了 · 周五前发三家报价']);
+                    ['记到“我记着的事” · 卫生间瓷砖用 60×120 哑光灰', '记到“我记着的事” · 周五前发三家报价']);
 
                 // The entry opens the sheet: active notes by kind, most actionable first; closed ones folded.
-                assert.equal(await page.locator('#pi-bot-header .pi-bot-notes-button').isVisible(), width < 700);
+                assert.equal(await page.locator('#pi-bot-header .pi-bot-notes-button').isVisible(), true);
                 if (width < 700) {
                     const box = await page.locator('#pi-bot-header .pi-bot-notes-button').boundingBox();
                     assert.ok(box.x + box.width >= width - 16, `the header entry sits at the right edge ${JSON.stringify(box)}`);

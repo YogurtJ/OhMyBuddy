@@ -389,6 +389,7 @@
         window.addEventListener('workspace:tabchanged', event => {
             visible = event.detail.tab === 'cron'; if (!visible) { epoch++; return; }
             filterProfile = event.detail.params.get('profileId') || '';
+            if (event.detail.params.get('jobId') && !dirty && !busy) selected = event.detail.params.get('jobId');
             const newTarget = event.detail.params.get('sessionId') ? { kind: 'thread', cwd: event.detail.params.get('cwd'), sessionId: event.detail.params.get('sessionId') } : null;
             void load().then(() => { if (newTarget && visible && !draft) return edit(null, newTarget); });
         });

@@ -11,6 +11,7 @@
     const button = (className, label) => { const b = el('button', className); b.type = 'button'; if (label) { b.title = label; b.setAttribute('aria-label', label); } return b; };
 
     function face(bot, size = 'md') {
+        if (window.PiAvatar) return window.PiAvatar.render(bot, `pi-bot-face is-${size}`);
         const node = el('span', `pi-bot-face is-${size}`);
         node.setAttribute('aria-hidden', 'true');
         if (bot?.avatar?.kind === 'image' && bot.id) {
@@ -37,6 +38,12 @@
             this.bots = []; this.revision = null; this.profileId = null; this.windowId = null;
             this.active = false; this.epoch = 0; this.loaded = false; this.creating = false; this.error = null;
             this.statusKind = 'connecting';
+            this.motionValue = { state: 'idle', live: false };
+            this.motion = window.PiBotMotion?.create({ paint: value => { this.motionValue = value; this.paintMotion(); } });
+            this.visibility = () => this.motion?.visibility(document.hidden);
+            document.addEventListener('visibilitychange', this.visibility);
+            // The identity belongs to the conversation column on desktop and phone.
+            document.querySelector('.pi-transcript-shell')?.prepend(header);
             this.placeholder = input.getAttribute('placeholder') || '';
             pane.hidden = true; header.hidden = true;
             pane.addEventListener('click', event => this.click(event));
@@ -85,6 +92,7 @@
         async activate(params) {
             const epoch = ++this.epoch;
             this.active = true; this.error = null;
+            this.status('connecting');
             this.pane.hidden = false; this.header.hidden = false;
             this.render();
             void this.checkModels();
@@ -126,6 +134,7 @@
 
         deactivate() {
             this.epoch++; this.active = false;
+            this.motion?.update({ key: '', connected: false });
             this.pane.closest('#chat-tab')?.classList.remove('pi-bot-welcome');
             this.pane.hidden = true; this.header.hidden = true;
             this.input.setAttribute('placeholder', this.placeholder);
@@ -358,10 +367,32 @@
 
         // ---- status --------------------------------------------------------------------
 
-        status(kind) {
-            const next = STATUS[kind] ? kind : 'connected';
-            if (next === this.statusKind) return;
-            this.statusKind = next; this.renderHeader();
+        status(kind, projection = {}) {
+            this.statusKind = STATUS[kind] ? kind : 'connected';
+            this.projection = { key: projection.key || `${this.profileId}/${this.windowId}`, connected: !['connecting', 'offline', 'error'].includes(this.statusKind),
+                waiting: kind === 'waiting', working: kind === 'working', ...projection,
+                greeting: this.bot()?.bot?.onboarding?.phase === 'greeting', greetingKey: `${this.profileId}/${this.windowId}` };
+            this.motion?.update(this.projection);
+            this.paintMotion();
+        }
+        paintMotion() {
+            const node = this.header.querySelector('.pi-bot-identity > .pi-bot-face');
+            if (!node) return;
+            node.dataset.avatarState = this.motionValue.state;
+            node.dataset.avatarLive = String(this.active && this.motionValue.live);
+            const line = this.header.querySelector('.pi-bot-status');
+            if (line) {
+                const pose = this.motionValue.state;
+                const label = pose === 'failed' ? translateUi("这轮回复未完成") : pose === 'done' ? translateUi("这轮回复结束")
+                    : this.projection?.label || STATUS[this.statusKind]();
+                line.dataset.state = pose === 'failed' ? 'error' : this.statusKind;
+                line.replaceChildren(el('i', 'pi-bot-status-dot'), document.createTextNode(label));
+            }
+        }
+        motionEvent(type, key, reason) {
+            if (type === 'start') this.motion?.begin(key);
+            else if (type === 'result') this.motion?.result(key, reason);
+            else if (type === 'settled') this.motion?.settle(key);
         }
 
         // ---- rendering -----------------------------------------------------------------
@@ -449,7 +480,10 @@
             const notes = button('pi-bot-notes-button', translateUi("我记着的事")); notes.dataset.botAction = 'notes';
             notes.append(icon('fa-thumbtack'));
             notes.hidden = !this.windowId;
-            this.header.replaceChildren(menu, face(bot, 'sm'), who, notes);
+            const identity = button('pi-bot-identity', translateUi("打开 {0} 的设置", bot.name)); identity.dataset.botAction = 'settings';
+            identity.append(face(bot, 'xl'), who);
+            this.header.replaceChildren(menu, identity, notes);
+            this.paintMotion();
         }
 
         // Shown in the conversation area when nothing else is: no Bot yet, or a fresh chat.
@@ -584,10 +618,11 @@
                 : key === 'job' ? now.job || null : null;
             // chosen: from the server (picked by any path, kept across a new interview).
             const chosen = key => (key === 'name' || key === 'avatar') && (now.chosen ? now.chosen[key] === true
-                : now.steps?.identity === 'done' || key === 'avatar' && now.avatar?.kind === 'image');
+                : now.steps?.identity === 'done' || now.steps?.[key] === 'done' || key === 'avatar' && ['image', 'preset'].includes(now.avatar?.kind));
             const fields = [];
             for (const [key] of SETUP_FIELDS) {
-                const value = typeof args[key] === 'string' ? args[key].trim() : '';
+                const value = key === 'avatar' && args.avatar?.kind === 'preset' ? { ...args.avatar }
+                    : typeof args[key] === 'string' ? args[key].trim() : '';
                 if (key === 'workStyle') {
                     // Always shown when proposed: the point is to let the user pick. Only the current way
                     // or more careful ones are offered; more freedom is set in Bot settings.
@@ -636,12 +671,23 @@
             const caption = el('label', 'pi-bot-setup-label', label()); caption.htmlFor = id;
             const body = el('div', 'pi-bot-setup-value');
             const input = field.key === 'personality' ? el('textarea') : el('input');
-            input.id = id; input.value = field.value; input.maxLength = max; input.dataset.setupField = field.key;
+            input.id = id; input.value = typeof field.value === 'string' ? field.value : ''; input.maxLength = max; input.dataset.setupField = field.key;
             if (field.key === 'personality') input.rows = Math.min(8, Math.max(3, field.value.split('\n').length + 1));
             if (field.key === 'avatar') { input.setAttribute('inputmode', 'text'); input.setAttribute('aria-label', translateUi("头像表情")); }
             let toggle = null;
             const use = on => { field.use = on; row.classList.toggle('is-kept', !on); if (toggle) toggle.checked = on; };
-            input.addEventListener('input', () => { field.value = input.value; if (!field.use) use(true); });
+            input.addEventListener('input', () => {
+                field.value = input.value; if (field.key === 'avatar') { draft.pictureRequest = (draft.pictureRequest || 0) + 1; draft.picture = null; draft.pictureVersion = null; }
+                if (!field.use) use(true);
+            });
+            if (field.key === 'avatar' && window.PiAvatar) {
+                const selected = typeof field.value === 'object' ? field.value : { kind: 'emoji', value: field.value };
+                body.append(window.PiAvatar.choices(selected, value => {
+                    draft.pictureRequest = (draft.pictureRequest || 0) + 1;
+                    field.value = value; draft.picture = null; draft.pictureVersion = null; use(true); render();
+                }));
+                if (field.value?.kind === 'preset') body.append(face({ avatar: field.value }, 'lg'));
+            }
             if (field.key === 'personality') {
                 const styles = el('div', 'pi-bot-setup-styles'); styles.setAttribute('role', 'group'); styles.setAttribute('aria-label', translateUi("快速选一种性格"));
                 for (const [title, text] of PERSONALITY_STYLES) {
@@ -665,10 +711,10 @@
                 file.addEventListener('change', async () => {
                     const chosen = file.files?.[0]; file.value = '';
                     if (!chosen || !current) return;
-                    const target = current;
+                    const target = current, request = draft.pictureRequest = (draft.pictureRequest || 0) + 1;
                     try {
                         const dataUrl = await pictureData(chosen);
-                        if (current !== target) return;
+                        if (current !== target || draft.pictureRequest !== request) return;
                         draft.picture = dataUrl; draft.pictureVersion = null; use(true); target.error = '';
                     } catch (error) { if (current === target) target.error = error.message; }
                     if (current === target) render();
@@ -719,11 +765,12 @@
             const confirm = el('button', 'pi-bot-primary pi-bot-setup-save', current.saving ? translateUi("正在保存…") : nothing && args.finish !== true ? translateUi("好") : translateUi("保存"));
             confirm.type = 'button';
             later.disabled = confirm.disabled = Boolean(current.saving);
-            later.hidden = nothing && args.finish !== true;
+            later.hidden = !interviewing() && nothing && args.finish !== true;
             later.addEventListener('click', () => void decline());
             confirm.addEventListener('click', () => void submit());
             foot.append(note, later, confirm);
             panel.replaceChildren(head, form, foot);
+            if (current.saving) for (const control of form.querySelectorAll('button,input,select,textarea')) control.disabled = true;
             panel.hidden = false;
         }
 
@@ -736,8 +783,11 @@
             const target = current, draft = target.draft;
             if (interviewing() && leaveForLater) {
                 target.saving = true; target.error = ''; render();
-                // Best effort: the answer below is given either way.
-                try { await leaveForLater(target.call.id); } catch {}
+                try { await leaveForLater(target.call.id); }
+                catch (error) {
+                    if (current === target) { target.saving = false; target.error = error.message || translateUi("保存失败"); render(); }
+                    return;
+                }
                 if (current !== target) return;
             }
             // A picture this card uploaded stays the face even though the rest is not saved.
@@ -750,7 +800,10 @@
         // The user's choices, from the draft: a field left unticked or emptied is not saved (null).
         function collect(draft) {
             const changes = {};
-            for (const field of draft.fields) changes[field.key] = field.use && field.value.trim() ? field.value.trim() : null;
+            for (const field of draft.fields) {
+                const value = typeof field.value === 'string' ? field.value.trim() : field.value;
+                changes[field.key] = field.use && value ? value : null;
+            }
             const picture = Boolean(draft.picture && draft.fields.find(field => field.key === 'avatar')?.use);
             if (picture) changes.avatar = null;
             if (draft.facts.length) {
@@ -765,10 +818,7 @@
             if (!current || current.saving) return;
             const target = current, draft = target.draft;
             const { changes, picture } = collect(draft);
-            const meaningful = picture || Object.entries(changes).some(([key, value]) => key !== 'finish' && value !== null);
-            // Nothing proposed differs from what the Bot already has: answer without saving.
-            if (!draft.fields.length && !draft.facts.length && changes.finish !== true) { respond({ id: target.event.id, value: SAVE }); hide(); return; }
-            if (!meaningful && changes.finish !== true) { target.error = translateUi("没有要保存的内容，可以选“{0}”", laterLabel()); render(); return; }
+            // Even unchanged or unticked values answer their own interview steps on the server.
             target.saving = true; target.error = ''; render();
             try {
                 if (picture && !draft.pictureVersion) {
@@ -821,7 +871,8 @@
         outside: name => translateUi("{0} 想改工作目录以外的文件", name),
         write: name => translateUi("{0} 想写入文件", name),
         memory: name => translateUi("{0} 想记下这件事", name),
-        action: name => translateUi("{0} 想做这一步", name)
+        action: name => translateUi("{0} 想做这一步", name),
+        schedule: name => translateUi("{0} 想安排或取消定时任务", name)
     };
     function parseApproval(event) {
         if (event?.method !== 'confirm' || event.title !== APPROVAL_TITLE) return null;
@@ -844,7 +895,8 @@
             const { event, kind, detail } = current;
             const head = el('header', 'pi-bot-setup-head');
             head.append(currentFace(), el('strong', null, APPROVAL_KINDS[kind](name() || 'Bot')));
-            const shown = kind === 'action' && Object.hasOwn(APPROVAL_ACTIONS, detail) ? APPROVAL_ACTIONS[detail]() : detail;
+            const shown = kind === 'action' && Object.hasOwn(APPROVAL_ACTIONS, detail) ? APPROVAL_ACTIONS[detail]()
+                : kind === 'schedule' ? detail.replace(/^Create: /, translateUi("安排：")).replace(/^Cancel: /, translateUi("取消：")) : detail;
             const body = el('pre', `pi-bot-approval-detail is-${kind}`, shown);
             body.tabIndex = 0;
             const foot = el('footer', 'pi-bot-setup-foot');

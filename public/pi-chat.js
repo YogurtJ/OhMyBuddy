@@ -570,7 +570,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (botApproval) document.querySelector('.pi-composer-wrap > .pi-composer')?.before(botApproval.element);
     const panelOwns = event => userQuestions.owns(event) || Boolean(botSetup?.owns(event)) || Boolean(botApproval?.owns(event));
     const questionReceipts = window.PiUserQuestion.receipts();
-    const resultCards = message => [deliveryCards.render(message), questionReceipts.render(message)].filter(Boolean);
+    const scheduleCards = window.PiBotScheduleCards.create({ api: apiFetch, notify: toast,
+        context: () => JSON.stringify([state.cwd, state.session?.id, state.socketGeneration]) });
+    const resultCards = message => [deliveryCards.render(message), questionReceipts.render(message), scheduleCards.render(message)].filter(Boolean);
     const turnEdits = new window.PiTurnEdits({
         transcript: elements.transcript, showPane: () => filesPanel.showHistory(), copy: copyTextToClipboard, notify: toast,
         viewer: filesPanel.viewer, context: () => ({ cwd: state.cwd, key: JSON.stringify([state.cwd, state.session?.id]), generation: state.socketGeneration })
@@ -888,8 +890,16 @@ document.addEventListener('DOMContentLoaded', () => {
             detail = state.model ? `${state.model.provider}/${state.model.id}` : 'Pi Agent';
         }
         elements.agentStateDot.dataset.state = kind;
-        if (state.botMode) botUi?.status(!state.connected ? (kind === 'connecting' ? 'connecting' : 'offline')
-            : kind === 'waiting' ? 'waiting' : kind === 'working' ? 'working' : 'connected');
+        if (state.botMode) {
+            const controls = nativeControls.value;
+            const queue = (controls?.queue?.steering?.length || 0) + (controls?.queue?.followUp?.length || 0);
+            const runs = controls?.subagents?.snapshot?.runs || [];
+            const working = Boolean(state.streaming || state.shellBusy || state.compacting || state.retrying || state.resourceRequested
+                || controls?.subagents?.background?.active || runs.some(run => run.state === 'running'));
+            botUi?.status(!state.connected ? (kind === 'connecting' ? 'connecting' : 'offline') : kind === 'waiting' ? 'waiting' : working ? 'working' : 'connected',
+                { key: botMotionKey(), label: title, working, queued: queue > 0 || runs.some(run => run.state === 'queued'),
+                    stopping: Boolean(controls?.stopping || state.controlRequested) });
+        }
         elements.agentState.textContent = title;
         elements.agentDetail.textContent = detail;
         elements.agentState.parentElement.title = [...labels, detail].join('\n');
@@ -2998,12 +3008,11 @@ document.addEventListener('DOMContentLoaded', () => {
         return content.filter(block => block.type === 'text').map(block => block.text).join('\n');
     }
 
-    // Bot mode signs every reply with the Bot's face and name, while streaming and after.
+    // One identity at the top of a Bot conversation; per-message author markup stays
+    // available to the shared transcript's accessibility and Pi Agent view.
     function signBotReply(header) {
         const identity = header && state.botMode ? botUi?.identity() : null;
         if (!identity) return;
-        header.querySelector(':scope > .pi-bot-face')?.remove();
-        header.prepend(botUi.face('xs'));
         const name = header.querySelector(':scope > strong'); if (name) name.textContent = identity.name;
     }
 
@@ -3160,6 +3169,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isUserTurn) {
             if (typeof message.timestamp === 'number' || typeof message.timestamp === 'string') {
                 const sentAt = new Date(message.timestamp);
+                if (state.botMode && Number.isFinite(sentAt.getTime())) article.dataset.botTime = String(sentAt.getTime());
                 if (Number.isFinite(sentAt.getTime())) {
                     const time = document.createElement('time');
                     time.className = 'pi-message-time';
@@ -3402,6 +3412,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return replies;
     }
 
+    function decorateBotTimes() {
+        if (!state.botMode) return;
+        let previous = null;
+        for (const article of elements.transcript.querySelectorAll('.pi-message.user[data-bot-time]')) {
+            const time = Number(article.dataset.botTime), gap = previous === null || Math.abs(time - previous) >= 10 * 60000;
+            article.classList.toggle('pi-bot-time-gap', gap);
+            previous = time;
+        }
+    }
+
     function renderMessages(messages) {
         const context = JSON.stringify([state.cwd, state.session?.id]);
         const previous = state.renderedTranscript?.context === context ? state.renderedTranscript.records : [];
@@ -3468,7 +3488,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         state.renderedTranscript = { context, records };
-        if (removed.length) { mediaRequests?.prune(); deliveryCards.prune(); questionReceipts.prune(); }
+        if (removed.length) { mediaRequests?.prune(); deliveryCards.prune(); questionReceipts.prune(); scheduleCards.prune(); }
         mediaRequests?.refresh(messages);
         state.dirtyTranscriptIndex = Infinity;
         state.lastAssistantText = '';
@@ -3487,6 +3507,7 @@ document.addEventListener('DOMContentLoaded', () => {
         chatKnowledge?.decorate();
         transcriptScroll.restore(readingPosition);
         workflows.decorate();
+        decorateBotTimes();
         archive?.sync();
         timeline?.sync();
     }
@@ -3577,7 +3598,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function clearSessionView() {
         mediaRequests?.reset();
-        deliveryCards.reset();
+        deliveryCards.reset(); scheduleCards.reset();
         questionReceipts.reset();
         state.recoveryNotice = null;
         transcriptActivity?.reset();
@@ -3628,6 +3649,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         deliveryCards.decorateLinks(root);
     }
+
+    const botMotionKey = () => JSON.stringify([botUi?.current(), state.session?.id, state.socketGeneration]);
 
     function handlePiEvent(event) {
         if (['agent_start', 'agent_settled', 'tool_execution_start', 'tool_execution_end', 'compaction_start', 'compaction_end', 'auto_retry_start', 'auto_retry_end', 'summarization_retry_scheduled', 'summarization_retry_attempt_start', 'summarization_retry_finished'].includes(event.type)) {
@@ -3722,8 +3745,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 setStreaming(true);
                 setConnection('working', translateUi("Pi 正在执行"));
                 setAgentState('working', translateUi("执行中"), state.model?.id || 'Pi Agent');
+                if (state.botMode) botUi?.motionEvent('start', botMotionKey());
                 break;
             case 'agent_settled':
+                if (state.botMode && event.aborted) botUi?.motionEvent('result', botMotionKey(), 'aborted');
                 state.retrying = false;
                 transcriptActivity?.idle();
                 historyView.changed();
@@ -3732,6 +3757,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 setStreaming(false);
                 setConnection('connected', translateUi("Pi Agent 已连接"));
                 setAgentState('connected', translateUi("空闲"), state.model?.id || 'Pi Agent');
+                if (state.botMode) botUi?.motionEvent('settled', botMotionKey());
                 reconcileSession();
                 break;
             case 'message_start':
@@ -3742,6 +3768,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 transcriptActivity?.output(event.assistantMessageEvent?.type);
                 break;
             case 'message_end':
+                if (state.botMode && event.message?.role === 'assistant') botUi?.motionEvent('result', botMotionKey(), event.message.stopReason);
                 endLiveMessage(event.message);
                 break;
             case 'tool_execution_start':
@@ -3992,7 +4019,7 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.transcript.querySelector('.pi-empty-state')?.remove();
             if (optimistic) optimistic.replaceWith(element);
             else elements.transcript.appendChild(element);
-            transcriptView.refreshChanged([element]); workflows.decorate(); scrollTranscript();
+            transcriptView.refreshChanged([element]); workflows.decorate(); decorateBotTimes(); scrollTranscript();
             return;
         }
         if (message?.role === 'toolResult') {

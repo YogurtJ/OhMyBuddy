@@ -44,7 +44,7 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
             await page.route(/https:\/\/(fonts\.googleapis\.com|fonts\.gstatic\.com)\//, route => route.abort());
             const load = async (...scripts) => {
                 await page.goto(`${base}/__forms`);
-                for (const script of scripts) await page.addScriptTag({ url: `${base}/${script}` });
+                for (const script of ['pi-avatar-presets.js', 'pi-avatar.js', 'pi-bot-motion.js', ...scripts]) await page.addScriptTag({ url: `${base}/${script}` });
             };
             // fail: how many saves fail with a plain conflict, or the error codes of the failing saves in turn.
             const mount = (args, identity, fail = 0) => page.evaluate(({ args, identity, fail, select }) => {
@@ -108,12 +108,12 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
             await page.locator('.pi-bot-setup-save').click();
             await page.waitForFunction(() => t.saves.length === 1);
             assert.equal(await page.evaluate(() => t.saves[0].changes.avatar), '🐱');
-            // A card with nothing new answers without saving.
+            // A card with nothing new still records the confirmed steps on the server.
             await mount({ name: '小狸', job: '帮我整理' }, chosenFace);
             assert.equal(await page.locator('.pi-bot-setup-head strong').textContent(), '这些已经是现在的设置了');
             assert.equal(await page.locator('.pi-bot-setup-later').isVisible(), false);
             await page.locator('.pi-bot-setup-save').click();
-            assert.deepEqual(await page.evaluate(() => [t.saves.length, t.responses]), [0, [{ id: 'ui-1', value: '保存 / Save' }]]);
+            assert.deepEqual(await page.evaluate(() => [t.saves.length, t.saves[0].changes, t.responses]), [1, {}, [{ id: 'ui-1', value: '保存 / Save' }]]);
 
             // 3. A picture face is uploaded before the card is saved, and the save names that exact picture (UAT-01).
             // A plain conflict keeps the upload; the face changed elsewhere means uploading it again.
@@ -204,7 +204,7 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
             const open = () => page.locator('.pi-bot-sheet[open]').count();
             await load('pi-bot-settings.js');
             await openSettings();
-            await page.locator('.pi-bot-sheet[open] .pi-bot-sheet-row input').nth(1).fill('');
+            await page.locator('.pi-bot-sheet[open] input[required]').fill('');
             await page.locator('.pi-bot-sheet[open] .pi-bot-sheet-close').click();
             assert.equal(await open(), 1, 'an emptied name is an unsaved edit too');
             assert.match(await page.locator('.pi-bot-sheet[open] .pi-bot-sheet-status').textContent(), /还有修改没保存/);
