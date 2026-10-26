@@ -11,7 +11,8 @@ const { isDeepStrictEqual } = require('node:util');
 const { getSdk } = require('../pi-session-store');
 const { validateProfile, profileRevision } = require('../pi-profile-registry');
 const settings = require('./bot-settings');
-const { BotWindowRegistry } = require('./bot-window-registry');
+const { BotWindowRegistry, MAX_WINDOWS } = require('./bot-window-registry');
+const { MAX_TOPICS, topicFields, topicId } = require('./bot-topic');
 const { WINDOW_ENTRY, windowMarker, readWindowBinding } = require('./bot-window-state');
 const { HANDOFF_MESSAGE, buildHandoff } = require('./bot-handoff');
 const ledger = require('./bot-ledger');
@@ -188,23 +189,154 @@ class BotService extends EventEmitter {
         });
     }
 
-    // Caller holds the profile reservation. Native marker first, index second: an
-    // interruption between the two leaves a marked session that reconcile() adopts.
-    async createWindowLocked(profileId, kind, { title = '', emoji = '', focus = '' } = {}) {
+    createTopic(profileId, input) {
+        const fields = topicFields(input, { revision: true });
+        return this.profiles.reserve(async () => {
+            const { windowsRevision, ...window } = await this.createWindowLocked(profileId, 'topic', { ...fields, expectedRevision: input.expectedRevision });
+            return { ok: true, window, windowsRevision };
+        });
+    }
+
+    async assertTopicWorker(worker) {
+        const { profileId, windowId, generation } = worker.loadedBot;
+        const window = await this.assertCurrentWindowSession(profileId, windowId, { id: worker.sessionId, path: worker.sessionPath });
+        if (worker.disposed || worker.restarting || worker.noSession || window.cwd !== worker.cwd || window.current.generation !== generation)
+            fail('Bot window generation changed', 409, 'BOT_WINDOW_STALE');
+        return window;
+    }
+
+    proposeTopic(worker, toolCallId, fields) {
+        fields = topicFields(fields);
+        return this.profiles.reserve(async () => {
+            await this.assertTopicWorker(worker);
+            if (worker.cronRun) fail('Topics require the user in an attended conversation', 409, 'BOT_TOPIC_UNATTENDED');
+            const profileId = worker.loadedBot.profileId, id = topicId(worker.sessionId, toolCallId);
+            await this.reconcileLocked(profileId, id);
+            const { state } = await this.windows.read(profileId);
+            let existing = state.windows.find(item => item.id === id);
+            if (existing) {
+                if (!isDeepStrictEqual(existing.topicSeed, fields)) fail('This topic call already used different fields', 409, 'BOT_TOPIC_CONFLICT');
+                if (!existing.current) existing = await this.completeWindowLocked(profileId, existing);
+                return { window: publicWindow(existing) };
+            }
+            const { windowsRevision, ...window } = await this.createWindowLocked(profileId, 'topic', { ...fields, id });
+            return { window };
+        });
+    }
+
+    // Reserve the window CAS before native creation. A prepared row survives interruptions;
+    // its last native marker proves creation completed and carries the original metadata.
+    async createWindowLocked(profileId, kind, { title = '', emoji = '', focus = '', expectedRevision, id = randomUUID() } = {}) {
         const { bot } = await this.bot(profileId);
-        const { state, revision } = await this.windows.read(profileId);
-        if (kind === 'main' && state.windows.some(window => window.kind === 'main')) fail('Bot already has a main chat', 409);
-        const windowId = randomUUID();
-        const session = await this.store.createSession(bot.workspace, '', { agentProfileId: profileId,
+        const { revision } = await this.windows.read(profileId);
+        const now = new Date().toISOString(), topicSeed = { title, focus, emoji };
+        if (kind === 'topic') topicFields(topicSeed);
+        const record = { id, kind, title, emoji, focus, cwd: bot.workspace, createdAt: now, updatedAt: now, archivedAt: null,
+            current: null, generations: [], rotation: null, ...(kind === 'topic' ? { topicSeed } : {}) };
+        await this.windows.mutate(profileId, expectedRevision ?? revision, state => {
+            if (kind === 'main' && state.windows.some(window => window.kind === 'main')) fail('Bot already has a main chat', 409);
+            if (state.windows.length >= MAX_WINDOWS || kind === 'topic' && state.windows.filter(window => window.kind === 'topic').length >= MAX_TOPICS)
+                fail('Topic limit reached (including archived topics)', 409, 'BOT_TOPIC_LIMIT');
+            state.windows.push(record); return {};
+        });
+        const completed = await this.completeWindowLocked(profileId, record, { fresh: true });
+        const saved = await this.windows.read(profileId);
+        return { ...publicWindow(completed), windowsRevision: saved.revision };
+    }
+
+    async completeWindowLocked(profileId, record, { fresh = false } = {}) {
+        record = (await this.windows.read(profileId)).state.windows.find(item => item.id === record.id);
+        if (!record) fail('Window not found', 404);
+        if (record.current) return record;
+        if (record.archivedAt) fail('This topic is archived; restore it before sending', 409, 'BOT_WINDOW_ARCHIVED');
+        const matches = fresh ? [] : (await this.nativeMarkers(profileId, record.cwd))
+            .filter(marker => marker.windowId === record.id && marker.kind === record.kind && marker.generation === 0);
+        if (matches.length > 1) fail('Multiple native conversations claim this topic; recovery is required', 409, 'BOT_TOPIC_CONFLICT');
+        let session = matches[0] && { id: matches[0].sessionId, path: matches[0].path };
+        if (!session) session = await this.store.createSession(record.cwd, '', { agentProfileId: profileId,
             initializeSession: manager => manager.appendCustomEntry(WINDOW_ENTRY,
-                windowMarker({ sessionId: manager.getSessionId(), profileId, windowId, kind, generation: 0 })) });
-        const now = new Date().toISOString();
-        const record = { id: windowId, kind, title, emoji, focus, cwd: bot.workspace, createdAt: now, updatedAt: now, archivedAt: null,
-            current: { generation: 0, sessionId: session.id, sessionPath: session.path },
-            generations: [{ generation: 0, sessionId: session.id, sessionPath: session.path, startedAt: now, endedAt: null, reason: 'initial' }],
-            rotation: null };
-        const saved = await this.windows.mutate(profileId, revision, windowState => { windowState.windows.push(record); return {}; });
-        return { ...publicWindow(record), windowsRevision: saved.revision };
+                windowMarker({ sessionId: manager.getSessionId(), profileId, windowId: record.id, kind: record.kind, generation: 0,
+                    ...(record.topicSeed ? { topicSeed: record.topicSeed } : {}) })) });
+        const { revision } = await this.windows.read(profileId);
+        const saved = await this.windows.mutate(profileId, revision, state => {
+            const item = state.windows.find(window => window.id === record.id);
+            if (!item || item.current) fail('Window changed during creation', 409);
+            item.current = { generation: 0, sessionId: session.id, sessionPath: session.path };
+            item.generations = [{ ...item.current, startedAt: item.createdAt, endedAt: null, reason: 'initial' }];
+            return {};
+        });
+        return saved.state.windows.find(window => window.id === record.id);
+    }
+
+    updateWindow(profileId, windowId, input) {
+        const fields = topicFields(input, { patch: true, revision: true });
+        return this.profiles.reserve(() => {
+            const update = async () => {
+                const window = await this.windowRecord(profileId, windowId);
+                const { revision } = await this.windows.read(profileId);
+                if (revision !== input.expectedRevision) fail('Bot windows changed; reload before saving', 409);
+                if (window.kind !== 'topic') fail('The main chat cannot be renamed or archived', 409, 'BOT_MAIN_WINDOW_FIXED');
+                if (window.rotation) fail(MOVING, 409, 'BOT_WINDOW_ROTATING');
+                const save = async () => {
+                    const saved = await this.windows.mutate(profileId, input.expectedRevision, state => {
+                        const item = state.windows.find(entry => entry.id === windowId);
+                        if (fields.archived && !window.archivedAt) this.assertWindowQuiescent?.(window);
+                        for (const key of ['title', 'focus', 'emoji']) if (Object.hasOwn(fields, key)) item[key] = fields[key];
+                        if (Object.hasOwn(fields, 'archived')) item.archivedAt = fields.archived ? item.archivedAt ?? new Date().toISOString() : null;
+                        item.updatedAt = new Date().toISOString(); return {};
+                    });
+                    return { ok: true, window: publicWindow(saved.state.windows.find(item => item.id === windowId)), windowsRevision: saved.revision };
+                };
+                if (!fields.archived || window.archivedAt) return save();
+                return this.archiveWindowLocked(profileId, window, save);
+            };
+            // Scheduler writes and dispatch admission observe this reservation before any await.
+            return fields.archived && this.cron ? this.cron.reserve(update) : update();
+        });
+    }
+
+    async archiveWindowLocked(profileId, window, save) {
+        const busy = () => fail('This topic has unfinished work; finish or clear it before archiving', 409, 'BOT_WINDOW_BUSY');
+        const paths = window.generations.map(item => item.sessionPath);
+        const check = async () => {
+            await this.assertWindowQuiescent?.(window);
+            const queue = await this.supervisor.getQueueStore();
+            for (const file of paths) {
+                try { queue.assertMovable(file); } catch { busy(); }
+                const worker = this.supervisor.getActiveWorker(file);
+                if (worker?.controls?.recoveries?.length || worker?.controls?.drafts?.length) busy();
+            }
+            if (this.cron) {
+                await this.cron.ready; this.cron.healthy();
+                const targets = target => target?.kind === 'profile' && target.profileId === profileId && target.windowId === window.id
+                    || target?.kind === 'thread' && target.cwd === window.cwd && window.generations.some(item => item.sessionId === target.sessionId);
+                if (this.cron.db.jobs().some(job => !job.deleted && job.enabled && targets(job.target)))
+                    fail('Disable or retarget this topic’s scheduled tasks before archiving', 409, 'BOT_TOPIC_SCHEDULED');
+                if (this.cron.db.activeRuns().some(run => targets(run.job?.target)
+                    || run.target?.cwd === window.cwd && window.generations.some(item => item.sessionId === run.target.sessionId))) busy();
+            }
+        };
+        for (const file of paths) if (!this.supervisor.isSessionIdle(file)) busy();
+        await check();
+        // Reserve every generation, including native-page workers, until the archive commits.
+        const reserve = index => index === paths.length ? (async () => {
+            await check();
+            for (const file of paths) {
+                const worker = this.supervisor.getActiveWorker(file);
+                if (worker) { worker._broadcast({ type: 'gateway_reconnect' }); await this.supervisor.stopSession(file); }
+            }
+            return save();
+        })() : this.supervisor.withSessionEdit(paths[index], () => reserve(index + 1));
+        try { return await reserve(0); }
+        catch (error) { if (error.status === 409 || error.code === 'SESSION_BUSY') busy(); throw error; }
+    }
+
+    async openItems(worker) {
+        const main = await this.assertTopicWorker(worker);
+        if (main.kind !== 'main') fail('The topic index is available only in the main chat', 403);
+        const { state } = await this.windows.read(worker.loadedBot.profileId);
+        return require('./bot-topic-index').openItems({ windows: state.windows, profileId: worker.loadedBot.profileId,
+            cwd: main.cwd, directory: path.dirname(worker.sessionPath), supervisor: this.supervisor, pi: await getSdk() });
     }
 
     // Idempotent repair: a Bot without a main window gets one (adopting a marked native
@@ -213,7 +345,7 @@ class BotService extends EventEmitter {
         return this.profiles.reserve(async () => {
             const { state } = await this.windows.read(profileId);
             const main = state.windows.find(window => window.kind === 'main');
-            if (main) return publicWindow(main);
+            if (main) return publicWindow(main.current ? main : await this.completeWindowLocked(profileId, main));
             const adopted = await this.reconcileLocked(profileId);
             return adopted.main ? publicWindow(adopted.main) : this.createWindowLocked(profileId, 'main');
         });
@@ -221,20 +353,26 @@ class BotService extends EventEmitter {
 
     // Adds windows whose native generation-0 marker exists but whose index entry is
     // missing. Never removes or rewrites existing index entries.
-    async reconcileLocked(profileId) {
+    async reconcileLocked(profileId, onlyWindowId = null) {
         const { bot } = await this.bot(profileId);
-        const markers = await this.nativeMarkers(profileId, bot.workspace);
+        const markers = (await this.nativeMarkers(profileId, bot.workspace)).filter(marker => onlyWindowId === null || marker.windowId === onlyWindowId);
         const { state, revision } = await this.windows.read(profileId);
         const known = new Set(state.windows.map(window => window.id));
         const adoptable = markers.filter(marker => marker.generation === 0 && !known.has(marker.windowId))
             .filter(marker => marker.kind !== 'main' || !state.windows.some(window => window.kind === 'main'));
         // Only one main window can be adopted; prefer the earliest.
         const mains = adoptable.filter(marker => marker.kind === 'main').sort((a, b) => a.created - b.created);
-        const chosen = [...mains.slice(0, 1), ...adoptable.filter(marker => marker.kind === 'topic')];
+        const counts = new Map();
+        for (const marker of adoptable) counts.set(marker.windowId, (counts.get(marker.windowId) || 0) + 1);
+        if (onlyWindowId && counts.get(onlyWindowId) > 1) fail('Multiple native conversations claim this topic; recovery is required', 409, 'BOT_TOPIC_CONFLICT');
+        const chosen = [...mains.slice(0, 1), ...adoptable.filter(marker => marker.kind === 'topic')
+            .slice(0, Math.max(0, MAX_TOPICS - state.windows.filter(item => item.kind === 'topic').length))]
+            .filter(marker => counts.get(marker.windowId) === 1).slice(0, MAX_WINDOWS - state.windows.length);
         if (!chosen.length) return { main: state.windows.find(window => window.kind === 'main') || null, adopted: 0 };
         const now = new Date().toISOString();
         const saved = await this.windows.mutate(profileId, revision, windowState => {
-            for (const marker of chosen) windowState.windows.push({ id: marker.windowId, kind: marker.kind, title: '', emoji: '', focus: '',
+            for (const marker of chosen) windowState.windows.push({ id: marker.windowId, kind: marker.kind, title: marker.topicSeed?.title ?? '', emoji: marker.topicSeed?.emoji ?? '', focus: marker.topicSeed?.focus ?? '',
+                ...(marker.topicSeed ? { topicSeed: marker.topicSeed } : {}),
                 cwd: bot.workspace, createdAt: now, updatedAt: now, archivedAt: null,
                 current: { generation: 0, sessionId: marker.sessionId, sessionPath: marker.path },
                 generations: [{ generation: 0, sessionId: marker.sessionId, sessionPath: marker.path, startedAt: now, endedAt: null, reason: 'initial' }],
@@ -279,6 +417,7 @@ class BotService extends EventEmitter {
         const { state, revision } = await this.windows.read(profileId);
         const window = state.windows.find(item => item.id === windowId);
         if (!window) fail('Window not found', 404);
+        if (window.archivedAt) fail('This topic is archived; restore it before sending', 409, 'BOT_WINDOW_ARCHIVED');
         if (!window.current) fail('Window has no conversation yet', 409);
         if (window.cwd !== bot.workspace) fail('Window workspace does not match its Bot', 409);
         if (window.current.generation !== expectedGeneration) fail('Window changed; reload before rotating', 409);
@@ -346,7 +485,7 @@ class BotService extends EventEmitter {
         try {
             const { state } = await this.windows.read(loaded.profileId);
             const window = state.windows.find(item => item.id === loaded.windowId);
-            if (!window?.current || window.rotation || window.current.sessionPath !== sessionPath || window.current.generation !== loaded.generation) return null;
+            if (!window?.current || window.archivedAt || window.rotation || window.current.sessionPath !== sessionPath || window.current.generation !== loaded.generation) return null;
             const started = window.generations.find(item => item.generation === window.current.generation)?.startedAt ?? window.createdAt;
             const bytes = fs.statSync(sessionPath).size;
             const reason = rotationReason({ bytes, entries: bytes >= 1024 * 1024 ? countLines(sessionPath) : 0, startedAt: started, now });
@@ -446,6 +585,11 @@ class BotService extends EventEmitter {
     // interrupted rotation is settled first, before anyone can open the predecessor again.
     async resolve(profileId, windowId) {
         let window = await this.windowRecord(profileId, windowId);
+        if (window.archivedAt) fail('This topic is archived; restore it before sending', 409, 'BOT_WINDOW_ARCHIVED');
+        if (!window.current) {
+            await this.profiles.reserve(() => this.completeWindowLocked(profileId, window));
+            window = await this.windowRecord(profileId, windowId);
+        }
         if (window.rotation) {
             try { await this.profiles.reserve(() => this.recoverRotationLocked(profileId, windowId)); }
             catch (error) {
@@ -455,6 +599,7 @@ class BotService extends EventEmitter {
             window = await this.windowRecord(profileId, windowId);
             if (window.rotation) fail(MOVING, 409, 'BOT_WINDOW_ROTATING');
         }
+        if (window.archivedAt) fail('This topic is archived; restore it before sending', 409, 'BOT_WINDOW_ARCHIVED');
         if (!window.current) fail('Window has no conversation yet', 409);
         return this.store.withSessionRead(window.cwd, window.current.sessionId, (session, read) => {
             const binding = readWindowBinding(read.manager());
@@ -478,10 +623,23 @@ class BotService extends EventEmitter {
     // Whether an opened session is the window's current generation (Bot-mode admission).
     async assertCurrentWindowSession(profileId, windowId, session) {
         const window = await this.windowRecord(profileId, windowId);
+        if (window.archivedAt) fail('This topic is archived; restore it before sending', 409, 'BOT_WINDOW_ARCHIVED');
         if (window.rotation) fail(MOVING, 409, 'BOT_WINDOW_ROTATING');
         if (!window.current || window.current.sessionId !== session.id || window.current.sessionPath !== session.path)
             fail('这段聊天已经换到新的记录文件', 409, 'BOT_WINDOW_STALE');
         return window;
+    }
+
+    // Deferred sends use the same archive boundary even when addressed as native sessions.
+    async assertNativeSendable(session) {
+        return this.store.withSessionRead(session.cwd, session.id, async (_current, read) => {
+            const binding = readWindowBinding(read.manager());
+            if (!binding) return;
+            const window = await this.windowRecord(binding.profileId, binding.windowId);
+            read.validate();
+            if (window.archivedAt) fail('This topic is archived; restore it before sending', 409, 'BOT_WINDOW_ARCHIVED');
+            if (this.profiles.busy) fail('Bot windows are being changed; try again shortly', 409, 'BOT_WINDOW_BUSY');
+        });
     }
 
     // Display-only reference to a Bot's main chat for the scheduler overview. Execution
@@ -524,6 +682,7 @@ class BotService extends EventEmitter {
         const ops = input.ops.map(op => ({ op: op.op, id: op.id, text: op.text, status: op.status, due: op.due }));
         return this.profiles.reserve(async () => {
             const window = await this.windowRecord(profileId, windowId);
+            if (window.archivedAt) fail('This topic is archived; restore it before editing', 409, 'BOT_WINDOW_ARCHIVED');
             if (window.rotation) fail(MOVING, 409, 'BOT_WINDOW_ROTATING');
             if (!window.current || window.current.generation !== input.expectedGeneration) fail('This chat moved on; reload the notebook', 409, 'BOT_WINDOW_STALE');
             const sessionPath = window.current.sessionPath;
@@ -569,11 +728,12 @@ class BotService extends EventEmitter {
     async windowContext(manager, { cwd, sessionId, sessionPath }) {
         const binding = readWindowBinding(manager);
         if (!binding) return null;
+        const { state } = await this.windows.read(binding.profileId);
+        const window = state.windows.find(item => item.id === binding.windowId);
+        if (window?.archivedAt) fail('This topic is archived; restore it before sending', 409, 'BOT_WINDOW_ARCHIVED');
         const profile = (await this.profiles.state()).state.profiles.find(item => item.id === binding.profileId);
         const bot = settings.readBot(profile);
         if (!settings.isBot(profile) || bot.workspace !== cwd) return null;
-        const { state } = await this.windows.read(binding.profileId);
-        const window = state.windows.find(item => item.id === binding.windowId);
         if (!window || window.cwd !== cwd || window.current?.sessionId !== sessionId || window.current.sessionPath !== sessionPath
             || window.current.generation !== binding.generation) return null;
         return { version: 1, profileId: binding.profileId, windowId: binding.windowId, sessionId, cwd, sessionPath };
@@ -593,6 +753,7 @@ class BotService extends EventEmitter {
         return this.profiles.reserve(async () => {
             if (!object(input) || typeof input.expectedRevision !== 'string' || typeof input.windowId !== 'string') fail('Invalid setup confirmation');
             const window = await this.windowRecord(profileId, input.windowId);
+            if (window.archivedAt) fail('This topic is archived; restore it before sending', 409, 'BOT_WINDOW_ARCHIVED');
             if (!window.current) fail('Window has no conversation yet', 409);
             const proposal = await this.store.withSessionRead(window.cwd, window.current.sessionId, (session, read) => {
                 const manager = read.manager(), binding = readWindowBinding(manager);

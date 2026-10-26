@@ -36,7 +36,7 @@ function generationList(window) {
 async function generationHistory({ store, profileId, window, generation, input }) {
     const record = window.generations.find(item => item.generation === generation);
     if (!record) fail('Generation not found', 404);
-    if (record.generation === window.current?.generation) fail('The current conversation is read through its live view', 409);
+    if (!window.archivedAt && record.generation === window.current?.generation) fail('The current conversation is read through its live view', 409);
     return store.withSessionRead(window.cwd, record.sessionId, (session, read) => {
         const manager = read.manager(), binding = readWindowBinding(manager);
         read.validate();

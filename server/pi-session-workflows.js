@@ -46,7 +46,7 @@ function workflowSnapshot(snapshot) {
     };
 }
 
-function mountSessionWorkflows(router, { store, supervisor, deferred, preferences }) {
+function mountSessionWorkflows(router, { store, supervisor, deferred, preferences, assertDeferredSendable }) {
     const forks = new (require('./pi-session-fork-requests').ForkRequests)(store);
     const sessionWorker = async (cwd, id) => {
         const session = await store.getSession(cwd, id);
@@ -130,11 +130,13 @@ function mountSessionWorkflows(router, { store, supervisor, deferred, preference
     router.post('/sessions/:id/deferred', endpoint(async (req, res) => {
         const session = await store.getSession(req.body.cwd, req.params.id);
         if (supervisor.getActiveWorker(session.path)?.operation) throw new Error('会话操作进行中，请稍后再预约');
+        await assertDeferredSendable?.(session);
         res.status(201).json(deferred.create(session, req.body));
     }));
     router.patch('/sessions/:id/deferred/:jobId', endpoint(async (req, res) => {
         const session = await store.getSession(req.body.cwd, req.params.id);
         if (supervisor.getActiveWorker(session.path)?.operation) throw new Error('会话操作进行中，请稍后再修改');
+        if (['save', 'send'].includes(req.body.action)) await assertDeferredSendable?.(session);
         res.json(deferred.update(session.cwd, session.id, req.params.jobId, req.body));
     }));
 }

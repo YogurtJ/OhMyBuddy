@@ -9,8 +9,14 @@ const WINDOW_ENTRY = 'pivane-bot-window';
 const UUID = /^[a-f0-9-]{36}$/;
 const MAX_GENERATION = 1_000_000;
 
-function windowMarker({ sessionId, profileId, windowId, kind, generation, predecessor = null }) {
-    return { version: 1, sessionId, profileId, windowId, kind, generation, predecessor };
+function validTopicSeed(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)
+        || Object.keys(value).some(key => !['title', 'focus', 'emoji'].includes(key))) return false;
+    try { require('./bot-topic').topicFields(value); return true; } catch { return false; }
+}
+
+function windowMarker({ sessionId, profileId, windowId, kind, generation, predecessor = null, topicSeed }) {
+    return { version: 1, sessionId, profileId, windowId, kind, generation, predecessor, ...(topicSeed ? { topicSeed } : {}) };
 }
 
 function validPredecessor(value) {
@@ -30,10 +36,12 @@ function readWindowBinding(manager) {
     if (data.version !== 1 || typeof data.profileId !== 'string' || !UUID.test(data.profileId)
         || typeof data.windowId !== 'string' || !UUID.test(data.windowId) || !['main', 'topic'].includes(data.kind)
         || !Number.isSafeInteger(data.generation) || data.generation < 0 || data.generation > MAX_GENERATION
-        || !validPredecessor(data.predecessor ?? null) || data.generation > 0 && !data.predecessor) return null;
+        || !validPredecessor(data.predecessor ?? null) || data.generation > 0 && !data.predecessor
+        || data.topicSeed !== undefined && (data.kind !== 'topic' || data.generation !== 0 || !validTopicSeed(data.topicSeed))) return null;
     // The window marker never overrides the immutable profile identity of the session.
     if (readProfileBinding(manager)?.profileId !== data.profileId) return null;
-    return { sessionId, profileId: data.profileId, windowId: data.windowId, kind: data.kind, generation: data.generation, predecessor: data.predecessor ?? null };
+    return { sessionId, profileId: data.profileId, windowId: data.windowId, kind: data.kind, generation: data.generation, predecessor: data.predecessor ?? null,
+        ...(data.topicSeed ? { topicSeed: data.topicSeed } : {}) };
 }
 
-module.exports = { WINDOW_ENTRY, windowMarker, readWindowBinding };
+module.exports = { WINDOW_ENTRY, windowMarker, readWindowBinding, validTopicSeed };

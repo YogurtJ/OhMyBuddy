@@ -177,7 +177,7 @@ function createPiAgentGateway(options = {}) {
         const memoryEnvironment = await profileMemory.environment(context);
         read.validate();
         // Bot windows: `bots` is constructed below; workers start only after routes are mounted.
-        const botContext = context ? await bots.windowContext(read.manager(), { cwd, sessionId, sessionPath }) : null;
+        const botContext = await bots.windowContext(read.manager(), { cwd, sessionId, sessionPath });
         read.validate();
         return { ...env, PIVANE_AGENT_PROFILE_CONTEXT: context ? JSON.stringify(context) : undefined,
             PIVANE_BOT_CONTEXT: botContext ? JSON.stringify(botContext) : undefined,
@@ -258,6 +258,16 @@ function createPiAgentGateway(options = {}) {
     require('./pi-cron-service').mountCron(router, cron);
     bots.trashBlockers = require('./bot/bot-trash').createTrashBlockers({ cron, deferred, learning });
     require('./bot/bot-schedule').mountBotSchedule(router, { cron, bots, authenticate: req => agentThreads.authenticate(req) });
+    bots.cron = cron;
+    bots.assertWindowQuiescent = window => {
+        const ids = new Set(window.generations.map(item => item.sessionId));
+        const matches = source => source?.cwd === window.cwd && ids.has(source.sessionId);
+        if ([...ids].some(id => deferred.list(window.cwd, id).some(job => !['sent', 'cancelled'].includes(job.status)))
+            || [...sideChat.connections].some(c => matches(c.reference.source))
+            || [...sideChat.parents.values()].some(p => (p.preparing || p.ticket) && matches(p.source)))
+            throw Object.assign(new Error('This topic has pending messages or side chats; finish them before archiving'), { status: 409, code: 'BOT_WINDOW_BUSY' });
+    };
+    require('./bot/bot-topic').mountBotTopics(router, { bots, authenticate: req => agentThreads.authenticate(req) });
     const channels = new (require('./channels/service').ChannelsService)({ store, supervisor,
         mediaLabService: options.mediaLabService, mediaRoot: options.artifactMediaRoot,
         isSuspended: () => maintenance.locked || maintenance.referenceLocked || Boolean(store.sessionMoves?.running),
@@ -665,7 +675,7 @@ function createPiAgentGateway(options = {}) {
     });
 
     require('./pi-session-classification').mountSessionClassification(router, { store, supervisor, profiles, projects: assistantProjects, sideChat });
-    mountSessionWorkflows(router, { store, supervisor, deferred, preferences });
+    mountSessionWorkflows(router, { store, supervisor, deferred, preferences, assertDeferredSendable: session => bots.assertNativeSendable(session) });
     const sessionTransfer = require('./pi-session-transfer').mountSessionTransfer(router, { store, supervisor, preferences });
     const sessionMoves = require('./pi-session-moves').mountSessionMoves(router, { store, supervisor, preferences, usage, deferred, cron, sideChat, channels,
         isSuspended: () => maintenance.locked || maintenance.referenceLocked,
