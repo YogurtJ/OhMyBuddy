@@ -751,6 +751,10 @@ class BotService extends EventEmitter {
         });
     }
 
+    trash(profileId, input = {}) {
+        return this.profiles.reserve(() => require('./bot-trash').trashBot(this, profileId, input));
+    }
+
     // Local onboarding choices share the profile reservation and never send a chat message.
     onboarding(profileId, input = {}) {
         return this.profiles.reserve(async () => {
