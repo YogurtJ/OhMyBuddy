@@ -46,15 +46,18 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
                 await page.goto(`${base}/__forms`);
                 for (const script of scripts) await page.addScriptTag({ url: `${base}/${script}` });
             };
+            // fail: how many saves fail with a plain conflict, or the error codes of the failing saves in turn.
             const mount = (args, identity, fail = 0) => page.evaluate(({ args, identity, fail, select }) => {
                 document.querySelector('.pi-bot-setup')?.remove();
-                window.t = { saves: [], uploads: [], responses: [], fail };
+                window.t = { saves: [], uploads: [], responses: [], notes: [], fail: Array.isArray(fail) ? fail : Array(fail).fill(null) };
                 const cards = PiBot.setupCards({ enabled: () => true, calls: () => [{ id: 'call-1', args }], respond: value => t.responses.push(value),
                     face: () => Object.assign(document.createElement('span'), { className: 'pi-bot-face is-sm', textContent: '🦉' }), changed: () => {},
-                    identity: () => identity, uploadPicture: async dataUrl => { t.uploads.push(dataUrl.slice(0, 22)); },
+                    identity: () => identity, notify: message => t.notes.push(message),
+                    // Each upload is a new picture version, as the avatar service reports it.
+                    uploadPicture: async dataUrl => { t.uploads.push(dataUrl.slice(0, 22)); return { ok: true, profile: { avatar: { kind: 'image', version: String(t.uploads.length).repeat(64) } } }; },
                     save: async (id, changes, options) => {
                         t.saves.push({ id, changes, options, uploadsBefore: t.uploads.length });
-                        if (t.fail-- > 0) throw Object.assign(new Error('synthetic conflict'), { status: 409 });
+                        if (t.fail.length) { const code = t.fail.shift(); throw Object.assign(new Error('synthetic conflict'), { status: 409, ...(code ? { code } : {}) }); }
                     } });
                 document.querySelector('#forms').append(cards.element);
                 cards.sync(new Map([['ui-1', { id: 'ui-1', ...select }]]), true);
@@ -64,7 +67,7 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
 
             // 1. A failed save keeps every edit and unticked fact; the retry sends the user's values (UAT-09).
             await load('pi-bot.js');
-            const fresh = { id: BOT, name: '新伙伴', avatar: { kind: 'emoji', value: '✨' }, job: '', steps: {} };
+            const fresh = { id: BOT, name: '新伙伴', avatar: { kind: 'emoji', value: '✨' }, job: '', chosen: { name: false, avatar: false }, steps: {} };
             await mount({ name: '提议名字', avatar: '👋', job: '默认职责', personality: '默认性格', aboutUser: ['条目一', '条目二'] }, fresh, 1);
             await page.locator('[data-setup-field="name"]').fill('用户选定名字');
             await page.locator('[data-setup-field="avatar"]').fill('🦊');
@@ -82,7 +85,8 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
             assert.deepEqual(await page.evaluate(() => t.responses), [{ id: 'ui-1', value: '保存 / Save' }]);
 
             // 2. A later card does not bring back a chosen face; what is already set is left out (UAT-03).
-            const chosenFace = { id: BOT, name: '小狸', avatar: { kind: 'emoji', value: '🦉' }, job: '帮我整理', steps: { identity: 'done' } };
+            // Chosen as the server reports it (here: in Bot settings, before the interview's identity step).
+            const chosenFace = { id: BOT, name: '小狸', avatar: { kind: 'emoji', value: '🦉' }, job: '帮我整理', chosen: { name: true, avatar: true }, steps: {} };
             await mount({ name: '小狸', avatar: '👋', job: '只帮我整理计划', finish: true }, chosenFace);
             assert.equal(await page.locator('[data-setup-field="name"]').count(), 0, 'the unchanged name is not shown');
             assert.equal(await page.locator('.pi-bot-setup-field.is-avatar').evaluate(row => row.classList.contains('is-kept')), true);
@@ -106,27 +110,40 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
             await page.locator('.pi-bot-setup-save').click();
             assert.deepEqual(await page.evaluate(() => [t.saves.length, t.responses]), [0, [{ id: 'ui-1', value: '保存 / Save' }]]);
 
-            // 3. A picture face is uploaded once, before the card is saved (UAT-01).
-            await mount({ avatar: '👋', job: '整理计划' }, fresh, 1);
+            // 3. A picture face is uploaded before the card is saved, and the save names that exact picture (UAT-01).
+            // A plain conflict keeps the upload; the face changed elsewhere means uploading it again.
+            await mount({ avatar: '👋', job: '整理计划' }, fresh, [null, 'BOT_PICTURE_CHANGED']);
             await page.locator('[data-setup-picture-file]').setInputFiles({ name: 'face.png', mimeType: 'image/png', buffer: PNG });
             await page.locator('.pi-bot-setup-picture img').waitFor();
             assert.match(await page.locator('.pi-bot-setup-note').textContent(), /图片会在保存时上传/);
             await shot('bot-setup-picture');
             await page.locator('.pi-bot-setup-save').click();
-            await page.locator('.pi-bot-setup-note.is-error').waitFor();
+            await page.locator('.pi-bot-setup-note.is-error').filter({ hasText: '设置刚刚有变化' }).waitFor();
+            await page.locator('.pi-bot-setup-save').click();
+            await page.locator('.pi-bot-setup-note.is-error').filter({ hasText: '头像刚刚在别处被换掉了' }).waitFor();
             await page.locator('.pi-bot-setup-save').click();
             await page.waitForFunction(() => t.responses.length === 1);
             const pictured = await page.evaluate(() => t);
-            assert.deepEqual(pictured.uploads, ['data:image/png;base64,'], 'uploaded once, not again on the retry');
+            const one = '1'.repeat(64), two = '2'.repeat(64);
+            assert.equal(pictured.uploads.length, 2, 'not uploaded again after a plain conflict, but again after the face changed elsewhere');
             assert.deepEqual(pictured.saves.map(item => [item.changes, item.options, item.uploadsBefore]),
-                [[{ avatar: null, job: '整理计划' }, { picture: true }, 1], [{ avatar: null, job: '整理计划' }, { picture: true }, 1]]);
+                [[{ avatar: null, job: '整理计划' }, { picture: one }, 1], [{ avatar: null, job: '整理计划' }, { picture: one }, 1], [{ avatar: null, job: '整理计划' }, { picture: two }, 2]]);
+            assert.deepEqual(pictured.notes, []);
+            // Not saving after the picture went up: the user is told the picture is already the face.
+            await mount({ avatar: '👋', job: '整理计划' }, fresh, 1);
+            await page.locator('[data-setup-picture-file]').setInputFiles({ name: 'face.png', mimeType: 'image/png', buffer: PNG });
+            await page.locator('.pi-bot-setup-picture img').waitFor();
+            await page.locator('.pi-bot-setup-save').click();
+            await page.locator('.pi-bot-setup-note.is-error').waitFor();
+            await page.locator('.pi-bot-setup-later').click();
+            assert.deepEqual(await page.evaluate(() => [t.notes, t.responses]), [['上传的图片已经是头像了；要换回可以在设置里改。'], [{ id: 'ui-1', value: '先不改 / Not now' }]]);
             // Back to an emoji: no upload.
             await mount({ avatar: '👋' }, fresh);
             await page.locator('[data-setup-picture-file]').setInputFiles({ name: 'face.png', mimeType: 'image/png', buffer: PNG });
             await page.locator('[data-setup-picture="clear"]').click();
             await page.locator('.pi-bot-setup-save').click();
             await page.waitForFunction(() => t.responses.length === 1);
-            assert.deepEqual(await page.evaluate(() => [t.uploads.length, t.saves[0].changes, t.saves[0].options]), [0, { avatar: '👋' }, { picture: false }]);
+            assert.deepEqual(await page.evaluate(() => [t.uploads.length, t.saves[0].changes, t.saves[0].options]), [0, { avatar: '👋' }, { picture: null }]);
 
             // 4. Every way out of the settings sheet warns once about unsaved edits, valid or not (UAT-11).
             const settings = { revision: 'r1', bot: { id: BOT, name: '小狸', avatar: { kind: 'emoji', value: '🦉' }, soul: '回答简短。',
@@ -167,7 +184,8 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
             // 5. The notebook editor keeps the draft after a failed save; exact due times show and edit (UAT-10/12).
             await load('pi-bot-notebook.js');
             await page.evaluate(({ profileId, windowId }) => {
-                window.n = { writes: [], failures: ['SESSION_BUSY', 'NETWORK', 'NOTEBOOK_CHANGED'], version: 1 };
+                // The conflict comes with another device's change to a field the user is not editing.
+                window.n = { writes: [], failures: ['SESSION_BUSY', 'NETWORK', { code: 'NOTEBOOK_CHANGED', due: '2026-11-06T18:00:00+08:00' }], version: 1 };
                 const item = { id: 'n1', kind: 'commitment', text: '原来的承诺', due: '2026-11-06T17:30:00+08:00', status: 'active', by: 'bot', supersedes: null,
                     createdAt: '2026-10-26T06:00:00Z', updatedAt: '2026-10-26T06:00:00Z', source: null };
                 const book = () => ({ generation: 0, version: `v${n.version}`, items: [{ ...item }] });
@@ -176,7 +194,7 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
                     const body = JSON.parse(options.body); n.writes.push(body);
                     const failure = n.failures.shift();
                     if (failure === 'NETWORK') throw new Error('Failed to fetch');
-                    if (failure === 'NOTEBOOK_CHANGED') { n.version++; throw Object.assign(new Error('changed'), { code: failure }); }
+                    if (failure?.code === 'NOTEBOOK_CHANGED') { const { code, ...change } = failure; Object.assign(item, change); n.version++; throw Object.assign(new Error('changed'), { code }); }
                     if (failure) throw Object.assign(new Error('busy'), { code: failure });
                     for (const op of body.ops) { if (op.text) item.text = op.text; if (op.due !== undefined) item.due = op.due; }
                     n.version++; return book();
@@ -194,18 +212,26 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
                 await page.locator('.pi-bot-sheet-status').filter({ hasText: expected }).waitFor();
                 assert.equal(await page.locator('[data-note-field="text"]').inputValue(), '用户刚刚修改但还未保存的承诺', String(expected));
             }
+            assert.equal(await page.locator('[data-note-field="time"]').inputValue(), '18:00', 'the untouched time follows the other device');
             await shot('bot-notes-kept-draft');
             await page.locator('[data-note-action="edit-save"]').click();
             await page.waitForFunction(() => !document.querySelector('[data-note-field="text"]'));
             assert.deepEqual(await page.evaluate(() => n.writes.map(body => body.ops)), Array(4).fill([{ op: 'update', id: 'n1', text: '用户刚刚修改但还未保存的承诺' }]),
-                'only the text is sent; the exact time stays as stored');
+                'only the text is sent: the exact time stays as stored, and the other device\'s change is not undone');
             assert.equal(await page.evaluate(() => n.writes.at(-1).expectedVersion), 'v2', 'the retry after the refresh names the new version');
+            assert.match(await meta(), /截止 11月6日 18:00/);
+            // The other way round: a time-only edit keeps the text another device changed meanwhile.
+            await page.evaluate(() => n.failures.push({ code: 'NOTEBOOK_CHANGED', text: '别的设备改过的承诺' }));
             await edit();
-            await page.locator('[data-note-field="time"]').fill('18:00');
+            await page.locator('[data-note-field="time"]').fill('19:00');
+            await page.locator('[data-note-action="edit-save"]').click();
+            await page.locator('.pi-bot-sheet-status').filter({ hasText: /已刷新；你的修改还在/ }).waitFor();
+            assert.deepEqual([await page.locator('[data-note-field="text"]').inputValue(), await page.locator('[data-note-field="time"]').inputValue()], ['别的设备改过的承诺', '19:00']);
             await page.locator('[data-note-action="edit-save"]').click();
             await page.waitForFunction(() => !document.querySelector('[data-note-field="time"]'));
-            assert.deepEqual(await page.evaluate(() => n.writes.at(-1).ops), [{ op: 'update', id: 'n1', due: '2026-11-06T18:00+08:00' }]);
-            assert.match(await meta(), /截止 11月6日 18:00/);
+            assert.deepEqual(await page.evaluate(() => n.writes.at(-1).ops), [{ op: 'update', id: 'n1', due: '2026-11-06T19:00+08:00' }]);
+            assert.match(await meta(), /截止 11月6日 19:00/);
+            assert.match(await page.locator('[data-note-id="n1"]').textContent(), /别的设备改过的承诺/);
             await edit();
             await page.locator('[data-note-field="due"]').fill('');
             assert.equal(await page.locator('[data-note-field="time"]').isDisabled(), true);
@@ -230,6 +256,37 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
             assert.equal(await menuFor(false), true, 'Pi Agent keeps it');
 
             assert.deepEqual(errors, [], `page errors at ${width}`);
+            await context.close();
+        }
+
+        // 7. A time the device's clock skips (daylight saving starts) is refused, not saved as another moment.
+        {
+            const context = await browser.newContext({ viewport: { width: 1440, height: 860 }, locale: 'zh-CN', timezoneId: 'America/New_York' });
+            const page = await context.newPage(), errors = [];
+            page.setDefaultTimeout(8000);
+            page.on('pageerror', error => errors.push(error.message));
+            await page.goto(`${base}/__forms`); await page.addScriptTag({ url: `${base}/pi-bot-notebook.js` });
+            await page.evaluate(() => {
+                window.n = { writes: [] };
+                const item = { id: 'n1', kind: 'commitment', text: '交报价', due: null, status: 'active', by: 'bot', supersedes: null,
+                    createdAt: '2026-03-01T06:00:00Z', updatedAt: '2026-03-01T06:00:00Z', source: null };
+                PiBotNotebook.open({ profileId: '11111111-1111-4111-8111-111111111111', windowId: '22222222-2222-4222-8222-222222222222', name: '小狸',
+                    face: () => document.createElement('span'), api: async (_url, options) => {
+                        if (options) { const body = JSON.parse(options.body); n.writes.push(body.ops); Object.assign(item, { due: body.ops[0].due }); }
+                        return { generation: 0, version: `v${n.writes.length}`, items: [{ ...item }] };
+                    } });
+            });
+            await page.locator('[data-note-id="n1"] [data-note-action="edit"]').first().evaluate(node => node.click());
+            await page.locator('[data-note-field="due"]').fill('2026-03-08');
+            await page.locator('[data-note-field="time"]').fill('02:30');
+            await page.locator('[data-note-action="edit-save"]').click();
+            await page.locator('.pi-bot-sheet-status').filter({ hasText: '这个时间在这台设备的时区里不存在' }).waitFor();
+            assert.equal(await page.evaluate(() => n.writes.length), 0);
+            await page.locator('[data-note-field="time"]').fill('03:30');
+            await page.locator('[data-note-action="edit-save"]').click();
+            await page.waitForFunction(() => n.writes.length === 1);
+            assert.deepEqual(await page.evaluate(() => n.writes[0]), [{ op: 'update', id: 'n1', due: '2026-03-08T03:30-04:00' }]);
+            assert.deepEqual(errors, []);
             await context.close();
         }
         console.log('Bot forms keep the user\'s choices and drafts at desktop and phone widths');

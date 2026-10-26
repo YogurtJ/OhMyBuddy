@@ -10461,7 +10461,11 @@
         ["截止", "Due"],
         ["还有修改没保存。再点一次就放弃这些修改并离开。", "There are unsaved changes. Click again to discard them and leave."],
         ["Bot 聊天里没有侧聊，直接在这里问就好", "Bot chats have no side chat; just ask here"],
-        ["Bot 聊天不能分叉；以后可以为 Bot 另开话题", "Bot chats cannot be forked; separate topics for a Bot will come later"]
+        ["Bot 聊天不能分叉；以后可以为 Bot 另开话题", "Bot chats cannot be forked; separate topics for a Bot will come later"],
+        ["这个时间在这台设备的时区里不存在（夏令时调整），请换一个时间", "That time does not exist in this device's time zone (a daylight saving change); choose another time"],
+        ["上传的图片已经是头像了；要换回可以在设置里改。", "The uploaded picture is already the face; you can change it back in settings."],
+        ["头像图片没有保存成功，请再试一次", "The picture was not saved; please try again"],
+        ["头像刚刚在别处被换掉了；你的修改还在，再点保存会重新上传这张图片", "The face was just changed elsewhere. Your edits are still here; press Save to upload this picture again"]
     );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

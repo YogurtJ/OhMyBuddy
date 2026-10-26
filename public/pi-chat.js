@@ -554,6 +554,7 @@ document.addEventListener('DOMContentLoaded', () => {
         face: () => botUi?.face('sm') || document.createElement('span'),
         identity: () => botUi?.setupIdentity?.() || null,
         uploadPicture: dataUrl => botUi.uploadAvatar(dataUrl),
+        notify: message => toast(message, 'info'),
         changed: () => renderPendingBanner()
     });
     if (botSetup) document.querySelector('.pi-composer-wrap > .pi-composer')?.before(botSetup.element);

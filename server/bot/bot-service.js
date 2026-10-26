@@ -36,6 +36,14 @@ const WORKSPACE_PARENT = 'PivaneBots';
 const MAX_BOTS = 50;
 const PLACEHOLDER = Object.freeze({ 'zh-CN': '新伙伴', en: 'New buddy' });
 const DEFAULT_AVATAR = Object.freeze({ kind: 'emoji', value: '✨' });
+// Whether the user has picked the name and the face, by any path (a setup card, Bot settings,
+// the identity page), and kept across a new interview: anything but what a new Bot starts with,
+// or the interview's identity step. A later setup card keeps these unless the user asks (UAT-03).
+function chosenIdentity(profile, bot) {
+    const done = bot.onboarding?.steps?.identity === 'done', avatar = profile.avatar;
+    return { name: done || !Object.values(PLACEHOLDER).includes(profile.name),
+        avatar: done || Boolean(avatar) && !(avatar.kind === DEFAULT_AVATAR.kind && avatar.value === DEFAULT_AVATAR.value) };
+}
 
 // What the notebook panel shows: every note except tombstones, with the quote it came from
 // (kept with the note), or else a short excerpt of the message when it is in the current generation.
@@ -83,7 +91,7 @@ class BotService extends EventEmitter {
             if (!bot || profile.trashedAt !== undefined) continue;
             const { state: windowState, revision: windowsRevision } = await this.windows.read(profile.id);
             bots.push({ id: profile.id, name: profile.name, description: profile.description, avatar: profile.avatar ?? null,
-                enabled: settings.isBot(profile), profileRevision: profileRevision(profile), bot: this.publicBot(bot),
+                enabled: settings.isBot(profile), profileRevision: profileRevision(profile), bot: this.publicBot(bot), chosen: chosenIdentity(profile, bot),
                 windowsRevision, windows: windowState.windows.map(publicWindow) });
         }
         bots.sort((a, b) => a.bot.order - b.bot.order || Date.parse(a.bot.createdAt) - Date.parse(b.bot.createdAt));
@@ -566,8 +574,9 @@ class BotService extends EventEmitter {
 
     // Saves a setup card the user confirmed (possibly edited). The card must still be pending
     // in the window's current native transcript; only its proposed fields are accepted.
-    // picture: true when the user answered a proposed face with a picture, which the card has
-    // just saved through the avatar service (the profile's face must be that picture now).
+    // picture: the version of the picture the user answered a proposed face with, which the
+    // card has just saved through the avatar service; the profile's face must still be exactly
+    // that picture (another client may have changed it in between).
     setup(profileId, input = {}) {
         return this.profiles.reserve(async () => {
             if (!object(input) || typeof input.expectedRevision !== 'string' || typeof input.windowId !== 'string') fail('Invalid setup confirmation');
@@ -582,8 +591,8 @@ class BotService extends EventEmitter {
                 return found;
             });
             const changes = setup.confirmedChanges(proposal, input.changes ?? proposal);
-            if (input.picture !== undefined && input.picture !== true) fail('Invalid setup confirmation');
-            const picture = input.picture === true;
+            if (input.picture !== undefined && (typeof input.picture !== 'string' || !/^[a-f0-9]{64}$/.test(input.picture))) fail('Invalid setup confirmation');
+            const picture = input.picture !== undefined;
             if (picture && !Object.hasOwn(proposal, 'avatar')) fail('Only the proposed fields can be saved');
             if (picture) delete changes.avatar;
             if (!Object.keys(changes).length && !picture) fail('Nothing to save');
@@ -592,7 +601,8 @@ class BotService extends EventEmitter {
                 const index = state.profiles.findIndex(profile => profile.id === profileId);
                 const previous = state.profiles[index], bot = settings.readBot(previous);
                 if (index < 0 || !bot || previous.trashedAt !== undefined) fail('Bot not found', 404);
-                if (picture && previous.avatar?.kind !== 'image') fail('The picture was not saved; try again', 409);
+                if (picture && (previous.avatar?.kind !== 'image' || previous.avatar.version !== input.picture))
+                    fail('The face is no longer the uploaded picture; upload it again', 409, 'BOT_PICTURE_CHANGED');
                 const base = validateProfile({ name: changes.name ?? previous.name, description: previous.description,
                     soul: changes.personality ?? previous.soul, enabled: previous.enabled, memory: previous.memory, skills: previous.skills,
                     ...(changes.avatar ? { avatar: { kind: 'emoji', value: changes.avatar } } : {}) }, previous);

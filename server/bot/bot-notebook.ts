@@ -32,17 +32,25 @@ export function noteOperation(input: any) {
 // Whether the model has seen the notebook since the last compaction: a Bot compaction
 // renders it into the summary, a generation seed or a fallback message carries it.
 // Returns the entries that changed it afterwards from the notebook panel (user edits).
+// What the model has seen of the notebook since it was last shown in full (a Bot summary, the
+// seed of a generation, or a notebook message): the user's own panel edits, and notes the Bot
+// saved whose window_note result is not in the conversation (a call made inside a script, whose
+// nested result Pi does not keep, or a run that ended before the result was written).
 export function notebookVisibility(branch: any[]) {
-    let visible = false, userOps: any[] = [];
+    const answered = new Set(branch.filter((entry: any) => entry.type === 'message' && entry.message?.role === 'toolResult'
+        && entry.message.toolName === NOTE_TOOL).map((entry: any) => entry.message.toolCallId));
+    let visible = false, userOps: any[] = [], unseenOps: any[] = [];
     for (const entry of branch) {
-        if (entry.type === 'compaction') { visible = Boolean(entry.details?.pivaneBot?.ledger); userOps = []; continue; }
+        if (entry.type === 'compaction') { visible = Boolean(entry.details?.pivaneBot?.ledger); userOps = []; unseenOps = []; continue; }
         if (entry.type === 'custom_message' && (entry.customType === NOTEBOOK_MESSAGE || entry.details?.pivaneNotebook === true)) {
-            visible = true; userOps = []; continue;
+            visible = true; userOps = []; unseenOps = []; continue;
         }
-        if (entry.type === 'custom' && entry.customType === LEDGER_ENTRY && Array.isArray(entry.data?.ops))
-            userOps.push(...entry.data.ops.filter((op: any) => op?.by === 'user'));
+        if (entry.type !== 'custom' || entry.customType !== LEDGER_ENTRY || !Array.isArray(entry.data?.ops)) continue;
+        userOps.push(...entry.data.ops.filter((op: any) => op?.by === 'user'));
+        if (typeof entry.data.toolCallId === 'string' && !answered.has(entry.data.toolCallId))
+            unseenOps.push(...entry.data.ops.filter((op: any) => op?.by !== 'user'));
     }
-    return { visible, userOps };
+    return { visible, userOps, unseenOps };
 }
 
 // Beyond this many changed notes the whole notebook is shown again as well (the changed ones
@@ -51,21 +59,25 @@ const MAX_NOTICE_NOTES = 40;
 
 // What to tell the model before a run, or null: the full notebook when it is not visible
 // (after a native fallback compaction, or a generation started before notebooks existed),
-// otherwise how every note the user changed in the panel stands now (all fields, so a
-// changed or removed due date is seen too).
+// otherwise how every note the user changed in the panel, or the Bot saved without seeing the
+// result, stands now (all fields, so a changed or removed due date is seen too).
 export function notebookNotice(branch: any[], now: string) {
     const state = replay(branch);
-    const { visible, userOps } = notebookVisibility(branch);
+    const { visible, userOps, unseenOps } = notebookVisibility(branch);
     const full = (reason: string) => ({ customType: NOTEBOOK_MESSAGE, display: false, details: { v: 1, reason },
         content: renderLedger(state, { now }) });
     if (!visible) return state.items.length ? full('render') : null;
-    if (!userOps.length) return null;
-    const ids = [...new Set(userOps.map(op => op?.id).filter((id: any) => typeof id === 'string'))];
-    const lines = ids.map(id => describeItem(state.items.find((item: any) => item.id === id))).filter(Boolean);
-    if (!lines.length) return null;
-    const changes = 'The user changed these notes of this chat themselves; this is how they stand now:\n' + lines.map(line => '- ' + line).join('\n');
-    return { customType: NOTEBOOK_MESSAGE, display: false, details: { v: 1, reason: 'user-edits' },
-        content: lines.length > MAX_NOTICE_NOTES ? renderLedger(state, { now }) + '\n\n' + changes : changes };
+    const describe = (ops: any[]) => [...new Set(ops.map(op => op?.id).filter((id: any) => typeof id === 'string'))]
+        .map(id => describeItem(state.items.find((item: any) => item.id === id))).filter(Boolean);
+    const userLines = describe(userOps), unseenLines = describe(unseenOps);
+    if (!userLines.length && !unseenLines.length) return null;
+    const parts = [];
+    if (userLines.length) parts.push('The user changed these notes of this chat themselves; this is how they stand now:\n' + userLines.map(line => '- ' + line).join('\n'));
+    if (unseenLines.length) parts.push('These notes were saved by your own window_note calls whose results are not in this conversation (for example calls made inside a script); this is how they stand now:\n'
+        + unseenLines.map(line => '- ' + line).join('\n'));
+    const changes = parts.join('\n\n');
+    return { customType: NOTEBOOK_MESSAGE, display: false, details: { v: 1, reason: userLines.length ? 'user-edits' : 'unseen-notes' },
+        content: userLines.length + unseenLines.length > MAX_NOTICE_NOTES ? renderLedger(state, { now }) + '\n\n' + changes : changes };
 }
 
 const PANEL_OPS = ['update', 'status', 'delete'];

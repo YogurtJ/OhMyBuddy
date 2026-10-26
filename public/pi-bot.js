@@ -168,7 +168,7 @@
         // The Bot as the setup card compares a proposal with it.
         setupIdentity() {
             const bot = this.bot();
-            return bot ? { id: bot.id, name: bot.name, avatar: bot.avatar, job: bot.bot?.job || '', steps: bot.bot?.onboarding?.steps || {} } : null;
+            return bot ? { id: bot.id, name: bot.name, avatar: bot.avatar, job: bot.bot?.job || '', chosen: bot.chosen || null, steps: bot.bot?.onboarding?.steps || {} } : null;
         }
 
         // A picture face chosen on a setup card, through the profile avatar service.
@@ -182,14 +182,15 @@
             } finally { await this.refresh(); }
         }
 
-        async saveSetup(toolCallId, changes, { picture = false } = {}) {
+        // picture: the version of the picture just uploaded for this card, if it answers the face.
+        async saveSetup(toolCallId, changes, { picture = null } = {}) {
             const current = this.current();
             if (!current) throw new Error(translateUi("请先打开 Bot 的聊天"));
             if (this.revision === null) await this.load();
             try {
                 const result = await this.api(`/api/pi/bots/${encodeURIComponent(current.profileId)}/setup`, { method: 'POST',
                     headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ windowId: current.windowId, toolCallId, changes,
-                        ...(picture ? { picture: true } : {}), expectedRevision: this.revision }) });
+                        ...(picture ? { picture } : {}), expectedRevision: this.revision }) });
                 if (result.user && result.user.documentSaved === false) this.toast(translateUi("关于你的内容这次没记下：{0}", result.user.error || ''), 'error');
                 return result;
             } finally { await this.refresh(); }
@@ -530,8 +531,9 @@
         return dataUrl;
     }
 
-    // identity(): { id, name, avatar, job, steps } of the Bot now; uploadPicture(dataUrl) saves a picture face.
-    function createSetupCards({ enabled, calls, respond, save, face: currentFace, changed, identity = () => null, uploadPicture = null }) {
+    // identity(): { id, name, avatar, job, chosen, steps } of the Bot now; uploadPicture(dataUrl) saves a picture
+    // face and resolves to the avatar service's answer; notify(message) tells the user something in passing.
+    function createSetupCards({ enabled, calls, respond, save, face: currentFace, changed, identity = () => null, uploadPicture = null, notify = null }) {
         const panel = el('section', 'pi-bot-setup'); panel.hidden = true;
         panel.setAttribute('role', 'region'); panel.setAttribute('aria-label', translateUi("请你确认设置"));
         let current = null, retry = 0, retries = 0, serial = 0;
@@ -546,7 +548,9 @@
             const now = identity() || {};
             const existing = key => key === 'name' ? now.name ?? null : key === 'avatar' ? (now.avatar?.kind === 'emoji' ? now.avatar.value : null)
                 : key === 'job' ? now.job || null : null;
-            const chosen = key => (key === 'name' || key === 'avatar') && now.steps?.identity === 'done' || key === 'avatar' && now.avatar?.kind === 'image';
+            // chosen: from the server (picked by any path, kept across a new interview).
+            const chosen = key => (key === 'name' || key === 'avatar') && (now.chosen ? now.chosen[key] === true
+                : now.steps?.identity === 'done' || key === 'avatar' && now.avatar?.kind === 'image');
             const fields = [];
             for (const [key] of SETUP_FIELDS) {
                 const value = typeof args[key] === 'string' ? args[key].trim() : '';
@@ -555,7 +559,8 @@
             }
             const facts = [...new Set((Array.isArray(args.aboutUser) ? args.aboutUser : []).filter(item => typeof item === 'string' && item.trim()))]
                 .map(text => ({ text, checked: true }));
-            return { fields, facts, picture: null, pictureSaved: false };
+            // pictureVersion: the uploaded picture, once the avatar service has it.
+            return { fields, facts, picture: null, pictureVersion: null };
         }
 
         function fieldRow(field, draft) {
@@ -575,7 +580,7 @@
                 const preview = el('span', 'pi-bot-setup-picture'), img = el('img');
                 img.src = draft.picture; img.alt = translateUi("新头像图片"); preview.append(img);
                 const back = el('button', 'pi-bot-chip', translateUi("改用表情")); back.type = 'button'; back.dataset.setupPicture = 'clear';
-                back.addEventListener('click', () => { draft.picture = null; draft.pictureSaved = false; render(); panel.querySelector('[data-setup-field="avatar"]')?.focus(); });
+                back.addEventListener('click', () => { draft.picture = null; draft.pictureVersion = null; render(); panel.querySelector('[data-setup-field="avatar"]')?.focus(); });
                 body.append(preview, back);
             } else body.append(input);
             if (field.key === 'avatar' && uploadPicture) {
@@ -589,7 +594,7 @@
                     try {
                         const dataUrl = await pictureData(chosen);
                         if (current !== target) return;
-                        draft.picture = dataUrl; draft.pictureSaved = false; use(true); target.error = '';
+                        draft.picture = dataUrl; draft.pictureVersion = null; use(true); target.error = '';
                     } catch (error) { if (current === target) target.error = error.message; }
                     if (current === target) render();
                 });
@@ -640,7 +645,11 @@
             confirm.type = 'button';
             later.disabled = confirm.disabled = Boolean(current.saving);
             later.hidden = nothing && args.finish !== true;
-            later.addEventListener('click', () => { respond({ id: event.id, value: DECLINE }); hide(); });
+            later.addEventListener('click', () => {
+                // A picture already uploaded for this card stays the face even though the rest is not saved.
+                if (draft.pictureVersion) notify?.(translateUi("上传的图片已经是头像了；要换回可以在设置里改。"));
+                respond({ id: event.id, value: DECLINE }); hide();
+            });
             confirm.addEventListener('click', () => void submit());
             foot.append(note, later, confirm);
             panel.replaceChildren(head, form, foot);
@@ -671,15 +680,22 @@
             if (!meaningful && changes.finish !== true) { target.error = translateUi("没有要保存的内容，可以选“先不改”"); render(); return; }
             target.saving = true; target.error = ''; render();
             try {
-                if (picture && !draft.pictureSaved) { await uploadPicture(draft.picture); draft.pictureSaved = true; }
-                await save(target.call.id, changes, { picture });
+                if (picture && !draft.pictureVersion) {
+                    const uploaded = await uploadPicture(draft.picture);
+                    if (!/^[a-f0-9]{64}$/.test(uploaded?.profile?.avatar?.version || '')) throw new Error(translateUi("头像图片没有保存成功，请再试一次"));
+                    draft.pictureVersion = uploaded.profile.avatar.version;
+                }
+                await save(target.call.id, changes, { picture: picture ? draft.pictureVersion : null });
                 if (current !== target) return;
                 respond({ id: target.event.id, value: SAVE });
                 hide();
             } catch (error) {
                 if (current !== target) return;
                 target.saving = false;
-                target.error = error.status === 409 ? translateUi("设置刚刚有变化，你的修改还在，请再点一次保存") : error.message;
+                // The face was changed elsewhere after the upload: upload the chosen picture again next time.
+                if (error.code === 'BOT_PICTURE_CHANGED') draft.pictureVersion = null;
+                target.error = error.code === 'BOT_PICTURE_CHANGED' ? translateUi("头像刚刚在别处被换掉了；你的修改还在，再点保存会重新上传这张图片")
+                    : error.status === 409 ? translateUi("设置刚刚有变化，你的修改还在，请再点一次保存") : error.message;
                 render();
             }
         }
