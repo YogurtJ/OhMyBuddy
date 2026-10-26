@@ -566,6 +566,8 @@ class BotService extends EventEmitter {
 
     // Saves a setup card the user confirmed (possibly edited). The card must still be pending
     // in the window's current native transcript; only its proposed fields are accepted.
+    // picture: true when the user answered a proposed face with a picture, which the card has
+    // just saved through the avatar service (the profile's face must be that picture now).
     setup(profileId, input = {}) {
         return this.profiles.reserve(async () => {
             if (!object(input) || typeof input.expectedRevision !== 'string' || typeof input.windowId !== 'string') fail('Invalid setup confirmation');
@@ -580,17 +582,22 @@ class BotService extends EventEmitter {
                 return found;
             });
             const changes = setup.confirmedChanges(proposal, input.changes ?? proposal);
-            if (!Object.keys(changes).length) fail('Nothing to save');
+            if (input.picture !== undefined && input.picture !== true) fail('Invalid setup confirmation');
+            const picture = input.picture === true;
+            if (picture && !Object.hasOwn(proposal, 'avatar')) fail('Only the proposed fields can be saved');
+            if (picture) delete changes.avatar;
+            if (!Object.keys(changes).length && !picture) fail('Nothing to save');
             const now = new Date().toISOString();
             const saved = await this.profiles.mutate(input.expectedRevision, state => {
                 const index = state.profiles.findIndex(profile => profile.id === profileId);
                 const previous = state.profiles[index], bot = settings.readBot(previous);
                 if (index < 0 || !bot || previous.trashedAt !== undefined) fail('Bot not found', 404);
+                if (picture && previous.avatar?.kind !== 'image') fail('The picture was not saved; try again', 409);
                 const base = validateProfile({ name: changes.name ?? previous.name, description: previous.description,
                     soul: changes.personality ?? previous.soul, enabled: previous.enabled, memory: previous.memory, skills: previous.skills,
                     ...(changes.avatar ? { avatar: { kind: 'emoji', value: changes.avatar } } : {}) }, previous);
                 const onboarding = { ...bot.onboarding, steps: { ...bot.onboarding.steps } };
-                if (changes.name || changes.avatar) onboarding.steps.identity = 'done';
+                if (changes.name || changes.avatar || picture) onboarding.steps.identity = 'done';
                 if (changes.job) onboarding.steps.job = 'done';
                 if (changes.personality) onboarding.steps.personality = 'done';
                 if (changes.aboutUser) onboarding.steps.about = 'done';
@@ -618,7 +625,7 @@ class BotService extends EventEmitter {
                 } catch (error) { user = { added: [], documentSaved: false, error: error.message }; }
             }
             this.emit('botChanged', { profileId });
-            return { ok: true, revision: saved.revision, bot: saved.bot, saved: changes, ...(user ? { user } : {}) };
+            return { ok: true, revision: saved.revision, bot: saved.bot, saved: { ...changes, ...(picture ? { picture: true } : {}) }, ...(user ? { user } : {}) };
         });
     }
 

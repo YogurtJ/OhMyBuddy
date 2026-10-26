@@ -17,9 +17,39 @@
         ['preference', () => translateUi("偏好和要求")], ['ref', () => translateUi("要记牢的信息")]
     ];
     const CLOSED = { done: () => translateUi("已完成"), cancelled: () => translateUi("不需要了"), superseded: () => translateUi("已被新的取代") };
+    const locale = () => globalThis.PiI18n?.locale || 'zh-CN';
+    const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+    const when = value => new Date(DATE_ONLY.test(value || '') ? `${value}T00:00:00` : value);
     const day = value => {
-        const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(value || '') ? `${value}T00:00:00` : value);
-        return Number.isFinite(date.getTime()) ? date.toLocaleDateString(globalThis.PiI18n?.locale || 'zh-CN', { month: 'short', day: 'numeric' }) : '';
+        const date = when(value);
+        return Number.isFinite(date.getTime()) ? date.toLocaleDateString(locale(), { month: 'short', day: 'numeric' }) : '';
+    };
+    // A due date as said: a plain date, or a time of day (shown in this device's time zone); the
+    // year only when it is not this year (UAT-12).
+    const dueLabel = value => {
+        const date = when(value);
+        if (!Number.isFinite(date.getTime())) return '';
+        const options = { month: 'short', day: 'numeric', ...(date.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) };
+        if (DATE_ONLY.test(value)) return date.toLocaleDateString(locale(), options);
+        return date.toLocaleString(locale(), { ...options, hour: '2-digit', minute: '2-digit', hour12: false });
+    };
+    const pad = number => String(number).padStart(2, '0');
+    // The date and time fields of the editor for a stored due value (local time).
+    const dueParts = value => {
+        if (!value) return { date: '', time: '' };
+        if (DATE_ONLY.test(value)) return { date: value, time: '' };
+        const date = when(value);
+        if (!Number.isFinite(date.getTime())) return { date: String(value).slice(0, 10), time: '' };
+        return { date: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`, time: `${pad(date.getHours())}:${pad(date.getMinutes())}` };
+    };
+    // Editor fields back to a stored value: a plain date, or the local time with its UTC offset.
+    const dueValue = (date, time) => {
+        if (!date) return null;
+        if (!time) return date;
+        const local = new Date(`${date}T${time}:00`);
+        if (!Number.isFinite(local.getTime())) return date;
+        const offset = -local.getTimezoneOffset(), sign = offset >= 0 ? '+' : '-';
+        return `${date}T${time}${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`;
     };
 
     let dialog = null;
@@ -50,6 +80,8 @@
         sheet.showModal();
 
         let book = null, saving = false, editing = null, confirming = null, expanded = null, showClosed = false;
+        // What the user typed in the open editor; it stays until the change is saved (UAT-10).
+        let draft = null;
         const say = (text, tone) => { status.textContent = text || ''; if (tone) status.dataset.tone = tone; else delete status.dataset.tone; };
         const hint = () => say(translateUi("{0} 在聊天里会自己记，也会照这里的修改来做。", name));
 
@@ -72,19 +104,25 @@
             try {
                 book = await api(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ expectedGeneration: book.generation, expectedVersion: book.version, ops }) });
-                editing = null; confirming = null; expanded = null; saving = false;
+                editing = null; draft = null; confirming = null; expanded = null; saving = false;
                 if (dialog !== sheet) return;
                 render(); hint();
             } catch (error) {
                 saving = false;
                 if (dialog !== sheet) return;
-                if (error.code === 'SESSION_BUSY') { render(); say(translateUi("{0} 正在回复，等它说完再改。", name), 'warn'); return; }
-                if (['NOTEBOOK_CHANGED', 'BOT_WINDOW_STALE', 'BOT_WINDOW_ROTATING'].includes(error.code)) {
-                    editing = null; confirming = null; expanded = null;
-                    await load(translateUi("刚刚有新的变化，已刷新，请再试一次。"));
+                const kept = Boolean(editing && draft);
+                if (error.code === 'SESSION_BUSY') {
+                    render(); say(kept ? translateUi("{0} 正在回复，你的修改还在，等它说完再保存。", name) : translateUi("{0} 正在回复，等它说完再改。", name), 'warn');
                     return;
                 }
-                render(); say(error.message, 'error');
+                if (['NOTEBOOK_CHANGED', 'BOT_WINDOW_STALE', 'BOT_WINDOW_ROTATING'].includes(error.code)) {
+                    confirming = null; expanded = null;
+                    await load(kept ? translateUi("刚刚有新的变化，已刷新；你的修改还在，请再保存一次。") : translateUi("刚刚有新的变化，已刷新，请再试一次。"));
+                    // The note may be gone (deleted meanwhile); then there is nothing to edit.
+                    if (editing && !book?.items.some(item => item.id === editing && item.status !== 'deleted')) { editing = null; draft = null; render(); }
+                    return;
+                }
+                render(); say(kept ? translateUi("没保存成功，你的修改还在：{0}", error.message) : error.message, 'error');
             }
         }
 
@@ -102,16 +140,21 @@
         function noteRow(item) {
             const row = el('li', `pi-bot-note is-${item.status}`); row.dataset.noteId = item.id;
             if (editing === item.id) {
+                if (draft?.id !== item.id) draft = { id: item.id, text: item.text, ...dueParts(item.due) };
                 const form = el('div', 'pi-bot-note-edit');
-                const text = el('textarea'); text.value = item.text; text.maxLength = 500; text.rows = 3; text.dataset.noteField = 'text';
+                const text = el('textarea'); text.value = draft.text; text.maxLength = 500; text.rows = 3; text.dataset.noteField = 'text';
                 text.setAttribute('aria-label', translateUi("内容"));
-                text.addEventListener('input', () => { if (status.dataset.tone === 'error') hint(); });
+                text.addEventListener('input', () => { draft.text = text.value; if (status.dataset.tone === 'error') hint(); });
                 form.append(text);
-                if (item.kind === 'commitment') {
-                    const due = el('input'); due.type = 'date'; due.dataset.noteField = 'due';
-                    due.value = /^\d{4}-\d{2}-\d{2}/.test(item.due || '') ? item.due.slice(0, 10) : '';
-                    const label = el('label', 'pi-bot-note-due'); label.append(el('span', null, translateUi("截止日期")), due);
-                    form.append(label);
+                if (item.kind === 'commitment' || item.due) {
+                    const due = el('input'); due.type = 'date'; due.dataset.noteField = 'due'; due.value = draft.date;
+                    const time = el('input'); time.type = 'time'; time.dataset.noteField = 'time'; time.value = draft.time; time.disabled = !draft.date;
+                    time.setAttribute('aria-label', translateUi("截止时间（可不填）"));
+                    due.addEventListener('input', () => { draft.date = due.value; time.disabled = !due.value; if (!due.value) { time.value = ''; draft.time = ''; } });
+                    time.addEventListener('input', () => { draft.time = time.value; });
+                    const label = el('label', 'pi-bot-note-due'); label.append(el('span', null, translateUi("截止")), due);
+                    const row = el('div', 'pi-bot-note-due-row'); row.append(label, time);
+                    form.append(row);
                 }
                 const actions = el('div', 'pi-bot-note-confirm');
                 const cancel = button('pi-bot-chip', translateUi("取消")); cancel.dataset.noteAction = 'edit-cancel';
@@ -136,7 +179,7 @@
             const meta = [];
             if (item.status !== 'active') meta.push(`${CLOSED[item.status]?.() || item.status} · ${day(item.updatedAt)}`);
             else {
-                if (item.due) meta.push(translateUi("截止 {0}", day(item.due)));
+                if (item.due) meta.push(translateUi("截止 {0}", dueLabel(item.due)));
                 meta.push(translateUi("{0} 记下", day(item.createdAt)));
                 if (day(item.updatedAt) !== day(item.createdAt)) meta.push(translateUi("{0} 改过", day(item.updatedAt)));
             }
@@ -227,19 +270,21 @@
             else if (action === 'cancel') void change([{ op: 'status', id, status: 'cancelled' }]);
             else if (action === 'reopen') void change([{ op: 'status', id, status: 'active' }]);
             else if (action === 'more') { expanded = expanded === id ? null : id; confirming = null; render(); focus(expanded ? 'edit' : 'more', 'reopen', 'more'); }
-            else if (action === 'edit') { editing = id; confirming = null; expanded = null; render(); }
-            else if (action === 'edit-cancel') { editing = null; render(); focus('edit', 'more'); }
+            else if (action === 'edit') { editing = id; draft = null; confirming = null; expanded = null; render(); }
+            else if (action === 'edit-cancel') { editing = null; draft = null; render(); focus('edit', 'more'); }
             else if (action === 'delete') { confirming = id; editing = null; expanded = null; render(); focus('delete-cancel'); }
             else if (action === 'delete-cancel') { confirming = null; render(); focus('delete', 'more'); }
             else if (action === 'delete-confirm') void change([{ op: 'delete', id }]);
             else if (action === 'edit-save') {
-                const text = row.querySelector('[data-note-field="text"]').value.replace(/\s+/g, ' ').trim();
+                if (draft?.id !== id) return;
+                const text = draft.text.replace(/\s+/g, ' ').trim();
                 if (!text) { say(translateUi("内容不能为空"), 'error'); return; }
                 const op = { op: 'update', id };
                 if (text !== item.text) op.text = text;
-                const dueInput = row.querySelector('[data-note-field="due"]');
-                if (dueInput) { const due = dueInput.value || null; if (due !== (item.due ? item.due.slice(0, 10) : null)) op.due = due; }
-                if (Object.keys(op).length === 2) { editing = null; render(); return; }
+                // Only a changed date or time is sent; an unchanged exact time stays exactly as stored.
+                const before = dueParts(item.due);
+                if (row.querySelector('[data-note-field="due"]') && (draft.date !== before.date || draft.time !== before.time)) op.due = dueValue(draft.date, draft.time);
+                if (Object.keys(op).length === 2) { editing = null; draft = null; render(); return; }
                 void change([op]);
             }
         });

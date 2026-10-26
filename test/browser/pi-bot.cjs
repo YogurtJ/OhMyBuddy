@@ -62,7 +62,7 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
             await page.route(/https:\/\/(fonts\.googleapis\.com|fonts\.gstatic\.com)\//, route => route.abort());
             await page.route('**/api/**', async route => {
                 const url = new URL(route.request().url()), pathname = url.pathname, method = route.request().method();
-                if (pathname === '/api/pi/status') return route.fulfill({ json: { ok: true, bots: true, agentProfiles: true, assistantProjects: true, deliverables: true, filePreviews: true, fileViewer: true,
+                if (pathname === '/api/pi/status') return route.fulfill({ json: { ok: true, bots: true, agentProfiles: true, assistantProjects: true, deliverables: true, filePreviews: true, fileViewer: true, sessionWorkflows: true,
                     projectRoots: ['/fixture'], defaultProject: geek } });
                 if (pathname === '/api/pi/deliverables') return route.fulfill({ json: { name: '计划.md', mime: 'text/markdown', size: 40, kind: 'markdown',
                     createdAt: '2026-10-24T06:03:05Z', revision: 'f'.repeat(64),
@@ -140,6 +140,11 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                     return route.fulfill({ json: { window: bots[0].windows[0], session: row(sessionId) } });
                 }
                 if (pathname === '/api/pi/projects') return route.fulfill({ json: { projects: [{ cwd: geek, name: 'project' }], roots: ['/fixture'] } });
+                // Session workflows know the first exchange: the user's retry and the reply's fork both match.
+                if (pathname.endsWith('/workflow')) return route.fulfill({ json: { leafId: 'e2', lastUserId: 'e1', versions: [],
+                    prompts: [{ entryId: 'e1', text: messages[0].content, timestamp: messages[0].timestamp }],
+                    replies: [{ entryId: 'e2', text: messages[1].content[0].text, timestamp: messages[1].timestamp }] } });
+                if (pathname.endsWith('/deferred')) return route.fulfill({ json: { jobs: [] } });
                 if (pathname === '/api/pi/sessions') return route.fulfill({ json: { sessions: [] } });
                 if (pathname === '/api/pi/activity') return route.fulfill({ json: { runtimes: [], pinnedProjects: [], hiddenProjects: [], replyNotices: [] } });
                 if (pathname === '/api/pi/profiles') return route.fulfill({ json: { version: 1, revision: 'p', profiles: profileList } });
@@ -209,13 +214,14 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                 assert.equal(phase, 'interview');
                 assert.equal(await page.locator('#pi-request-dialog[open]').count(), 0, 'no generic dialog for the setup card');
                 assert.equal(await page.locator('.pi-bot-setup [data-setup-field="name"]').inputValue(), '阿狸');
+                assert.equal(await page.locator('.pi-bot-setup [data-setup-field="avatar"]').count(), 0, 'the proposed face is already its face');
                 await page.locator('.pi-bot-setup [data-setup-field="name"]').fill('小狸');
                 await page.locator('.pi-bot-setup [data-setup-field="job"]').fill('');
                 if (evidence) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(evidence, `bot-setup-${width}.png`) }); }
                 await page.locator('.pi-bot-setup .pi-bot-setup-save').click();
                 await page.waitForFunction(() => document.querySelector('.pi-bot-setup').hidden);
                 assert.deepEqual(setupBodies.map(body => [body.toolCallId, body.windowId, body.changes]),
-                    [['call-1', MAIN, { name: '小狸', avatar: '🦊', job: null, aboutUser: ['希望被叫做小王'] }]]);
+                    [['call-1', MAIN, { name: '小狸', job: null, aboutUser: ['希望被叫做小王'] }]], 'the face it already has is not sent again');
                 assert.deepEqual(responses.map(item => [item.id, item.value]), [['ui-1', '保存 / Save']], 'Save is answered only after the server saved');
                 await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-who strong')?.textContent === '小狸');
                 // Reopen with a conversation to check replies carry the Bot's identity.
@@ -233,6 +239,9 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                 assert.match(await page.locator('#pi-bot-header .pi-bot-who strong').textContent(), /小狸/);
                 await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-status')?.dataset.state === 'connected');
                 assert.deepEqual(opened, ['gen-0', 'gen-0']);
+                // A Bot chat is never forked into an ordinary thread (UAT-06); editing the last question in place stays.
+                await page.locator('#pi-transcript-content article.user [data-message-workflow="retry"]').first().waitFor({ state: 'attached' });
+                assert.equal(await page.locator('[data-message-workflow="reply-fork"]').count(), 0, 'no reply fork in a Bot chat');
 
                 // 2b. Everyday words for a turn's steps; a delivered file opens the preview panel,
                 // and nothing else of the right panel (or its phone scrim) shows in Bot mode.

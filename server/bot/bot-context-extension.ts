@@ -114,8 +114,10 @@ function identitySnapshot(context: any, agentDir: string) {
         const text = readDocument(file)?.text ?? '';
         entries = text ? text.split('\n§\n').map((part: string) => part.trim()).filter(Boolean) : [];
     } catch { entries = []; }
-    return { name: profile?.name ?? null, avatar: profile?.avatar?.kind === 'emoji' ? profile.avatar.value : null,
-        job: readBot(profile)?.job ?? null, personality: typeof profile?.soul === 'string' ? profile.soul : null, entries };
+    const avatar = profile?.avatar?.kind === 'emoji' ? profile.avatar.value
+        : profile?.avatar?.kind === 'image' ? `(picture ${String(profile.avatar.version).slice(0, 8)})` : null;
+    return { name: profile?.name ?? null, avatar, job: readBot(profile)?.job ?? null,
+        personality: typeof profile?.soul === 'string' ? profile.soul : null, phase: readBot(profile)?.onboarding?.phase ?? null, entries };
 }
 
 // The Bot proposes; the user decides on an editable card in the Bot page, where the server
@@ -124,11 +126,13 @@ function registerSetupTool(pi: ExtensionAPI, context: any, getAgentDir: () => st
     let pending = false;
     pi.registerTool({
         name: SETUP_TOOL, label: 'Propose Bot setup', exposure: 'model-only',
-        description: 'Propose changes to your own name, face (one emoji), main job or personality, or short lasting facts about the user (how to address them, what matters to them). The user sees an editable card and decides; nothing is saved unless they confirm. Returns status and the values actually saved, which may differ from your proposal because the user can edit them.',
+        description: 'Propose changes to your own name, face (one emoji), main job or personality, or short lasting facts about the user (how to address them, what matters to them). The user sees an editable card and decides; nothing is saved unless they confirm. Include only the fields you are proposing to change and leave the others out. Returns status, what was actually saved (the user can edit or untick fields) and your current identity.',
         promptSnippet: 'Propose changes to your own identity or notes about the user for the user to confirm',
         promptGuidelines: [
             'Use bot_setup_propose for your own name, face emoji, main job and personality, and for lasting facts about the user. Propose one coherent step at a time, in the user\'s language.',
-            'Only status "saved" means something changed; then use the returned values, since the user may have edited them. After "declined" or "no_answer", carry on without proposing the same thing again right away.'
+            'Put in a card only what the user has just told you or agreed to in this step; leave every other field out (never send empty values or fill fields the user did not talk about). Once your name or face is set, propose it again only when the user asks to change it.',
+            'If the user is not sure yet what you should mainly help with or how you should talk, that is fine: say you will start in a general way and learn as you go, propose nothing for it, and carry on with what they need. Later, when their requests or feedback show a clear preference, you may propose an update of that one field.',
+            'Only status "saved" means something changed; then use the returned "current" identity, since the user may have edited or unticked fields. After "declined" or "no_answer", carry on without proposing the same thing again right away.'
         ],
         parameters: Type.Object({
             name: Type.Optional(Type.String({ maxLength: 40, description: 'Your new name.' })),
@@ -151,16 +155,21 @@ function registerSetupTool(pi: ExtensionAPI, context: any, getAgentDir: () => st
                 if (answer === undefined) return reply({ status: signal?.aborted ? 'aborted' : 'no_answer' });
                 if (answer !== SAVE) return reply({ status: 'declined' });
                 const after = identitySnapshot(context, getAgentDir());
-                const saved: any = {};
+                const trim = (key: string, value: any) => key === 'personality' && value ? String(value).slice(0, 1500) : value;
+                // What changed now, what the user kept as it was, and the identity as it now stands
+                // (the user may have edited a field back to its current value or unticked it).
+                const saved: any = {}, kept: string[] = [];
                 for (const key of ['name', 'avatar', 'job', 'personality'] as const) {
                     if (proposal[key] === undefined) continue;
-                    if (after[key] !== before[key] || after[key] === proposal[key]) saved[key] = key === 'personality' && after[key]
-                        ? String(after[key]).slice(0, 1500) : after[key];
+                    if (after[key] !== before[key]) saved[key] = trim(key, after[key]); else kept.push(key);
                 }
                 const added = after.entries.filter((entry: string) => !before.entries.includes(entry));
                 if (proposal.aboutUser && added.length) saved.aboutUser = added;
+                if (proposal.finish && after.phase === 'done' && before.phase !== 'done') saved.finish = true;
                 const status = Object.keys(saved).length ? 'saved' : 'not_saved';
-                return reply({ status, saved, ...(status === 'not_saved' ? { note: 'Nothing was saved. The card can only be saved in the Bot page.' } : {}) });
+                const current = { name: after.name, avatar: after.avatar, job: after.job, personality: trim('personality', after.personality) };
+                return reply({ status, saved, ...(kept.length ? { kept } : {}), current,
+                    ...(status === 'not_saved' ? { note: 'Nothing was changed; "current" is how things stand.' } : {}) });
             } finally { pending = false; }
         }
     } as any);

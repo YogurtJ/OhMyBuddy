@@ -165,13 +165,31 @@
             } finally { this.creating = false; this.render(); }
         }
 
-        async saveSetup(toolCallId, changes) {
+        // The Bot as the setup card compares a proposal with it.
+        setupIdentity() {
+            const bot = this.bot();
+            return bot ? { id: bot.id, name: bot.name, avatar: bot.avatar, job: bot.bot?.job || '', steps: bot.bot?.onboarding?.steps || {} } : null;
+        }
+
+        // A picture face chosen on a setup card, through the profile avatar service.
+        async uploadAvatar(dataUrl) {
+            const bot = this.bot();
+            if (!bot) throw new Error(translateUi("请先打开 Bot 的聊天"));
+            if (this.revision === null) await this.load();
+            try {
+                return await this.api(`/api/pi/profiles/${encodeURIComponent(bot.id)}/avatar`, { method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expectedRevision: this.revision, dataUrl }) });
+            } finally { await this.refresh(); }
+        }
+
+        async saveSetup(toolCallId, changes, { picture = false } = {}) {
             const current = this.current();
             if (!current) throw new Error(translateUi("请先打开 Bot 的聊天"));
             if (this.revision === null) await this.load();
             try {
                 const result = await this.api(`/api/pi/bots/${encodeURIComponent(current.profileId)}/setup`, { method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ windowId: current.windowId, toolCallId, changes, expectedRevision: this.revision }) });
+                    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ windowId: current.windowId, toolCallId, changes,
+                        ...(picture ? { picture: true } : {}), expectedRevision: this.revision }) });
                 if (result.user && result.user.documentSaved === false) this.toast(translateUi("关于你的内容这次没记下：{0}", result.user.error || ''), 'error');
                 return result;
             } finally { await this.refresh(); }
@@ -494,38 +512,121 @@
             && event.options.length === 2 && event.options[0] === SAVE && event.options[1] === DECLINE;
     }
 
-    function createSetupCards({ enabled, calls, respond, save, face: currentFace, changed }) {
+    // A picture chosen on the card, as the PNG data URL the avatar service accepts (≤ 1 MiB).
+    async function pictureData(file) {
+        if (!/^image\/(png|jpeg|webp|gif)$/.test(file?.type || '') || file.size > 6 * 1024 * 1024) throw new Error(translateUi("请选择不超过 6 MiB 的 PNG、JPEG、WebP 或 GIF 图片"));
+        const bitmap = await createImageBitmap(file);
+        let dataUrl = '';
+        try {
+            for (const size of [512, 384, 256]) {
+                const scale = Math.min(1, size / Math.max(bitmap.width, bitmap.height)), canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.round(bitmap.width * scale)); canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+                canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+                dataUrl = canvas.toDataURL('image/png');
+                if (dataUrl.length <= 1.4 * 1024 * 1024) break;
+            }
+        } finally { bitmap.close(); }
+        if (dataUrl.length > 1.4 * 1024 * 1024) throw new Error(translateUi("图片太大了，请换一张小一点的"));
+        return dataUrl;
+    }
+
+    // identity(): { id, name, avatar, job, steps } of the Bot now; uploadPicture(dataUrl) saves a picture face.
+    function createSetupCards({ enabled, calls, respond, save, face: currentFace, changed, identity = () => null, uploadPicture = null }) {
         const panel = el('section', 'pi-bot-setup'); panel.hidden = true;
         panel.setAttribute('role', 'region'); panel.setAttribute('aria-label', translateUi("请你确认设置"));
-        let current = null, retry = 0, retries = 0;
+        let current = null, retry = 0, retries = 0, serial = 0;
         const owns = event => enabled() && setupFits(event);
 
         function hide() { current = null; panel.hidden = true; panel.replaceChildren(); changed?.(); }
 
-        function render() {
-            const { event, args } = current;
-            const head = el('header', 'pi-bot-setup-head');
-            head.append(currentFace(), el('strong', null, args.finish && Object.keys(args).length === 1
-                ? translateUi("我们算是认识啦") : translateUi("这样设置可以吗？")));
-            const form = el('div', 'pi-bot-setup-fields');
-            for (const [key, label, max] of SETUP_FIELDS) {
-                if (typeof args[key] !== 'string') continue;
-                const field = el('label', `pi-bot-setup-field is-${key}`);
-                const input = key === 'personality' ? el('textarea') : el('input');
-                input.value = args[key]; input.maxLength = max; input.dataset.setupField = key;
-                if (key === 'personality') input.rows = Math.min(8, Math.max(3, args[key].split('\n').length + 1));
-                if (key === 'avatar') input.setAttribute('inputmode', 'text');
-                field.append(el('span', null, label()), input);
-                form.append(field);
+        // What the card starts from, kept while the card is open (a failed save keeps every edit).
+        // A proposed value the Bot already has is left out; a name or face the user chose before
+        // stays unless they tick the change (UAT-03).
+        function draftFor(args) {
+            const now = identity() || {};
+            const existing = key => key === 'name' ? now.name ?? null : key === 'avatar' ? (now.avatar?.kind === 'emoji' ? now.avatar.value : null)
+                : key === 'job' ? now.job || null : null;
+            const chosen = key => (key === 'name' || key === 'avatar') && now.steps?.identity === 'done' || key === 'avatar' && now.avatar?.kind === 'image';
+            const fields = [];
+            for (const [key] of SETUP_FIELDS) {
+                const value = typeof args[key] === 'string' ? args[key].trim() : '';
+                if (!value || existing(key) === value) continue;
+                fields.push({ key, value, use: !chosen(key), kept: chosen(key) ? { name: now.name, avatar: now.avatar, id: now.id } : null });
             }
-            if (Array.isArray(args.aboutUser) && args.aboutUser.length) {
+            const facts = [...new Set((Array.isArray(args.aboutUser) ? args.aboutUser : []).filter(item => typeof item === 'string' && item.trim()))]
+                .map(text => ({ text, checked: true }));
+            return { fields, facts, picture: null, pictureSaved: false };
+        }
+
+        function fieldRow(field, draft) {
+            const [, label, max] = SETUP_FIELDS.find(([key]) => key === field.key);
+            const row = el('div', `pi-bot-setup-field is-${field.key}`);
+            const id = `pi-bot-setup-${serial}-${field.key}`;
+            const caption = el('label', 'pi-bot-setup-label', label()); caption.htmlFor = id;
+            const body = el('div', 'pi-bot-setup-value');
+            const input = field.key === 'personality' ? el('textarea') : el('input');
+            input.id = id; input.value = field.value; input.maxLength = max; input.dataset.setupField = field.key;
+            if (field.key === 'personality') input.rows = Math.min(8, Math.max(3, field.value.split('\n').length + 1));
+            if (field.key === 'avatar') { input.setAttribute('inputmode', 'text'); input.setAttribute('aria-label', translateUi("头像表情")); }
+            let toggle = null;
+            const use = on => { field.use = on; row.classList.toggle('is-kept', !on); if (toggle) toggle.checked = on; };
+            input.addEventListener('input', () => { field.value = input.value; if (!field.use) use(true); });
+            if (field.key === 'avatar' && draft.picture) {
+                const preview = el('span', 'pi-bot-setup-picture'), img = el('img');
+                img.src = draft.picture; img.alt = translateUi("新头像图片"); preview.append(img);
+                const back = el('button', 'pi-bot-chip', translateUi("改用表情")); back.type = 'button'; back.dataset.setupPicture = 'clear';
+                back.addEventListener('click', () => { draft.picture = null; draft.pictureSaved = false; render(); panel.querySelector('[data-setup-field="avatar"]')?.focus(); });
+                body.append(preview, back);
+            } else body.append(input);
+            if (field.key === 'avatar' && uploadPicture) {
+                const file = el('input'); file.type = 'file'; file.accept = 'image/png,image/jpeg,image/webp,image/gif'; file.hidden = true; file.dataset.setupPictureFile = '';
+                const pick = el('button', 'pi-bot-chip', draft.picture ? translateUi("换一张") : translateUi("上传图片")); pick.type = 'button'; pick.dataset.setupPicture = 'pick';
+                pick.addEventListener('click', () => file.click());
+                file.addEventListener('change', async () => {
+                    const chosen = file.files?.[0]; file.value = '';
+                    if (!chosen || !current) return;
+                    const target = current;
+                    try {
+                        const dataUrl = await pictureData(chosen);
+                        if (current !== target) return;
+                        draft.picture = dataUrl; draft.pictureSaved = false; use(true); target.error = '';
+                    } catch (error) { if (current === target) target.error = error.message; }
+                    if (current === target) render();
+                });
+                body.append(pick, file);
+            }
+            row.append(caption, body);
+            if (field.kept) {
+                const hint = el('div', 'pi-bot-setup-current');
+                const now = el('span', null, translateUi("现在："));
+                now.append(field.key === 'avatar' ? face(field.kept, 'sm') : el('strong', null, field.kept.name || ''));
+                const choice = el('label', 'pi-bot-setup-use'); toggle = el('input'); toggle.type = 'checkbox'; toggle.dataset.setupUse = field.key;
+                toggle.addEventListener('change', () => use(toggle.checked));
+                choice.append(toggle, el('span', null, translateUi("改成上面的")));
+                hint.append(now, choice);
+                row.append(hint);
+            }
+            use(field.use);
+            return row;
+        }
+
+        function render() {
+            const { event, args, draft } = current;
+            const pictured = Boolean(draft.picture && draft.fields.find(field => field.key === 'avatar')?.use);
+            const nothing = !draft.fields.length && !draft.facts.length;
+            const head = el('header', 'pi-bot-setup-head');
+            head.append(currentFace(), el('strong', null, nothing && args.finish === true ? translateUi("我们算是认识啦")
+                : nothing ? translateUi("这些已经是现在的设置了") : translateUi("这样设置可以吗？")));
+            const form = el('div', 'pi-bot-setup-fields');
+            for (const field of draft.fields) form.append(fieldRow(field, draft));
+            if (draft.facts.length) {
                 const group = el('fieldset', 'pi-bot-setup-about');
                 group.append(el('legend', null, translateUi("记住关于你的")));
-                for (const item of args.aboutUser) {
-                    if (typeof item !== 'string') continue;
+                for (const fact of draft.facts) {
                     const option = el('label', 'pi-bot-setup-fact'), box = el('input');
-                    box.type = 'checkbox'; box.checked = true; box.value = item; box.dataset.setupFact = '';
-                    option.append(box, el('span', null, item));
+                    box.type = 'checkbox'; box.checked = fact.checked; box.value = fact.text; box.dataset.setupFact = '';
+                    box.addEventListener('change', () => { fact.checked = box.checked; });
+                    option.append(box, el('span', null, fact.text));
                     group.append(option);
                 }
                 form.append(group);
@@ -533,9 +634,12 @@
             const foot = el('footer', 'pi-bot-setup-foot');
             const note = el('p', 'pi-bot-setup-note'); note.setAttribute('role', 'status'); note.setAttribute('aria-live', 'polite');
             if (current.error) { note.textContent = current.error; note.classList.add('is-error'); }
+            else if (pictured) note.textContent = translateUi("图片会在保存时上传");
             const later = el('button', 'pi-bot-setup-later', translateUi("先不改")); later.type = 'button';
-            const confirm = el('button', 'pi-bot-primary pi-bot-setup-save', current.saving ? translateUi("正在保存…") : translateUi("保存")); confirm.type = 'button';
+            const confirm = el('button', 'pi-bot-primary pi-bot-setup-save', current.saving ? translateUi("正在保存…") : nothing && args.finish !== true ? translateUi("好") : translateUi("保存"));
+            confirm.type = 'button';
             later.disabled = confirm.disabled = Boolean(current.saving);
+            later.hidden = nothing && args.finish !== true;
             later.addEventListener('click', () => { respond({ id: event.id, value: DECLINE }); hide(); });
             confirm.addEventListener('click', () => void submit());
             foot.append(note, later, confirm);
@@ -543,37 +647,39 @@
             panel.hidden = false;
         }
 
-        function collect() {
+        // The user's choices, from the draft: a field left unticked or emptied is not saved (null).
+        function collect(draft) {
             const changes = {};
-            for (const [key] of SETUP_FIELDS) {
-                const input = panel.querySelector(`[data-setup-field="${key}"]`);
-                if (input) changes[key] = input.value.trim() || null;
-            }
-            const facts = [...panel.querySelectorAll('[data-setup-fact]')];
-            if (facts.length) {
-                const kept = facts.filter(box => box.checked).map(box => box.value);
+            for (const field of draft.fields) changes[field.key] = field.use && field.value.trim() ? field.value.trim() : null;
+            const picture = Boolean(draft.picture && draft.fields.find(field => field.key === 'avatar')?.use);
+            if (picture) changes.avatar = null;
+            if (draft.facts.length) {
+                const kept = draft.facts.filter(fact => fact.checked).map(fact => fact.text);
                 changes.aboutUser = kept.length ? kept : null;
             }
             if (current.args.finish === true) changes.finish = true;
-            return changes;
+            return { changes, picture };
         }
 
         async function submit() {
             if (!current || current.saving) return;
-            const changes = collect();
-            const meaningful = Object.entries(changes).some(([key, value]) => key !== 'finish' && value !== null);
-            if (!meaningful && changes.finish !== true) { current.error = translateUi("没有要保存的内容，可以选“先不改”"); render(); return; }
-            const target = current;
+            const target = current, draft = target.draft;
+            const { changes, picture } = collect(draft);
+            const meaningful = picture || Object.entries(changes).some(([key, value]) => key !== 'finish' && value !== null);
+            // Nothing proposed differs from what the Bot already has: answer without saving.
+            if (!draft.fields.length && !draft.facts.length && changes.finish !== true) { respond({ id: target.event.id, value: SAVE }); hide(); return; }
+            if (!meaningful && changes.finish !== true) { target.error = translateUi("没有要保存的内容，可以选“先不改”"); render(); return; }
             target.saving = true; target.error = ''; render();
             try {
-                await save(target.call.id, changes);
+                if (picture && !draft.pictureSaved) { await uploadPicture(draft.picture); draft.pictureSaved = true; }
+                await save(target.call.id, changes, { picture });
                 if (current !== target) return;
                 respond({ id: target.event.id, value: SAVE });
                 hide();
             } catch (error) {
                 if (current !== target) return;
                 target.saving = false;
-                target.error = error.status === 409 ? translateUi("设置刚刚有变化，请再点一次保存") : error.message;
+                target.error = error.status === 409 ? translateUi("设置刚刚有变化，你的修改还在，请再点一次保存") : error.message;
                 render();
             }
         }
@@ -588,7 +694,9 @@
             if (!call) { if (retries++ < 20) retry = setTimeout(() => sync(pending, connected), 150); return; }
             retries = 0;
             if (current?.event.id === event.id) return;
-            current = { event, call, args: call.args || {}, saving: false, error: '' };
+            serial += 1;
+            const args = call.args || {};
+            current = { event, call, args, draft: draftFor(args), saving: false, error: '' };
             render(); changed?.();
         }
 

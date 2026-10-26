@@ -3,9 +3,10 @@ const { createHash } = require('node:crypto');
 // The window notebook ("我记着的事", D-028): decisions, commitments, open questions,
 // window preferences and key references of one Bot window. It lives only in the window's
 // native session entries and is recomputed by replaying the active branch:
-//   - window_note tool results: details.pivaneLedger = { v: 1, ops }
+//   - window_note tool results written before 2026-10-26: details.pivaneLedger = { v: 1, ops }
+//     (the tool now writes a custom entry, below, the moment it runs)
 //   - Bot compactions: details.pivaneBot.ledger = { ops, snapshot } (ops applied, then the full state)
-//   - edits from the notebook panel: custom entries `pivane-bot-ledger` with { v: 1, ops }
+//   - edits from the notebook panel and window_note: custom entries `pivane-bot-ledger` with { v: 1, ops }
 //   - each generation's seed: custom entry `pivane-bot-ledger` with { v: 1, snapshot }
 // A snapshot replaces the state; operations apply in branch order. Deleting leaves a tombstone
 // (kind, source and a hash of the text, so a summary does not bring the note back); at most
@@ -27,6 +28,7 @@ const MAX_OPS = 64;
 const ID = /^n[1-9]\d{0,6}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?$/;
 
+const BAD_DUE = 'Invalid due date: use YYYY-MM-DD or YYYY-MM-DDTHH:MM with a UTC offset, or leave it out';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const fail = message => { throw Object.assign(new Error(message), { code: 'LEDGER_INVALID' }); };
 
@@ -115,11 +117,11 @@ function normalizeOp(raw, state, { at, by, source = null } = {}) {
     if (raw.op === 'add') {
         if (!KINDS.includes(raw.kind)) fail('Unknown notebook kind');
         const text = cleanText(raw.text); if (!text) fail(`Note text must be 1-${MAX_TEXT} characters`);
-        const due = validDate(raw.due); if (due === undefined) fail('Invalid due date');
+        const due = validDate(raw.due); if (due === undefined) fail(BAD_DUE);
         let supersedes = null;
         if (raw.supersedes !== undefined && raw.supersedes !== null) {
             const target = state.items.find(item => item.id === raw.supersedes);
-            if (!target || ['deleted', 'superseded'].includes(target.status)) fail(`No current note ${raw.supersedes}`);
+            if (!target || ['deleted', 'superseded'].includes(target.status)) fail(`No current note ${raw.supersedes} to replace; leave replaces out for a new note`);
             supersedes = target.id;
         }
         if (state.items.filter(item => item.status !== 'deleted').length >= MAX_ITEMS) fail('The notebook is full');
@@ -140,7 +142,7 @@ function normalizeOp(raw, state, { at, by, source = null } = {}) {
     const change = {};
     if (raw.text !== undefined) { const text = cleanText(raw.text); if (!text) fail(`Note text must be 1-${MAX_TEXT} characters`); change.text = text; }
     if (raw.kind !== undefined) { if (!KINDS.includes(raw.kind)) fail('Unknown notebook kind'); change.kind = raw.kind; }
-    if (raw.due !== undefined) { const due = validDate(raw.due); if (due === undefined) fail('Invalid due date'); change.due = due; }
+    if (raw.due !== undefined) { const due = validDate(raw.due); if (due === undefined) fail(BAD_DUE); change.due = due; }
     if (!Object.keys(change).length) fail('Nothing to update');
     if (Object.entries(change).every(([key, value]) => target[key] === value)) fail(`Note ${raw.id} already says that`);
     return { op: 'update', id: target.id, ...change, at: time, by, source: origin };
