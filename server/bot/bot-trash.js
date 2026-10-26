@@ -71,8 +71,11 @@ function createTrashBlockers({ cron, deferred, learning }) {
         if (!cron?.db || cron.error) return [{ code: 'BOT_ACTIVITY_UNAVAILABLE', message: 'Scheduled task checks are not ready; try again shortly' }];
         if (cron.busy || cron.mutating) return [{ code: 'BOT_WORK_PENDING', message: 'Wait for scheduled task operations to finish' }];
         const sameThread = target => sessionRefs.some(ref => ref.cwd === target?.cwd && ref.sessionId === target?.sessionId);
-        const scheduled = cron.db.jobs().some(job => !job.deleted && job.enabled
-            && (job.target?.kind === 'profile' && job.target.profileId === profileId || job.target?.kind === 'thread' && sameThread(job.target)));
+        const sameTarget = target => target?.kind === 'profile' && target.profileId === profileId
+            || target?.kind === 'thread' && sameThread(target);
+        const accepted = cron.db.activeRuns().some(run => sameTarget(run.job?.target) || sameThread(run.target));
+        if (accepted) return [{ code: 'BOT_HAS_SCHEDULES', message: 'Wait for accepted scheduled work to finish before moving this Bot to trash' }];
+        const scheduled = cron.db.jobs().some(job => !job.deleted && job.enabled && sameTarget(job.target));
         if (scheduled) return [{ code: 'BOT_HAS_SCHEDULES', message: 'Disable or cancel this Bot scheduled tasks before moving it to trash' }];
         deferred.assertHealthy();
         if (deferred.jobs.some(job => ['scheduled', 'waiting', 'paused', 'dispatching', 'failed', 'expired', 'uncertain'].includes(job.status)
