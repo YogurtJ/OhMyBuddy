@@ -15,8 +15,6 @@
     const THINKING = { off: () => translateUi("不启用"), minimal: () => translateUi("极简"), low: () => translateUi("低"), medium: () => translateUi("中"),
         high: () => translateUi("高"), xhigh: () => translateUi("极高"), max: () => translateUi("最大") };
     const modelKey = model => model ? `${model.provider}\u0000${model.id}` : '';
-    // The same quick faces as the identity page; any emoji can be typed, or a picture uploaded.
-    const EMOJIS = '🍀 🌿 🦉 🧠 🔭 📚 ✍️ 🧪 💡 🎯 🛠️ 🐱 🦊 🌙 ⭐ 🤖'.split(' ');
 
     let dialog = null;
 
@@ -176,12 +174,6 @@
                 back.hidden = !picture;
                 pick.textContent = picture || bot.avatar?.kind === 'image' ? translateUi("换一张图片") : translateUi("上传图片");
             };
-            const grid = el('div', 'pi-bot-sheet-emojis'); grid.setAttribute('role', 'group'); grid.setAttribute('aria-label', translateUi("选一个表情"));
-            for (const emoji of EMOJIS) {
-                const choice = button('pi-bot-sheet-emoji-choice', emoji); choice.dataset.sheetEmoji = emoji;
-                choice.addEventListener('click', () => { picture = null; avatar.value = emoji; avatar.dispatchEvent(new Event('input', { bubbles: true })); });
-                grid.append(choice);
-            }
             const file = el('input'); file.type = 'file'; file.accept = 'image/png,image/jpeg,image/webp,image/gif'; file.hidden = true; file.dataset.sheetPictureFile = '';
             const pick = button('pi-bot-chip'); pick.dataset.sheetPicture = 'pick';
             pick.addEventListener('click', () => file.click());
@@ -210,7 +202,7 @@
             const avatarBox = el('div', 'pi-bot-sheet-avatar');
             const avatarSide = el('div', 'pi-bot-sheet-avatar-side');
             if (facePresets) avatarSide.append(facePresets);
-            avatarSide.append(grid, actions);
+            avatarSide.append(actions);
             avatarBox.append(preview, avatarSide);
             const identity = el('div', 'pi-bot-sheet-identity');
             identity.append(avatarBox, field(translateUi("名字"), name));

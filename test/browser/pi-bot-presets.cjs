@@ -71,8 +71,11 @@ const BOT = '11111111-1111-4111-8111-111111111111';
             if (process.env.PI_BOT_EVIDENCE) await page.screenshot({ path: path.join(process.env.PI_BOT_EVIDENCE, `preset-settings-${width}.png`) });
             await sheet().locator('.pi-bot-sheet-save').click(); await page.waitForFunction(() => !document.querySelector('.pi-bot-sheet[open]'));
             assert.deepEqual(await page.evaluate(() => x.writes.at(-1).changes), { avatar: { kind: 'preset', id: 'pivane-bean' } });
-            // Emoji and preset never survive as two competing choices.
-            await page.evaluate(() => x.open()); await sheet().locator('[data-sheet-emoji="🦊"]').click();
+            // Custom emoji stays available without competing with the three designed characters.
+            await page.evaluate(() => x.open());
+            assert.equal(await sheet().locator('[data-sheet-emoji]').count(), 0);
+            assert.equal(await sheet().locator('[data-avatar-preset]').count(), 3);
+            await sheet().locator('.pi-bot-sheet-emoji').fill('🦊');
             assert.equal(await sheet().locator('[data-avatar-preset][aria-pressed="true"]').count(), 0);
             await sheet().locator('.pi-bot-sheet-save').click(); await page.waitForFunction(() => !document.querySelector('.pi-bot-sheet[open]'));
             assert.deepEqual(await page.evaluate(() => x.profile.avatar), { kind: 'emoji', value: '🦊' });

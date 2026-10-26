@@ -109,7 +109,7 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                 }
                 if (pathname === `/api/pi/bots/${BOT}/settings`) {
                     settingsReads++;
-                    return route.fulfill({ json: { revision, bot: { id: BOT, name, avatar: { kind: 'emoji', value: face }, soul, bot: bot().bot },
+                    return route.fulfill({ json: { revision, bot: { id: BOT, name, avatar: bot().avatar, soul, bot: bot().bot },
                         models: { defaults: { provider: 'fixture', modelId: 'small', thinkingLevel: 'medium' }, models: [
                             { provider: 'fixture', id: 'small', name: 'Small', thinkingLevels: [] },
                             { provider: 'fixture', id: 'large', name: 'Large', thinkingLevels: ['low', 'high'] }] } } });
@@ -321,6 +321,60 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                 await page.evaluate(() => window.dispatchEvent(new Event('workspace:agent-profiles-changed')));
                 await page.locator('#pi-bot-header .pi-preset-svg[data-preset="pivane-bean"]').waitFor();
                 assert.equal(await page.locator('.pi-bot-rail [data-avatar-live="true"]').count(), 0);
+                // The identity overlays the scroller: it never consumes a full-width header row.
+                const geometry = await page.evaluate(() => {
+                    const viewport = document.querySelector('.pi-transcript-viewport').getBoundingClientRect();
+                    const shell = document.querySelector('.pi-transcript-shell').getBoundingClientRect();
+                    const face = document.querySelector('.pi-bot-identity > .pi-bot-face').getBoundingClientRect();
+                    return { top: viewport.top - shell.top, faceTop: face.top - viewport.top };
+                });
+                assert.ok(Math.abs(geometry.top) < 2, 'messages use the full height of the chat column');
+                assert.ok(geometry.faceTop >= 0 && geometry.faceTop < 8, 'the avatar sits at the top of the conversation');
+                // A long synthetic reading sample checks scrolling and pointer access beside the badge.
+                await page.evaluate(() => {
+                    const article = document.createElement('article'); article.id = 'header-scroll-probe'; article.className = 'pi-message assistant';
+                    const body = document.createElement('div'); body.className = 'pi-message-body';
+                    const text = document.createElement('div'); text.className = 'pi-markdown';
+                    for (let i = 0; i < 24; i++) {
+                        const p = document.createElement('p');
+                        p.textContent = i % 2 ? '头像留在聊天上方，翻看之前说过的话时，两侧的内容仍然沿着阅读区域自然向上滚动。'
+                            : '把这周的安排慢慢理清：周三整理笔记，周五留一点时间回顾，周末带上相机出去走走。';
+                        if (i === 12) {
+                            const link = document.createElement('a'); link.href = '#probe'; link.id = 'header-probe-link'; link.textContent = '查看周末的安排';
+                            link.addEventListener('click', event => { event.preventDefault(); link.dataset.clicked = 'true'; }); p.prepend(link, document.createElement('br'));
+                        }
+                        text.append(p);
+                    }
+                    body.append(text); article.append(body); document.querySelector('#pi-transcript-content').append(article);
+                });
+                const originalTheme = await page.locator('html').getAttribute('data-theme');
+                const originalViewport = page.viewportSize();
+                for (const variant of [{ width, theme: 'daylight' }, { width, theme: 'dark' }, ...(width < 700 ? [{ width: 320, theme: 'daylight' }] : [])]) {
+                    await page.setViewportSize({ width: variant.width, height: 860 });
+                    await page.locator('html').evaluate((node, theme) => node.dataset.theme = theme, variant.theme);
+                    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+                    const point = await page.evaluate(() => {
+                        const scroller = document.querySelector('#pi-transcript'), link = document.querySelector('#header-probe-link');
+                        scroller.scrollTop += link.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 70;
+                        const box = link.getBoundingClientRect();
+                        return { x: box.x + box.width / 2, y: box.y + box.height / 2, relativeTop: box.y - scroller.getBoundingClientRect().top };
+                    });
+                    assert.ok(Math.abs(point.relativeTop - 70) < 2, 'the link reaches the floating identity rather than staying below a header');
+                    await page.mouse.click(point.x, point.y);
+                    assert.equal(await page.locator('#header-probe-link').getAttribute('data-clicked'), 'true', 'the floating header does not intercept links beside it');
+                    await page.locator('#header-probe-link').evaluate(node => delete node.dataset.clicked);
+                    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'the badge fits even a narrow phone');
+                    if (evidence) await page.screenshot({ path: path.join(evidence, `bot-floating-${variant.theme}-${variant.width}.png`) });
+                }
+                await page.setViewportSize(originalViewport);
+                await page.locator('html').evaluate((node, theme) => node.dataset.theme = theme, originalTheme);
+                await page.locator('#header-scroll-probe').evaluate(node => node.remove());
+                // Clicking the floating face, and keyboard activation of its button, still open settings.
+                await page.locator('.pi-bot-identity > .pi-bot-face').click();
+                await page.locator('.pi-bot-sheet[open]').waitFor();
+                await page.locator('.pi-bot-sheet-close').click();
+                await page.locator('.pi-bot-identity').focus(); await page.keyboard.press('Enter');
+                await page.locator('.pi-bot-sheet[open]').waitFor(); await page.locator('.pi-bot-sheet-close').click();
                 const pose = () => page.locator('#pi-bot-header .pi-bot-identity > .pi-bot-face').getAttribute('data-avatar-state');
                 socket.send(JSON.stringify({ type: 'agent_start' }));
                 await page.waitForFunction(() => document.querySelector('.pi-bot-identity > .pi-bot-face')?.dataset.avatarState === 'working');
@@ -328,6 +382,7 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                 assert.equal(await pose(), 'working', 'a recoverable tool error does not fail the turn');
                 socket.send(JSON.stringify({ type: 'extension_ui_request', id: 'pose-wait', method: 'confirm', title: APPROVAL, message: `command #${'4'.repeat(16)}\n\npwd` }));
                 await page.waitForFunction(() => document.querySelector('.pi-bot-identity > .pi-bot-face')?.dataset.avatarState === 'waiting');
+                assert.equal(await page.locator('.pi-bot-status').evaluate(node => node.classList.contains('is-quiet')), false, 'waiting keeps its status text');
                 socket.send(JSON.stringify({ type: 'message_end', message: { role: 'assistant', content: [], stopReason: 'stop', timestamp: Date.now() } }));
                 socket.send(JSON.stringify({ type: 'agent_settled' }));
                 await page.waitForFunction(() => document.querySelector('.pi-bot-identity > .pi-bot-face')?.dataset.avatarState === 'waiting');
@@ -353,6 +408,8 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                 socket.send(JSON.stringify({ type: 'gateway_window_rotated', profileId: BOT, windowId: MAIN, generation: 1 }));
                 await socket.close({ code: 4007, reason: 'Window rotated' });
                 await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-status')?.dataset.state === 'connected' && !document.querySelector('.pi-message.assistant'));
+                assert.equal(await page.locator('.pi-bot-status').evaluate(node => node.classList.contains('is-quiet')), true, 'idle uses the compact dot while keeping an accessible label');
+                assert.ok(await page.locator('.pi-bot-status').getAttribute('aria-label'));
                 await page.waitForTimeout(2200); // past the ordinary reconnect delay
                 assert.deepEqual(opened, ['gen-0', 'gen-0', 'gen-1']);
                 assert.ok((await page.evaluate(() => location.hash)).includes(`windowId=${MAIN}`), 'the route names the window, not the session');
@@ -418,6 +475,7 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                 reconnectHistory = null;
 
                 // 4. Settings: one sheet; only what changed is saved, and a conflict keeps the edits.
+                const settingsReadsBeforeConflict = settingsReads;
                 if (width < 700) {
                     await page.locator('#pi-bot-header .pi-bot-menu').click();
                     await page.locator('#pi-session-pane.open .pi-bot-settings').waitFor();
@@ -436,7 +494,7 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                 if (evidence) { await page.waitForTimeout(250); await page.screenshot({ path: path.join(evidence, `bot-settings-${width}.png`) }); }
                 await sheet.locator('.pi-bot-sheet-save').click();
                 await page.waitForFunction(() => /别处改过/.test(document.querySelector('.pi-bot-sheet-status')?.textContent || ''));
-                assert.equal(settingsReads, 2, 'the conflict rereads the saved settings');
+                assert.equal(settingsReads, settingsReadsBeforeConflict + 2, 'the conflict rereads the saved settings');
                 assert.equal(await sheet.locator('.pi-bot-sheet-preset input:checked').evaluate(input => input.value), 'balanced', 'the edits stay');
                 assert.equal(await sheet.locator('select').first().evaluate(select => select.selectedOptions[0].textContent), 'Large');
                 assert.equal(await sheet.locator('textarea').nth(1).inputValue(), '活泼一点，多用表情。', 'untouched fields follow the newer saved value');

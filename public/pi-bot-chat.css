@@ -1,21 +1,42 @@
 /* Bot conversation presentation. Pi Agent keeps its existing reading layout. */
 #chat-tab.pi-bot-mode > .pi-command-bar { display: none; }
-#chat-tab.pi-bot-mode .pi-transcript-shell > #pi-bot-header {
-    display: grid; grid-template-columns: 48px minmax(0,1fr) 48px; align-items: center;
-    flex: 0 0 auto; gap: 12px; padding: 18px max(22px,calc((100% - 800px)/2));
-    border-bottom: 1px solid var(--line); background: var(--surface-transcript); z-index: 3;
+/* The identity floats over messages; only its controls accept clicks. */
+#chat-tab.pi-bot-mode .pi-transcript-viewport > #pi-bot-header {
+    position: absolute; inset: 3px 0 auto; z-index: 6; pointer-events: none;
+    display: grid; grid-template-columns: 44px minmax(0,1fr) 44px; align-items: start;
+    gap: 8px; padding: 0 18px; border: 0; background: transparent;
 }
-#chat-tab.pi-bot-mode.pi-bot-welcome .pi-transcript-shell > #pi-bot-header { display: none; }
-.pi-bot-identity { grid-column: 2; display: grid; justify-items: center; gap: 5px; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--text-main); cursor: pointer; font: inherit; }
-.pi-bot-identity > .pi-bot-face.is-xl { width: 72px; height: 72px; border-radius: 28%; }
-.pi-bot-identity .pi-bot-who { justify-items: center; max-width: 100%; }
-.pi-bot-identity .pi-bot-who strong { font-size: 1rem; max-width: 100%; }
-.pi-bot-identity .pi-bot-status { max-width: 100%; font-size: .73rem; }
-.pi-bot-identity:focus-visible { outline: 2px solid var(--primary,var(--green)); outline-offset: 5px; border-radius: 12px; }
-#chat-tab.pi-bot-mode .pi-bot-notes-button { grid-column: 3; grid-row: 1; margin: 0; }
-#chat-tab.pi-bot-mode .pi-bot-menu { grid-column: 1; grid-row: 1; }
+#chat-tab.pi-bot-mode.pi-bot-welcome .pi-transcript-viewport > #pi-bot-header { display: none; }
+/* The mask gradually releases the blur as older messages pass the top edge. */
+#chat-tab.pi-bot-mode:not(.pi-bot-welcome) .pi-transcript-viewport::after {
+    content: ''; position: absolute; inset: 0 0 auto; height: 64px; z-index: 3; pointer-events: none;
+    background: linear-gradient(var(--surface-transcript), transparent);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    -webkit-mask-image: linear-gradient(#000, transparent); mask-image: linear-gradient(#000, transparent);
+}
+.pi-bot-identity {
+    grid-column: 2; justify-self: center; display: grid; justify-items: center; gap: 0; min-width: 0;
+    width: max-content; max-width: min(320px,100%); padding: 0; border: 0; background: transparent;
+    color: var(--text-main); cursor: pointer; font: inherit; pointer-events: none;
+}
+.pi-bot-identity > .pi-bot-face.is-xl { width: 72px; height: 72px; border-radius: 28%; pointer-events: auto; }
+.pi-bot-identity .pi-bot-who {
+    display: flex; align-items: center; gap: 7px; max-width: 100%; min-height: 34px; margin-top: -3px; padding: 5px 12px;
+    border-radius: 999px; background: color-mix(in srgb,var(--surface-transcript) 94%,transparent);
+    box-shadow: 0 2px 12px color-mix(in srgb,var(--text-main) 10%,transparent);
+    -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); pointer-events: auto;
+}
+.pi-bot-identity .pi-bot-who strong { min-width: 0; font-size: .9rem; font-weight: 600; }
+.pi-bot-identity .pi-bot-status { flex: 0 1 auto; min-width: 0; max-width: 150px; font-size: .72rem; }
+.pi-bot-identity .pi-bot-status.is-quiet { flex: none; width: 7px; gap: 0; font-size: 0; }
+.pi-bot-identity:focus-visible { outline: 2px solid var(--primary,var(--green)); outline-offset: 4px; border-radius: 18px; }
+#chat-tab.pi-bot-mode .pi-bot-notes-button { grid-column: 3; grid-row: 1; margin: 7px 0 0; pointer-events: auto; background: color-mix(in srgb,var(--surface-transcript) 82%,transparent); }
+#chat-tab.pi-bot-mode .pi-bot-menu { grid-column: 1; grid-row: 1; margin-top: 7px; pointer-events: auto; background: color-mix(in srgb,var(--surface-transcript) 82%,transparent); }
 #chat-tab.pi-bot-mode .pi-bot-identity { grid-row: 1; }
+/* Initial clearance belongs to the scroller so it also covers older-chat controls.
+   It scrolls away with the messages, never taking a fixed header row. */
 #chat-tab.pi-bot-mode .pi-transcript-content { padding-top: 18px; }
+#chat-tab.pi-bot-mode .pi-transcript { padding-top: 104px; scroll-padding-top: 122px; }
 #chat-tab.pi-bot-mode .pi-message:is(.user,.assistant) { margin-top: 0; margin-bottom: 18px; max-width: 800px; }
 #chat-tab.pi-bot-mode .pi-message.assistant > header { display: none !important; }
 #chat-tab.pi-bot-mode .pi-message.user > header { position: relative; justify-content: flex-end; min-height: 0; margin: 0 0 5px; }
@@ -55,8 +76,10 @@
 .pi-bot-setup-field.is-avatar .pi-avatar-presets { flex-basis: 100%; }
 .pi-bot-notes-about { flex-wrap: wrap; }
 @media (max-width: 900px) {
-    #chat-tab.pi-bot-mode .pi-transcript-shell > #pi-bot-header { gap: 6px; padding: 10px 12px 12px; }
+    #chat-tab.pi-bot-mode .pi-transcript-viewport > #pi-bot-header { gap: 6px; padding-inline: 12px; }
+    #chat-tab.pi-bot-mode .pi-transcript-viewport::after { height: 52px; }
     .pi-bot-identity > .pi-bot-face.is-xl { width: 64px; height: 64px; }
+    #chat-tab.pi-bot-mode .pi-transcript { padding-top: 94px; scroll-padding-top: 112px; }
     #chat-tab.pi-bot-mode .pi-bot-menu { width: 44px; height: 44px; }
     #chat-tab.pi-bot-mode .pi-message.assistant > .pi-message-body { padding: 12px 15px; max-width: 96%; }
     #chat-tab.pi-bot-mode .pi-message.user .pi-message-body { max-width: 84%; padding: 11px 15px; }
