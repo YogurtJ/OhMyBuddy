@@ -206,6 +206,8 @@
 
 `GET /status.agentProfiles=true` 表示可选助手档案接口可用。`GET /profiles?cwd` 返回 `profiles`（不含回收站身份）、按移入时间从新到旧的 `trash:[{id,name,description,avatar,trashedAt}]`、注册表修订、`profileRevisions`（含回收站的所有档案ID到自身修订的映射）和所选项目默认身份；`PUT /profiles` 接受 `{expectedRevision,profile}` 创建或更新档案，回收站身份拒绝更新（409），须先恢复；`PUT /profiles/default` 接受 `{cwd,profileId,expectedRevision}`，`profileId:null` 清除项目默认身份，仅接受已启用且不在回收站的身份。现有 `POST /sessions` 的可选 `profileId` 省略时使用项目默认，显式 null 创建无档案线程。
 
+`profile.avatar` 是头像选择的唯一持久化字段，可省略（更新时保留原值）、为 null、`{kind:'emoji',value}`、`{kind:'image',version}` 或 `{kind:'preset',id}`。预设新选择只接受共享内置目录中的 `pivane-pebble`（小石）、`pivane-bean`（豆豆）、`pivane-tile`（方方）；预设对象只能含 `kind`、`id`，不接受路径、SVG 正文或混合字段。读取容忍符合 `^pivane-[a-z0-9]+(?:-[a-z0-9]+)*$` 且至多 80 字符的未知 ID，资源暂缺时仍保留引用；保存同一档案的未变未知引用或仅修改其他字段也保留，但不能新选未知 ID。图片仍只接受本档案已上传的当前 PNG 版本，不因预设支持扩大上传格式。列表、回收站、恢复和 Bot 使用同一字段，既有头像不自动替换。
+
 - `POST /profiles/:id/trash`：`{expectedRevision}`，原子保存 `trashedAt`（ISO）、`trashedEnabled`（原启用状态）和 `enabled:false`，同时清除所有指向该身份的项目默认值；返回 `{ok:true,profile,revision}`。
 - `POST /profiles/:id/restore`：`{expectedRevision}`，移除回收站元数据并恢复原启用状态，原本停用的身份仍停用，不重设项目默认值；返回 `{ok:true,profile,revision}`。
 
@@ -254,7 +256,7 @@
 - `GET /bots/readiness` → `{models:<可用聊天模型数>|null,error?}`；null 表示无法确定，不等于没有模型。
 - `POST /bots` `{expectedRevision,language?}` 创建 Bot、工作目录 `<默认项目>/PivaneBots/bot-<ID前8位>/` 与主聊天，返回 `{ok,revision,bot,window}`。最多 50 个 Bot，且计入档案 50 个上限。
 - `GET /bots/:id/settings` → `{revision,bot:{id,name,avatar,soul,bot},models:null|{defaults,models:[{provider,id,name,thinkingLevels}]},modelsError?}`；模型目录按该 Bot 工作目录读取，失败时 `models:null`。
-- `PATCH /bots/:id` `{expectedRevision,changes:{name?,description?,soul?,avatar?,bot?}}`；`bot` 只接受 `job`、`model`（null 为跟随默认）、`permissions:{preset}`、`notify`、`order`。图片头像需先经头像接口上传。仅在访谈阶段为 `greeting|interview` 时，将实际改动的名字、头像、职责、性格和做事方式对应步骤记为 `done`（旧版 `identity:'done'` 已完成名字和头像）；上传图片后再通过 PATCH 保存该图片头像，即使版本未变，也计为已选头像，并在 `greeting|interview` 阶段完成头像步骤。
+- `PATCH /bots/:id` `{expectedRevision,changes:{name?,description?,soul?,avatar?,bot?}}`；`avatar` 沿用上述 `profile.avatar` 契约；`bot` 只接受 `job`、`model`（null 为跟随默认）、`permissions:{preset}`、`notify`、`order`。图片头像需先经头像接口上传。仅在访谈阶段为 `greeting|interview` 时，将实际改动的名字、头像、职责、性格和做事方式对应步骤记为 `done`（旧版 `identity:'done'` 已完成名字和头像）；上传图片后再通过 PATCH 保存该图片头像，即使版本未变，也计为已选头像，并在 `greeting|interview` 阶段完成头像步骤。
 - `POST /bots/:id/main-window` 幂等补建或采用已有原生标记的主聊天。
 - `GET /bots/:id/windows/:windowId/session` 解析窗口当前一代并返回 `{window,session}`（会话行同 `/sessions`）；网页据此打开原生会话。窗口有中断的换代记录时先在档案预占和旧会话编辑预占内按原生证据完成恢复，再返回；只有采用新一代时才停止旧会话的运行实例，并先向已连接页面发送 `gateway_reconnect`；放弃时旧会话保持运行。暂时无法完成恢复（例如另一换代正在进行）时返回 409 `code:'BOT_WINDOW_ROTATING'`。
 - `GET /bots/:id/windows/:windowId/generations` → `{window,generations:[{generation,startedAt,endedAt,reason,current}]}`。
@@ -265,11 +267,13 @@
 - `POST /bots/:id/onboarding` `{expectedRevision,action:'start'|'skip'|'restart'}`；restart 清空访谈步骤并回到 `interview`，保留已选的名字和头像，包括从逐项步骤或旧版 `identity` 步骤推断出的选择。
 - `POST /bots/:id/setup` `{expectedRevision,windowId,toolCallId,changes?,picture?,later?}` 回答模型 `bot_setup_propose` 提出的设置卡：该调用必须仍在窗口当前一代中等待回答。`changes` 省略时采用提议，只能包含卡上提出的 `name|avatar|job|personality|workStyle|aboutUser|finish` 字段，可编辑值；null 或清空后的字段不保存，空白的“关于你”条目忽略。提议本身的空值也视为未提出。`workStyle:'free'|'balanced'|'ask'` 对应 `permissions.preset`，按此顺序越来越谨慎；卡片只能保持当前方式或变得更谨慎，更自由的值返回 409 `code:'BOT_WORK_STYLE_FREER'`，需在 Bot 设置中修改。
 
-  `picture` 为刚经头像接口上传的图片版本（64 位小写十六进制，即头像接口返回的 `profile.avatar.version`），表示卡上的头像改用这张图片：卡上必须提出过头像；档案头像必须仍是这张图片，否则 409 `code:'BOT_PICTURE_CHANGED'`。保存名字或头像时分别记为已选。`later` 只接受 `true`，不能与 `changes` 或 `picture` 同传；不保存卡片提出的值，只将其中尚未处理的访谈步骤记为 `skipped`；已完成或跳过的步骤保持原状。正常保存时，提出且保存的字段对应步骤记为 `done`；未选中或清空的项，若尚未处理则记为 `skipped`。名字、表情头像、职责、性格、做事方式的提议值与当前值相同也记为 `done`（包括该字段未包含在编辑结果中时）；只要卡上提出了访谈字段，接受空的编辑结果 `changes:{}`。`finish:true` 可结束访谈。
+  设置提议和确认的 `avatar` 可为旧版 emoji 字符串，或 `{kind:'preset',id}`（只接受上述三个已知 ID，拒绝额外字段）；确认时可在两种形式之间切换。emoji 字符串保存为 `profile.avatar:{kind:'emoji',value}`，预设对象直接保存为 `profile.avatar`。已选预设视为已定头像，重新访谈及仅修改名字／性格时保留。
+
+  `picture` 为刚经头像接口上传的图片版本（64 位小写十六进制，即头像接口返回的 `profile.avatar.version`），表示卡上的头像改用这张图片：卡上必须提出过头像；档案头像必须仍是这张图片，否则 409 `code:'BOT_PICTURE_CHANGED'`。保存名字或头像时分别记为已选。`later` 只接受 `true`，不能与 `changes` 或 `picture` 同传；不保存卡片提出的值，只将其中尚未处理的访谈步骤记为 `skipped`；已完成或跳过的步骤保持原状。正常保存时，提出且保存的字段对应步骤记为 `done`；未选中或清空的项，若尚未处理则记为 `skipped`。名字、表情／预设头像、职责、性格、做事方式的提议值与当前值相同也记为 `done`（包括该字段未包含在编辑结果中时）；只要卡上提出了访谈字段，接受空的编辑结果 `changes:{}`。`finish:true` 可结束访谈。
 
   返回 `{ok,revision,bot,saved,later?,user?:{added,documentSaved,error?},progressReverted?}`，`saved` 是本次确认的字段，`saved.picture` 表示采用了图片；稍后决定的响应带 `later:true`。“关于你”条目经档案文档服务去重追加到 `USER.md`，是否保存以 `user.documentSaved` 为准。写入失败时，已保存的身份改动保留，服务端再做一次修订写入，将 `about` 步骤及本次结束访谈的转换恢复到提交前；若这次进度修正也失败，响应带 `progressReverted:false`。
 
-  模型工具回执与 HTTP 响应分开：确认后为 `{status:'saved'|'not_saved',saved,kept?,current,note?}`；`saved` 报告实际变化、新增的“关于你”和本次完成访谈的标记，`kept` 列出提出但值未变的字段，`current` 为 `{name,avatar,job,personality,workStyle,interview}`（`interview` 为 `greeting|interview|done|skipped`）。访谈中首次确认当前做事方式时，即使值未变，也以 `saved.workStyle` 报告。拒绝回执为 `{status:'declined',later?:[字段名]}`，`later` 仅列出本次新记为跳过的提议字段（如 `workStyle`、`aboutUser`，不是步骤键）；只有 `declined` 不代表进度已记为跳过。无回答、中止或没有界面时分别返回 `no_answer|aborted|unavailable`。
+  模型工具回执与 HTTP 响应分开：确认后为 `{status:'saved'|'not_saved',saved,kept?,current,note?}`；`saved` 报告实际变化、新增的“关于你”和本次完成访谈的标记，`kept` 列出提出但值未变的字段，`current` 为 `{name,avatar,job,personality,workStyle,interview}`（`interview` 为 `greeting|interview|done|skipped`）。`current.avatar` 对 emoji 仍为字符串，对图片仍为 `(picture <版本前8位>)`，无头像为 null；预设返回 `{kind:'preset',id}`，按结构比较，未变的预设记入 `kept` 而不误报已改变。访谈中首次确认当前做事方式时，即使值未变，也以 `saved.workStyle` 报告。拒绝回执为 `{status:'declined',later?:[字段名]}`，`later` 仅列出本次新记为跳过的提议字段（如 `workStyle`、`aboutUser`，不是步骤键）；只有 `declined` 不代表进度已记为跳过。无回答、中止或没有界面时分别返回 `no_answer|aborted|unavailable`。
 - `GET /bots/:id/about-sources` → `{sources:[{profileId,name,avatar,entries}]}`，列出其他 Bot 的“关于你”条目。
 - `POST /bots/:id/about` `{expectedRevision,action:'copy'|'decline',fromProfileId?,entries?}`；copy 的条目必须仍存在于来源（否则 409），去重追加到本 Bot，记录 `onboarding.steps.known`。
 

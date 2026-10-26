@@ -40,7 +40,7 @@ const INTERVIEW_STEPS = Object.freeze([
     ['about', 'How to address the user (save it as an about-user fact).'],
     ['job', 'What they mainly want your help with; offer a few everyday examples (daily chores, study, work, writing, just chatting).'],
     ['name', 'Your name: suggest three or four names that fit the job, or take the user\'s own idea; the card holds only the name.'],
-    ['avatar', 'Your face: propose one fitting emoji in its own card; on the card the user can also upload a picture or keep the current face.'],
+    ['avatar', 'Your face: propose one fitting emoji or built-in preset in its own card; on the card the user can choose a built-in face, upload a picture or keep the current face. Keep an already chosen face unless the user asks to change it.'],
     ['personality', 'Your personality: open the card with a short draft based on what you know so far; on the card the user can pick one of four quick styles (crisp / warm and patient / a bit playful / professional) or write their own.'],
     ['work', 'How you work: propose workStyle with your current mode (see Permissions above) in its own card, so the user sees the three modes and picks one; do not explain the modes at length in chat.']
 ]);

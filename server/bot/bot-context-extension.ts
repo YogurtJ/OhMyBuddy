@@ -5,6 +5,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
+import avatarPresets from '../../public/pi-avatar-presets.js';
 import { SettingsManager, type ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { readRegistry } from '../pi-profile-registry.js';
 import { safeFile } from '../pi-native-service.js';
@@ -116,7 +118,8 @@ function identitySnapshot(context: any, agentDir: string) {
         entries = text ? text.split('\n§\n').map((part: string) => part.trim()).filter(Boolean) : [];
     } catch { entries = []; }
     const avatar = profile?.avatar?.kind === 'emoji' ? profile.avatar.value
-        : profile?.avatar?.kind === 'image' ? `(picture ${String(profile.avatar.version).slice(0, 8)})` : null;
+        : profile?.avatar?.kind === 'image' ? `(picture ${String(profile.avatar.version).slice(0, 8)})`
+        : profile?.avatar?.kind === 'preset' ? { kind: 'preset', id: profile.avatar.id } : null;
     const bot = readBot(profile);
     return { name: profile?.name ?? null, avatar, job: bot?.job ?? null, personality: typeof profile?.soul === 'string' ? profile.soul : null,
         workStyle: bot?.permissions?.preset ?? null, phase: bot?.onboarding?.phase ?? null, steps: bot?.onboarding?.steps ?? {}, entries };
@@ -128,10 +131,10 @@ function registerSetupTool(pi: ExtensionAPI, context: any, getAgentDir: () => st
     let pending = false;
     pi.registerTool({
         name: SETUP_TOOL, label: 'Propose Bot setup', exposure: 'model-only',
-        description: 'Propose changes to your own name, face (one emoji), main job, personality or way of working, or short lasting facts about the user (how to address them, what matters to them). The user sees an editable card and decides; nothing is saved unless they confirm. Include only the fields you are proposing to change and leave the others out. Returns status, what was actually saved (the user can edit or untick fields) and your current identity.',
+        description: 'Propose changes to your own name, face (an emoji or built-in preset), main job, personality or way of working, or short lasting facts about the user (how to address them, what matters to them). The user sees an editable card and decides; nothing is saved unless they confirm. Include only the fields you are proposing to change and leave the others out. Returns status, what was actually saved (the user can edit or untick fields) and your current identity.',
         promptSnippet: 'Propose changes to your own identity or notes about the user for the user to confirm',
         promptGuidelines: [
-            'Use bot_setup_propose for your own name, face emoji, main job and personality, and for lasting facts about the user. Propose one coherent step at a time, in the user\'s language.',
+            'Use bot_setup_propose for your own name, face emoji or built-in preset, main job and personality, and for lasting facts about the user. Propose one coherent step at a time, in the user\'s language.',
             'Put in a card only what the user has just told you or agreed to in this step; leave every other field out (never send empty values or fill fields the user did not talk about). Once your name or face is set, propose it again only when the user asks to change it.',
             'If the user is not sure yet what you should mainly help with or how you should talk, that is fine: say you will start in a general way and learn as you go, propose nothing for it, and carry on with what they need. Later, when their requests or feedback show a clear preference, you may propose an update of that one field.',
             'workStyle shows the user the three ways you can work (hands-off, careful, ask every time) and lets them pick; propose it in the interview step for it, or when the user asks you to ask first more or less often. A card can keep the current way or make you more careful; for more freedom the user changes it in your settings.',
@@ -139,7 +142,11 @@ function registerSetupTool(pi: ExtensionAPI, context: any, getAgentDir: () => st
         ],
         parameters: Type.Object({
             name: Type.Optional(Type.String({ maxLength: 40, description: 'Your new name.' })),
-            avatar: Type.Optional(Type.String({ maxLength: 16, description: 'One emoji for your face.' })),
+            avatar: Type.Optional(Type.Union([
+                Type.String({ maxLength: 16, description: 'One emoji for your face.' }),
+                Type.Object({ kind: Type.Literal('preset'), id: Type.Union(avatarPresets.presets.map(preset => Type.Literal(preset.id))) },
+                    { additionalProperties: false, description: `Built-in face: ${avatarPresets.presets.map(preset => `${preset.id} (${preset.name})`).join(', ')}.` })
+            ])),
             job: Type.Optional(Type.String({ maxLength: 300, description: 'One sentence: what you mainly help this user with.' })),
             workStyle: Type.Optional(Type.Union([Type.Literal('free'), Type.Literal('balanced'), Type.Literal('ask')], { description: 'How you work: free (hands-off), balanced (careful) or ask (ask every time). The card shows all three and the user picks.' })),
             personality: Type.Optional(Type.String({ maxLength: 6000, description: 'Your personality and way of talking, written as guidance to yourself (second person), a few short paragraphs at most.' })),
@@ -170,7 +177,7 @@ function registerSetupTool(pi: ExtensionAPI, context: any, getAgentDir: () => st
                     if (proposal[key] === undefined) continue;
                     // A way of working confirmed as it was is still the user's answer.
                     const confirmed = key === 'workStyle' && after.steps.work === 'done' && before.steps.work !== 'done';
-                    if (after[key] !== before[key] || confirmed) saved[key] = trim(key, after[key]); else kept.push(key);
+                    if (!isDeepStrictEqual(after[key], before[key]) || confirmed) saved[key] = trim(key, after[key]); else kept.push(key);
                 }
                 const added = after.entries.filter((entry: string) => !before.entries.includes(entry));
                 if (proposal.aboutUser && added.length) saved.aboutUser = added;
