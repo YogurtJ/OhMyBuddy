@@ -53,7 +53,7 @@
         dialog.append(form);
         document.body.append(dialog);
         const sheet = dialog;
-        let data = null, controls = null, saving = false, warnedClose = false, initial = null;
+        let data = null, controls = null, saving = false, warned = null, initial = null;
         // What the form shows, field by field; compared with `initial` to know what the user edited.
         const formValues = () => controls ? { name: controls.name.value, avatar: controls.avatar.value, job: controls.job.value, soul: controls.soul.value,
             model: controls.model.value, thinking: controls.thinkingWrap.hidden ? '' : controls.thinking.value,
@@ -67,21 +67,27 @@
             if (values.preset !== undefined) for (const input of controls.presets) input.checked = input.value === values.preset;
         }
 
-        const dirty = () => controls ? changes() : null;
-        const tryClose = () => {
-            const pending = dirty();
-            if (pending && Object.keys(pending).length && !warnedClose) {
-                warnedClose = true; status.dataset.tone = 'warn';
-                status.textContent = translateUi("还有修改没保存。再关一次就放弃这些修改。");
-                return;
+        // Whether the user edited anything, valid or not (UAT-11: an emptied name is an edit too).
+        const edited = () => Boolean(controls && initial) && Object.entries(formValues()).some(([key, value]) => value !== initial[key]);
+        // Every way out of the sheet (close, Escape, cancel, the memory page, meeting again): with
+        // unsaved edits the first try only warns; the same action again leaves without them.
+        const leave = (action, then) => {
+            if (edited() && warned !== action) {
+                warned = action; status.dataset.tone = 'warn';
+                status.textContent = action === 'close' ? translateUi("还有修改没保存。再关一次就放弃这些修改。")
+                    : translateUi("还有修改没保存。再点一次就放弃这些修改并离开。");
+                return false;
             }
             sheet.close();
+            then?.();
+            return true;
         };
+        const tryClose = () => leave('close');
         close.addEventListener('click', tryClose);
         cancel.addEventListener('click', tryClose);
         sheet.addEventListener('cancel', event => { event.preventDefault(); tryClose(); });
         sheet.addEventListener('close', () => { sheet.remove(); if (dialog === sheet) dialog = null; });
-        sheet.addEventListener('input', () => { warnedClose = false; status.textContent = ''; delete status.dataset.tone; refreshState(); });
+        sheet.addEventListener('input', () => { warned = null; status.textContent = ''; delete status.dataset.tone; refreshState(); });
         sheet.addEventListener('change', () => refreshState());
         sheet.showModal();
 
@@ -177,12 +183,14 @@
             // Quiet hours join this sheet once Bots can start conversations on their own (M4).
 
             const memory = button('pi-bot-sheet-link'); memory.append(icon('fa-book-open'), el('span', null, translateUi("记忆和关于你")), icon('fa-chevron-right'));
-            memory.addEventListener('click', () => { sheet.close(); options.onMemory?.(); });
+            memory.addEventListener('click', () => leave('memory', () => options.onMemory?.()));
             const restart = button('pi-bot-sheet-link'); restart.append(icon('fa-rotate-left'), el('span', null, translateUi("重新互相认识")), icon('fa-chevron-right'));
             let restartArmed = false;
             restart.addEventListener('click', async () => {
                 if (!restartArmed) { restartArmed = true; restart.querySelector('span').textContent = translateUi("再点一次确认：在主聊天里重新认识"); return; }
-                sheet.close(); await options.onRestart?.();
+                let leaving = false;
+                leave('restart', () => { leaving = true; });
+                if (leaving) await options.onRestart?.();
             });
 
             controls = { name, avatar, job, soul, model, thinking, thinkingWrap, presets };

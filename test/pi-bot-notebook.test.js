@@ -106,31 +106,47 @@ test('the window_note tool writes branch-following operations and the model sees
     const manager = SessionManager.inMemory('/tmp');
     const userId = manager.appendMessage({ role: 'user', content: '周五前把报价发我，瓷砖就定哑光灰', timestamp: Date.now() });
     const tools = new Map(), handlers = new Map();
-    const pi = { registerTool(tool) { tools.set(tool.name, tool); }, on(name, fn) { handlers.set(name, fn); } };
+    const pi = { registerTool(tool) { tools.set(tool.name, tool); }, on(name, fn) { handlers.set(name, fn); },
+        appendEntry(type, data) { manager.appendCustomEntry(type, data); } };
     let bot = true;
     notebook.registerNotebook(pi, () => bot);
     const tool = tools.get(notebook.NOTE_TOOL);
     assert.equal(tool.executionMode, 'sequential');
     const ctx = { sessionManager: manager };
-    const call = async (id, input) => {
-        const result = await tool.execute(id, input, undefined, undefined, ctx);
-        return result;
-    };
-    // Two calls in one assistant message, before Pi appended either result: distinct ids.
-    manager.appendMessage(assistant([{ type: 'toolCall', id: 't1', name: 'window_note', arguments: {} }, { type: 'toolCall', id: 't2', name: 'window_note', arguments: {} }]));
-    const first = await call('t1', { action: 'add', kind: 'decision', text: '瓷砖哑光灰' });
-    const second = await call('t2', { action: 'add', kind: 'commitment', text: '周五前发报价', due: '2026-03-06' });
+    const call = (id, input) => tool.execute(id, input, undefined, undefined, ctx);
+    // A codemode script calling the tool twice at once: Pi keeps no nested tool results in the
+    // session, yet both changes are there, with distinct ids (UAT-04).
+    manager.appendMessage(assistant([{ type: 'toolCall', id: 'c1', name: 'codemode', arguments: {} }]));
+    const [first, second] = await Promise.all([call('c1/1', { action: 'add', kind: 'decision', text: '瓷砖哑光灰', id: '', due: '', replaces: '' }),
+        call('c1/2', { action: 'add', kind: 'commitment', text: '周五前发报价', due: '2026-03-06T17:30+08:00', replaces: ' ' })]);
     assert.match(first.content[0].text, /added \[n1\] \(decision\): 瓷砖哑光灰/);
-    assert.equal(second.details.pivaneLedger.ops[0].id, 'n2');
+    assert.deepEqual(second.details, { pivaneNoteSaved: { v: 1, ids: ['n2'] } }, 'the result names the change; it is not the change');
+    assert.equal(manager.getBranch().filter(entry => entry.type === 'message' && entry.message.role === 'toolResult').length, 0);
+    let state = ledger.replay(manager.getBranch());
+    assert.deepEqual(state.items.map(item => [item.id, item.text, item.due]), [['n1', '瓷砖哑光灰', null], ['n2', '周五前发报价', '2026-03-06T17:30+08:00']]);
     // The note points at the user's words that led to it, not at the tool-call message.
-    assert.deepEqual(first.details.pivaneLedger.ops[0].source, { sessionId: manager.getSessionId(), entryId: userId, role: 'user', quote: '周五前把报价发我，瓷砖就定哑光灰' });
-    for (const [id, result] of [['t1', first], ['t2', second]])
-        manager.appendMessage({ role: 'toolResult', toolCallId: id, toolName: 'window_note', content: result.content, details: result.details, isError: false, timestamp: Date.now() });
-    await handlers.get('agent_settled')({});
-    const third = await call('t3', { action: 'done', id: 'n2' });
+    assert.deepEqual(state.items[0].source, { sessionId: manager.getSessionId(), entryId: userId, role: 'user', quote: '周五前把报价发我，瓷砖就定哑光灰' });
+    assert.equal(manager.getBranch().filter(entry => entry.customType === ledger.LEDGER_ENTRY).at(-1).data.toolCallId, 'c1/2');
+    // A direct call's result is appended as usual; the change is not applied twice.
+    const third = await call('t3', { action: 'done', id: 'n2', kind: '', text: '' });
+    manager.appendMessage({ role: 'toolResult', toolCallId: 't3', toolName: 'window_note', content: third.content, details: third.details, isError: false, timestamp: Date.now() });
     assert.match(third.content[0].text, /marked \[n2\] done: 周五前发报价/);
+    await call('t3b', { action: 'update', id: 'n2', due: 'none', text: '' });
+    state = ledger.replay(manager.getBranch());
+    assert.deepEqual(state.items.map(item => [item.id, item.status, item.due]), [['n1', 'active', null], ['n2', 'done', null]], '"none" removes the due date');
+    // A failed call writes nothing; nothing is filled in for a missing date.
+    const entries = manager.getBranch().length;
     await assert.rejects(call('t4', { action: 'update', id: 'n7', text: 'x' }), /No note n7/);
+    await assert.rejects(call('t4b', { action: 'add', kind: 'ref', text: 'x', due: 'next friday' }), /Invalid due date: use YYYY-MM-DD/);
+    await assert.rejects(call('t4c', { action: 'add', kind: 'ref', text: 'x', replaces: 'n9' }), /leave replaces out/);
     await assert.rejects(call('t5', { action: 'shout' }), /Unknown notebook action/);
+    assert.equal(manager.getBranch().length, entries);
+    // Results written by the previous version (details.pivaneLedger on a tool result) still replay.
+    const legacy = ledger.prepareOps(ledger.replay(manager.getBranch()), [{ op: 'add', kind: 'ref', text: '旧版记下的' }], { at: T1, by: 'bot' });
+    manager.appendMessage({ role: 'toolResult', toolCallId: 'old', toolName: 'window_note', content: [{ type: 'text', text: 'Notebook added' }],
+        details: { pivaneLedger: { v: 1, ops: legacy.ops } }, isError: false, timestamp: Date.now() });
+    assert.equal(ledger.replay(manager.getBranch()).items.at(-1).text, '旧版记下的');
+    assert.match((await call('t5b', { action: 'add', kind: 'ref', text: '新的' })).content[0].text, /\[n4\]/, 'ids continue');
     bot = false;
     await assert.rejects(call('t6', { action: 'add', kind: 'ref', text: 'x' }), /only available in a Bot chat/);
     // Visibility: nothing was compacted yet, so the notebook is rendered once before the next run.

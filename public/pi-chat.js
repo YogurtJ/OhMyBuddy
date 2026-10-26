@@ -452,7 +452,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try { documentStorage.open(); } catch (error) { toast(error.message, 'error'); }
     });
     const workflows = new window.PiSessionWorkflows({
-        getContext: () => ({ cwd: state.cwd, session: state.session, connected: state.connected, model: state.model, generation: state.socketGeneration,
+        getContext: () => ({ cwd: state.cwd, session: state.session, connected: state.connected, model: state.model, generation: state.socketGeneration, botMode: state.botMode,
             busy: state.shellBusy || state.streaming || state.compacting || state.compactRequested || state.controlRequested || state.controlsStopping || state.pendingUi.size > 0,
             draftBusy: state.attachmentReads > 0 || state.submittingDrafts.has(state.composerSessionKey) }),
         apiFetch, toast, prepareDocumentUpload: current => documentAttachments.prepareUpload(current), preserveImages: () => documentAttachments.generic, documentCard: reference => documentAttachments.card(reference),
@@ -509,6 +509,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectionActions = new window.PiSelectionActions({
         context: () => ({ connected: state.connected, key: JSON.stringify([state.cwd, state.session?.id, state.socketGeneration]) }),
         sideEnabled: () => sideChat.enabled,
+        // A Bot chat has no side chat (its panel is not shown on the Bot page, UAT-05).
+        sideHidden: () => state.botMode,
         addMain: quote => {
             if (state.attachmentReads || state.submittingDrafts.has(state.composerSessionKey)) throw new Error(translateUi('请等待附件读取或消息投递完成'));
             const file = { ...quote, kind: 'quote', id: attachments.id() };
@@ -548,8 +550,10 @@ document.addEventListener('DOMContentLoaded', () => {
             .filter(([, row]) => row.dataset.toolName === 'bot_setup_propose' && !row._piResult && row._piToolArgs && typeof row._piToolArgs === 'object')
             .map(([id, row]) => ({ id, args: row._piToolArgs })),
         respond: payload => sendExtensionResponse(payload),
-        save: (toolCallId, changes) => botUi.saveSetup(toolCallId, changes),
+        save: (toolCallId, changes, options) => botUi.saveSetup(toolCallId, changes, options),
         face: () => botUi?.face('sm') || document.createElement('span'),
+        identity: () => botUi?.setupIdentity?.() || null,
+        uploadPicture: dataUrl => botUi.uploadAvatar(dataUrl),
         changed: () => renderPendingBanner()
     });
     if (botSetup) document.querySelector('.pi-composer-wrap > .pi-composer')?.before(botSetup.element);
@@ -739,6 +743,7 @@ document.addEventListener('DOMContentLoaded', () => {
             submitting: state.submittingDrafts.has(state.composerSessionKey), submissionVersion: state.composerSubmissionVersion }),
         api: apiFetch, toast, changed: autoResizeInput, reload: reloadResources,
         locals: () => LOCAL_COMMANDS.filter(c => c.name !== 'btw' || sideChat.enabled).map(c =>
+            c.name === 'btw' && state.botMode ? { ...c, available: false, description: translateUi("Bot 聊天里没有侧聊，直接在这里问就好") } :
             c.name === 'tree' && !historyView.tree.enabled ? { ...c, available: false, description: translateUi("当前后端尚未启用会话树") } :
             c.name === 'trust' && !state.nativeSettings ? { ...c, available: false, description: translateUi("当前后端尚未启用项目信任设置") } :
             ['import', 'export'].includes(c.name) && !transfer.enabled
@@ -4483,7 +4488,10 @@ document.addEventListener('DOMContentLoaded', () => {
             window.dispatchEvent(new CustomEvent('workspace:open-settings', { detail: { tab: 'skills' } }));
             $('settings-manage-templates').focus(); return true;
         }
-        if (name === 'btw') return sideChat.run(() => sideChat.open({ question: args }));
+        if (name === 'btw') {
+            if (state.botMode) throw new Error(translateUi("Bot 聊天里没有侧聊，直接在这里问就好"));
+            return sideChat.run(() => sideChat.open({ question: args }));
+        }
         if (name === 'copy') { await copyTextToClipboard(state.lastAssistantText); toast(translateUi("已复制最近一条 Agent 回复"), 'success'); return true; }
         if (name === 'compact') return runCompact(args, draft);
         if (name === 'quit') return quitRuntime();
@@ -4504,6 +4512,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (name === 'hotkeys') { toast(translateUi("输入 / 搜索命令、Skill 或模板，@ 搜索项目文件；↑↓ 选择，Tab/Enter 填入，Esc 关闭；加号内可添加附件、延迟发送或创建定时任务，Shift+Enter 换行。"), 'info', 12000); return true; }
         if (!state.connected) throw new Error(translateUi("请先打开会话"));
+        if ((name === 'fork' || name === 'clone') && state.botMode) throw new Error(translateUi("Bot 聊天不能分叉；以后可以为 Bot 另开话题"));
         if (name === 'fork' || name === 'clone') {
             if (!workflows.enabled) throw new Error(translateUi("当前后端尚未支持会话分叉"));
             if (name === 'fork') await workflows.openList('history'); else await workflows.openClone(); return true;
@@ -5016,7 +5025,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function historyWorkflowItems() {
         return [
-            { label: translateUi("从历史问题分叉"), icon: 'fa-code-branch', disabled: !workflows.usable(), run: () => workflows.run(() => workflows.openList('history')) },
+            ...workflows.forkable() ? [{ label: translateUi("从历史问题分叉"), icon: 'fa-code-branch', disabled: !workflows.usable(), run: () => workflows.run(() => workflows.openList('history')) }] : [],
             { label: translateUi("恢复旧版本"), icon: 'fa-clock-rotate-left', disabled: workflows.busy(), run: () => workflows.run(() => workflows.openList('versions')) }
         ];
     }

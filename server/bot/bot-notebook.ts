@@ -1,23 +1,32 @@
 // The window notebook inside a Bot window worker (D-028): the window_note tool, and the
 // rule that the model can always see the current notebook. The state is replayed from the
-// active branch every time; nothing is cached across runs except tool calls whose results
-// Pi has not appended yet.
+// active branch every time. A change the tool makes is written to the session file at once
+// (a custom entry), so it holds however the tool was called: directly, from a codemode script
+// (whose nested tool results are not kept in the session) or several times in parallel.
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
-import { LEDGER_ENTRY, KINDS, replay, prepareOps, renderLedger, describeOp, describeItem, applyOp, ledgerVersion, sourceQuote } from './bot-ledger.js';
+import { LEDGER_ENTRY, KINDS, replay, prepareOps, renderLedger, describeOp, describeItem, ledgerVersion, sourceQuote } from './bot-ledger.js';
 
 export const NOTE_TOOL = 'window_note';
 export const NOTEBOOK_MESSAGE = 'pivane-bot-notebook';
 const ACTIONS = ['add', 'update', 'done', 'cancel', 'reopen'] as const;
 
-// Raw tool input -> one notebook operation.
+// An optional field the model left empty counts as left out (some models send "" for every
+// optional field); nothing is filled in for it.
+const given = (value: any) => typeof value === 'string' ? (value.trim() ? value.trim() : undefined) : value ?? undefined;
+
+// Raw tool input -> one notebook operation. For update, due "none" removes the due date.
 export function noteOperation(input: any) {
-    const action = input?.action;
-    if (action === 'add') return { op: 'add', kind: input.kind, text: input.text, due: input.due, supersedes: input.replaces };
-    if (action === 'update') return { op: 'update', id: input.id, text: input.text, kind: input.kind, due: input.due };
+    const action = given(input?.action);
+    if (action === 'add') return { op: 'add', kind: given(input.kind), text: given(input.text), due: given(input.due), supersedes: given(input.replaces) };
+    if (action === 'update') {
+        const due = given(input.due);
+        return { op: 'update', id: given(input.id), text: given(input.text), kind: given(input.kind),
+            due: typeof due === 'string' && due.toLowerCase() === 'none' ? null : due };
+    }
     if (action === 'done' || action === 'cancel' || action === 'reopen')
-        return { op: 'status', id: input.id, status: action === 'done' ? 'done' : action === 'cancel' ? 'cancelled' : 'active' };
-    throw new Error('Unknown notebook action');
+        return { op: 'status', id: given(input.id), status: action === 'done' ? 'done' : action === 'cancel' ? 'cancelled' : 'active' };
+    throw new Error('Unknown notebook action; use add, update, done, cancel or reopen');
 }
 
 // Whether the model has seen the notebook since the last compaction: a Bot compaction
@@ -91,19 +100,6 @@ export function editNotebook(pi: any, ctx: any, input: any) {
 }
 
 export function registerNotebook(pi: ExtensionAPI, isBotWindow: (ctx: any) => boolean) {
-    // Results of window_note calls that Pi has not appended to the branch yet (parallel
-    // calls in one assistant message), so ids stay unique.
-    const pending: { toolCallId: string, ops: any[] }[] = [];
-    const current = (manager: any) => {
-        const branch = manager.getBranch();
-        const appended = new Set(branch.filter((entry: any) => entry.type === 'message' && entry.message?.role === 'toolResult')
-            .map((entry: any) => entry.message.toolCallId));
-        for (let index = pending.length - 1; index >= 0; index--) if (appended.has(pending[index].toolCallId)) pending.splice(index, 1);
-        let state = replay(branch);
-        for (const item of pending) for (const op of item.ops) { try { state = applyOp(state, op); } catch { /* superseded meanwhile */ } }
-        return state;
-    };
-    pi.on('agent_settled', () => { pending.length = 0; });
     pi.registerTool({
         name: NOTE_TOOL, label: 'Notebook', executionMode: 'sequential',
         description: 'Keep the notebook of this chat: decisions the user made, commitments (what you or the user promised, and by when), '
@@ -118,21 +114,24 @@ export function registerNotebook(pi: ExtensionAPI, isBotWindow: (ctx: any) => bo
         ],
         parameters: Type.Object({
             action: Type.Union(ACTIONS.map(value => Type.Literal(value)) as any, { description: 'add, update, done, cancel or reopen.' }),
-            id: Type.Optional(Type.String({ maxLength: 12, description: 'Note id such as n3 (required except for add).' })),
+            id: Type.Optional(Type.String({ maxLength: 12, description: 'Note id such as n3 (required except for add; leave it out for add).' })),
             kind: Type.Optional(Type.Union(KINDS.map((value: string) => Type.Literal(value)) as any,
                 { description: 'decision, commitment, open, preference or ref (required for add).' })),
             text: Type.Optional(Type.String({ maxLength: 500, description: 'One self-contained sentence in the user\'s language.' })),
-            due: Type.Optional(Type.String({ maxLength: 32, description: 'Due date as YYYY-MM-DD (or a full ISO time), for commitments.' })),
-            replaces: Type.Optional(Type.String({ maxLength: 12, description: 'For add: id of the note this one replaces.' }))
+            due: Type.Optional(Type.String({ maxLength: 32, description: 'Only when the user said one: YYYY-MM-DD, or YYYY-MM-DDTHH:MM with the user\'s UTC offset (e.g. 2026-11-06T17:30+08:00) for a time of day. Leave it out otherwise; never invent one. For update, "none" removes the due date.' })),
+            replaces: Type.Optional(Type.String({ maxLength: 12, description: 'For add, only when the new note replaces an existing one: that note\'s id. Leave it out otherwise.' }))
         }),
         execute: async (toolCallId: string, input: any, _signal: AbortSignal | undefined, _update: any, ctx: any) => {
             if (!isBotWindow(ctx)) throw new Error('The notebook is only available in a Bot chat');
-            const manager = ctx.sessionManager, state = current(manager);
+            // Read, check and write with no await in between, so parallel calls (codemode scripts
+            // can make several at once) each see the previous change and ids stay unique.
+            const manager = ctx.sessionManager, state = replay(manager.getBranch());
             const { ops, state: next } = prepareOps(state, [noteOperation(input)], { at: new Date().toISOString(), by: 'bot',
                 source: noteSource(manager) });
-            pending.push({ toolCallId, ops });
+            pi.appendEntry(LEDGER_ENTRY, { v: 1, ops, toolCallId });
             const text = ops.map((op: any) => describeOp(op, next)).join('\n');
-            return { content: [{ type: 'text' as const, text: `Notebook ${text}` }], details: { pivaneLedger: { v: 1, ops } } };
+            // The result only names what was written: the custom entry above is the change.
+            return { content: [{ type: 'text' as const, text: `Notebook ${text}` }], details: { pivaneNoteSaved: { v: 1, ids: ops.map((op: any) => op.id) } } };
         }
     } as any);
 }

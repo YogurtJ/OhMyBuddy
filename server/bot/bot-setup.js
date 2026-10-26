@@ -21,8 +21,11 @@ const line = (value, max, label) => {
 };
 
 // Shared by the worker tool, the browser card and the server: one definition of valid input.
-function normalizeProposal(input, { partial = false } = {}) {
-    if (!object(input)) fail('Invalid setup proposal');
+// A field left empty (some models send "" for every optional field) counts as not proposed.
+function normalizeProposal(raw, { partial = false } = {}) {
+    if (!object(raw)) fail('Invalid setup proposal');
+    const input = Object.fromEntries(Object.entries(raw).map(([key, value]) => [key, typeof value === 'string' && !value.trim() ? undefined
+        : Array.isArray(value) ? value.filter(item => !(typeof item === 'string' && !item.trim())) : value]));
     const keys = Object.keys(input).filter(key => input[key] !== undefined && input[key] !== null);
     if (keys.some(key => !FIELDS.includes(key))) fail('Unknown setup field');
     const out = {};

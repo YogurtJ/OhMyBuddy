@@ -10442,5 +10442,26 @@
         ["引导已提交，未收到送达确认；可刷新状态核对", "Guidance submitted without a delivery receipt; refresh the status to check"],
         ["已继续运行，新运行 {0}", "Continued as run {0}"]
     );
+    rows.push(
+        ["请选择不超过 6 MiB 的 PNG、JPEG、WebP 或 GIF 图片", "Choose a PNG, JPEG, WebP or GIF image up to 6 MiB"],
+        ["图片太大了，请换一张小一点的", "That image is too large; please choose a smaller one"],
+        ["新头像图片", "New face picture"],
+        ["改用表情", "Use an emoji instead"],
+        ["换一张", "Choose another"],
+        ["现在：", "Now:"],
+        ["改成上面的", "Change to the above"],
+        ["这些已经是现在的设置了", "These are already the current settings"],
+        ["图片会在保存时上传", "The picture is uploaded when you save"],
+        ["好", "OK"],
+        ["设置刚刚有变化，你的修改还在，请再点一次保存", "Settings just changed. Your edits are still here; press Save again"],
+        ["{0} 正在回复，你的修改还在，等它说完再保存。", "{0} is replying. Your edit is still here; save once it is done."],
+        ["刚刚有新的变化，已刷新；你的修改还在，请再保存一次。", "Something just changed and was reloaded. Your edit is still here; save it again."],
+        ["没保存成功，你的修改还在：{0}", "Not saved, your edit is still here: {0}"],
+        ["截止时间（可不填）", "Due time (optional)"],
+        ["截止", "Due"],
+        ["还有修改没保存。再点一次就放弃这些修改并离开。", "There are unsaved changes. Click again to discard them and leave."],
+        ["Bot 聊天里没有侧聊，直接在这里问就好", "Bot chats have no side chat; just ask here"],
+        ["Bot 聊天不能分叉；以后可以为 Bot 另开话题", "Bot chats cannot be forked; separate topics for a Bot will come later"]
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

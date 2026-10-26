@@ -192,13 +192,22 @@
 .pi-bot-setup[hidden] { display: none; }
 .pi-bot-setup-head { display: flex; align-items: center; gap: 10px; font-size: .95rem; }
 .pi-bot-setup-fields { display: grid; gap: 10px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 2px; }
-.pi-bot-setup-field { display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: start; gap: 10px; }
-.pi-bot-setup-field > span { padding-top: 9px; color: var(--text-muted); font-size: .82rem; }
-.pi-bot-setup-field input, .pi-bot-setup-field textarea {
+.pi-bot-setup-field { display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: start; gap: 6px 10px; }
+.pi-bot-setup-label { padding-top: 9px; color: var(--text-muted); font-size: .82rem; }
+.pi-bot-setup-value { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.pi-bot-setup-value .pi-bot-chip { margin: 0; min-height: 36px; padding: 0 12px; font-size: .85rem; }
+.pi-bot-setup-picture img { display: block; width: 44px; height: 44px; border-radius: 50%; object-fit: cover; }
+.pi-bot-setup-current { grid-column: 2; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 14px; color: var(--text-muted); font-size: .82rem; }
+.pi-bot-setup-current > span { display: inline-flex; align-items: center; gap: 6px; }
+.pi-bot-setup-use { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; color: var(--text-main); cursor: pointer; }
+.pi-bot-setup-use input { width: 18px; height: 18px; margin: 0; accent-color: var(--primary, var(--green)); }
+.pi-bot-setup-field.is-kept .pi-bot-setup-value input, .pi-bot-setup-field.is-kept .pi-bot-setup-value textarea,
+.pi-bot-setup-field.is-kept .pi-bot-setup-picture { opacity: .5; }
+.pi-bot-setup-value input:not([type="file"]), .pi-bot-setup-value textarea {
     width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 10px;
     background: var(--surface-1); color: var(--text-main); font: inherit; font-size: .92rem; line-height: 1.5; resize: vertical;
 }
-.pi-bot-setup-field.is-avatar input { width: 64px; text-align: center; font-size: 1.3rem; padding: 4px; }
+.pi-bot-setup-field.is-avatar .pi-bot-setup-value input { width: 64px; text-align: center; font-size: 1.3rem; padding: 4px; }
 .pi-bot-setup-field input:focus-visible, .pi-bot-setup-field textarea:focus-visible, .pi-bot-setup-fact input:focus-visible,
 .pi-bot-setup-later:focus-visible, .pi-bot-chip:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
 .pi-bot-setup-about { display: grid; gap: 6px; margin: 0; padding: 0; border: 0; }
@@ -213,8 +222,10 @@
 .pi-bot-setup .pi-bot-primary { margin-top: 0; min-width: 96px; min-height: 40px; }
 @media (max-width: 680px) {
     .pi-bot-setup-field { grid-template-columns: 1fr; gap: 4px; }
-    .pi-bot-setup-field > span { padding-top: 0; }
-    .pi-bot-setup-field input, .pi-bot-setup-field textarea { font-size: 16px; }
+    .pi-bot-setup-label { padding-top: 0; }
+    .pi-bot-setup-current { grid-column: 1; }
+    .pi-bot-setup-value input:not([type="file"]), .pi-bot-setup-value textarea { font-size: 16px; }
+    .pi-bot-setup-value .pi-bot-chip, .pi-bot-setup-use { min-height: 44px; }
 }
 
 /* ---- one lifelong conversation: compaction and generations stay invisible ----------- */
@@ -382,7 +393,9 @@
 .pi-bot-danger:disabled { opacity: .55; cursor: default; }
 .pi-bot-note-edit { padding-right: 6px; flex: 1; min-width: 0; display: grid; gap: 8px; }
 .pi-bot-note-due { display: flex; align-items: center; gap: 10px; font-size: .82rem; color: var(--text-muted); }
-.pi-bot-sheet input[type="date"] {
+.pi-bot-note-due-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.pi-bot-sheet input[type="time"]:disabled { opacity: .5; }
+.pi-bot-sheet input[type="date"], .pi-bot-sheet input[type="time"] {
     min-height: 38px; padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: 10px;
     background: var(--surface-1, var(--surface)); color: var(--text-main); font: inherit; font-size: .9rem;
 }
@@ -398,7 +411,7 @@
     .pi-bot-note-check { position: relative; }
     .pi-bot-note-check::after { content: ""; position: absolute; inset: -9px; }
     .pi-bot-note-panel .pi-bot-chip, .pi-bot-danger { min-height: 40px; }
-    .pi-bot-sheet input[type="date"] { font-size: 16px; }
+    .pi-bot-sheet input[type="date"], .pi-bot-sheet input[type="time"] { font-size: 16px; min-height: 44px; }
 }
 
 /* ---- no chat model yet ---------------------------------------------------------------- */
