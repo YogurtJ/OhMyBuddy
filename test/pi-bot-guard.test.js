@@ -58,6 +58,22 @@ test('careful presets decide which steps ask first', () => {
     assert.equal(ask('balanced', 'bash', { command: 'x'.repeat(3000) }).detail.length, 2001, 'long details are clipped');
 });
 
+test('bot_schedule is reading for list and asks for create and cancel in careful presets', () => {
+    const create = { action: 'create', title: '吃晚饭', once: '2026-10-26 19:00', timeZone: 'Asia/Shanghai' };
+    const cancel = { action: 'cancel', id: 'task-id', approvalJob: { title: '工作日简报',
+        schedule: { kind: 'cron', expression: '0 9 * * 1-5', timeZone: 'Asia/Shanghai' } } };
+    for (const preset of ['free', 'balanced', 'ask']) {
+        assert.equal(ask(preset, 'bot_schedule', { action: 'list' }), null);
+        for (const [input, detail] of [[create, 'Create: 吃晚饭\n2026-10-26 19:00 (Asia/Shanghai)'],
+            [cancel, 'Cancel: 工作日简报\n0 9 * * 1-5 (Asia/Shanghai)']]) {
+            assert.deepEqual(ask(preset, 'bot_schedule', input, { readOnlyHint: true }), preset === 'free' ? null : { kind: 'schedule', detail });
+        }
+    }
+    assert.deepEqual(ask('ask', 'bot_schedule', { ...cancel, approvalJob: { title: '晚饭',
+        schedule: { kind: 'once', at: Date.parse('2026-10-26T11:00:00Z'), timeZone: 'Asia/Shanghai' } } }),
+    { kind: 'schedule', detail: 'Cancel: 晚饭\n2026-10-26 19:00 (Asia/Shanghai)' });
+});
+
 test('the approval message carries a token, round-trips and rejects other confirms', () => {
     const token = newToken();
     assert.match(token, /^[a-f0-9]{16}$/);

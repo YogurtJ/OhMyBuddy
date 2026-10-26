@@ -10,9 +10,10 @@ const os = require('node:os');
 const path = require('node:path');
 const { fileURLToPath } = require('node:url');
 const { randomBytes } = require('node:crypto');
+const { scheduleDetail } = require('./bot-schedule');
 
 const APPROVAL_TITLE = '允许这一步吗？ / Allow this step?';
-const KINDS = Object.freeze(['command', 'delegate', 'outside', 'write', 'memory', 'action']);
+const KINDS = Object.freeze(['command', 'delegate', 'outside', 'write', 'memory', 'action', 'schedule']);
 const PRESETS = Object.freeze(['free', 'balanced', 'ask']);
 const DETAIL_LIMIT = 2000;
 
@@ -91,6 +92,7 @@ function insideWorkspace(cwd, raw) {
 }
 
 function detailFor(kind, toolName, input) {
+    if (kind === 'schedule') return text(scheduleDetail(input));
     if (kind === 'command') return text(input?.command);
     if (kind === 'outside' || kind === 'write') return text(input?.path, 500);
     if (kind === 'memory') return text(input?.content ?? input?.old_text ?? '', 500);
@@ -105,6 +107,7 @@ function approvalFor({ preset, toolName, input, cwd, annotations }) {
     if (preset !== 'balanced' && preset !== 'ask') return null;
     if (typeof toolName !== 'string' || SELF_ASKING.has(toolName)) return null;
     const ask = kind => ({ kind, detail: detailFor(kind, toolName, input) });
+    if (toolName === 'bot_schedule') return input?.action === 'list' ? null : ask('schedule');
     if (COMMANDS.has(toolName)) return ask('command');
     if (DELEGATES.has(toolName)) return ask('delegate');
     if (WRITES.has(toolName)) {

@@ -19,6 +19,7 @@ import { APPROVAL_TITLE, BLOCKED, PRESETS, approvalFor, approvalMessage, newToke
 import { safeFile as readDocument } from '../profile-memory/management.js';
 import { registerNotebook, notebookNotice, editNotebook } from './bot-notebook.ts';
 import { registerRecall } from './bot-recall-tools.ts';
+import { registerBotSchedule } from './bot-schedule-tool.ts';
 import { structuredCompaction, summaryReasoning } from './bot-compaction.js';
 import { pruneDrafts, idleDelay, idleCompactionWanted, rotationReason } from './bot-maintenance.js';
 import { Type } from 'typebox';
@@ -199,6 +200,7 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
     // Private bridge record: the Supervisor consumes it and never shows it as a notification.
     const notifier = (ctx: any) => (value: any) => ctx.ui.notify(JSON.stringify({ pivaneBot: value, sessionId: ctx.sessionManager.getSessionId() }));
     let toolRegistered = false;
+    let schedule: ReturnType<typeof registerBotSchedule> | undefined;
     pi.on('session_start', async (_event, ctx: any) => {
         if (!managed(ctx)) return;
         const loaded = botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir());
@@ -206,6 +208,7 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
             toolRegistered = true;
             registerSetupTool(pi, context, getAgentDir);
             const verified = (toolCtx: any) => Boolean(botSection(context, toolCtx.sessionManager, toolCtx.cwd, getAgentDir()));
+            schedule = registerBotSchedule(pi, verified, scheduledRunActive);
             registerNotebook(pi, verified);
             registerRecall(pi, context, getAgentDir, verified);
         }
@@ -220,6 +223,7 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
     // A nested call (codemode) is cancelled with its parent tool, so its request is too.
     const nested = new Map<string, Set<AbortController>>();
     pi.on('tool_execution_end', (event: any) => {
+        schedule?.discard(event?.toolCallId);
         const waiting = nested.get(event?.toolCallId);
         if (!waiting) return;
         nested.delete(event.toolCallId);
@@ -230,24 +234,28 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
         // Tracked from the start: the parent can end while the preset is still being read.
         const controller = new AbortController(), parent = event.parentToolCallId;
         if (parent) { if (!nested.has(parent)) nested.set(parent, new Set()); nested.get(parent)!.add(controller); }
+        let keepSchedule = false;
         try {
             const preset = await botPreset(context, ctx.sessionManager, ctx.cwd, getAgentDir());
             if (!preset) return;
             let annotations;
             try { annotations = pi.getAllTools().find((tool: any) => tool.name === event.toolName)?.annotations; } catch { annotations = undefined; }
-            const approval = approvalFor({ preset, toolName: event.toolName, input: event.input, cwd: context.cwd, annotations });
-            if (!approval) return;
+            const signal = ctx.signal ? AbortSignal.any([controller.signal, ctx.signal]) : controller.signal;
+            const scheduled = event.toolName === 'bot_schedule' ? await schedule?.prepareApproval(event, ctx, preset, signal) : undefined;
+            const approval = approvalFor({ preset, toolName: event.toolName, input: scheduled?.input ?? event.input, cwd: context.cwd, annotations });
+            if (scheduled?.skipApproval || !approval) { keepSchedule = true; return; }
             if (!ctx.hasUI || scheduledRunActive(ctx.sessionManager)) return { block: true, reason: BLOCKED.unattended };
             // Already cancelled with its parent: nothing to ask about.
             if (controller.signal.aborted) return { block: true, reason: BLOCKED.not_approved };
             const token = newToken();
-            const signal = ctx.signal ? AbortSignal.any([controller.signal, ctx.signal]) : controller.signal;
             let allowed = false;
             // However it ends, the request is over: the Supervisor drops it if still pending.
             try { allowed = await ctx.ui.confirm(APPROVAL_TITLE, approvalMessage({ ...approval, token }), { signal, timeout: 30 * 60 * 1000 }); }
             finally { notifier(ctx)({ event: 'approval-done', token }); }
-            return allowed && !controller.signal.aborted ? undefined : { block: true, reason: BLOCKED.not_approved };
+            keepSchedule = allowed && !signal.aborted;
+            return keepSchedule ? undefined : { block: true, reason: BLOCKED.not_approved };
         } finally {
+            if (!keepSchedule) schedule?.discard(event.toolCallId);
             if (parent) { nested.get(parent)?.delete(controller); if (!nested.get(parent)?.size) nested.delete(parent); }
         }
     });

@@ -269,11 +269,44 @@
 
 WebSocket `open_session` 可带 `botWindow:{profileId,windowId}`（Bot 页面打开和重连时都带）：服务端在启动 worker 前和订阅后各核对一次，只接受该窗口当前一代；否则返回失败响应 `errorCode:'BOT_WINDOW_STALE'`（已换代）或 `'BOT_WINDOW_ROTATING'`（正在换代），网页重新解析窗口。不带 `botWindow` 时按普通原生会话打开（Pi Agent 页面）。另有 `gateway_bot_notice {notice:'model_unavailable',provider,id}`：Bot 指定的模型不可用，本轮继续使用当前模型。
 
-Bot 设置为“稳妥”或“每次都问”时，需要确认的工具调用在执行前发出 `extension_ui_request` `method:'confirm'`，`title` 固定为 `允许这一步吗？ / Allow this step?`，`message` 为 `<kind> #<token>\n\n<detail>`（`token` 为 16 位十六进制，标识这次请求；`kind` 为 `command`、`delegate`、`outside`、`write`、`memory`、`action` 之一；`detail` 为命令、路径、记忆内容或工具名，最多约 2000 字符）。按普通确认回复 `{type:'extension_ui_response',id,confirmed:true|false}`；拒绝、取消或 30 分钟无回答时该调用被阻止。没有界面或定时运行进行中时不发确认，直接阻止。请求在 worker 内结束（回答、超时、所在的嵌套调用被取消）后，仍挂起的同一请求由服务端撤回并广播 `gateway_ui_resolved`。
+Bot 设置为“稳妥”或“每次都问”时，需要确认的工具调用在执行前发出 `extension_ui_request` `method:'confirm'`，`title` 固定为 `允许这一步吗？ / Allow this step?`，`message` 为 `<kind> #<token>\n\n<detail>`（`token` 为 16 位十六进制，标识这次请求；`kind` 为 `command`、`delegate`、`outside`、`write`、`memory`、`action`、`schedule` 之一；`detail` 为命令、路径、记忆内容、定时任务标题与时间或工具名，最多约 2000 字符）。按普通确认回复 `{type:'extension_ui_response',id,confirmed:true|false}`；拒绝、取消或 30 分钟无回答时该调用被阻止。没有界面或定时运行进行中时不发确认，直接阻止。请求在 worker 内结束（回答、超时、所在的嵌套调用被取消）后，仍挂起的同一请求由服务端撤回并广播 `gateway_ui_resolved`。
 
-Bot 窗口的 worker 另有三个工具：`window_note`（记事本 add/update/done/cancel/reopen；`due` 和 `replaces` 为空字符串时视为未给，update 的 `due:"none"` 清除截止时间。工具在执行时立即追加原生 custom 条目 `pivane-bot-ledger` `{v:1,ops,toolCallId}`，所以经 Codemode 等包装调用的记录也会保存；结果 `details.pivaneNoteSaved:{v:1,ids}`。较早版本写在结果 `details.pivaneLedger` 中的记录仍会重放）、`window_recall` 与 `window_read`（只读检索和查看本窗口各代原文，带 `readOnlyHint`）。Bot 窗口的压缩由扩展写结构化摘要（`details.pivaneBot` 含 `sections`、记事本对账 `ledger:{ops,snapshot}`、被拒的变更，本代到期时另有 `includedKept:true`），回答缺少部分或失败时回落 Pi 原生摘要。服务端在压缩完成约 3 秒后检查换代条件（8 MiB、8000 条或 60 天）；到期且原生分支最后一次压缩是带 `includedKept` 的结构化摘要、其后没有新的消息时才换代（在会话编辑预占内再核对一次），否则等下一次压缩。规则见 [Bot 模式](BOT_MODE.md#长期聊天的维护)。
+Bot 窗口的 worker 提供以下记事本和回看工具：`window_note`（记事本 add/update/done/cancel/reopen；`due` 和 `replaces` 为空字符串时视为未给，update 的 `due:"none"` 清除截止时间。工具在执行时立即追加原生 custom 条目 `pivane-bot-ledger` `{v:1,ops,toolCallId}`，所以经 Codemode 等包装调用的记录也会保存；结果 `details.pivaneNoteSaved:{v:1,ids}`。较早版本写在结果 `details.pivaneLedger` 中的记录仍会重放）、`window_recall` 与 `window_read`（只读检索和查看本窗口各代原文，带 `readOnlyHint`）。Bot 窗口的压缩由扩展写结构化摘要（`details.pivaneBot` 含 `sections`、记事本对账 `ledger:{ops,snapshot}`、被拒的变更，本代到期时另有 `includedKept:true`），回答缺少部分或失败时回落 Pi 原生摘要。服务端在压缩完成约 3 秒后检查换代条件（8 MiB、8000 条或 60 天）；到期且原生分支最后一次压缩是带 `includedKept` 的结构化摘要、其后没有新的消息时才换代（在会话编辑预占内再核对一次），否则等下一次压缩。规则见 [Bot 模式](BOT_MODE.md#长期聊天的维护)。
 
-Bot 窗口会话不能移动或绑定消息渠道。以 Bot 档案为目标的定时任务进入主聊天当前一代，运行期间使用任务准入和计价时选定的模型；`GET /cron` 的 `homes` 中 Bot 的主线程按主聊天当前一代派生（`bot:true`），`PUT /cron/homes/:profileId` 对 Bot 返回 409，不保存也不创建会话。
+Bot 窗口会话不能移动或绑定消息渠道。以 Bot 档案为目标的定时任务默认进入主聊天当前一代；目标带 `windowId` 时进入该 Bot 指定窗口的当前一代，运行期间使用任务准入和计价时选定的模型；`GET /cron` 的 `homes` 中 Bot 的主线程按主聊天当前一代派生（`bot:true`），`PUT /cron/homes/:profileId` 对 Bot 返回 409，不保存也不创建会话。
+
+Bot 窗口另有 `bot_schedule` 工具，动作是 `create/list/cancel`。内部 `POST /api/pi/bot-schedule/:action` **只接受存活 worker 的导航 Bearer Token**；工作台 Cookie／管理 Token 不能代替。worker 必须加载 Bot 身份，且仍是该窗口当前一代；`profileId/windowId` 仅从 worker 取，不接受请求体指定。查询与取消只涉及以本 Bot 为 profile 目标的任务（包含它的全部窗口）。
+
+- `create`：`{toolCallId,title,message,once?,repeat?,timeZone?,needsTools?}`。`title` 最多 120 字，`message` 最多 40000 字；`once` 为本地墙上时间 `YYYY-MM-DD HH:mm`，与五段 cron `repeat` 必须二选一。`timeZone` 为 IANA 时区，默认服务端时区；拒绝过去时间、无效日期和夏令时缺失的本地时刻，重复时刻选首次。`needsTools:false`（默认）保存为文字模式，true 为工作模式；默认启用，其余执行限制和预算沿用调度器。主聊天使用 `{kind:'profile',profileId}`，话题使用 `{kind:'profile',profileId,windowId}`。以窗口当前会话 ID 和 `toolCallId` 派生稳定 UUID，同一调用重试不重复创建；已有同一调用不接受更改内容。定时运行未结束或仍待核对时拒绝创建。
+- `list`：`{timeZone?}`，返回本 Bot 未删除任务和该时区的当前本地时间 `now`（`YYYY-MM-DD HH:mm`）。查看不需要确认。
+- `cancel`：`{id,expectedRevision?}`，删除对应任务但保留历史；按调度器现有规则，正在运行或待核对的任务不能删除。`expectedRevision` 由 worker 审批流程内部保存和发送，不向模型暴露；修订已改变则返回 409，提示任务在批准后有变，请重新列出，不取消任何任务。“放手”无审批时取消当前修订。
+
+“稳妥”和“每次都问”的创建／取消走现有确认卡，`kind:'schedule'`。创建详情固定为 `Create: <title>\n<YYYY-MM-DD HH:mm 或规范化 cron> (<timeZone>)`；取消详情为 `Cancel: <title>\n<单次本地时间或 cron> (<timeZone>)`。创建时先固定时区与时间参数，确认和执行复用；取消先只读查询本 Bot 任务，确认时保留该任务修订。不存在或不属于本 Bot 的 ID 不发确认，执行返回 404。拒绝、取消或无人值守沿用原有阻止规则。
+
+HTTP 成功响应也是工具结果 `details.pivaneBotSchedule` 的值（工具 `content` 为同值的短 JSON）：
+
+```ts
+{
+  v: 1,
+  action: 'created' | 'cancelled' | 'listed',
+  job?: JobView,       // created/cancelled
+  jobs?: JobView[],    // listed
+  now?: string        // listed；请求时区的 YYYY-MM-DD HH:mm
+}
+// JobView
+{
+  id: string,
+  title: string,
+  message: string,    // 最多 500 字符的任务说明
+  schedule: { kind: 'once', at: number, timeZone: string }
+          | { kind: 'cron', expression: string, timeZone: string },
+  nextAt: number | null,  // 毫秒时间戳
+  enabled: boolean,
+  revision: number,
+  windowId: string | null, // null 表示 profile 的主聊天
+  local: string | null    // nextAt 在任务时区的 YYYY-MM-DD HH:mm；无下次时为 null
+}
+```
 
 ### Agent 任务线程
 
