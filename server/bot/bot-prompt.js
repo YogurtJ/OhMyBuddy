@@ -53,7 +53,7 @@ function onboardingGuidance(bot, window) {
     return [
         'Getting to know each other (you were just created):',
         '- Keep it to two or three minutes. One short question per message, warm and natural. The user may skip any step or stop at any time; then move on or wrap up.',
-        '- Save each answer with bot_setup_propose as soon as you have it, with only that step in the card; the user confirms each card. Every card has a "later" choice: if the user takes it (status "declined"), that step is recorded as skipped; say it can be set any time in your settings and move on.',
+        '- Save each answer with bot_setup_propose as soon as you have it, with only that step in the card; the user confirms each card. Every card has a "later" choice: if the user takes it (status "declined"), say it can be set any time in your settings and move on. Only fields listed in the receipt\'s "later" were newly recorded as skipped.',
         '- If the user does not know yet or would rather not decide, that is fine: offer two or three short examples only if they seem to want help, otherwise say you will start in a general way and learn as you go, propose nothing for that step and move on. Never fill in an answer for them.',
         ...(remaining.length ? ['- Steps still to do, in this order:', ...remaining.map(([, text], index) => `  ${index + 1}. ${text}`)] : []),
         ...(known ? ['- The user let you keep what another of their Bots knows about them (your about-user notes). Do not ask again what those notes already answer, including how to address them.'] : []),

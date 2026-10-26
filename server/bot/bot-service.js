@@ -606,12 +606,15 @@ class BotService extends EventEmitter {
             const picture = input.picture !== undefined;
             if (picture && !Object.hasOwn(proposal, 'avatar')) fail('Only the proposed fields can be saved');
             if (picture) delete changes.avatar;
-            if (!later && !Object.keys(changes).length && !picture) fail('Nothing to save');
+            // Even an empty edited card answers its proposed steps (kept as-is or skipped).
+            if (!later && !Object.keys(changes).length && !picture && !Object.keys(setup.STEP_OF).some(field => Object.hasOwn(proposal, field))) fail('Nothing to save');
             const now = new Date().toISOString();
-            const saved = await this.profiles.mutate(input.expectedRevision, state => {
+            let progressBefore;
+            let saved = await this.profiles.mutate(input.expectedRevision, state => {
                 const index = state.profiles.findIndex(profile => profile.id === profileId);
                 const previous = state.profiles[index], bot = settings.readBot(previous);
                 if (index < 0 || !bot || previous.trashedAt !== undefined) fail('Bot not found', 404);
+                progressBefore = bot.onboarding;
                 if (picture && (previous.avatar?.kind !== 'image' || previous.avatar.version !== input.picture))
                     fail('The face is no longer the uploaded picture; upload it again', 409, 'BOT_PICTURE_CHANGED');
                 const base = validateProfile({ name: changes.name ?? previous.name, description: previous.description,
@@ -625,8 +628,8 @@ class BotService extends EventEmitter {
                     personality: previous.soul, workStyle: bot.permissions.preset };
                 for (const [field, step] of Object.entries(setup.STEP_OF)) {
                     if (!Object.hasOwn(proposal, field)) continue;
-                    if (changes[field] !== undefined || field === 'avatar' && picture) onboarding.steps[step] = 'done';
-                    else if (!settled(onboarding.steps, step)) onboarding.steps[step] = !later && has[field] === proposal[field] ? 'done' : 'skipped';
+                    if (changes[field] !== undefined || field === 'avatar' && picture || !later && has[field] === proposal[field]) onboarding.steps[step] = 'done';
+                    else if (!settled(onboarding.steps, step)) onboarding.steps[step] = 'skipped';
                 }
                 if (onboarding.phase === 'greeting') onboarding.phase = 'interview';
                 if (changes.finish && !['done', 'skipped'].includes(onboarding.phase)) { onboarding.phase = 'done'; onboarding.completedAt = now; }
@@ -653,9 +656,31 @@ class BotService extends EventEmitter {
                     }
                 } catch (error) { user = { added: [], documentSaved: false, error: error.message }; }
             }
+            let progressReverted;
+            if (user && !user.documentSaved) {
+                // The identity stands, but an unsaved fact must not settle the about step or
+                // finish the interview. Keep the shared reservation through this correction.
+                try {
+                    saved = await this.profiles.mutate(saved.revision, state => {
+                        const index = state.profiles.findIndex(profile => profile.id === profileId);
+                        const previous = state.profiles[index], bot = settings.readBot(previous);
+                        if (index < 0 || !bot || previous.trashedAt !== undefined) fail('Bot not found', 404);
+                        const onboarding = { ...bot.onboarding, steps: { ...bot.onboarding.steps } };
+                        if (Object.hasOwn(progressBefore.steps, 'about')) onboarding.steps.about = progressBefore.steps.about;
+                        else delete onboarding.steps.about;
+                        if (changes.finish && onboarding.phase === 'done' && !['done', 'skipped'].includes(progressBefore.phase)) {
+                            onboarding.phase = progressBefore.phase;
+                            onboarding.completedAt = progressBefore.completedAt;
+                        }
+                        const record = { ...previous, bot: { ...previous.bot, onboarding } };
+                        state.profiles[index] = record;
+                        return { bot: { id: record.id, name: record.name, avatar: record.avatar ?? null, bot: this.publicBot({ ...bot, onboarding }) } };
+                    });
+                } catch { progressReverted = false; }
+            }
             this.emit('botChanged', { profileId });
             return { ok: true, revision: saved.revision, bot: saved.bot, saved: { ...changes, ...(picture ? { picture: true } : {}) },
-                ...(later ? { later: true } : {}), ...(user ? { user } : {}) };
+                ...(later ? { later: true } : {}), ...(user ? { user } : {}), ...(progressReverted === false ? { progressReverted } : {}) };
         });
     }
 
@@ -735,7 +760,9 @@ class BotService extends EventEmitter {
                 if (input.action === 'start') { if (onboarding.phase === 'greeting') onboarding.phase = 'interview'; }
                 else if (input.action === 'skip') { onboarding.phase = 'skipped'; onboarding.completedAt = now; }
                 else Object.assign(onboarding, { phase: 'interview', steps: {}, startedAt: now, completedAt: null });
-                const nextBot = settings.normalizeBot({ ...bot, onboarding });
+                // Preserve choices inferred from legacy/per-step answers before restart clears them.
+                const chosen = input.action === 'restart' ? chosenIdentity(previous, bot) : bot.chosen;
+                const nextBot = settings.normalizeBot({ ...bot, onboarding, chosen });
                 state.profiles[index] = { ...previous, bot: { ...previous.bot, ...nextBot }, updatedAt: now };
                 return { bot: { id: previous.id, bot: this.publicBot(nextBot) } };
             });
