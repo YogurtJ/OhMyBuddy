@@ -192,6 +192,12 @@ test('archive protects enabled scheduler targets and waiting runs; archived hist
     let direct = await f.cron.save({ ...baseJob, id: randomUUID(), target: { kind: 'thread', cwd: first.cwd, sessionId: first.id } });
     await assert.rejects(f.patch(id, { archived: true }), error => error.code === 'BOT_TOPIC_SCHEDULED');
     direct = await f.cron.save({ ...direct, enabled: false });
+    let alias = await f.cron.save({ ...baseJob, id: randomUUID(), target: { kind: 'thread', cwd: first.cwd + '/.', sessionId: first.id } });
+    await assert.rejects(f.patch(id, { archived: true }), error => error.code === 'BOT_TOPIC_SCHEDULED');
+    alias = await f.cron.save({ ...alias, enabled: false });
+    const aliasRun = f.cron.enqueue(alias, f.cron.now(), randomUUID(), true);
+    await assert.rejects(f.patch(id, { archived: true }), error => error.code === 'BOT_WINDOW_BUSY');
+    f.cron.db.saveRun({ ...aliasRun, status: 'skipped', completedAt: f.cron.now() });
     const waiting = f.cron.enqueue(job, f.cron.now(), randomUUID(), true);
     await assert.rejects(f.patch(id, { archived: true }), error => error.code === 'BOT_WINDOW_BUSY');
     f.cron.db.saveRun({ ...waiting, status: 'skipped', completedAt: f.cron.now() });

@@ -12,7 +12,7 @@ const { getSdk } = require('../pi-session-store');
 const { validateProfile, profileRevision } = require('../pi-profile-registry');
 const settings = require('./bot-settings');
 const { BotWindowRegistry, MAX_WINDOWS } = require('./bot-window-registry');
-const { MAX_TOPICS, topicFields, topicId } = require('./bot-topic');
+const { MAX_TOPICS, topicFields, topicId, sameThreadTarget } = require('./bot-topic');
 const { WINDOW_ENTRY, windowMarker, readWindowBinding } = require('./bot-window-state');
 const { HANDOFF_MESSAGE, buildHandoff } = require('./bot-handoff');
 const ledger = require('./bot-ledger');
@@ -308,12 +308,14 @@ class BotService extends EventEmitter {
             }
             if (this.cron) {
                 await this.cron.ready; this.cron.healthy();
+                const refs = window.generations.map(item => ({ cwd: window.cwd, sessionId: item.sessionId }));
+                const thread = target => sameThreadTarget(target, refs, cwd => this.store.resolveProject(cwd));
                 const targets = target => target?.kind === 'profile' && target.profileId === profileId && target.windowId === window.id
-                    || target?.kind === 'thread' && target.cwd === window.cwd && window.generations.some(item => item.sessionId === target.sessionId);
+                    || target?.kind === 'thread' && thread(target);
                 if (this.cron.db.jobs().some(job => !job.deleted && job.enabled && targets(job.target)))
                     fail('Disable or retarget this topic’s scheduled tasks before archiving', 409, 'BOT_TOPIC_SCHEDULED');
                 if (this.cron.db.activeRuns().some(run => targets(run.job?.target)
-                    || run.target?.cwd === window.cwd && window.generations.some(item => item.sessionId === run.target.sessionId))) busy();
+                    || thread(run.target))) busy();
             }
         };
         for (const file of paths) if (!this.supervisor.isSessionIdle(file)) busy();

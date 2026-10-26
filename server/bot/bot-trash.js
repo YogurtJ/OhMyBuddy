@@ -3,6 +3,7 @@
 // No session, memory, document, media or workspace is deleted.
 const fs = require('node:fs');
 const { readBot } = require('./bot-settings');
+const { sameThreadTarget } = require('./bot-topic');
 const fail = (message, status = 409, code) => { throw Object.assign(new Error(message), { status, code }); };
 async function trashBot(service, profileId, input) {
     if (!input || typeof input !== 'object' || Array.isArray(input) || typeof input.expectedRevision !== 'string'
@@ -66,11 +67,11 @@ module.exports = { trashBot, createTrashBlockers };
 
 // These sources are inspected synchronously again inside the profile CAS callback.
 // In-flight scheduler writes are blocked too: an earlier target lookup is not a lease.
-function createTrashBlockers({ cron, deferred, learning }) {
+function createTrashBlockers({ cron, deferred, learning, store }) {
     return ({ profileId, sessionRefs }) => {
         if (!cron?.db || cron.error) return [{ code: 'BOT_ACTIVITY_UNAVAILABLE', message: 'Scheduled task checks are not ready; try again shortly' }];
         if (cron.busy || cron.mutating) return [{ code: 'BOT_WORK_PENDING', message: 'Wait for scheduled task operations to finish' }];
-        const sameThread = target => sessionRefs.some(ref => ref.cwd === target?.cwd && ref.sessionId === target?.sessionId);
+        const sameThread = target => sameThreadTarget(target, sessionRefs, store ? cwd => store.resolveProject(cwd) : undefined);
         const sameTarget = target => target?.kind === 'profile' && target.profileId === profileId
             || target?.kind === 'thread' && sameThread(target);
         const accepted = cron.db.activeRuns().some(run => sameTarget(run.job?.target) || sameThread(run.target));

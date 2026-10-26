@@ -52,4 +52,12 @@ function mountBotTopics(router, { bots, authenticate }) {
     });
 }
 
-module.exports = { MAX_TOPICS, topicFields, topicId, mountBotTopics };
+// Stored thread targets may use an allowed path alias while native references are canonical.
+function sameThreadTarget(target, refs, resolveProject = value => value) {
+    if (!target || typeof target.cwd !== 'string' || typeof target.sessionId !== 'string') return false;
+    let cwd;
+    try { cwd = resolveProject(target.cwd); } catch { return false; }
+    return refs.some(ref => ref.cwd === cwd && ref.sessionId === target.sessionId);
+}
+
+module.exports = { MAX_TOPICS, topicFields, topicId, mountBotTopics, sameThreadTarget };
