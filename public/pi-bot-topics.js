@@ -13,6 +13,9 @@
     const json = body => ({ headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     // A plain revision conflict (no code): reread and let the user decide again.
     const stale = error => error?.status === 409 && !error.code;
+    // The server takes single-line values only: line breaks, tabs and other control characters
+    // (typed or pasted into the focus box) become one space, so a multi-line focus still saves.
+    const clean = value => String(value ?? '').replace(/ *[\x00-\x1f\x7f][\x00-\x1f\x7f ]*/g, ' ').trim();
 
     // What the server refused, in plain words; archiving a busy topic or one that scheduled
     // tasks still post to is refused, never forced.
@@ -23,6 +26,14 @@
         if (/DEFERRED/.test(code)) return translateUi("这个话题还有等着稍后发送的消息。等它们发出或取消后再归档。");
         if (/BUSY|QUEUE|RUNNING|ACTIVE|PENDING|RECOVERY/.test(code)) return translateUi("这个话题还在忙或有排队的消息，等它停下再归档。");
         return error?.message || translateUi("保存失败");
+    }
+
+    // What the server refused when creating or editing a topic, in plain words.
+    function problem(error) {
+        if (error?.code === 'BOT_TOPIC_LIMIT') return translateUi("话题已经到上限了（已归档的也算在内），可以先接着用已有的话题。");
+        if (error?.status === 400) return translateUi("内容没有通过检查：话题名不能为空，最多 {0} 字；“专注什么”最多 {1} 字；表情最多 {2} 个字符。", LIMITS.title, LIMITS.focus, LIMITS.emoji);
+        if (error?.status === 404) return translateUi("找不到这个话题了，可能已经在别处移走。");
+        return refusal(error);
     }
 
     let dialog = null;
@@ -92,12 +103,12 @@
         const values = () => ({ title: name.value, focus: focus.value, emoji: emoji.value });
         const edited = () => Object.entries(values()).some(([key, value]) => value !== base[key]);
         const say = (text, tone) => { status.textContent = text; if (tone) status.dataset.tone = tone; else delete status.dataset.tone; };
-        // Fields the user changed, trimmed; null when something is not valid yet.
+        // Fields the user changed, as single trimmed lines; null when something is not valid yet.
         function changes() {
-            const next = { title: name.value.trim(), focus: focus.value.trim(), emoji: emoji.value.trim() };
+            const next = { title: clean(name.value), focus: clean(focus.value), emoji: clean(emoji.value) };
             if (!next.title || next.title.length > LIMITS.title || next.focus.length > LIMITS.focus || next.emoji.length > LIMITS.emoji) return null;
             if (creating) return next;
-            return Object.fromEntries(Object.entries(next).filter(([key, value]) => value !== base[key].trim()));
+            return Object.fromEntries(Object.entries(next).filter(([key, value]) => value !== clean(base[key])));
         }
         function refresh() {
             mark.textContent = emoji.value.trim() || '';
@@ -129,8 +140,9 @@
             if (creating) return true;
             const now = fresh?.windows?.find(item => item.id === options.window.id);
             if (!now || now.archivedAt) { gone = true; say(translateUi("这个话题已经被归档或移走了。"), 'error'); refresh(); return false; }
+            // A field counts as the user's own edit only when its saved form differs from before.
             const mine = values(), next = { title: now.title || '', focus: now.focus || '', emoji: now.emoji || '' };
-            fill(Object.fromEntries(Object.keys(next).map(key => [key, mine[key] !== base[key] ? mine[key] : next[key]])));
+            fill(Object.fromEntries(Object.keys(next).map(key => [key, clean(mine[key]) !== clean(base[key]) ? mine[key] : next[key]])));
             base = next;
             return true;
         }
@@ -154,7 +166,7 @@
                     let fresh = false;
                     try { fresh = await reread(); } catch {}
                     if (alive() && fresh) say(translateUi("话题刚刚在别处改过。你的修改还在，检查后再保存一次。"), 'warn');
-                } else say(error.message || translateUi("保存失败"), 'error');
+                } else say(problem(error), 'error');
             } finally { busy = false; if (sheet.open) refresh(); }
         });
 
@@ -215,7 +227,8 @@
 
     // ---- receipts of topics the Bot opened ----------------------------------------------
     // host: { api, notify, context(), generation() } as for task cards; a card stays usable
-    // across reconnects of the same conversation and does nothing for a stale one.
+    // across reconnects of the same conversation and does nothing for a stale one. Only results
+    // of the topic tool (server/bot/bot-topic-tool.ts) are receipts.
     const validWindow = item => item && typeof item === 'object' && UUID.test(item.id || '') && item.kind === 'topic'
         && typeof item.title === 'string' && item.title.trim() && item.title.length <= LIMITS.title
         && (item.focus == null || typeof item.focus === 'string' && item.focus.length <= LIMITS.focus)
@@ -265,7 +278,7 @@
         return {
             render(message) {
                 const receipt = message?.details?.pivaneBotTopic, id = message?.toolCallId;
-                if (message?.isError || receipt?.v !== 1 || receipt.action !== 'created' || !UUID.test(receipt.profileId || '')
+                if (message?.isError || message?.toolName !== 'bot_topic_propose' || receipt?.v !== 1 || receipt.action !== 'created' || !UUID.test(receipt.profileId || '')
                     || !validWindow(receipt.window) || !id || cards.get(id)?.isConnected) return null;
                 const node = card(receipt, host.context());
                 node.dataset.readingKey = `topic:${id}`;

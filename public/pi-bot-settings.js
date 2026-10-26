@@ -20,7 +20,12 @@
         BOT_HAS_SCHEDULES: name => translateUi("还有定时任务发给 {0}。先在“定时”页改掉或取消它们。", name),
         BOT_HAS_DEFERRED: name => translateUi("{0} 还有等着稍后发送的消息。等它们发出或取消后再试。", name),
         BOT_WORK_PENDING: name => translateUi("{0} 还在忙（回复、排队或后台工作）。等它停下再试。", name),
-        SESSION_QUEUE_RECOVERY: name => translateUi("{0} 的聊天里还有等待取回的排队内容。先在聊天里处理它们。", name)
+        SESSION_QUEUE_RECOVERY: name => translateUi("{0} 的聊天里还有等待取回的排队内容。先在聊天里处理它们。", name),
+        BOT_WINDOW_ROTATING: name => translateUi("{0} 的聊天正在接续到新的会话文件，稍等一下再试。", name),
+        BOT_WINDOW_STALE: name => translateUi("{0} 的聊天刚刚有变化，和记录对不上。稍等一下再试；一直这样可以刷新页面。", name),
+        BOT_TRASH_UNAVAILABLE: () => translateUi("回收站前的检查暂时还没准备好，稍后再试。"),
+        BOT_ACTIVITY_UNAVAILABLE: () => translateUi("定时任务的检查暂时还没准备好，稍后再试。"),
+        BOT_NOT_FOUND: name => translateUi("找不到 {0} 了，可能已在别处移到回收站。", name)
     };
 
     let dialog = null;
@@ -376,7 +381,7 @@
                     status.dataset.tone = 'warn';
                     status.textContent = translateUi("设置刚刚在别处改过，还没有移到回收站。检查后可以再试一次。");
                 } else {
-                    const reason = TRASH_BLOCKED[error.code]?.(name) || error.message || translateUi("保存失败");
+                    const reason = (TRASH_BLOCKED[error.code] || (error.status === 404 ? TRASH_BLOCKED.BOT_NOT_FOUND : null))?.(name) || error.message || translateUi("保存失败");
                     status.dataset.tone = 'error'; status.textContent = translateUi("没有移到回收站：{0}", reason);
                 }
             } finally { saving = false; if (sheet.open) refreshState(); }

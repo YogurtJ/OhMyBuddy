@@ -2565,6 +2565,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     return openBotWindow(target);
                 }).catch(error => {
                     if (!state.botMode || state.connected || state.bot?.windowId !== target.windowId) return;
+                    // Archived, removed or moved to the trash elsewhere: retrying cannot succeed. Only the
+                    // latest attempt for this very window hands over; the Bot page then continues elsewhere.
+                    if (error.code === 'BOT_WINDOW_ARCHIVED' || error.status === 404) {
+                        if (attempt !== state.reconnectAttempt || state.bot?.profileId !== target.profileId) return;
+                        clearTimeout(state.reconnectTimer);
+                        void botUi?.leaveGoneWindow(target, { archived: error.code === 'BOT_WINDOW_ARCHIVED' });
+                        return;
+                    }
                     setConnection('error', error.code === 'BOT_WINDOW_ROTATING' ? translateUi("正在打开最新的聊天") : translateUi("连接中断，正在重连"));
                     if (attempt === state.reconnectAttempt) scheduleReconnect(Math.min(15000, Math.max(1800, delay * 2)));
                 });
@@ -2687,8 +2695,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     resolve(true);
                 } catch (error) {
                     if (generation !== state.socketGeneration || state.socket !== socket) return resolve(false);
-                    if (['BOT_WINDOW_STALE', 'BOT_WINDOW_ROTATING'].includes(error.errorCode) && state.botMode && state.bot) {
-                        // The window moved on: open its current generation instead of this one.
+                    if (['BOT_WINDOW_STALE', 'BOT_WINDOW_ROTATING', 'BOT_WINDOW_ARCHIVED'].includes(error.errorCode) && state.botMode && state.bot) {
+                        // The window moved on: open its current generation instead of this one (an archived
+                        // topic is then settled by the reconnect, which leaves it).
                         state.intentionalClose = true; socket.close(4000, 'Bot window moved');
                         setConnection('connecting', translateUi("正在打开最新的聊天"));
                         scheduleReconnect(error.errorCode === 'BOT_WINDOW_ROTATING' || (state.reconnectAttempt || 0) > 2 ? 1500 : 0);
@@ -4648,6 +4657,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             await requestRpc(command, { message, images }, 60000);
             if (key === state.composerSessionKey) transcriptActivity?.accepted();
+            if (state.botMode && !selectedCommand && key === state.composerSessionKey) botUi?.ownMessage();
             state.uncertainDrafts.delete(key);
             const current = key === state.composerSessionKey ? { text: elements.input.value, files: state.attachmentFiles } : state.composerDrafts.get(key);
             if (current?.text === draft.text && current.files.length === draft.files.length && current.files.every((file, index) => file === draft.files[index])) {

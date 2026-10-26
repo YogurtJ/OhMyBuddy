@@ -465,8 +465,13 @@
 }
 .pi-bot-topic-add:hover, .pi-bot-topic-edit:hover { background: var(--pv-nav-hover, var(--surface-2)); color: var(--text-main); }
 .pi-bot-topic-add:focus-visible, .pi-bot-topic-edit:focus-visible, .pi-bot-archived > summary:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
-.pi-bot-topic-row { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.pi-bot-topic-row { display: flex; align-items: center; gap: 2px; min-width: 0; border-radius: 9px; }
 .pi-bot-topic-row > .pi-bot-window { flex: 1; min-width: 0; }
+/* The whole row (with its edit button) carries hover and the open topic's highlight, as wide as the main chat's. */
+.pi-bot-topic-row:hover { background: var(--pv-nav-hover, var(--surface-2)); }
+.pi-bot-topic-row:has(> .pi-bot-window[aria-current="page"]) { background: var(--surface-3); }
+.pi-bot-topic-row > .pi-bot-window:hover, .pi-bot-topic-row > .pi-bot-window[aria-current="page"] { background: transparent; }
+.pi-bot-topic-row > .pi-bot-topic-edit:hover { background: color-mix(in srgb, var(--text-main) 8%, transparent); }
 @media (hover: hover) and (pointer: fine) and (min-width: 901px) {
     .pi-bot-topic-row:not(:hover):not(:focus-within) .pi-bot-topic-edit { opacity: 0; }
 }
@@ -526,6 +531,7 @@
 .pi-bot-sheet-rule.is-revoked .pi-bot-sheet-rule-copy > :not(.pi-bot-sheet-rule-state) { opacity: .55; text-decoration: line-through; }
 .pi-bot-sheet-rule-state { color: var(--danger); font-weight: 600; }
 .pi-bot-sheet-rule .pi-bot-chip { flex: none; margin: 0; min-height: 36px; padding: 0 12px; font-size: .82rem; }
+@media (max-width: 900px) { .pi-bot-sheet-rule .pi-bot-chip { min-height: 44px; } }
 @media (max-width: 600px) {
     .pi-bot-sheet-rule { flex-wrap: wrap; }
     .pi-bot-sheet-rule .pi-bot-chip { min-height: 44px; margin-left: auto; }
@@ -551,7 +557,33 @@
 }
 
 /* ---- the end of getting acquainted (flow 2) -------------------------------------------- */
-.pi-bot-closure-body { gap: 14px; }
+/* Only the body (facts and model) scrolls; the heading, the choices and any message keep their room. */
+.pi-bot-closure > .pi-bot-setup-head, .pi-bot-closure > .pi-bot-closure-tasks, .pi-bot-closure > .pi-bot-setup-foot { flex: none; }
+.pi-bot-closure-body {
+    gap: 14px;
+    /* Scroll shadows: a soft edge shows only where more content is hidden above or below. */
+    background:
+        linear-gradient(var(--surface-2) 40%, transparent) center top / 100% 20px no-repeat local,
+        linear-gradient(transparent, var(--surface-2) 60%) center bottom / 100% 20px no-repeat local,
+        radial-gradient(farthest-side at 50% 0, color-mix(in srgb, var(--text-main) 16%, transparent), transparent) center top / 100% 8px no-repeat scroll,
+        radial-gradient(farthest-side at 50% 100%, color-mix(in srgb, var(--text-main) 16%, transparent), transparent) center bottom / 100% 8px no-repeat scroll;
+}
+.pi-bot-closure-about { min-width: 0; }
+.pi-bot-closure-about > summary {
+    display: flex; align-items: center; gap: 8px; width: fit-content; max-width: 100%; min-height: 32px; padding: 0 8px 0 2px; border-radius: 8px;
+    color: var(--text-muted); font-size: .84rem; cursor: pointer; list-style: none;
+}
+.pi-bot-closure-about > summary::-webkit-details-marker { display: none; }
+.pi-bot-closure-about > summary > i { flex: none; width: 18px; text-align: center; color: var(--primary, var(--green)); font-size: .82rem; }
+.pi-bot-closure-about > summary::after {
+    content: ""; flex: none; width: 5px; height: 5px; margin-left: 2px; border: solid currentColor; border-width: 0 1.5px 1.5px 0;
+    transform: rotate(-45deg); transition: transform 120ms ease;
+}
+.pi-bot-closure-about[open] > summary::after { transform: rotate(45deg); }
+.pi-bot-closure-about[open] > summary { margin-bottom: 6px; }
+.pi-bot-closure-about > summary:hover { color: var(--text-main); }
+.pi-bot-closure-about > summary:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) { .pi-bot-closure-about > summary::after { transition: none; } }
 .pi-bot-closure-facts { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .pi-bot-closure-facts li { display: flex; align-items: flex-start; gap: 10px; font-size: .86rem; line-height: 1.55; color: var(--text-main); }
 .pi-bot-closure-facts li > i { flex: none; width: 18px; margin-top: 4px; text-align: center; color: var(--primary, var(--green)); font-size: .82rem; }
@@ -575,13 +607,18 @@
 /* The footer only carries a message (an error or a hint); without one it takes no room. */
 .pi-bot-closure .pi-bot-setup-foot:has(.pi-bot-setup-note:empty) { display: none; }
 @media (max-width: 680px) {
+    /* Phones: a bounded panel leaves the Bot's last reply readable above it; the six choices sit
+       in two rows of three that never scroll away. */
+    .pi-bot-closure { gap: 10px; padding: 12px 12px 10px; max-height: min(42vh, 400px); max-height: min(42dvh, 400px); }
     .pi-bot-closure-model-row select { font-size: 16px; min-height: 44px; }
     .pi-bot-closure-model-row .pi-bot-chip, .pi-bot-closure-chips .pi-bot-chip, .pi-bot-closure .pi-bot-setup-later { min-height: 44px; }
-    .pi-bot-closure { gap: 10px; padding: 12px 12px 10px; }
-    .pi-bot-closure-body { gap: 10px; }
+    .pi-bot-closure-about > summary { min-height: 44px; }
+    .pi-bot-closure-body { gap: 8px; }
     .pi-bot-closure-facts { gap: 5px; }
     .pi-bot-closure-facts li { font-size: .8rem; line-height: 1.5; }
     .pi-bot-closure-model-row select[data-closure-thinking] { flex-basis: 92px; }
-    .pi-bot-closure-chips { gap: 6px; }
-    .pi-bot-closure-model-row .pi-bot-chip, .pi-bot-closure-chips .pi-bot-chip { padding: 0 12px; }
+    .pi-bot-closure-model-row .pi-bot-chip { padding: 0 12px; }
+    .pi-bot-closure-chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+    .pi-bot-closure-chips .pi-bot-chip, .pi-bot-closure-chips .pi-bot-setup-later { min-width: 0; margin: 0; padding: 0 4px; font-size: .86rem; }
+    .pi-bot-closure-chips .pi-bot-setup-later { margin-left: 0; }
 }
