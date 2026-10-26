@@ -125,6 +125,25 @@ test('command grants never override risk, unknown classification, private paths 
     assert.equal(check('ask', 'window_note', { text: 'remember' }).kind, 'action');
 });
 
+test('NB-02 PowerShell quoted wildcard file selectors are refused and cannot become grants', () => {
+    for (const command of ["Get-Content 'auth.*'", "Get-Content '*'", 'Get-Content "auth?json"',
+        "Get-Content 'auth[.]json'", "Get-Content '[a]uth.json'", "Get-Content -Path '*.json'", "Get-Content 'safe.*'",
+        "Get-ChildItem '*'", "Get-Item '?'", "Get-Content -LiteralPath '*' -Force", 'Get-Content -LiteralPath safe[1].txt']) {
+        for (const preset of ['free', 'balanced', 'ask']) {
+            const input = { command }, forged = { v: 1, id: 'old-ps-rule', tool: 'powershell', value: command, cwd };
+            const decision = check(preset, 'powershell', input, [forged]);
+            assert.deepEqual(decision, { block: true, reason: BLOCKED.protected }, command);
+            assert.equal(ruleFor({ toolName: 'powershell', input, cwd, agentDir }), null);
+            assert.throws(() => normalizeRule(forged), /Invalid/);
+        }
+    }
+    fs.writeFileSync(path.join(cwd, 'safe[1].txt'), 'synthetic literal');
+    for (const command of ["Get-Content 'notes.txt'", "Get-Content -LiteralPath 'safe[1].txt'", 'Write-Output "*"']) {
+        assert.equal(check('free', 'powershell', { command }), null, command);
+        assert.ok(check('balanced', 'powershell', { command }).rule, command);
+    }
+});
+
 test('rule parsing rejects broad shapes and approval envelopes keep both formats', () => {
     const rule = ruleFor({ toolName: 'bash', input: { command: 'pwd' }, cwd, agentDir });
     const token = newToken(), detail = 'a\n\nb';

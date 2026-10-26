@@ -81,6 +81,14 @@ function classifyCommand({ toolName, input, cwd, agentDir }) {
     if (obviousPrivate(command, words, cwd, agentDir, resolve) || protectedPath(cwd, cwd, agentDir, resolve)) return { status: 'blocked' };
     if (!words.length) return { status: 'unknown' };
     const names = words.map(commandName), name = toolName === 'powershell' ? names[0] : path.posix.basename(words[0]), args = words.slice(1);
+    // PowerShell expands -Path wildcards in quoted strings too. Without a strictly
+    // literal operand, even '*' can select credentials or a private alias. Refuse
+    // unsupported selectors rather than asking or offering a persistent grant.
+    if (toolName === 'powershell' && PS_READ.has(names[0]) && args.some(arg => /[*?\[\]]/.test(arg))) {
+        const literalPath = !opaque && args.length === 2 && args[0].toLowerCase() === '-literalpath'
+            && !args[1].startsWith('-') && !args[1].includes(':');
+        if (!literalPath) return { status: 'blocked' };
+    }
     if (names.some(value => DANGEROUS.has(value)) || /\b(?:push|publish|deploy|upload|delete|destroy|reset|clean|format-volume)\b/i.test(words.join(' '))) return { status: 'risk' };
     if (opaque) return { status: 'unknown' };
     // A relative executable, an alternate absolute binary or a command wrapper is opaque.
