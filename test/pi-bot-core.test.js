@@ -36,7 +36,7 @@ test('bot settings normalize, tolerate invalid reads and accept only user-editab
     assert.equal(patched.permissions.preset, 'balanced');
     assert.equal(patched.notify.quietHours, null);
     assert.equal(patched.notify.dailyProactiveLimit, 5);
-    for (const bad of [{ workspace: '/tmp' }, { onboarding: {} }, { permissions: { preset: 'root' } }, { permissions: { rules: [] } },
+    for (const bad of [{ workspace: '/tmp' }, { onboarding: {} }, { permissions: { preset: 'root' } }, { permissions: { rules: [ { v: 99 } ] } },
         { model: { provider: '', id: 'x' } }, { notify: { quietHours: { start: '25:00', end: '08:00' } } }, { order: -1 }, { job: 'x'.repeat(501) }])
         assert.throws(() => settings.applyBotPatch(bot, bad), /Invalid/);
     // Unknown persisted fields survive normalization.
@@ -124,6 +124,18 @@ test('bots are profiles with a private workspace and a native-marked main window
         soul: record.soul, enabled: true, memory: record.memory, skills: record.skills } });
     assert.equal(saved.status, 200, JSON.stringify(saved.data));
     assert.equal(saved.data.profile.bot.job, '生活琐事');
+
+    const { ruleFor } = require('../server/bot/bot-guard');
+    const rule = ruleFor({ toolName: 'bash', input: { command: 'date' }, cwd: workspace, agentDir });
+    const granted = await call('PATCH', `/bots/${botId}`, { expectedRevision: saved.data.revision,
+        changes: { bot: { permissions: { rules: [rule] } } } });
+    assert.equal(granted.status, 200, JSON.stringify(granted.data));
+    assert.deepEqual((await call('GET', '/profiles')).data.profiles.find(item => item.id === botId).bot.permissions.rules, [rule]);
+    assert.equal((await call('PATCH', `/bots/${botId}`, { expectedRevision: saved.data.revision,
+        changes: { bot: { permissions: { rules: [] } } } })).status, 409, 'a stale owner patch cannot revoke a newer grant');
+    assert.equal((await call('PATCH', `/bots/${botId}`, { expectedRevision: granted.data.revision,
+        changes: { bot: { permissions: { rules: [] } } } })).status, 200);
+    assert.deepEqual((await call('GET', '/profiles')).data.profiles.find(item => item.id === botId).bot.permissions.rules, []);
 
     // An interrupted creation (native session written, index missing) is adopted, not duplicated.
     const secondId = second.data.bot.id;

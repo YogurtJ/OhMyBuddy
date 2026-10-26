@@ -4,6 +4,8 @@
 // normalized and validated on every write. Reads tolerate an invalid section by
 // treating the profile as "not a usable Bot" instead of invalidating the registry.
 const path = require('node:path');
+const { isDeepStrictEqual } = require('node:util');
+const { normalizeRule } = require('./bot-guard-rules');
 
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -37,7 +39,7 @@ function normalizeModel(model) {
 function normalizePermissions(permissions, previous) {
     const value = permissions ?? previous ?? { preset: 'free', rules: [] };
     if (!object(value) || !PRESETS.includes(value.preset) || !Array.isArray(value.rules ?? []) || (value.rules ?? []).length > MAX_RULES
-        || (value.rules ?? []).some(rule => !object(rule) || Buffer.byteLength(JSON.stringify(rule)) > 2048)) fail('Invalid bot permissions');
+        || (value.rules ?? []).some(rule => !object(rule))) fail('Invalid bot permissions');
     return { ...value, preset: value.preset, rules: value.rules ?? [] };
 }
 
@@ -99,8 +101,23 @@ function applyBotPatch(previous, patch) {
     if (patch.job !== undefined) next.job = typeof patch.job === 'string' ? patch.job.trim() : patch.job;
     if (patch.model !== undefined) next.model = normalizeModel(patch.model);
     if (patch.permissions !== undefined) {
-        if (!object(patch.permissions) || Object.keys(patch.permissions).some(key => key !== 'preset')) fail('Invalid bot permissions change');
-        next.permissions = { ...previous.permissions, preset: patch.permissions.preset };
+        if (!object(patch.permissions) || Object.keys(patch.permissions).some(key => !['preset', 'rules'].includes(key))) fail('Invalid bot permissions change');
+        const permissions = { ...previous.permissions, ...patch.permissions };
+        if (patch.permissions.rules !== undefined) {
+            if (!Array.isArray(patch.permissions.rules) || patch.permissions.rules.length > MAX_RULES) fail('Invalid bot permissions');
+            const ids = new Set();
+            permissions.rules = patch.permissions.rules.map(rule => {
+                // Future/legacy objects can be retained or removed by an owner. Never
+                // reinterpret, invalidate or erase them during an unrelated update.
+                const retained = (previous.permissions.rules ?? []).some(old => isDeepStrictEqual(old, rule));
+                let normalized;
+                try { normalized = normalizeRule(rule); } catch (error) { if (retained) return rule; throw error; }
+                if (ids.has(normalized.id)) fail('Duplicate bot permission rule id');
+                ids.add(normalized.id);
+                return retained ? rule : normalized;
+            });
+        }
+        next.permissions = normalizePermissions(permissions);
     }
     if (patch.notify !== undefined) next.notify = normalizeNotify({ ...previous.notify, ...patch.notify });
     if (patch.order !== undefined) next.order = patch.order;
