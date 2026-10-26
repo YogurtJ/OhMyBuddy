@@ -15,6 +15,13 @@
     const THINKING = { off: () => translateUi("不启用"), minimal: () => translateUi("极简"), low: () => translateUi("低"), medium: () => translateUi("中"),
         high: () => translateUi("高"), xhigh: () => translateUi("极高"), max: () => translateUi("最大") };
     const modelKey = model => model ? `${model.provider}\u0000${model.id}` : '';
+    // Why the server would not move a Bot to the trash (nothing was changed).
+    const TRASH_BLOCKED = {
+        BOT_HAS_SCHEDULES: name => translateUi("还有定时任务发给 {0}。先在“定时”页改掉或取消它们。", name),
+        BOT_HAS_DEFERRED: name => translateUi("{0} 还有等着稍后发送的消息。等它们发出或取消后再试。", name),
+        BOT_WORK_PENDING: name => translateUi("{0} 还在忙（回复、排队或后台工作）。等它停下再试。", name),
+        SESSION_QUEUE_RECOVERY: name => translateUi("{0} 的聊天里还有等待取回的排队内容。先在聊天里处理它们。", name)
+    };
 
     let dialog = null;
 
@@ -32,7 +39,7 @@
         return node;
     }
 
-    // open({ api, toast, profileId, face, onSaved, onMemory, onRestart })
+    // open({ api, toast, profileId, face, onSaved, onMemory, onRestart, onTrashed })
     async function open(options) {
         dialog?.close();
         dialog = el('dialog', 'pi-bot-sheet');
@@ -57,11 +64,13 @@
         // picture: a picture chosen in this sheet (PNG data URL), uploaded when saving;
         // uploaded: the last one this sheet put up, so a retry does not upload it again.
         let picture = null, uploaded = null, faceChoice = null, fileSerial = 0, decoding = false;
+        // Ids of "always allow" grants the user chose to revoke; saved with the other edits.
+        let revoked = new Set();
         // The avatar and picture are one draft value, so rebasing never combines two sources.
         const formValues = () => controls ? { name: controls.name.value,
             faceDraft: JSON.stringify({ avatar: faceChoice, picture, text: controls.avatar.value }), job: controls.job.value, soul: controls.soul.value,
             model: controls.model.value, thinking: controls.thinkingWrap.hidden ? '' : controls.thinking.value,
-            preset: controls.presets.find(input => input.checked)?.value || '' } : null;
+            preset: controls.presets.find(input => input.checked)?.value || '', revoked: [...revoked].sort().join('\n') } : null;
         function applyValues(values) {
             for (const key of ['name', 'job', 'soul']) if (values[key] !== undefined) controls[key].value = values[key];
             if (values.faceDraft !== undefined) {
@@ -73,7 +82,14 @@
             controls.thinkingWrap.hidden = !levels.length;
             if (levels.length) fillThinking(levels, values.thinking ?? controls.thinking.value);
             if (values.preset !== undefined) for (const input of controls.presets) input.checked = input.value === values.preset;
+            // A revoked grant stays revoked only while it still exists in the reread settings.
+            if (values.revoked !== undefined) {
+                const ids = new Set(knownRules().map(rule => rule.id));
+                revoked = new Set(values.revoked ? values.revoked.split('\n').filter(id => ids.has(id)) : []);
+                controls.showRules();
+            }
         }
+        const knownRules = () => Array.isArray(data?.bot.bot.permissions?.rules) ? data.bot.bot.permissions.rules.filter(rule => window.PiBotRules?.valid(rule)) : [];
 
         // Whether the user edited anything, valid or not (UAT-11: an emptied name is an edit too).
         const edited = () => Boolean(controls && initial) && Object.entries(formValues()).some(([key, value]) => value !== initial[key]);
@@ -146,8 +162,15 @@
                 if (!controls.thinkingWrap.hidden && controls.thinking.value) model.thinking = controls.thinking.value;
             }
             if (JSON.stringify(model) !== JSON.stringify(current.model ?? null)) patch.model = model;
-            const preset = controls.presets.find(input => input.checked)?.value;
-            if (preset && preset !== current.permissions.preset) patch.permissions = { preset };
+            const permissions = {}, preset = controls.presets.find(input => input.checked)?.value;
+            if (preset && preset !== current.permissions.preset) permissions.preset = preset;
+            // Revoking sends the whole list without those grants; unknown grants are always kept.
+            const rules = current.permissions.rules;
+            if (revoked.size && Array.isArray(rules)) {
+                const kept = rules.filter(rule => !(window.PiBotRules?.valid(rule) && revoked.has(rule.id)));
+                if (kept.length !== rules.length) permissions.rules = kept;
+            }
+            if (Object.keys(permissions).length) patch.permissions = permissions;
             if (Object.keys(patch).length) out.bot = patch;
             return out;
         }
@@ -238,6 +261,48 @@
                 option.append(input, copy); presetList.append(option); presets.push(input);
             }
             const honesty = el('p', 'pi-bot-sheet-note', translateUi("“稳妥”和“每次都问”会在动手前弹出确认；“放手”靠 {0} 自觉先问。这些都不是安全隔离：它能使用这台电脑上的工具。密码、密钥这类东西它一律不碰。", bot.name));
+            // Grants kept from approval cards ("always allow"): shown exactly, revocable here, never added here.
+            revoked = new Set();
+            const rulesBox = el('div', 'pi-bot-sheet-rules'); rulesBox.setAttribute('role', 'group');
+            const rulesTitle = el('h4', null, translateUi("一直允许的事")); rulesTitle.id = 'pi-bot-sheet-rules-title';
+            rulesBox.setAttribute('aria-labelledby', rulesTitle.id);
+            const showRules = focusId => {
+                const list = current.permissions.rules, nodes = [rulesTitle];
+                if (!Array.isArray(list)) {
+                    nodes.push(el('p', 'pi-bot-sheet-note', Number.isSafeInteger(list) && list > 0
+                        ? translateUi("有 {0} 条一直允许的规则，暂时读不到详情。", list) : translateUi("还没有一直允许的事。")));
+                } else {
+                    const known = list.filter(rule => window.PiBotRules?.valid(rule)), other = list.length - known.length;
+                    if (!list.length) nodes.push(el('p', 'pi-bot-sheet-note', translateUi("还没有一直允许的事。在确认卡上选“以后都允许”，会加到这里。")));
+                    if (known.length) {
+                        const items = el('ul', 'pi-bot-sheet-rule-list');
+                        for (const rule of known) {
+                            const gone = revoked.has(rule.id);
+                            const item = el('li', `pi-bot-sheet-rule${gone ? ' is-revoked' : ''}`);
+                            const copy = el('div', 'pi-bot-sheet-rule-copy');
+                            copy.append(el('strong', null, window.PiBotRules.label(rule)), el('code', null, rule.value));
+                            const where = window.PiBotRules.place(rule);
+                            if (where) copy.append(el('small', null, where));
+                            if (gone) copy.append(el('small', 'pi-bot-sheet-rule-state', translateUi("保存后撤销")));
+                            const toggle = button('pi-bot-chip', gone ? translateUi("不撤销了") : translateUi("撤销"));
+                            toggle.dataset.ruleId = rule.id;
+                            toggle.setAttribute('aria-label', gone ? translateUi("不撤销：{0}", rule.value) : translateUi("撤销：{0}", rule.value));
+                            toggle.addEventListener('click', () => {
+                                if (revoked.has(rule.id)) revoked.delete(rule.id); else revoked.add(rule.id);
+                                warned = null; status.textContent = ''; delete status.dataset.tone;
+                                showRules(rule.id); refreshState();
+                            });
+                            item.append(copy, toggle); items.append(item);
+                        }
+                        nodes.push(items);
+                    }
+                    if (other) nodes.push(el('p', 'pi-bot-sheet-note', translateUi("另有 {0} 条这个版本看不懂的规则，会原样保留。", other)));
+                }
+                nodes.push(el('p', 'pi-bot-sheet-note', translateUi("一直允许只对完全相同的命令（同一个目录）或同一个文件跳过确认，其他照常询问。它只在 Pivane 的工具层生效，不是系统沙箱：允许的命令以 Pivane 服务的权限运行。")));
+                rulesBox.replaceChildren(...nodes);
+                if (focusId) [...rulesBox.querySelectorAll('[data-rule-id]')].find(node => node.dataset.ruleId === focusId)?.focus();
+            };
+            showRules();
 
             // Quiet hours join this sheet once Bots can start conversations on their own (M4).
 
@@ -252,15 +317,20 @@
                 if (leaving) await options.onRestart?.();
             });
 
-            controls = { name, avatar, job, soul, model, thinking, thinkingWrap, presets, showFace };
+            // Moving the Bot to the trash keeps everything and can be undone on the identity page.
+            const trash = button('pi-bot-sheet-link is-danger'); trash.dataset.sheetAction = 'trash';
+            trash.append(icon('fa-trash-can'), el('span', null, translateUi("移到回收站")), icon('fa-chevron-right'));
+            trash.addEventListener('click', () => void moveToTrash());
+
+            controls = { name, avatar, job, soul, model, thinking, thinkingWrap, presets, showFace, showRules };
             showFace();
             body.replaceChildren(
                 section(translateUi("名字和样子"), identity),
                 section(translateUi("主要帮你做什么"), job),
                 section(translateUi("性格"), soul),
                 section(translateUi("用哪个模型"), field(null, model, modelHint), thinkingWrap),
-                section(translateUi("做事方式"), presetList, honesty),
-                section(translateUi("更多"), memory, restart));
+                section(translateUi("做事方式"), presetList, honesty, rulesBox),
+                section(translateUi("更多"), memory, restart, trash));
             const levels = data.models?.models.find(item => modelKey(item) === model.value)?.thinkingLevels || [];
             thinkingWrap.hidden = !levels.length;
             if (levels.length) fillThinking(levels, current.model?.thinking || '');
@@ -270,6 +340,46 @@
 
         async function load() {
             data = await options.api(`/api/pi/bots/${encodeURIComponent(options.profileId)}/settings`);
+        }
+
+        // The edits made in this sheet, to put back after rereading (only fields the user touched).
+        const ownEdits = () => Object.fromEntries(Object.entries(formValues()).filter(([key, value]) => value !== initial[key]));
+
+        // POST /bots/:id/trash after an explicit confirmation. Unsaved edits are warned about first;
+        // a failure keeps the sheet open with the user's edits, and success is reported as such.
+        async function moveToTrash() {
+            if (saving || decoding || !controls || !data) return;
+            if (edited() && warned !== 'trash') {
+                warned = 'trash'; status.dataset.tone = 'warn';
+                status.textContent = translateUi("还有修改没保存。再点一次就放弃这些修改，接着移到回收站。");
+                return;
+            }
+            const name = data.bot.name;
+            const accepted = await window.PiProfileDialog?.confirm({ title: translateUi("把 {0} 移到回收站？", name),
+                message: translateUi("{0} 会从 Bot 列表里移走。它的名字、性格、记忆、聊天记录和工作目录里的文件都会保留，之后可以在“身份”页的回收站恢复。", name),
+                accept: translateUi("移到回收站"), cancelLabel: translateUi("保留"), current: () => sheet.open });
+            if (!accepted || !sheet.open || saving) return;
+            saving = true; refreshState(); status.textContent = translateUi("正在移到回收站…"); delete status.dataset.tone;
+            try {
+                const result = await options.api(`/api/pi/bots/${encodeURIComponent(options.profileId)}/trash`, { method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expectedRevision: data.revision }) });
+                saving = false;
+                sheet.close();
+                options.toast?.(translateUi("{0} 已移到回收站，可以在“身份”页的回收站恢复。", name), 'success');
+                await options.onTrashed?.(result);
+            } catch (error) {
+                if (!sheet.open) return;
+                // A refusal leaves everything as it was; say why in plain words.
+                if (error.status === 409 && (!error.code || error.code === 'BOT_TRASH_STALE')) {
+                    const mine = ownEdits();
+                    try { await load(); render(); applyValues(mine); } catch {}
+                    status.dataset.tone = 'warn';
+                    status.textContent = translateUi("设置刚刚在别处改过，还没有移到回收站。检查后可以再试一次。");
+                } else {
+                    const reason = TRASH_BLOCKED[error.code]?.(name) || error.message || translateUi("保存失败");
+                    status.dataset.tone = 'error'; status.textContent = translateUi("没有移到回收站：{0}", reason);
+                }
+            } finally { saving = false; if (sheet.open) refreshState(); }
         }
 
         form.addEventListener('submit', async event => {
@@ -305,8 +415,8 @@
                 if (error.status === 409) {
                     // Reread the saved settings and show them, then put back only the fields this
                     // user edited: anything they did not touch follows the newer saved value.
-                    const now = formValues(), edited = Object.fromEntries(Object.entries(now).filter(([key, value]) => value !== initial[key]));
-                    try { await load(); render(); applyValues(edited); } catch {}
+                    const mine = ownEdits();
+                    try { await load(); render(); applyValues(mine); } catch {}
                     status.dataset.tone = 'warn';
                     status.textContent = translateUi("设置刚刚在别处改过。你的修改还在，检查后再保存一次。");
                 } else { status.dataset.tone = 'error'; status.textContent = error.message || translateUi("保存失败"); }

@@ -565,6 +565,11 @@ document.addEventListener('DOMContentLoaded', () => {
         respond: payload => sendExtensionResponse(payload),
         face: () => botUi?.face('sm') || document.createElement('span'),
         name: () => botUi?.identity()?.name || '',
+        // "Always allow" saves the offered grant first; the step is then allowed only if this
+        // conversation (Bot window, session and socket) is still the one showing the request.
+        remember: rule => botUi.rememberRule(rule),
+        owner: () => JSON.stringify([state.cwd, state.session?.id, state.socketGeneration, botUi?.current()]),
+        notify: message => toast(message, 'info'),
         changed: () => renderPendingBanner()
     });
     if (botApproval) document.querySelector('.pi-composer-wrap > .pi-composer')?.before(botApproval.element);
@@ -572,7 +577,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const questionReceipts = window.PiUserQuestion.receipts();
     const scheduleCards = window.PiBotScheduleCards.create({ api: apiFetch, notify: toast,
         context: () => JSON.stringify([state.cwd, state.session?.id]), generation: () => state.socketGeneration });
-    const resultCards = message => [deliveryCards.render(message), questionReceipts.render(message), scheduleCards.render(message)].filter(Boolean);
+    // Topics the Bot opened: a receipt with an explicit way in; it never switches chats by itself.
+    const topicCards = window.PiBotTopics?.receipts({ api: apiFetch, notify: toast,
+        context: () => JSON.stringify([state.cwd, state.session?.id]), generation: () => state.socketGeneration });
+    const resultCards = message => [deliveryCards.render(message), questionReceipts.render(message), scheduleCards.render(message), topicCards?.render(message)].filter(Boolean);
     const turnEdits = new window.PiTurnEdits({
         transcript: elements.transcript, showPane: () => filesPanel.showHistory(), copy: copyTextToClipboard, notify: toast,
         viewer: filesPanel.viewer, context: () => ({ cwd: state.cwd, key: JSON.stringify([state.cwd, state.session?.id]), generation: state.socketGeneration })
@@ -3488,7 +3496,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         state.renderedTranscript = { context, records };
-        if (removed.length) { mediaRequests?.prune(); deliveryCards.prune(); questionReceipts.prune(); scheduleCards.prune(); }
+        if (removed.length) { mediaRequests?.prune(); deliveryCards.prune(); questionReceipts.prune(); scheduleCards.prune(); topicCards?.prune(); }
         mediaRequests?.refresh(messages);
         state.dirtyTranscriptIndex = Infinity;
         state.lastAssistantText = '';
@@ -3598,7 +3606,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function clearSessionView() {
         mediaRequests?.reset();
-        deliveryCards.reset(); scheduleCards.reset();
+        deliveryCards.reset(); scheduleCards.reset(); topicCards?.reset();
         questionReceipts.reset();
         state.recoveryNotice = null;
         transcriptActivity?.reset();
@@ -5413,17 +5421,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     // Bot greeting chips speak through the normal composer path, never over a draft.
+    // A refused or failed send keeps the text in the composer (sendMessage keeps drafts), so the
+    // user can send it again; an existing draft or attachment is never replaced.
+    const botDraft = () => Boolean(elements.input.value.trim() || state.attachmentFiles.length);
     const botSay = text => {
-        if (elements.input.value.trim() || state.attachmentFiles.length) { toast(translateUi("输入框里还有草稿，先发送或清空它"), 'info'); return; }
+        if (botDraft()) { toast(translateUi("输入框里还有草稿，先发送或清空它"), 'info'); return false; }
         elements.input.value = text; autoResizeInput(); void sendMessage();
+        return true;
     };
     botUi = window.PiBot?.create({ api: apiFetch, toast, open: openBotWindow, say: botSay, pane: $('pi-bot-pane'), header: $('pi-bot-header'), input: elements.input,
+        draft: botDraft, focusComposer: () => { if (!elements.input.disabled) elements.input.focus({ preventScroll: true }); },
         onChange: kind => {
             // A new name or face shows in the open conversation's replies at once.
             if (kind === 'identity' && state.botMode && elements.transcript.querySelector(':scope > .pi-bot-empty')) renderEmptySession();
             if (kind === 'identity' && state.botMode) elements.transcript.querySelectorAll('.pi-message.assistant > header').forEach(signBotReply);
             if (kind === 'empty' && state.botMode) { disconnectSocket(true); state.session = null; clearSessionView(); }
         } });
+    if (botUi?.closure) document.querySelector('.pi-composer-wrap > .pi-composer')?.before(botUi.closure.element);
     window.addEventListener('workspace:agent-profiles-changed', () => { void botUi?.refresh(); });
     const route = window.PiWorkspaceRoute?.current();
     if (route?.tab === 'assistant' || route?.tab === 'chat' || route?.tab === 'bot') window.dispatchEvent(new CustomEvent('workspace:tabchanged', { detail: route }));
