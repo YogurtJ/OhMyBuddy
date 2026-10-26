@@ -23,6 +23,7 @@ import { registerNotebook, notebookNotice, editNotebook } from './bot-notebook.t
 import { registerRecall } from './bot-recall-tools.ts';
 import { registerBotSchedule } from './bot-schedule-tool.ts';
 import { registerBotTopic, topicIndexNotice } from './bot-topic-tool.ts';
+import { topicIndexContext, topicIndexRetirements } from './bot-topic-context.js';
 import { structuredCompaction, summaryReasoning } from './bot-compaction.js';
 import { pruneDrafts, idleDelay, idleCompactionWanted, rotationReason } from './bot-maintenance.js';
 import { Type } from 'typebox';
@@ -332,6 +333,11 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
         }
     });
     const isBot = (ctx: any) => managed(ctx) && Boolean(botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir()));
+    pi.on('context', (event: any, ctx: any) => {
+        const loaded = managed(ctx) ? botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir()) : null;
+        if (loaded?.window.kind !== 'main') return;
+        return { messages: topicIndexContext(event.messages, ctx.sessionManager.getBranch()) };
+    });
     notebookEditor = (ctx: any, input: any) => {
         if (!isBot(ctx)) throw new Error('This chat has no notebook');
         return editNotebook(pi, ctx, input);
@@ -339,8 +345,10 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
     // S1 (D-030): at the end of a completed run, old large tool outputs become short stubs when
     // that saves a lot. Earlier drafts of other extensions are kept as they are.
     pi.on('agent_before_settle', (event: any, ctx: any) => {
-        if (event.outcome !== 'completed' || !isBot(ctx)) return;
-        const drafts = pruneDrafts(event.context?.contextEntries || [], ctx.getContextUsage());
+        if (!isBot(ctx)) return;
+        const projection = event.context?.contextEntries || [];
+        const drafts = [...topicIndexRetirements(projection),
+            ...(event.outcome === 'completed' ? pruneDrafts(projection, ctx.getContextUsage()) : [])];
         return drafts.length ? { entries: [...(event.entries || []), ...drafts] } : undefined;
     });
     // S2 (D-030): once the prompt cache has gone cold, a still idle and fairly full window is
@@ -382,8 +390,11 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
         // The notebook is appended to the conversation (never the system prompt), so the cached prefix stays.
         const notice = notebookNotice(ctx.sessionManager.getBranch(), new Date().toISOString());
         if (loaded.window.kind === 'main') {
-            const index = await topicIndexNotice(ctx.signal);
-            return { message: notice ? { ...notice, content: notice.content + '\n\n' + index.content } : index };
+            const index = await topicIndexNotice(ctx.sessionManager, ctx.signal);
+            // nextTurn joins this starting run after the hook; it never starts another run.
+            // Keep notebook provenance separate so retiring an index cannot erase its notes.
+            if (index && notice) pi.sendMessage(index, { deliverAs: 'nextTurn' });
+            else if (index) return { message: index };
         }
         if (notice) return { message: notice };
     });

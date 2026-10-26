@@ -265,13 +265,14 @@ async function workerTool(t, f) {
     }
     const file = path.join(__dirname, '../server/bot/bot-context-extension.ts');
     const { registerBotContext } = require(process.env.PIVANE_TEST_PI_JITI).createJiti(file)(file);
-    const handlers = new Map(), tools = new Map(), confirmations = [], notifications = [];
-    const pi = { on(name, handler) { handlers.set(name, handler); }, registerTool(tool) { tools.set(tool.name, tool); }, getAllTools: () => [...tools.values()] };
+    const handlers = new Map(), tools = new Map(), confirmations = [], notifications = [], nextTurn = [];
+    const pi = { on(name, handler) { handlers.set(name, handler); }, registerTool(tool) { tools.set(tool.name, tool); }, getAllTools: () => [...tools.values()],
+        sendMessage(message, options) { assert.deepEqual(options, { deliverAs: 'nextTurn' }); nextTurn.push(message); } };
     registerBotContext(pi, () => agentDir);
-    const ctx = { mode: 'rpc', cwd: f.main.cwd, sessionManager: manager, hasUI: true, model: null,
+    const ctx = { mode: 'rpc', cwd: f.main.cwd, sessionManager: manager, hasUI: true, model: null, getContextUsage: () => null,
         ui: { notify(value) { notifications.push(JSON.parse(value)); }, confirm: async (title, message) => { confirmations.push({ title, message }); return true; } } };
     await handlers.get('session_start')({}, ctx);
-    return { worker, ctx, manager, handlers, tools, confirmations, notifications };
+    return { worker, ctx, manager, handlers, tools, confirmations, notifications, nextTurn };
 }
 
 test('worker topic routes are token-scoped, strictly whitelisted and idempotent even across a lost index', async t => {
@@ -329,8 +330,12 @@ test('bot_topic_propose always uses one native topic confirmation, declines/unat
         assert.equal(w.worker.sessionId, f.main.id, 'creation never switches the source chat');
     }
     const before = (await f.bots.windows.read(f.profileId)).state.windows.length;
-    w.ctx.ui.confirm = async () => false;
-    assert.equal((await tool.execute('declined', input, undefined, undefined, w.ctx)).details.pivaneBotTopic, undefined);
+    for (const [index, response] of [false, undefined, null, 'false', 'true', 1, -1, {}, []].entries()) {
+        w.ctx.ui.confirm = async () => response;
+        const declined = await tool.execute(`declined-${index}`, input, undefined, undefined, w.ctx);
+        assert.equal(declined.details.pivaneBotTopic, undefined, JSON.stringify(response));
+        assert.equal((await f.bots.windows.read(f.profileId)).state.windows.length, before, 'only Boolean true creates a topic');
+    }
     w.ctx.hasUI = false; await tool.execute('no-ui', input, undefined, undefined, w.ctx); w.ctx.hasUI = true;
     const cancelled = new AbortController();
     w.ctx.ui.confirm = async () => { cancelled.abort(); return true; };
@@ -385,4 +390,56 @@ test('main open-items index is fresh, bounded, profile-isolated and says unknown
     await f.patch(topic.id, { archived: true }); assert.deepEqual((await call({})).data.topics, []);
     assert.deepEqual((await f.call('GET', ownerUrl)).data.topics, []);
     assert.equal(f.supervisor.workers.size, 1, 'only the synthetic source worker exists; topic reads never start workers');
+});
+
+
+test('main index notices suppress unchanged native appends and split notebook provenance before retiring old snapshots', async t => {
+    const f = await fixture(t), w = await workerTool(t, f);
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+    const { TOPIC_INDEX_MESSAGE } = require('../server/bot/bot-topic-context');
+    const mainLedger = ledger.prepareOps(ledger.emptyLedger(), [{ op: 'add', kind: 'open', text: 'Keep this genuine notebook note' }],
+        { at: new Date().toISOString(), by: 'bot' });
+    w.manager.appendCustomEntry(ledger.LEDGER_ENTRY, { v: 1, snapshot: mainLedger.state });
+    const indexEntries = () => w.ctx.sessionManager.getBranch().filter(entry => entry.customType === TOPIC_INDEX_MESSAGE);
+    const run = async () => {
+        const result = await w.handlers.get('before_agent_start')({ systemPromptOptions: { sections: {} } }, w.ctx);
+        w.ctx.sessionManager.appendMessage({ role: 'user', content: 'Synthetic main turn', timestamp: Date.now() });
+        const injected = [...w.nextTurn.splice(0), ...(result?.message ? [result.message] : [])];
+        for (const message of injected) w.ctx.sessionManager.appendCustomMessageEntry(message.customType, message.content, message.display, message.details);
+        const model = w.handlers.get('context')({ messages: w.ctx.sessionManager.buildSessionContext().messages }, w.ctx).messages;
+        const settled = w.handlers.get('agent_before_settle')({ outcome: 'completed', entries: [],
+            context: { contextEntries: w.ctx.sessionManager.buildSessionProjection().entries } }, w.ctx);
+        for (const draft of settled?.entries || []) w.ctx.sessionManager.appendContextEdit(draft.targetId, draft.replacement);
+        return { injected, model };
+    };
+    const first = await run();
+    assert.deepEqual(first.injected.map(message => message.customType), [TOPIC_INDEX_MESSAGE, 'pivane-bot-notebook']);
+    assert.doesNotMatch(first.injected[1].content, /Other topics of this Bot/);
+    for (let turn = 0; turn < 3; turn++) assert.equal((await run()).injected.length, 0, 'an unchanged empty index adds no native notice');
+    assert.equal(indexEntries().length, 1);
+    const topic = (await f.topic()).window, session = (await f.bots.resolve(f.profileId, topic.id)).session;
+    await note(session, [{ op: 'add', kind: 'open', text: 'Fresh topic title' }]);
+    const changed = await run();
+    assert.equal(indexEntries().length, 2, 'one native snapshot per actual change');
+    const visible = changed.model.filter(message => message.customType === TOPIC_INDEX_MESSAGE);
+    assert.equal(visible.length, 1); assert.match(visible[0].content, /Fresh topic title/);
+    assert.doesNotMatch(visible[0].content, /No other active topics/);
+    assert.match(changed.model.find(message => message.customType === 'pivane-bot-notebook').content, /Keep this genuine notebook note/);
+    assert.equal(w.ctx.sessionManager.buildSessionProjection().messages.filter(message => message.customType === TOPIC_INDEX_MESSAGE).length, 1);
+    w.ctx.sessionManager = SessionManager.open(f.main.path);
+    assert.equal((await run()).injected.length, 0, 'reopening the native manager does not reset suppression');
+    const kept = w.ctx.sessionManager.appendMessage({ role: 'user', content: 'Kept after compaction', timestamp: Date.now() });
+    w.ctx.sessionManager.appendCompaction(ledger.renderLedger(mainLedger.state), kept, 100,
+        { pivaneBot: { ledger: { snapshot: mainLedger.state } } }, true);
+    assert.equal(w.ctx.sessionManager.buildSessionProjection().messages.filter(message => message.customType === TOPIC_INDEX_MESSAGE).length, 0);
+    const restored = w.handlers.get('context')({ messages: w.ctx.sessionManager.buildSessionContext().messages }, w.ctx).messages;
+    assert.match(restored.find(message => message.customType === TOPIC_INDEX_MESSAGE).content, /Fresh topic title/, 'request-local restoration uses the latest native snapshot');
+    assert.equal((await run()).injected.filter(message => message.customType === TOPIC_INDEX_MESSAGE).length, 1, 'a compacted-away index is refreshed from the service');
+    assert.equal(indexEntries().length, 3);
+    assert.equal((await run()).injected.length, 0);
+    await f.patch(topic.id, { archived: true });
+    const empty = await run();
+    assert.match(empty.model.find(message => message.customType === TOPIC_INDEX_MESSAGE).content, /No other active topics/);
+    assert.doesNotMatch(JSON.stringify(empty.model), /Fresh topic title/);
+    assert.equal((await run()).injected.length, 0, 'the new empty snapshot is also suppressed until it changes');
 });
