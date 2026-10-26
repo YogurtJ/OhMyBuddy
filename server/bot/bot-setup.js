@@ -11,7 +11,8 @@ const FIELDS = Object.freeze(['name', 'avatar', 'job', 'personality', 'workStyle
 // How the Bot works (its permission preset), from most freedom to most careful. A setup card
 // may keep the current way or make it more careful; more freedom is only set in Bot settings.
 const WORK_STYLES = Object.freeze(['free', 'balanced', 'ask']);
-const moreCareful = (next, current) => WORK_STYLES.indexOf(next) >= WORK_STYLES.indexOf(current);
+const moreCareful = (next, current) => WORK_STYLES.includes(next)
+    && WORK_STYLES.indexOf(next) >= WORK_STYLES.indexOf(WORK_STYLES.includes(current) ? current : 'ask');
 // The interview step each proposal field answers (onboarding.steps keys).
 const STEP_OF = Object.freeze({ name: 'name', avatar: 'avatar', job: 'job', personality: 'personality', workStyle: 'work', aboutUser: 'about' });
 const LIMITS = Object.freeze({ name: 40, avatar: 16, job: 300, personality: 6000, aboutItems: 6, aboutItem: 300 });

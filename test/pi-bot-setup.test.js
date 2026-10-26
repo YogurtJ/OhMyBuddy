@@ -212,6 +212,53 @@ test('the setup tool reports only what the Bot page actually saved', { timeout: 
     answer = undefined;
     assert.deepEqual(await run({ job: '陪我聊天' }), { status: 'no_answer' });
     await assert.rejects(tool.execute('call', { other: 1 }, undefined, undefined, ctx), /Unknown setup field/);
+
+    // The page persists Later before answering DECLINE. Only newly skipped steps belong in
+    // the receipt, including about-user facts but never finish or already settled answers.
+    await bots.onboarding(botId, { action: 'restart', expectedRevision: (await profiles.state()).revision });
+    const laterProposal = { name: 'Another guess', avatar: '🦉', job: 'Study plans', personality: 'Be warm.', workStyle: 'ask',
+        aboutUser: ['Another fact'], finish: true };
+    manager.appendMessage({ role: 'assistant', content: [{ type: 'toolCall', id: 'call-later', name: setup.SETUP_TOOL, arguments: laterProposal }],
+        api: 'openai-completions', provider: 'fixture', model: 'small', usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: 'toolUse', timestamp: Date.now() });
+    onSelect = async () => bots.setup(botId, { windowId, toolCallId: 'call-later', later: true, expectedRevision: (await profiles.state()).revision });
+    answer = setup.DECLINE;
+    assert.deepEqual(await run(laterProposal), { status: 'declined', later: ['name', 'avatar', 'job', 'personality', 'workStyle', 'aboutUser'] });
+    assert.deepEqual(await run(laterProposal), { status: 'declined' }, 'steps already skipped before this call are not newly skipped');
+    onSelect = null;
+    assert.deepEqual(await run({ finish: true }), { status: 'declined' }, 'declining finish does not invent a skipped step');
+    assert.equal((await profiles.getProfile(botId)).bot.onboarding.phase, 'interview');
+
+    await bots.onboarding(botId, { action: 'restart', expectedRevision: (await profiles.state()).revision });
+    manager.appendMessage({ role: 'assistant', content: [{ type: 'toolCall', id: 'call-work', name: setup.SETUP_TOOL, arguments: { workStyle: 'free' } }],
+        api: 'openai-completions', provider: 'fixture', model: 'small', usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: 'toolUse', timestamp: Date.now() });
+    onSelect = async () => bots.setup(botId, { windowId, toolCallId: 'call-work', expectedRevision: (await profiles.state()).revision });
+    answer = setup.SAVE;
+    const workReceipt = await run({ workStyle: 'free' });
+    assert.equal(workReceipt.status, 'saved', 'confirming the current way of working answers the interview');
+    assert.deepEqual(workReceipt.saved, { workStyle: 'free' });
+    assert.equal(workReceipt.current.workStyle, 'free');
+    assert.equal(workReceipt.current.interview, 'interview');
+    assert.equal(workReceipt.kept, undefined);
+
+    // A failed final fact still saves the identity, but cannot tell the model the interview
+    // finished or that the fact was remembered.
+    const failedProposal = { name: 'Cedar', aboutUser: ['This fact must not be reported as saved'], finish: true };
+    manager.appendMessage({ role: 'assistant', content: [{ type: 'toolCall', id: 'call-failed-fact', name: setup.SETUP_TOOL, arguments: failedProposal }],
+        api: 'openai-completions', provider: 'fixture', model: 'small', usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: 'toolUse', timestamp: Date.now() });
+    bots.documents = { async run(id, target, write) {
+        if (write) throw new Error('Synthetic final fact failure');
+        return documents.run(id, target, false);
+    } };
+    onSelect = async () => bots.setup(botId, { windowId, toolCallId: 'call-failed-fact', expectedRevision: (await profiles.state()).revision });
+    const failedReceipt = await run(failedProposal);
+    assert.equal(failedReceipt.status, 'saved');
+    assert.deepEqual(failedReceipt.saved, { name: 'Cedar' });
+    assert.equal(failedReceipt.current.interview, 'interview');
+    assert.equal(failedReceipt.current.workStyle, 'free');
+    assert.equal((await profiles.getProfile(botId)).bot.onboarding.steps.about, undefined);
 });
 
 async function services2(store, profiles, supervisor, documents) { return new BotService({ store, profiles, supervisor, documents }); }

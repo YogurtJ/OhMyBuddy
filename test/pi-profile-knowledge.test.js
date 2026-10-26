@@ -629,6 +629,32 @@ test('receipts carry origin, preview and category; origin cannot come from raw i
         .every(row => typeof row.preview === 'string'));
 });
 
+test('memory receipts identify the saved document on create, edit, delete, undo and replay', { skip: !bundle }, async t => {
+    const { service, mutate } = setup(t);
+    for (const target of ['user', 'memory']) {
+        const created = await mutate('create', 'memory', { target, category: 'fact', content: `Synthetic ${target} fact` });
+        assert.equal(created.receipt.target, target);
+        const updated = await mutate('update', 'memory', { itemId: created.item.id, itemRevision: created.item.revision,
+            category: 'fact', content: `Edited ${target} fact` });
+        assert.equal(updated.receipt.target, target);
+        const removed = await mutate('delete', 'memory', { itemId: updated.item.id, itemRevision: updated.item.revision });
+        assert.equal(removed.receipt.target, target);
+        const restored = await mutate('undo', 'memory', { receiptId: removed.receipt.id });
+        assert.equal(restored.receipt.target, target);
+        const snapshot = await service.snapshot(id);
+        assert.equal(snapshot.items.find(item => item.id === created.item.id).target, target);
+        for (const changed of [created, updated, removed, restored])
+            assert.equal(snapshot.receipts.find(row => row.id === changed.receipt.id).target, target, 'persisted receipts retain the document target');
+    }
+    const expectedRevision = (await service.snapshot(id)).revision;
+    const input = { requestId: 'target-replay', expectedRevision, operation: 'create', kind: 'memory', category: 'preference', content: 'Default memory target' };
+    const saved = await service.mutate(id, input);
+    assert.equal(saved.receipt.target, 'memory', 'omitted targets are reported after normalization');
+    assert.deepEqual((await service.mutate(id, input)).receipt, saved.receipt);
+    const skill = await mutate('create', 'skill', { name: 'target-free-skill', description: '', content: 'Synthetic steps.' });
+    assert.equal(Object.hasOwn(skill.receipt, 'target'), false);
+});
+
 test('usage matches the write-time limit and memory-full is structured in service, HTTP and tool', { skip: !bundle }, async t => {
     const { agent, root } = setup(t);
     const profile = { id, enabled: true, memory: { enabled: true, memoryCharLimit: 256, userCharLimit: 300 },
