@@ -9,6 +9,7 @@ const path = require('node:path');
 const { safeFile } = require('../pi-native-service');
 const privateFiles = require('../pi-private-files');
 const { PrivateJsonDocument } = require('./bot-json-store');
+const { validTopicSeed } = require('./bot-window-state');
 
 const UUID = /^[a-f0-9-]{36}$/;
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -39,6 +40,7 @@ function validWindow(value) {
         || typeof value.cwd !== 'string' || !path.isAbsolute(value.cwd) || !iso(value.createdAt) || !iso(value.updatedAt)
         || value.archivedAt !== null && !iso(value.archivedAt) || !Array.isArray(value.generations)
         || value.generations.length > MAX_GENERATIONS || !value.generations.every(validGeneration) || !validRotation(value.rotation ?? null)) return false;
+    if (value.topicSeed !== undefined && (value.kind !== 'topic' || !validTopicSeed(value.topicSeed))) return false;
     const last = value.generations.at(-1);
     if (value.current === null) return value.generations.length === 0;
     return object(value.current) && Boolean(last) && value.current.generation === last.generation

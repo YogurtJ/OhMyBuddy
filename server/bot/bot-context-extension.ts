@@ -22,6 +22,7 @@ import { safeFile as readDocument } from '../profile-memory/management.js';
 import { registerNotebook, notebookNotice, editNotebook } from './bot-notebook.ts';
 import { registerRecall } from './bot-recall-tools.ts';
 import { registerBotSchedule } from './bot-schedule-tool.ts';
+import { registerBotTopic, topicIndexNotice } from './bot-topic-tool.ts';
 import { structuredCompaction, summaryReasoning } from './bot-compaction.js';
 import { pruneDrafts, idleDelay, idleCompactionWanted, rotationReason } from './bot-maintenance.js';
 import { Type } from 'typebox';
@@ -51,8 +52,8 @@ export function botSection(context: any, manager: any, cwd: string, agentDir: st
         const bot = readBot(profile);
         if (!profile?.enabled || profile.trashedAt !== undefined || !bot?.enabled || bot.workspace !== context.cwd) return null;
         const window = readWindowRecord(agentDir, context.profileId, context.windowId);
-        if (!window || window.current?.sessionId !== context.sessionId) return null;
-        return { binding, model: bot.model, soul: typeof profile.soul === 'string' ? profile.soul : '', profile, bot,
+        if (!window || window.archivedAt || window.current?.sessionId !== context.sessionId) return null;
+        return { binding, window, model: bot.model, soul: typeof profile.soul === 'string' ? profile.soul : '', profile, bot,
             text: botPreamble({ name: profile.name, bot, cwd: context.cwd, window }) };
     } catch { return null; }
 }
@@ -222,6 +223,7 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
             registerSetupTool(pi, context, getAgentDir);
             const verified = (toolCtx: any) => Boolean(botSection(context, toolCtx.sessionManager, toolCtx.cwd, getAgentDir()));
             schedule = registerBotSchedule(pi, verified, scheduledRunActive);
+            registerBotTopic(pi, verified, scheduledRunActive);
             registerNotebook(pi, verified);
             registerRecall(pi, context, getAgentDir, verified);
         }
@@ -243,7 +245,7 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
         for (const controller of waiting) controller.abort();
     });
     pi.on('tool_call', async (event: any, ctx: any) => {
-        if (!managed(ctx)) return;
+        if (!managed(ctx) || event.toolName === 'bot_topic_propose') return; // This tool always asks in its own execute, in every preset.
         // Tracked from the start: the parent can end while the preset is still being read.
         const controller = new AbortController(), parent = event.parentToolCallId;
         if (parent) { if (!nested.has(parent)) nested.set(parent, new Set()); nested.get(parent)!.add(controller); }
@@ -379,6 +381,10 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
         }
         // The notebook is appended to the conversation (never the system prompt), so the cached prefix stays.
         const notice = notebookNotice(ctx.sessionManager.getBranch(), new Date().toISOString());
+        if (loaded.window.kind === 'main') {
+            const index = await topicIndexNotice(ctx.signal);
+            return { message: notice ? { ...notice, content: notice.content + '\n\n' + index.content } : index };
+        }
         if (notice) return { message: notice };
     });
 }

@@ -102,7 +102,8 @@ function botPreamble({ name, bot, cwd, window }) {
         `Permissions: ${PRESET_GUIDANCE[bot?.permissions?.preset] ?? PRESET_GUIDANCE.free} `
             + 'When you ask, say plainly what you will do and why, in one or two lines. ' + ALWAYS,
         '',
-        windowGuidance(window)
+        windowGuidance(window),
+        'For substantial focused work, use bot_topic_propose to offer a separate topic. The user confirms it; it starts fresh, with its own notebook and your shared about-user memory. Do not copy this conversation or claim the user has switched chats.'
     ];
     const interview = onboardingGuidance(bot, window);
     if (interview) lines.push('', interview);
