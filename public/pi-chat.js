@@ -571,7 +571,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const panelOwns = event => userQuestions.owns(event) || Boolean(botSetup?.owns(event)) || Boolean(botApproval?.owns(event));
     const questionReceipts = window.PiUserQuestion.receipts();
     const scheduleCards = window.PiBotScheduleCards.create({ api: apiFetch, notify: toast,
-        context: () => JSON.stringify([state.cwd, state.session?.id, state.socketGeneration]) });
+        context: () => JSON.stringify([state.cwd, state.session?.id]), generation: () => state.socketGeneration });
     const resultCards = message => [deliveryCards.render(message), questionReceipts.render(message), scheduleCards.render(message)].filter(Boolean);
     const turnEdits = new window.PiTurnEdits({
         transcript: elements.transcript, showPane: () => filesPanel.showHistory(), copy: copyTextToClipboard, notify: toast,

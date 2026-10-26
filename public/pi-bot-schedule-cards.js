@@ -24,18 +24,20 @@
             cancel.addEventListener('click', async () => {
                 if (host.context() !== key || cancel.disabled) return;
                 cancel.disabled = true;
+                const generation = host.generation?.();
+                const currentOperation = () => card.isConnected && host.context() === key && host.generation?.() === generation;
                 try {
                     // Read fresh status; an edited job needs a fresh explicit decision, not a blind retry.
                     const snapshot = await host.api('/api/pi/cron');
-                    if (!card.isConnected || host.context() !== key) return;
+                    if (!currentOperation()) return;
                     const current = snapshot.jobs?.find(job => job.id === saved.id);
                     if (!current) { state.textContent = t('已取消'); cancel.hidden = true; return; }
                     const accepted = await window.PiProfileDialog.confirm({ title: t('取消这项定时任务？'), message: current.name, accept: t('取消任务'), cancelLabel: t('保留') });
-                    if (!accepted || !card.isConnected || host.context() !== key) return;
+                    if (!accepted || !currentOperation()) return;
                     await host.api(`/api/pi/cron/jobs/${encodeURIComponent(saved.id)}/actions`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ revision: current.revision, action: 'delete' }) });
-                    if (card.isConnected && host.context() === key) { state.textContent = t('已取消'); cancel.hidden = true; }
-                } catch (error) { if (host.context() === key) host.notify(error.message, 'error'); }
+                    if (currentOperation()) { state.textContent = t('已取消'); cancel.hidden = true; }
+                } catch (error) { if (currentOperation()) host.notify(error.message, 'error'); }
                 finally { cancel.disabled = false; }
             });
             foot.append(open, cancel); card.append(head, text, zone, foot); return card;
