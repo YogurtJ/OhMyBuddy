@@ -19,6 +19,7 @@ const { LEDGER_ENTRY } = ledger;
 const { rotationReason, freshRotationSummary } = require('./bot-maintenance');
 const history = require('./bot-history');
 const setup = require('./bot-setup');
+const onboardingFlow = require('./bot-onboarding');
 const { EventEmitter } = require('node:events');
 
 const MOVING = '这段聊天正在换到新的记录文件，请稍后再试';
@@ -171,8 +172,9 @@ class BotService extends EventEmitter {
             if (existingBots.length >= MAX_BOTS) fail('Bot limit reached', 409);
             const workspace = this.prepareWorkspace(id, name, language);
             const now = new Date().toISOString();
-            const bot = settings.normalizeBot(settings.defaultBot({ workspace, now, firstBot: existingBots.length === 0,
-                order: existingBots.reduce((max, profile) => Math.max(max, settings.readBot(profile).order + 1), 0) }));
+            const defaults = settings.defaultBot({ workspace, now, firstBot: existingBots.length === 0,
+                order: existingBots.reduce((max, profile) => Math.max(max, settings.readBot(profile).order + 1), 0) });
+            const bot = settings.normalizeBot({ ...defaults, onboarding: { ...defaults.onboarding, flowVersion: 2 } });
             const base = validateProfile({ name, description: '', soul: '', enabled: true, avatar: DEFAULT_AVATAR,
                 memory: { enabled: true, autoLearn: false }, skills: { learnedEnabled: true } });
             const saved = await this.profiles.mutate(input.expectedRevision, state => {
@@ -633,7 +635,9 @@ class BotService extends EventEmitter {
                     else if (!settled(onboarding.steps, step)) onboarding.steps[step] = 'skipped';
                 }
                 if (onboarding.phase === 'greeting') onboarding.phase = 'interview';
-                if (changes.finish && !['done', 'skipped'].includes(onboarding.phase)) { onboarding.phase = 'done'; onboarding.completedAt = now; }
+                if (changes.finish && !['done', 'skipped'].includes(onboarding.phase)) {
+                    onboarding.phase = 'done'; onboarding.completedAt = now; onboarding.flowVersion = 2;
+                }
                 const chosen = { ...bot.chosen, ...(changes.name ? { name: true } : {}), ...(changes.avatar || picture ? { avatar: true } : {}) };
                 const permissions = changes.workStyle ? { ...bot.permissions, preset: changes.workStyle } : bot.permissions;
                 const nextBot = settings.normalizeBot({ ...bot, job: changes.job ?? bot.job, permissions, onboarding, chosen });
@@ -747,23 +751,23 @@ class BotService extends EventEmitter {
         });
     }
 
-    // Onboarding without a model call: start (greeting → interview), skip, or start over.
+    // Local onboarding choices share the profile reservation and never send a chat message.
     onboarding(profileId, input = {}) {
         return this.profiles.reserve(async () => {
-            if (!object(input) || typeof input.expectedRevision !== 'string' || !['start', 'skip', 'restart'].includes(input.action))
-                fail('Invalid onboarding change');
+            onboardingFlow.validateOnboardingInput(input);
+            const current = await this.profiles.state();
+            if (current.revision !== input.expectedRevision) fail('Profiles changed; reload before saving', 409);
+            const { bot: before } = await this.bot(profileId);
+            const desiredModel = input.action === 'model-choice' ? await onboardingFlow.modelChoice(before, input.model, this.catalog) : undefined;
             const now = new Date().toISOString();
             const saved = await this.profiles.mutate(input.expectedRevision, state => {
                 const index = state.profiles.findIndex(profile => profile.id === profileId);
                 const previous = state.profiles[index], bot = settings.readBot(previous);
                 if (index < 0 || !bot || previous.trashedAt !== undefined) fail('Bot not found', 404);
-                const onboarding = { ...bot.onboarding, steps: { ...bot.onboarding.steps } };
-                if (input.action === 'start') { if (onboarding.phase === 'greeting') onboarding.phase = 'interview'; }
-                else if (input.action === 'skip') { onboarding.phase = 'skipped'; onboarding.completedAt = now; }
-                else Object.assign(onboarding, { phase: 'interview', steps: {}, startedAt: now, completedAt: null });
+                const changed = onboardingFlow.localStep(bot, input, now, desiredModel);
                 // Preserve choices inferred from legacy/per-step answers before restart clears them.
                 const chosen = input.action === 'restart' ? chosenIdentity(previous, bot) : bot.chosen;
-                const nextBot = settings.normalizeBot({ ...bot, onboarding, chosen });
+                const nextBot = settings.normalizeBot({ ...changed, chosen });
                 state.profiles[index] = { ...previous, bot: { ...previous.bot, ...nextBot }, updatedAt: now };
                 return { bot: { id: previous.id, bot: this.publicBot(nextBot) } };
             });
