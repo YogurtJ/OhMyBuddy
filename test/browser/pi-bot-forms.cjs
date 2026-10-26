@@ -171,6 +171,7 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
                     notify: message => u.notes.push(message),
                     save: async () => { u.saves++; throw Object.assign(new Error('changed'), { status: 409 }); } });
                 document.querySelector('#forms').append(cards.element);
+                u.cards = cards;
                 cards.sync(new Map([['ui-1', { id: 'ui-1', method: 'select', title: '保存这些设置？ / Save these settings?', options: ['保存 / Save', '先不改 / Not now'] }]]), true);
             }, { bot: { id: BOT, name: '新伙伴', avatar: { kind: 'emoji', value: '✨' }, chosen: { name: false, avatar: false }, bot: { job: '', onboarding: { steps: {} } } } });
             await page.locator('[data-setup-picture-file]').setInputFiles({ name: 'face.png', mimeType: 'image/png', buffer: PNG });
@@ -180,6 +181,10 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
             assert.deepEqual(await page.evaluate(() => [u.ui.revision, u.ui.setupIdentity().avatar.kind, u.saves]), ['r-after-upload', 'image', 1]);
             await page.locator('.pi-bot-setup-later').click();
             assert.deepEqual(await page.evaluate(() => u.notes), ['上传的图片已经是头像了；要换回可以在设置里改。']);
+            // The next card proposing an emoji keeps that picture by default, as it would after a good list read.
+            await page.evaluate(() => u.cards.sync(new Map([['ui-2', { id: 'ui-2', method: 'select', title: '保存这些设置？ / Save these settings?', options: ['保存 / Save', '先不改 / Not now'] }]]), true));
+            await page.locator('.pi-bot-setup-field.is-avatar.is-kept').waitFor();
+            assert.equal(await page.locator('[data-setup-use="avatar"]').isChecked(), false);
             // Back to an emoji: no upload.
             await mount({ avatar: '👋' }, fresh);
             await page.locator('[data-setup-picture-file]').setInputFiles({ name: 'face.png', mimeType: 'image/png', buffer: PNG });
