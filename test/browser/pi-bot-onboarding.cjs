@@ -2,11 +2,11 @@
 // how the Bot works and where things are kept, an optional model choice from the settings list
 // that is never claimed as saved after a failure or conflict, and first-task chips that send a
 // message only when clicked (never over a draft). Finished older Bots are not asked again.
-// Synthetic backend (pi-bot-fixture.cjs); desktop, phone and narrow phone; dark and reduced motion.
+// Synthetic backend (pi-bot-fixture.js); desktop, phone and narrow phone; dark and reduced motion.
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const { BOT, say, serve, botRecord, botPage, newWorld, layout } = require('./pi-bot-fixture.cjs');
+const { BOT, say, serve, botRecord, botPage, newWorld, layout } = require('./pi-bot-fixture.js');
 
 const MODELS = { defaults: { provider: 'fixture', modelId: 'small', thinkingLevel: 'medium' }, models: [
     { provider: 'fixture', id: 'small', name: 'Small', thinkingLevels: [] },
