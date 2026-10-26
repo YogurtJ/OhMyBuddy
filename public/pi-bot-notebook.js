@@ -43,13 +43,26 @@
         return { date: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`, time: `${pad(date.getHours())}:${pad(date.getMinutes())}` };
     };
     // Editor fields back to a stored value: a plain date, or the local time with its UTC offset.
+    // undefined for a time this device's clock skips (the hour lost when daylight saving starts),
+    // which would otherwise be saved as a different moment.
     const dueValue = (date, time) => {
         if (!date) return null;
         if (!time) return date;
         const local = new Date(`${date}T${time}:00`);
-        if (!Number.isFinite(local.getTime())) return date;
+        if (!Number.isFinite(local.getTime())) return undefined;
+        if (`${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}T${pad(local.getHours())}:${pad(local.getMinutes())}` !== `${date}T${time}`) return undefined;
         const offset = -local.getTimezoneOffset(), sign = offset >= 0 ? '+' : '-';
         return `${date}T${time}${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`;
+    };
+    // An edit in progress: what the user typed, and the note as it was when they started
+    // (base). After a refresh, fields the user has not touched follow the note's new values,
+    // so a retry sends only what the user changed (never an older value of another field).
+    const editDraft = item => { const base = { text: item.text, ...dueParts(item.due) }; return { id: item.id, ...base, base }; };
+    const rebase = (draft, item) => {
+        const fresh = { text: item.text, ...dueParts(item.due) };
+        if (draft.text === draft.base.text) draft.text = fresh.text;
+        if (draft.date === draft.base.date && draft.time === draft.base.time) { draft.date = fresh.date; draft.time = fresh.time; }
+        draft.base = fresh;
     };
 
     let dialog = null;
@@ -140,7 +153,7 @@
         function noteRow(item) {
             const row = el('li', `pi-bot-note is-${item.status}`); row.dataset.noteId = item.id;
             if (editing === item.id) {
-                if (draft?.id !== item.id) draft = { id: item.id, text: item.text, ...dueParts(item.due) };
+                if (draft?.id !== item.id) draft = editDraft(item); else rebase(draft, item);
                 const form = el('div', 'pi-bot-note-edit');
                 const text = el('textarea'); text.value = draft.text; text.maxLength = 500; text.rows = 3; text.dataset.noteField = 'text';
                 text.setAttribute('aria-label', translateUi("内容"));
@@ -277,13 +290,16 @@
             else if (action === 'delete-confirm') void change([{ op: 'delete', id }]);
             else if (action === 'edit-save') {
                 if (draft?.id !== id) return;
+                rebase(draft, item);
                 const text = draft.text.replace(/\s+/g, ' ').trim();
                 if (!text) { say(translateUi("内容不能为空"), 'error'); return; }
                 const op = { op: 'update', id };
                 if (text !== item.text) op.text = text;
                 // Only a changed date or time is sent; an unchanged exact time stays exactly as stored.
-                const before = dueParts(item.due);
-                if (row.querySelector('[data-note-field="due"]') && (draft.date !== before.date || draft.time !== before.time)) op.due = dueValue(draft.date, draft.time);
+                if (row.querySelector('[data-note-field="due"]') && (draft.date !== draft.base.date || draft.time !== draft.base.time)) {
+                    op.due = dueValue(draft.date, draft.time);
+                    if (op.due === undefined) { say(translateUi("这个时间在这台设备的时区里不存在（夏令时调整），请换一个时间"), 'error'); return; }
+                }
                 if (Object.keys(op).length === 2) { editing = null; draft = null; render(); return; }
                 void change([op]);
             }

@@ -167,7 +167,7 @@ function registerSetupTool(pi: ExtensionAPI, context: any, getAgentDir: () => st
                 if (proposal.aboutUser && added.length) saved.aboutUser = added;
                 if (proposal.finish && after.phase === 'done' && before.phase !== 'done') saved.finish = true;
                 const status = Object.keys(saved).length ? 'saved' : 'not_saved';
-                const current = { name: after.name, avatar: after.avatar, job: after.job, personality: trim('personality', after.personality) };
+                const current = { name: after.name, avatar: after.avatar, job: after.job, personality: trim('personality', after.personality), interview: after.phase };
                 return reply({ status, saved, ...(kept.length ? { kept } : {}), current,
                     ...(status === 'not_saved' ? { note: 'Nothing was changed; "current" is how things stand.' } : {}) });
             } finally { pending = false; }

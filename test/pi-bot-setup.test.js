@@ -44,6 +44,7 @@ test('a confirmed card saves identity, onboarding progress and about-you notes o
     const { SessionManager } = await import('@earendil-works/pi-coding-agent');
     const created = await bots.create({ expectedRevision: (await profiles.state()).revision });
     const botId = created.bot.id, windowId = created.window.id;
+    assert.deepEqual((await bots.list()).bots[0].chosen, { name: false, avatar: false }, 'a new Bot has nothing chosen yet');
     const { session } = await bots.resolve(botId, windowId);
     const manager = SessionManager.open(session.path);
     const callAssistant = (id, args) => manager.appendMessage({ role: 'assistant', content: [{ type: 'toolCall', id, name: setup.SETUP_TOOL, arguments: args }],
@@ -79,20 +80,27 @@ test('a confirmed card saves identity, onboarding progress and about-you notes o
     manager.appendMessage({ role: 'toolResult', toolCallId: 'call-1', toolName: setup.SETUP_TOOL, content: [{ type: 'text', text: '{}' }], isError: false, timestamp: Date.now() });
     await assert.rejects(bots.setup(botId, { windowId, toolCallId: 'call-1', expectedRevision: (await profiles.state()).revision }), /already answered/);
 
-    // A proposed face answered with a picture: the card saves the picture first; the emoji is not applied.
+    // A proposed face answered with a picture: the card uploads the picture first and names its
+    // version; the emoji is not applied, and a face changed elsewhere in between is not taken.
     callAssistant('call-p', { avatar: '👋', job: '整理计划' });
-    await assert.rejects(bots.setup(botId, { windowId, toolCallId: 'call-p', picture: true, changes: { avatar: null, job: '整理计划' },
-        expectedRevision: (await profiles.state()).revision }), /picture was not saved/);
-    await assert.rejects(bots.setup(botId, { windowId, toolCallId: 'call-p', picture: 'yes', expectedRevision: (await profiles.state()).revision }), /Invalid/);
-    const version = 'a'.repeat(64);
+    const version = 'a'.repeat(64), another = 'b'.repeat(64);
+    const changed = { status: 409, code: 'BOT_PICTURE_CHANGED' };
+    await assert.rejects(bots.setup(botId, { windowId, toolCallId: 'call-p', picture: version, changes: { avatar: null, job: '整理计划' },
+        expectedRevision: (await profiles.state()).revision }), changed);
+    for (const picture of ['yes', true, 'A'.repeat(64)])
+        await assert.rejects(bots.setup(botId, { windowId, toolCallId: 'call-p', picture, expectedRevision: (await profiles.state()).revision }), /Invalid/);
+    await profiles.saveAvatar(botId, (await profiles.state()).revision, another, async () => () => {});
+    await assert.rejects(bots.setup(botId, { windowId, toolCallId: 'call-p', picture: version, changes: { avatar: null, job: '整理计划' },
+        expectedRevision: (await profiles.state()).revision }), changed, 'another picture is not the one the user chose');
+    assert.equal((await bots.list()).bots[0].bot.job, '', 'nothing saved');
     await profiles.saveAvatar(botId, (await profiles.state()).revision, version, async () => () => {});
-    const pictured = await bots.setup(botId, { windowId, toolCallId: 'call-p', picture: true, changes: { avatar: '👋', job: '整理计划' },
+    const pictured = await bots.setup(botId, { windowId, toolCallId: 'call-p', picture: version, changes: { avatar: '👋', job: '整理计划' },
         expectedRevision: (await profiles.state()).revision });
     assert.deepEqual(pictured.saved, { job: '整理计划', picture: true });
     assert.deepEqual((await profiles.getProfile(botId)).avatar, { kind: 'image', version }, 'the picture stays');
     manager.appendMessage({ role: 'toolResult', toolCallId: 'call-p', toolName: setup.SETUP_TOOL, content: [{ type: 'text', text: '{}' }], isError: false, timestamp: Date.now() });
     callAssistant('call-q', { job: '整理计划' });
-    await assert.rejects(bots.setup(botId, { windowId, toolCallId: 'call-q', picture: true, expectedRevision: (await profiles.state()).revision }), /Only the proposed fields/);
+    await assert.rejects(bots.setup(botId, { windowId, toolCallId: 'call-q', picture: version, expectedRevision: (await profiles.state()).revision }), /Only the proposed fields/);
     manager.appendMessage({ role: 'toolResult', toolCallId: 'call-q', toolName: setup.SETUP_TOOL, content: [{ type: 'text', text: '{}' }], isError: false, timestamp: Date.now() });
 
     // Personality and finish complete onboarding; existing notes are not duplicated.
@@ -114,6 +122,14 @@ test('a confirmed card saves identity, onboarding progress and about-you notes o
     const restarted = await bots.onboarding(botId, { action: 'restart', expectedRevision: (await profiles.state()).revision });
     assert.equal(restarted.bot.bot.onboarding.phase, 'interview');
     assert.deepEqual(restarted.bot.bot.onboarding.steps, {});
+    assert.deepEqual((await bots.list()).bots.find(bot => bot.id === botId).chosen, { name: true, avatar: true }, 'meeting again keeps the chosen name and face');
+    // A name picked in Bot settings, before the interview got there, counts as chosen too.
+    const manual = await bots.create({ expectedRevision: (await profiles.state()).revision });
+    await bots.update(manual.bot.id, { expectedRevision: (await profiles.state()).revision, changes: { name: '阿青' } });
+    const listedManual = (await bots.list()).bots.find(bot => bot.id === manual.bot.id);
+    assert.deepEqual([listedManual.bot.onboarding.steps, listedManual.chosen], [{}, { name: true, avatar: false }]);
+    await bots.update(manual.bot.id, { expectedRevision: (await profiles.state()).revision, changes: { avatar: { kind: 'emoji', value: '🐼' } } });
+    assert.deepEqual((await bots.list()).bots.find(bot => bot.id === manual.bot.id).chosen, { name: true, avatar: true });
     const skipped = await bots.onboarding(botId, { action: 'skip', expectedRevision: (await profiles.state()).revision });
     assert.equal(skipped.bot.bot.onboarding.phase, 'skipped');
     await assert.rejects(bots.onboarding(botId, { action: 'other', expectedRevision: (await profiles.state()).revision }), /Invalid/);
@@ -161,7 +177,7 @@ test('the setup tool reports only what the Bot page actually saved', { timeout: 
 
     answer = setup.SAVE;
     const initial = (await profiles.getProfile(botId));
-    const now = { name: initial.name, avatar: initial.avatar.value, job: '', personality: initial.soul };
+    const now = { name: initial.name, avatar: initial.avatar.value, job: '', personality: initial.soul, interview: 'greeting' };
     assert.deepEqual(await run({ name: '阿狸', avatar: '', job: ' ' }), { status: 'not_saved', saved: {}, kept: ['name'], current: now,
         note: 'Nothing was changed; "current" is how things stand.' }, 'answering Save elsewhere saves nothing; empty fields are not proposed');
     await assert.rejects(tool.execute('call', { name: '', avatar: '' }, undefined, undefined, ctx), /at least one change/);
@@ -172,7 +188,7 @@ test('the setup tool reports only what the Bot page actually saved', { timeout: 
     onSelect = async () => bots.setup(botId, { windowId, toolCallId: 'call-x', changes: { name: '小狸', aboutUser: ['叫我小王'] },
         expectedRevision: (await profiles.state()).revision });
     assert.deepEqual(await run({ name: '阿狸', aboutUser: ['叫我小王'] }), { status: 'saved', saved: { name: '小狸', aboutUser: ['叫我小王'] },
-        current: { ...now, name: '小狸' } });
+        current: { ...now, name: '小狸', interview: 'interview' } });
     // The user unticks the face the Bot proposed again (or sets it back): reported as kept, with the identity as it stands.
     manager.appendMessage({ role: 'assistant', content: [{ type: 'toolCall', id: 'call-y', name: setup.SETUP_TOOL, arguments: { avatar: '👋', job: '整理计划', finish: true } }],
         api: 'openai-completions', provider: 'fixture', model: 'small', usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
@@ -180,7 +196,7 @@ test('the setup tool reports only what the Bot page actually saved', { timeout: 
     onSelect = async () => bots.setup(botId, { windowId, toolCallId: 'call-y', changes: { avatar: null, job: '整理计划', finish: true },
         expectedRevision: (await profiles.state()).revision });
     assert.deepEqual(await run({ avatar: '👋', job: '整理计划', finish: true }), { status: 'saved', saved: { job: '整理计划', finish: true }, kept: ['avatar'],
-        current: { ...now, name: '小狸', job: '整理计划' } });
+        current: { ...now, name: '小狸', job: '整理计划', interview: 'done' } });
     onSelect = null;
     answer = setup.DECLINE;
     assert.deepEqual(await run({ job: '陪我聊天' }), { status: 'declined' });

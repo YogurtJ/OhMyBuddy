@@ -166,6 +166,24 @@ test('the window_note tool writes branch-following operations and the model sees
     // A Bot compaction carries it in the summary.
     manager.appendCompaction('bot summary', manager.getLeafId(), 10, { pivaneBot: { v: 1, ledger: { ops: [], snapshot: ledger.replay(manager.getBranch()) } } }, true);
     assert.equal(notebook.notebookNotice(manager.getBranch(), T2), null);
+    // A note saved inside a script (no window_note result in the conversation) is shown before the
+    // next run, apart from the user's edits; one whose result is in the conversation is not.
+    bot = true;
+    manager.appendMessage(assistant([{ type: 'toolCall', id: 'c9', name: 'codemode', arguments: {} }]));
+    await call('c9/1', { action: 'add', kind: 'ref', text: '物业电话 6123' });
+    manager.appendMessage({ role: 'toolResult', toolCallId: 'c9', toolName: 'codemode', content: [{ type: 'text', text: 'done' }],
+        details: { calls: [{ id: 'c9/1', name: 'window_note', args: {}, status: 'done', durationMs: 1 }] }, isError: false, timestamp: Date.now() });
+    const seen = await call('d1', { action: 'add', kind: 'decision', text: '地板选橡木' });
+    manager.appendMessage({ role: 'toolResult', toolCallId: 'd1', toolName: 'window_note', content: seen.content, details: seen.details, isError: false, timestamp: Date.now() });
+    notice = notebook.notebookNotice(manager.getBranch(), T2);
+    assert.equal(notice.details.reason, 'unseen-notes');
+    assert.match(notice.content, /results are not in this conversation[^]*\n- \[n5\] \(ref, active\) 物业电话 6123$/);
+    assert.doesNotMatch(notice.content, /地板选橡木|user changed/);
+    manager.appendCustomEntry(ledger.LEDGER_ENTRY, { v: 1, ops: [{ op: 'update', id: 'n6', text: '地板选白橡木', at: T2, by: 'user' }] });
+    notice = notebook.notebookNotice(manager.getBranch(), T2);
+    assert.match(notice.content, /^The user changed these notes[^]*\[n6\] \(decision, active\) 地板选白橡木\n\nThese notes were saved by your own window_note calls[^]*\[n5\]/);
+    manager.appendCustomMessageEntry(notice.customType, notice.content, false, notice.details);
+    assert.equal(notebook.notebookNotice(manager.getBranch(), T2), null, 'shown once');
     // An empty notebook says nothing.
     assert.equal(notebook.notebookNotice(SessionManager.inMemory('/tmp').getBranch(), T2), null);
 });
