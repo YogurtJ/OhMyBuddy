@@ -36,13 +36,14 @@ const WORKSPACE_PARENT = 'PivaneBots';
 const MAX_BOTS = 50;
 const PLACEHOLDER = Object.freeze({ 'zh-CN': '新伙伴', en: 'New buddy' });
 const DEFAULT_AVATAR = Object.freeze({ kind: 'emoji', value: '✨' });
-// Whether the user has picked the name and the face, by any path (a setup card, Bot settings,
-// the identity page), and kept across a new interview: anything but what a new Bot starts with,
-// or the interview's identity step. A later setup card keeps these unless the user asks (UAT-03).
+// Whether the user has picked the name and the face, kept across a new interview: recorded when
+// they save one on a setup card or in Bot settings (bot.chosen), else inferred (older records,
+// the identity page) from the interview's identity step or a value a new Bot does not start with.
+// A later setup card keeps these unless the user asks (UAT-03).
 function chosenIdentity(profile, bot) {
     const done = bot.onboarding?.steps?.identity === 'done', avatar = profile.avatar;
-    return { name: done || !Object.values(PLACEHOLDER).includes(profile.name),
-        avatar: done || Boolean(avatar) && !(avatar.kind === DEFAULT_AVATAR.kind && avatar.value === DEFAULT_AVATAR.value) };
+    return { name: bot.chosen?.name === true || done || !Object.values(PLACEHOLDER).includes(profile.name),
+        avatar: bot.chosen?.avatar === true || done || Boolean(avatar) && !(avatar.kind === DEFAULT_AVATAR.kind && avatar.value === DEFAULT_AVATAR.value) };
 }
 
 // What the notebook panel shows: every note except tombstones, with the quote it came from
@@ -613,7 +614,8 @@ class BotService extends EventEmitter {
                 if (changes.aboutUser) onboarding.steps.about = 'done';
                 if (onboarding.phase === 'greeting') onboarding.phase = 'interview';
                 if (changes.finish && !['done', 'skipped'].includes(onboarding.phase)) { onboarding.phase = 'done'; onboarding.completedAt = now; }
-                const nextBot = settings.normalizeBot({ ...bot, job: changes.job ?? bot.job, onboarding });
+                const chosen = { ...bot.chosen, ...(changes.name ? { name: true } : {}), ...(changes.avatar || picture ? { avatar: true } : {}) };
+                const nextBot = settings.normalizeBot({ ...bot, job: changes.job ?? bot.job, onboarding, chosen });
                 const record = { ...previous, ...base, bot: { ...previous.bot, ...nextBot }, updatedAt: now };
                 state.profiles[index] = record;
                 return { bot: { id: record.id, name: record.name, avatar: record.avatar ?? null, bot: this.publicBot(nextBot) } };
@@ -738,7 +740,12 @@ class BotService extends EventEmitter {
                     soul: soul ?? previous.soul, enabled: previous.enabled, memory: previous.memory, skills: previous.skills,
                     ...(avatar !== undefined ? { avatar } : {}) }, previous);
                 if (base.avatar?.kind === 'image' && (previous.avatar?.kind !== 'image' || previous.avatar.version !== base.avatar.version)) fail('Image avatar must be uploaded');
-                const nextBot = botPatch === undefined ? bot : settings.applyBotPatch(bot, botPatch);
+                const patched = botPatch === undefined ? bot : settings.applyBotPatch(bot, botPatch);
+                // A name or face set here is the user's choice, even one that looks like a new Bot's.
+                const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+                const chosen = { ...patched.chosen, ...(name !== undefined && base.name !== previous.name ? { name: true } : {}),
+                    ...(avatar !== undefined && !same(base.avatar, previous.avatar) ? { avatar: true } : {}) };
+                const nextBot = settings.normalizeBot({ ...patched, chosen });
                 const record = { ...previous, ...base, bot: { ...previous.bot, ...nextBot }, updatedAt: new Date().toISOString() };
                 state.profiles[index] = record;
                 return { ok: true, bot: { id: record.id, name: record.name, avatar: record.avatar ?? null, bot: this.publicBot(nextBot) },

@@ -287,7 +287,8 @@ function describeItem(item) {
     if (!item) return null;
     if (item.status === 'deleted') return `[${item.id}] deleted by the user (forget it)`;
     const due = item.due ? `due ${item.due}` : item.kind === 'commitment' ? 'no due date' : '';
-    return `[${item.id}] (${[item.kind, item.status, due].filter(Boolean).join(', ')}) ${item.text}`;
+    const replaces = item.supersedes ? `replaces ${item.supersedes}` : '';
+    return `[${item.id}] (${[item.kind, item.status, due, replaces].filter(Boolean).join(', ')}) ${item.text}`;
 }
 
 // Whether a state survives being stored and read back (a seed or compaction snapshot).
