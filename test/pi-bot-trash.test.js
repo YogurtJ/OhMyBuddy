@@ -79,17 +79,18 @@ test('profile reservation and session gates cover asynchronous startup until the
 });
 test('production blocker check catches enabled profile/thread schedules, deferred states and profile learning without modifying them', () => {
     const cron = { db: { jobs: () => jobs, activeRuns: () => runs }, busy: false, mutating: null }, deferred = { jobs: [], assertHealthy() {} }, learning = { active: new Map() };
-    let jobs = [], runs = []; const check = createTrashBlockers({ cron, deferred, learning }), target = { profileId: 'bot-a', sessionRefs: [{ cwd: '/fixture', sessionId: 's' }] };
+    const store = { resolveProject: cwd => path.resolve(cwd) };
+    let jobs = [], runs = []; const check = createTrashBlockers({ cron, deferred, learning, store }), target = { profileId: 'bot-a', sessionRefs: [{ cwd: '/fixture', sessionId: 's' }] };
     assert.deepEqual(check(target), []);
     jobs = [{ enabled: true, target: { kind: 'profile', profileId: 'bot-a' } }]; assert.equal(check(target)[0].code, 'BOT_HAS_SCHEDULES');
     jobs[0].enabled = false; assert.deepEqual(check(target), []);
     for (const status of ['waiting', 'uncertain']) {
         runs = [{ status, job: { target: { kind: 'profile', profileId: 'bot-a' } } }];
-        assert.equal(check(target)[0].code, 'BOT_HAS_SCHEDULES', 'a disabled one-time job can still own accepted work');
-        runs = [{ status, job: { target: { kind: 'profile', profileId: 'other' } }, target: { cwd: '/fixture', sessionId: 's' } }];
-        assert.equal(check(target)[0].code, 'BOT_HAS_SCHEDULES', 'resolved native targets remain protected after retargeting');
-        runs = [{ status, job: { target: { kind: 'thread', cwd: '/fixture', sessionId: 's' } } }];
-        assert.equal(check(target)[0].code, 'BOT_HAS_SCHEDULES', 'unresolved thread-targeted runs are protected');
+        assert.ok(check(target).some(item => item.code === 'BOT_HAS_SCHEDULES'), 'a disabled one-time job can still own accepted work');
+        runs = [{ status, job: { target: { kind: 'profile', profileId: 'other' } }, target: { cwd: '/fixture/.', sessionId: 's' } }];
+        assert.ok(check(target).some(item => item.code === 'BOT_HAS_SCHEDULES'), 'resolved native targets remain protected after retargeting');
+        runs = [{ status, job: { target: { kind: 'thread', cwd: '/fixture/.', sessionId: 's' } } }];
+        assert.ok(check(target).some(item => item.code === 'BOT_HAS_SCHEDULES'), 'unresolved thread targets use canonical directory identity');
     }
     runs = [{ status: 'waiting', job: { target: { kind: 'profile', profileId: 'other' } }, target: { cwd: '/fixture', sessionId: 'other' } }];
     assert.deepEqual(check(target), []); runs = [];

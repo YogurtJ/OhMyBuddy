@@ -256,7 +256,7 @@ function createPiAgentGateway(options = {}) {
     const cron = new (require('./pi-cron-service').CronService)({ store, supervisor, profiles, bots, reloadBotWorker,
         catalog: cwd => agentThreads.catalog(cwd), isSuspended: () => maintenance.locked || maintenance.referenceLocked || Boolean(store.sessionMoves?.running), filename: options.cronFilePath });
     require('./pi-cron-service').mountCron(router, cron);
-    bots.trashBlockers = require('./bot/bot-trash').createTrashBlockers({ cron, deferred, learning });
+    bots.trashBlockers = require('./bot/bot-trash').createTrashBlockers({ cron, deferred, learning, store });
     require('./bot/bot-schedule').mountBotSchedule(router, { cron, bots, authenticate: req => agentThreads.authenticate(req) });
     bots.cron = cron;
     bots.assertWindowQuiescent = window => {
