@@ -12,13 +12,19 @@
     const modelKey = model => model ? `${model.provider}\u0000${model.id}` : '';
     const THINKING = { off: () => translateUi("不启用"), minimal: () => translateUi("极简"), low: () => translateUi("低"), medium: () => translateUi("中"),
         high: () => translateUi("高"), xhigh: () => translateUi("极高"), max: () => translateUi("最大") };
-    // First things to do: [choice, chip, the message sent when it is clicked].
+    // First things to do: [choice, chip, the message sent when it is clicked]. Chips stay short so
+    // all six choices fit two rows on a narrow phone.
     const FIRST_TASKS = [
-        ['study', () => translateUi("帮我学点东西"), () => translateUi("我想先从学习开始：帮我定一个小目标，再一步步陪我学。")],
-        ['plan', () => translateUi("理一理接下来的安排"), () => translateUi("帮我理一理接下来要做的事，排一个轻松可行的计划。")],
-        ['write', () => translateUi("帮我写点东西"), () => translateUi("我想请你帮我写点东西，先问问我要写什么吧。")],
+        ['study', () => translateUi("学点东西"), () => translateUi("我想先从学习开始：帮我定一个小目标，再一步步陪我学。")],
+        ['plan', () => translateUi("理一理安排"), () => translateUi("帮我理一理接下来要做的事，排一个轻松可行的计划。")],
+        ['write', () => translateUi("写点东西"), () => translateUi("我想请你帮我写点东西，先问问我要写什么吧。")],
         ['chat', () => translateUi("随便聊聊"), () => translateUi("我们先随便聊聊吧。")]
     ];
+    // Phones fold the facts so the conversation above stays readable (pi-bot.css uses the same width).
+    const COMPACT = '(max-width: 680px)';
+    // Moving focus to the composer would open a phone's on-screen keyboard; only fine pointers get it.
+    const FINE_POINTER = '(hover: hover) and (pointer: fine)';
+    const matches = query => Boolean(globalThis.matchMedia?.(query).matches);
     const WORK = {
         free: () => translateUi("现在的做事方式是“放手”：大部分事我直接办好，危险或花钱的事会先问你。"),
         balanced: () => translateUi("现在的做事方式是“稳妥”：运行命令、改工作目录以外的文件之前，会弹出确认等你允许。"),
@@ -32,15 +38,26 @@
         return onboarding?.flowVersion === 2 && onboarding.phase === 'done' && !onboarding.steps?.['first-task'];
     }
 
+    // A model the server refused to save, in plain words.
+    function modelProblem(error) {
+        if (error?.code === 'BOT_MODEL_UNAVAILABLE') return translateUi("这个模型现在用不了，你的选择还在。可以换一个，或者先跟随默认。");
+        if (error?.status === 409 && !error.code) return translateUi("设置刚刚有变化，你的选择还在，请再点一次");
+        return translateUi("模型没有保存：{0}", error?.message || translateUi("保存失败"));
+    }
+
     // target(): { bot, window, idle } of the open Bot chat, or null; load(profileId): the Bot's
     // settings with the model list (GET /bots/:id/settings); submit(profileId, body): saves one
     // step and resolves after the Bot list was reread; say(text): sends a message as the user,
-    // false when the composer holds a draft; draft(): whether it does; focusComposer().
+    // false when the composer holds a draft; draft(): whether it does; focusComposer();
+    // notify(message, timeout): a passing notice.
     function closure({ target, load, submit, say, draft, focusComposer, notify, face, changed }) {
         const panel = el('section', 'pi-bot-setup pi-bot-closure'); panel.hidden = true;
         panel.setAttribute('role', 'region'); panel.setAttribute('aria-label', translateUi("认识好啦"));
         // Per Bot while the page is open: the model list, the user's pick, what is being saved.
         let state = null, shown = '';
+        // Bots whose user wrote their own message instead of choosing: the panel stays away on this
+        // page (nothing is saved; it comes back after a reload while the step is still open).
+        const dismissed = new Set();
 
         function hide() { if (panel.hidden) return; panel.hidden = true; panel.replaceChildren(); shown = ''; changed?.(); }
 
@@ -59,11 +76,19 @@
             const now = target();
             // A first task chosen here hides the panel even before the reread list shows it; once the
             // server shows the step settled, a later round (getting acquainted again) may ask anew.
-            if (state?.answered && state.botId === now?.bot?.id && !pending(now.bot)) state.answered = false;
-            const show = Boolean(now && now.window?.kind === 'main' && pending(now.bot) && !(state?.botId === now.bot.id && state.answered)
-                && (now.idle || state?.botId === now.bot.id && state.saving));
+            if (now?.bot && !pending(now.bot)) {
+                dismissed.delete(now.bot.id);
+                if (state?.answered && state.botId === now.bot.id) state.answered = false;
+            }
+            const show = Boolean(now && now.window?.kind === 'main' && pending(now.bot) && !dismissed.has(now.bot.id)
+                && !(state?.botId === now.bot.id && state.answered) && (now.idle || state?.botId === now.bot.id && state.saving));
             if (!show) { hide(); return; }
-            if (state?.botId !== now.bot.id) { state = { botId: now.bot.id, models: null, pick: undefined, saving: null, error: '', answered: false }; void models(now.bot.id); }
+            if (state?.botId !== now.bot.id) {
+                state = { botId: now.bot.id, models: null, pick: undefined, saving: null, error: '', draftBlocked: false, answered: false, about: undefined };
+                void models(now.bot.id);
+            }
+            // The "draft in the way" note goes once the composer is empty again.
+            if (state.draftBlocked && !draft()) { state.draftBlocked = false; state.error = ''; shown = ''; }
             const onboarding = now.bot.bot.onboarding;
             const key = JSON.stringify([now.bot.id, now.bot.name, now.bot.avatar, onboarding.steps, now.bot.bot.model, now.bot.bot.permissions?.preset]);
             if (key !== shown || panel.hidden) render();
@@ -78,13 +103,20 @@
             const levels = item.thinkingLevels || [];
             return { provider: item.provider, id: item.id, ...(state.pick.thinking && levels.includes(state.pick.thinking) ? { thinking: state.pick.thinking } : {}) };
         };
+        // The name of the model new chats use by default, when the list says.
+        const defaultName = data => {
+            const defaults = data?.defaults, item = defaults && data.models.find(entry => entry.provider === defaults.provider && entry.id === defaults.modelId);
+            return item ? item.name || item.id : '';
+        };
         const modelName = (model, data) => {
-            if (!model) {
-                const defaults = data?.defaults, item = defaults && data.models.find(entry => entry.provider === defaults.provider && entry.id === defaults.modelId);
-                return item ? translateUi("跟随默认（{0}）", item.name || item.id) : translateUi("跟随默认");
-            }
+            if (!model) { const name = defaultName(data); return name ? translateUi("跟随默认（{0}）", name) : translateUi("跟随默认"); }
             const item = data?.models?.find(entry => modelKey(entry) === modelKey(model));
             return item?.name || model.id;
+        };
+        const savedLine = (model, data) => {
+            if (model) return translateUi("用 {0} 说话，以后可以在设置里改。", modelName(model, data));
+            const name = defaultName(data);
+            return name ? translateUi("用默认模型（{0}）说话，以后可以在设置里改。", name) : translateUi("用默认模型说话，以后可以在设置里改。");
         };
 
         function modelPart(bot) {
@@ -96,7 +128,7 @@
             if (done) {
                 // What the server's Bot record says now, not what was asked for.
                 const line = el('p', 'pi-bot-closure-saved');
-                line.append(icon('fa-circle-check'), el('span', null, translateUi("用 {0} 说话，以后可以在设置里改。", modelName(bot.bot.model, data))));
+                line.append(icon('fa-circle-check'), el('span', null, savedLine(bot.bot.model, data)));
                 part.append(line);
                 return part;
             }
@@ -149,18 +181,23 @@
             const mine = state, model = selected(bot.bot.model);
             mine.saving = 'model'; mine.error = ''; render();
             try { await submit(bot.id, { action: 'model-choice', model }); }
-            catch (error) {
-                mine.error = error.status === 409 && !error.code ? translateUi("设置刚刚有变化，你的选择还在，请再点一次")
-                    : translateUi("模型没有保存：{0}", error.message || translateUi("保存失败"));
-            } finally { mine.saving = null; }
+            catch (error) { mine.error = modelProblem(error); }
+            finally { mine.saving = null; }
             if (state === mine) { render(); sync(); }
+        }
+
+        // After a choice the panel goes away. Keyboard and mouse users continue in the composer;
+        // a phone's keyboard is not opened for them, and focus the user moved elsewhere stays.
+        function settleFocus() {
+            const active = document.activeElement;
+            if ((!active || active === document.body) && matches(FINE_POINTER)) focusComposer?.();
         }
 
         async function chooseTask(bot, choice, message) {
             if (state.saving) return;
             const mine = state;
-            if (message && draft()) { mine.error = translateUi("输入框里还有草稿，先发送或清空它"); render(); return; }
-            mine.saving = 'task'; mine.error = ''; render();
+            if (message && draft()) { mine.error = translateUi("输入框里还有草稿，先发送或清空它"); mine.draftBlocked = true; render(); return; }
+            mine.saving = 'task'; mine.error = ''; mine.draftBlocked = false; render();
             try { await submit(bot.id, { action: 'first-task', choice }); }
             catch (error) {
                 mine.saving = null;
@@ -171,11 +208,28 @@
             mine.saving = null; mine.answered = true;
             sync();
             // Only now, and only for the suggestion the user clicked, does anything reach the model.
-            // The choice is a selection, not the task being done: if sending is refused or fails,
-            // the suggestion stays in the composer as a draft to send again.
-            if (message) say(message);
-            else if (choice === 'own') focusComposer?.();
-            else notify?.(translateUi("好的，想到要做什么，随时跟我说。"));
+            // The choice is a selection, not the task being done. Text typed into the composer while
+            // the choice was saved stays as it is; the suggestion is then not sent, and that is said.
+            if (message) {
+                if (draft() || say(message) === false) notify?.(translateUi("已记下你的选择，但输入框里有草稿，这条建议没有发出；草稿原样保留。"), 8000);
+                else settleFocus();
+            } else if (choice === 'own') focusComposer?.();
+            else { notify?.(translateUi("好的，想到要做什么，随时跟我说。")); settleFocus(); }
+        }
+
+        // The user wrote their own message while the panel was waiting for a choice: step aside on
+        // this page instead of coming back after every reply. Nothing is recorded on the server.
+        function ownMessage() {
+            const now = target();
+            if (!now?.bot || now.window?.kind !== 'main' || !pending(now.bot) || state?.botId === now.bot.id && (state.answered || state.saving)) return;
+            dismissed.add(now.bot.id);
+            hide();
+        }
+
+        // The composer changed: a "draft in the way" note leaves once the draft is gone.
+        function composerChanged() {
+            if (!state?.draftBlocked || draft() || panel.hidden) return;
+            state.draftBlocked = false; state.error = ''; render();
         }
 
         function render() {
@@ -190,8 +244,17 @@
             fact('fa-house-laptop', translateUi("聊天、记忆和我做的文件都保存在运行 Pivane 的这台电脑上；回复时，需要的内容会发给下面选的模型服务。"));
             fact('fa-thumbtack', translateUi("关于你的事记在“关于你”，这段聊天定下的事记在“我记着的事”，都能随时查看和修改。"));
             fact('fa-shield-halved', `${(WORK[bot.bot.permissions?.preset] || WORK.free)()} ${translateUi("这些确认在 Pivane 的工具层进行，不是系统沙箱；可以在设置里改。")}`);
+            // The facts fold away on phones (open on wider screens) and keep the user's own toggle.
+            const about = el('details', 'pi-bot-closure-about');
+            about.open = state.about ?? !matches(COMPACT);
+            const summary = el('summary');
+            summary.append(icon('fa-circle-info'), el('span', null, translateUi("东西存在哪、动手前怎么问你")));
+            about.append(summary, facts);
+            const mine = state;
+            about.addEventListener('toggle', () => { mine.about = about.open; });
+            // Only the facts and the model scroll; the choices below always stay in view.
             const body = el('div', 'pi-bot-setup-fields pi-bot-closure-body');
-            body.append(facts, modelPart(bot));
+            body.append(about, modelPart(bot));
             const tasks = el('div', 'pi-bot-closure-tasks'); tasks.setAttribute('role', 'group');
             const ask = el('p', 'pi-bot-closure-label', translateUi("想先做点什么？点一下就会发给 {0}。", bot.name)); ask.id = `pi-bot-closure-ask-${bot.id}`;
             tasks.setAttribute('aria-labelledby', ask.id);
@@ -208,23 +271,27 @@
             later.addEventListener('click', () => void chooseTask(bot, 'later', ''));
             chips.append(own, later);
             tasks.append(ask, chips);
-            body.append(tasks);
             const foot = el('footer', 'pi-bot-setup-foot');
             const note = el('p', 'pi-bot-setup-note', state.error || ''); note.setAttribute('role', 'status'); note.setAttribute('aria-live', 'polite');
             note.classList.toggle('is-error', Boolean(state.error));
             foot.append(note);
             const focused = panel.contains(document.activeElement) ? document.activeElement : null;
-            const focusKey = focused?.dataset.closureTask || focused?.dataset.closureAction || (focused?.hasAttribute('data-closure-model') ? 'model-select' : '');
-            panel.replaceChildren(head, body, foot);
+            const focusKey = focused?.dataset.closureTask || focused?.dataset.closureAction || (focused?.hasAttribute('data-closure-model') ? 'model-select'
+                : focused?.matches('.pi-bot-closure-about > summary') ? 'about' : '');
+            // A redraw (a pick, a save) keeps the reading position of the scrolling part.
+            const scrolled = panel.hidden ? 0 : panel.querySelector('.pi-bot-closure-body')?.scrollTop || 0;
+            panel.replaceChildren(head, body, tasks, foot);
             if (state.saving) for (const control of panel.querySelectorAll('button,select')) control.disabled = true;
             const wasHidden = panel.hidden;
             panel.hidden = false;
+            if (scrolled) body.scrollTop = scrolled;
             // Keep keyboard focus on the same control across a redraw.
-            if (focusKey) panel.querySelector(focusKey === 'model-select' ? '[data-closure-model]' : `[data-closure-task="${focusKey}"],[data-closure-action="${focusKey}"]`)?.focus({ preventScroll: true });
+            if (focusKey) panel.querySelector(focusKey === 'model-select' ? '[data-closure-model]' : focusKey === 'about' ? '.pi-bot-closure-about > summary'
+                : `[data-closure-task="${focusKey}"],[data-closure-action="${focusKey}"]`)?.focus({ preventScroll: true });
             if (wasHidden) changed?.();
         }
 
-        return { element: panel, sync, hide };
+        return { element: panel, sync, hide, ownMessage, composerChanged };
     }
 
     window.PiBotOnboarding = Object.freeze({ closure, pending, FIRST_TASKS: Object.freeze(FIRST_TASKS.map(([choice]) => choice)) });

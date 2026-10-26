@@ -55,6 +55,8 @@ async function botPage(browser, base, world, { width, height = 860, reducedMotio
         if (session) {
             const window = world.bots().find(item => item.id === session[1])?.windows.find(item => item.id === session[2]);
             if (!window) return route.fulfill({ status: 404, json: { error: 'Window not found' } });
+            // As bot-service resolve(): an archived topic is never opened as a live chat.
+            if (window.archivedAt) return route.fulfill({ status: 409, json: { error: 'This topic is archived; restore it before sending', code: 'BOT_WINDOW_ARCHIVED' } });
             return route.fulfill({ json: { window, session: { id: window.sessionId, cwd: WORKSPACE, path: `${WORKSPACE}/${window.sessionId}.jsonl`, name: '', firstMessage: '',
                 messageCount: world.messages(window.sessionId).length, agentProfile: { id: session[1], name: '小狸' }, assistantProject: null,
                 created: '2026-10-24T00:00:00Z', modified: '2026-10-24T00:00:00Z' } } });
@@ -81,7 +83,8 @@ async function botPage(browser, base, world, { width, height = 860, reducedMotio
                     messages: { messages: world.messages(command.sessionId) }, stats: {}, models: { models: [state.model] },
                     thinkingLevels: { levels: ['off'] }, commands: { commands: [] } };
             } else if (command.type === 'get_state') data = state;
-            else if (command.type === 'get_messages') data = { messages: [] };
+            // The stored conversation of the session this socket opened, as after a re-sync.
+            else if (command.type === 'get_messages') data = { messages: world.messages(world.opened.at(-1)) };
             if (command.type === 'prompt') world.prompts.push(command.message);
             ws.send(JSON.stringify({ type: 'response', id: command.id, command: command.type, success: true, data }));
         });
@@ -98,4 +101,24 @@ function newWorld(overrides = {}) {
 // of the composer-docked panels.
 const layout = page => page.evaluate(() => ({ overflow: document.documentElement.scrollWidth > innerWidth || document.body.scrollWidth > innerWidth, width: innerWidth }));
 
-module.exports = { BOT, MAIN, BOT2, MAIN2, APPROVAL, say, serve, botRecord, windowRecord, botPage, newWorld, layout };
+// The phone's bottom bar after two painted frames: whether the bar is what sits near the bottom
+// edge, and whether its active tab is laid out and on top where it is drawn.
+const bottomBar = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => {
+    const under = document.elementFromPoint(innerWidth / 2, innerHeight - 30);
+    const active = document.querySelector('#workspace-sidebar .nav-btn.active');
+    const box = active?.getBoundingClientRect();
+    const visible = Boolean(box && box.width && box.height && box.top >= 0 && box.bottom <= innerHeight && getComputedStyle(active).visibility !== 'hidden'
+        && document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)?.closest('.nav-btn') === active);
+    resolve({ bar: Boolean(under?.closest('#workspace-sidebar')), active: visible, tab: active?.dataset.tab || null });
+}))));
+
+// An evidence screenshot after a theme or motion change. Headless Chromium's first capture after
+// such a change can leave the bottom bar's blurred layer unpainted even though the bar is laid out
+// and on top (bottomBar); a throwaway capture first lets the saved image show the settled page.
+async function settledShot(page, file) {
+    await page.screenshot();
+    await page.waitForTimeout(250);
+    await page.screenshot({ path: file });
+}
+
+module.exports = { BOT, MAIN, BOT2, MAIN2, APPROVAL, say, serve, botRecord, windowRecord, botPage, newWorld, layout, bottomBar, settledShot };

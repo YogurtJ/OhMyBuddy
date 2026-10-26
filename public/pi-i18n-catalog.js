@@ -10617,5 +10617,25 @@
         ["这个话题正在忙", "This topic is busy"],
         ["这个话题正在接续到新的会话文件，稍等一下再试。", "This topic is moving to a new conversation file. Try again in a moment."]
     );
+    rows.push(
+        ["学点东西", "Learn something"],
+        ["理一理安排", "Sort out plans"],
+        ["写点东西", "Write something"],
+        ["东西存在哪、动手前怎么问你", "Where things are kept and when I ask first"],
+        ["这个模型现在用不了，你的选择还在。可以换一个，或者先跟随默认。", "This model is not available right now. Your choice is still here: pick another one, or follow the default for now."],
+        ["用默认模型（{0}）说话，以后可以在设置里改。", "Talking with the default model ({0}). You can change it later in settings."],
+        ["用默认模型说话，以后可以在设置里改。", "Talking with the default model. You can change it later in settings."],
+        ["已记下你的选择，但输入框里有草稿，这条建议没有发出；草稿原样保留。", "Your choice was saved, but the message box has a draft, so the suggestion was not sent. Your draft is unchanged."],
+        ["这个话题已在别处归档，聊天记录都保留着；已回到主聊天。", "This topic was archived elsewhere. Its history is kept; you are back in the main chat."],
+        ["这个聊天已经不在了，已回到主聊天。", "This chat is no longer here; you are back in the main chat."],
+        ["找不到 {0} 了，可能已在别处移到回收站。", "{0} can no longer be found; it may have been moved to the trash elsewhere."],
+        ["话题已经到上限了（已归档的也算在内），可以先接着用已有的话题。", "The topic limit has been reached (archived topics count too). You can keep using the topics you have."],
+        ["内容没有通过检查：话题名不能为空，最多 {0} 字；“专注什么”最多 {1} 字；表情最多 {2} 个字符。", "This could not be saved: the topic name cannot be empty and can have at most {0} characters; the focus at most {1}; the emoji at most {2}."],
+        ["找不到这个话题了，可能已经在别处移走。", "This topic can no longer be found; it may have been removed elsewhere."],
+        ["{0} 的聊天正在接续到新的会话文件，稍等一下再试。", "{0}'s chat is moving to a new conversation file. Try again in a moment."],
+        ["{0} 的聊天刚刚有变化，和记录对不上。稍等一下再试；一直这样可以刷新页面。", "{0}'s chat just changed and no longer matches its records. Try again in a moment; if this keeps happening, reload the page."],
+        ["回收站前的检查暂时还没准备好，稍后再试。", "The checks before moving to the trash are not ready yet. Try again shortly."],
+        ["定时任务的检查暂时还没准备好，稍后再试。", "The scheduled task checks are not ready yet. Try again shortly."]
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

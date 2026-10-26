@@ -26,7 +26,7 @@ const token = digit => digit.repeat(16);
         for (const width of [1440, 393, 320]) {
             const phone = width < 900;
             let rules = [R1, R2, FUTURE], revision = 's1', trashed = false, patchGate = null, name = '小狸';
-            const patchPlan = ['conflict'], trashPlan = ['blocked'], patches = [], trashes = [];
+            const patchPlan = ['conflict'], trashPlan = ['blocked', 'unavailable'], patches = [], trashes = [];
             const second = botRecord({ id: BOT2, name: '阿豆', avatar: { kind: 'emoji', value: '🐼' }, windows: [windowRecord(MAIN2)] });
             const world = newWorld({
                 bots: () => trashed ? [second] : [botRecord({ name, bot: { permissions: { preset: 'balanced', rules: rules.length } } }), second],
@@ -48,7 +48,9 @@ const token = digit => digit.repeat(16);
                 }
                 if (pathname === `/api/pi/bots/${BOT}/trash` && method === 'POST') {
                     trashes.push(body);
-                    if (trashPlan.shift() === 'blocked') return { status: 409, json: { error: 'Bot has scheduled tasks', code: 'BOT_HAS_SCHEDULES' } };
+                    const refusal = trashPlan.shift();
+                    if (refusal === 'blocked') return { status: 409, json: { error: 'Bot has scheduled tasks', code: 'BOT_HAS_SCHEDULES' } };
+                    if (refusal === 'unavailable') return { status: 503, json: { error: 'Bot trash is unavailable until its activity checks are ready', code: 'BOT_TRASH_UNAVAILABLE' } };
                     assert.equal(body.expectedRevision, revision);
                     trashed = true; revision = 's9';
                     return { json: { ok: true, revision } };
@@ -138,6 +140,11 @@ const token = digit => digit.repeat(16);
                 assert.match(await sheet.locator('.pi-bot-sheet-rules').innerText(), /另有 1 条这个版本看不懂的规则/);
                 assert.match(await sheet.locator('.pi-bot-sheet-rules').innerText(), /不是系统沙箱/);
                 assert.equal(await sheet.locator('.pi-bot-sheet-save').isDisabled(), true);
+                // Touch-sized revoke buttons up to 900px wide (a tablet between the phone and desktop layouts too).
+                if (!phone) await page.setViewportSize({ width: 768, height: 860 });
+                for (const toggle of await sheet.locator('.pi-bot-sheet-rule .pi-bot-chip').all())
+                    assert.ok((await toggle.boundingBox()).height >= 44, 'touch-sized revoke buttons up to 900px');
+                if (!phone) await page.setViewportSize({ width, height: 860 });
                 await sheet.locator(`[data-rule-id="${R1.id}"]`).click();
                 assert.equal(await items.first().evaluate(node => node.classList.contains('is-revoked')), true);
                 assert.equal(await page.evaluate(() => document.activeElement?.dataset.ruleId), R1.id, 'focus stays on the toggled grant');
@@ -166,11 +173,18 @@ const token = digit => digit.repeat(16);
                 await sheet.locator('.pi-bot-sheet-status[data-tone="error"]').filter({ hasText: '还有定时任务发给 小狸' }).waitFor();
                 assert.equal(await sheet.locator('input[required]').inputValue(), '小狸二号', 'the edits survive a refusal');
                 assert.equal(trashed, false);
+                // Checks that are not ready yet are explained in the user's language, not the server's.
+                await sheet.locator('[data-sheet-action="trash"]').click();
+                await confirm.waitFor();
+                await confirm.locator('.pi-profile-confirm-discard').click();
+                await sheet.locator('.pi-bot-sheet-status[data-tone="error"]').filter({ hasText: '回收站前的检查暂时还没准备好' }).waitFor();
+                assert.doesNotMatch(await sheet.locator('.pi-bot-sheet-status').textContent(), /unavailable|activity/i);
+                assert.equal(trashed, false);
                 await sheet.locator('[data-sheet-action="trash"]').click();
                 await confirm.waitFor();
                 await confirm.locator('.pi-profile-confirm-discard').click();
                 await page.locator('.pi-bot-sheet').waitFor({ state: 'detached' });
-                assert.deepEqual(trashes, [{ expectedRevision: reviewed }, { expectedRevision: reviewed }], 'the settings the user reviewed, no silent reread');
+                assert.deepEqual(trashes, [{ expectedRevision: reviewed }, { expectedRevision: reviewed }, { expectedRevision: reviewed }], 'the settings the user reviewed, no silent reread');
                 await page.locator('.pi-toast').filter({ hasText: '已移到回收站' }).waitFor();
                 await page.waitForFunction(id => decodeURIComponent(location.hash).includes(`profileId=${id}`), BOT2);
                 await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-who strong')?.textContent === '阿豆');

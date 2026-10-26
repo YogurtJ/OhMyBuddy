@@ -1,12 +1,15 @@
-// Bot topics (public/pi-bot-topics.js with the session pane in pi-bot.js): create with a
-// windows-revision conflict that keeps the draft, edit only what changed, archive refused while
-// busy and then archived, restore from the archived list, the open-items index, the topic
-// approval card, and the receipt card's explicit "Open topic" (also safe for a stale owner).
+// Bot topics (public/pi-bot-topics.js with the session pane in pi-bot.js): create with a topic
+// limit refusal and a windows-revision conflict that keep the draft, multi-line text saved as one
+// line, edit only what changed (with refusals in plain words), archive refused while busy and then
+// archived, restore from the archived list, the open-items index reread on events (a reply
+// settling, the phone drawer opening) and never polled, the topic approval card, the receipt
+// card's explicit "Open topic" (also safe for a stale owner), and a chat archived or a Bot moved to
+// the trash on another device ending the reconnect with a notice instead of retrying forever.
 // Synthetic backend (pi-bot-fixture.js); desktop, phone and narrow phone; dark and reduced motion.
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const { BOT, MAIN, APPROVAL, say, serve, botRecord, windowRecord, botPage, newWorld, layout } = require('./pi-bot-fixture.js');
+const { BOT, MAIN, BOT2, MAIN2, APPROVAL, say, serve, botRecord, windowRecord, botPage, newWorld, layout, bottomBar, settledShot } = require('./pi-bot-fixture.js');
 
 const T1 = '55555555-5555-4555-8555-555555555555', T2 = '66666666-6666-4666-8666-666666666666', T3 = '77777777-7777-4777-8777-777777777777';
 const REV = letter => letter.repeat(64);
@@ -22,27 +25,31 @@ const REV = letter => letter.repeat(64);
             let windows = [windowRecord(MAIN),
                 windowRecord(T1, { kind: 'topic', title: '英语考试', emoji: '📚', focus: '每天练一点听力' }),
                 windowRecord(T2, { kind: 'topic', title: '旧计划', emoji: '', focus: '', archivedAt: '2026-10-25T00:00:00Z' })];
-            let windowsRevision = REV('a'), creates = 0, archives = 0, gate = null;
+            let windowsRevision = REV('a'), creates = 0, archives = 0, edits = 0, gate = null, t1Busy = false, trashed = false;
+            const second = botRecord({ id: BOT2, name: '阿豆', avatar: { kind: 'emoji', value: '🐼' }, windows: [windowRecord(MAIN2)] });
             const receipt = { v: 1, action: 'created', profileId: BOT,
                 window: windowRecord(T3, { kind: 'topic', title: '日本旅行', emoji: '✈️', focus: '十二月去大阪' }) };
             const mainHistory = [say('user', '帮我开个话题聊旅行', '2026-10-26T06:00:00Z'),
-                { role: 'toolResult', toolCallId: 'topic-call-1', toolName: 'bot_topic', content: [{ type: 'text', text: '{}' }], isError: false,
+                { role: 'toolResult', toolCallId: 'topic-call-1', toolName: 'bot_topic_propose', content: [{ type: 'text', text: '{}' }], isError: false,
                     details: { pivaneBotTopic: receipt }, timestamp: Date.parse('2026-10-26T06:00:05Z') },
                 say('assistant', '好，开好了“日本旅行”，想聊的时候点开它就行。', '2026-10-26T06:00:09Z')];
             const world = newWorld({
-                bots: () => [botRecord({ windows, windowsRevision })],
+                bots: () => trashed ? [second] : [botRecord({ windows, windowsRevision })],
                 messages: sessionId => sessionId === windowRecord(MAIN).sessionId ? mainHistory : []
             });
             const bodies = [];
             const api = async ({ pathname, method, body }) => {
                 if (pathname === `/api/pi/bots/${BOT}/topics/open-items`) return { json: { v: 1, omittedTopics: 0, topics: [
-                    { windowId: T1, title: '英语考试', state: 'ready', items: [{ title: '周五交作文', kind: 'commitment' }], omitted: 1 },
+                    t1Busy ? { windowId: T1, title: '英语考试', state: 'busy', items: [] }
+                        : { windowId: T1, title: '英语考试', state: 'ready', items: [{ title: '周五交作文', kind: 'commitment' }], omitted: 1 },
                     { windowId: T3, title: '日本旅行', state: 'busy', items: [] }] } };
                 if (pathname === '/api/pi/bots' && method === 'GET' && gate) { const wait = gate; gate = null; await wait; return undefined; }
                 if (pathname === `/api/pi/bots/${BOT}/windows` && method === 'POST') {
                     bodies.push(['POST', body]);
-                    // Another device changed the windows first: a plain revision conflict.
-                    if (creates++ === 0) { windowsRevision = REV('b'); return { status: 409, json: { error: 'Windows changed' } }; }
+                    // The topic limit, then another device changing the windows first (a plain conflict).
+                    const attempt = creates++;
+                    if (attempt === 0) return { status: 409, json: { error: 'Topic limit reached (including archived topics)', code: 'BOT_TOPIC_LIMIT' } };
+                    if (attempt === 1) { windowsRevision = REV('b'); return { status: 409, json: { error: 'Windows changed' } }; }
                     assert.equal(body.expectedRevision, windowsRevision);
                     const window = windowRecord(T3, { kind: 'topic', title: body.title, emoji: body.emoji, focus: body.focus });
                     windows = [...windows, window]; windowsRevision = REV('c');
@@ -51,6 +58,15 @@ const REV = letter => letter.repeat(64);
                 const patch = new RegExp(`^/api/pi/bots/${BOT}/windows/([^/]+)$`).exec(pathname);
                 if (patch && method === 'PATCH') {
                     bodies.push(['PATCH', patch[1], body]);
+                    if (body.archived === undefined) {
+                        // An edit: another device renames the topic first, then a validation refusal.
+                        const attempt = edits++;
+                        if (attempt === 0) {
+                            windows = windows.map(item => item.id === patch[1] ? { ...item, title: '英语考试（12月）' } : item); windowsRevision = REV('d');
+                            return { status: 409, json: { error: 'Bot windows changed; reload before saving' } };
+                        }
+                        if (attempt === 1) return { status: 400, json: { error: 'Invalid topic focus (maximum 500 characters)' } };
+                    }
                     assert.equal(body.expectedRevision, windowsRevision);
                     if (body.archived === true && archives++ === 0) return { status: 409, json: { error: 'Topic is busy', code: 'BOT_WINDOW_BUSY' } };
                     const { expectedRevision, archived, ...fields } = body;
@@ -65,6 +81,18 @@ const REV = letter => letter.repeat(64);
             const shot = async name => { if (evidence) { await page.waitForTimeout(250); await page.screenshot({ path: path.join(evidence, `${name}-${width}.png`) }); } };
             const openPane = async () => { if (phone && !await page.locator('#pi-session-pane.open').count()) { await page.locator('#pi-bot-header .pi-bot-menu').click(); await page.locator('#pi-session-pane.open').waitFor(); } };
             const hash = () => page.evaluate(() => decodeURIComponent(location.hash));
+            const indexReads = () => world.requests.filter(request => request.pathname === `/api/pi/bots/${BOT}/topics/open-items`).length;
+            const sessionReads = id => world.requests.filter(request => request.pathname === `/api/pi/bots/${BOT}/windows/${id}/session`).length;
+            // One reply of the open chat: working, then settled.
+            const turn = async () => {
+                world.socket.send(JSON.stringify({ type: 'agent_start' }));
+                await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-status')?.dataset.state === 'working');
+                world.socket.send(JSON.stringify({ type: 'agent_end', messages: [] }));
+                world.socket.send(JSON.stringify({ type: 'agent_settled' }));
+                await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-status')?.dataset.state === 'connected');
+            };
+            const connected = topic => page.waitForFunction(topic => (document.querySelector('#pi-bot-header .pi-bot-who-topic')?.textContent || '') === topic
+                && document.querySelector('#pi-bot-header .pi-bot-status')?.dataset.state === 'connected', topic);
             try {
                 await page.locator('.pi-bot-topic-receipt').waitFor();
                 await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-status')?.dataset.state === 'connected');
@@ -79,7 +107,24 @@ const REV = letter => letter.repeat(64);
                 assert.equal(await page.locator('.pi-bot-archived-row .pi-bot-window').count(), 0, 'an archived topic is never opened as a live chat');
                 await shot('bot-topics-pane');
 
-                // 2. Create: a conflict keeps the draft and rereads the revision; the second save opens the topic.
+                // 1b. The index follows events: a reply of the open chat settling rereads it (throttled), and on
+                // phones so does opening the drawer. Nothing polls it in between.
+                t1Busy = true;
+                await turn();
+                await t1.locator('.pi-bot-topic-badge.is-busy').waitFor({ timeout: 9000 });
+                t1Busy = false;
+                if (phone) {
+                    await page.locator('#pi-session-pane .pi-bot-window[aria-current="page"]').click();
+                    await page.waitForFunction(() => !document.getElementById('pi-session-pane').classList.contains('open'));
+                    await openPane();
+                } else await turn();
+                await page.waitForFunction(() => document.querySelector('.pi-bot-topic-badge:not(.is-busy)')?.textContent.trim() === '2', null, { timeout: 9000 });
+                const reads = indexReads();
+                await page.waitForTimeout(6500);
+                assert.equal(indexReads(), reads, 'no polling without an event');
+
+                // 2. Create: the topic limit and a conflict keep the draft (the conflict rereads the revision);
+                // a multi-line focus is saved as one line; the user's own save opens the topic.
                 await page.locator('.pi-bot-topic-add').click();
                 const sheet = page.locator('.pi-bot-topic-sheet[open]');
                 await sheet.waitFor();
@@ -87,37 +132,53 @@ const REV = letter => letter.repeat(64);
                 assert.equal(await sheet.locator('.pi-bot-sheet-save').isDisabled(), true, 'a topic needs a name');
                 await sheet.locator('[data-topic-field="emoji"]').fill('✈️');
                 await sheet.locator('[data-topic-field="title"]').fill('日本旅行');
-                await sheet.locator('[data-topic-field="focus"]').fill('十二月去大阪');
+                await sheet.locator('[data-topic-field="focus"]').fill('十二月去大阪\n先订酒店');
                 if (phone) for (const field of ['emoji', 'title', 'focus'])
                     assert.equal(await sheet.locator(`[data-topic-field="${field}"]`).evaluate(node => getComputedStyle(node).fontSize), '16px', `${field} does not zoom on phones`);
                 await shot('bot-topic-create');
+                const typed = ['✈️', '日本旅行', '十二月去大阪\n先订酒店'];
+                await sheet.locator('.pi-bot-sheet-save').click();
+                await sheet.locator('.pi-bot-sheet-status[data-tone="error"]').filter({ hasText: '话题已经到上限了' }).waitFor();
+                assert.deepEqual(await sheet.locator('[data-topic-field]').evaluateAll(nodes => nodes.map(node => node.value)), typed);
                 await sheet.locator('.pi-bot-sheet-save').click();
                 await sheet.locator('.pi-bot-sheet-status[data-tone="warn"]').filter({ hasText: '别处改过' }).waitFor();
-                assert.deepEqual(await sheet.locator('[data-topic-field]').evaluateAll(nodes => nodes.map(node => node.value)), ['✈️', '日本旅行', '十二月去大阪']);
+                assert.deepEqual(await sheet.locator('[data-topic-field]').evaluateAll(nodes => nodes.map(node => node.value)), typed);
                 await sheet.locator('.pi-bot-sheet-save').click();
                 await page.waitForFunction(id => decodeURIComponent(location.hash).includes(`windowId=${id}`), T3);
-                assert.deepEqual(bodies.slice(0, 2).map(([, body]) => body), [
-                    { expectedRevision: REV('a'), title: '日本旅行', focus: '十二月去大阪', emoji: '✈️' },
-                    { expectedRevision: REV('b'), title: '日本旅行', focus: '十二月去大阪', emoji: '✈️' }], 'no blind retry: the second save is the user\'s');
+                assert.deepEqual(bodies.slice(0, 3).map(([, body]) => body), [
+                    { expectedRevision: REV('a'), title: '日本旅行', focus: '十二月去大阪 先订酒店', emoji: '✈️' },
+                    { expectedRevision: REV('a'), title: '日本旅行', focus: '十二月去大阪 先订酒店', emoji: '✈️' },
+                    { expectedRevision: REV('b'), title: '日本旅行', focus: '十二月去大阪 先订酒店', emoji: '✈️' }], 'one line for the server; no blind retry: every save is the user\'s');
                 await page.locator('.pi-bot-empty h2').filter({ hasText: '日本旅行' }).waitFor();
-                assert.match(await page.locator('.pi-bot-empty p').textContent(), /这个话题专心聊：十二月去大阪/);
+                assert.match(await page.locator('.pi-bot-empty p').textContent(), /这个话题专心聊：十二月去大阪 先订酒店/);
                 await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-who-topic')?.textContent === '✈️ 日本旅行');
                 const badge = await page.locator('#pi-bot-header .pi-bot-who').boundingBox();
                 assert.ok(badge.x >= 0 && badge.x + badge.width <= width, 'the name badge with the topic fits');
                 await shot('bot-topic-open');
 
-                // 3. Edit only what changed.
+                // 3. Edit only what changed. A line break in the focus is saved as a space; after another device
+                // renamed the topic the new name is taken and the user's focus kept; a refusal is in plain words.
                 await openPane();
                 await t1.locator('.pi-bot-topic-edit').click();
                 await sheet.waitFor();
                 assert.equal(await sheet.locator('h2').textContent(), '编辑话题');
-                await sheet.locator('[data-topic-field="focus"]').fill('每天练听力，周五交作文');
+                await sheet.locator('[data-topic-field="focus"]').fill('a\nb');
                 // Closing with an unsaved edit warns once.
                 await page.keyboard.press('Escape');
                 await sheet.locator('.pi-bot-sheet-status').filter({ hasText: '还有修改没保存' }).waitFor();
                 await sheet.locator('.pi-bot-sheet-save').click();
+                await sheet.locator('.pi-bot-sheet-status[data-tone="warn"]').filter({ hasText: '别处改过' }).waitFor();
+                assert.deepEqual(await sheet.locator('[data-topic-field]').evaluateAll(nodes => nodes.map(node => node.value)), ['📚', '英语考试（12月）', 'a\nb']);
+                await sheet.locator('.pi-bot-sheet-save').click();
+                await sheet.locator('.pi-bot-sheet-status[data-tone="error"]').filter({ hasText: '内容没有通过检查' }).waitFor();
+                assert.doesNotMatch(await sheet.locator('.pi-bot-sheet-status').textContent(), /Invalid|maximum/);
+                await shot('bot-topic-edit-refused');
+                await sheet.locator('.pi-bot-sheet-save').click();
                 await page.locator('.pi-bot-topic-sheet').waitFor({ state: 'detached' });
-                assert.deepEqual(bodies.at(-1), ['PATCH', T1, { expectedRevision: REV('c'), focus: '每天练听力，周五交作文' }]);
+                assert.deepEqual(bodies.filter(([method, , body]) => method === 'PATCH' && body.archived === undefined).map(([, id, body]) => [id, body]), [
+                    [T1, { expectedRevision: REV('c'), focus: 'a b' }],
+                    [T1, { expectedRevision: REV('d'), focus: 'a b' }],
+                    [T1, { expectedRevision: REV('d'), focus: 'a b' }]], 'only the changed field, as one line');
 
                 // 4. Archive: two clicks; a busy topic is refused and the sheet stays; then it is archived.
                 await openPane();
@@ -125,7 +186,7 @@ const REV = letter => letter.repeat(64);
                 await sheet.waitFor();
                 await sheet.locator('[data-topic-action="archive"]').click();
                 assert.equal(await sheet.locator('[data-topic-action="archive"] span').textContent(), '再点一次确认归档');
-                assert.equal(bodies.filter(([method]) => method === 'PATCH').length, 1, 'the first click only asks');
+                assert.equal(bodies.filter(([method]) => method === 'PATCH').length, 3, 'the first click only asks');
                 await sheet.locator('[data-topic-action="archive"]').click();
                 await sheet.locator('.pi-bot-sheet-status[data-tone="error"]').filter({ hasText: '还在忙' }).waitFor();
                 await shot('bot-topic-archive-refused');
@@ -206,8 +267,50 @@ const REV = letter => letter.repeat(64);
                     await page.locator('html').evaluate(node => { node.dataset.theme = 'dark'; });
                     await openPane();
                     assert.equal(await page.locator('.pi-bot-topic-badge.is-busy .pi-bot-status-dot').evaluate(node => getComputedStyle(node).animationName), 'none');
-                    await shot('bot-topics-dark-reduced');
+                    // The phone's bottom bar is in place after two painted frames (no passing toast over it).
+                    await page.waitForFunction(() => !document.querySelector('.pi-toast'), null, { timeout: 9000 });
+                    assert.deepEqual(await bottomBar(page), { bar: true, active: true, tab: 'bot' });
+                    if (evidence) await settledShot(page, path.join(evidence, `bot-topics-dark-reduced-${width}.png`));
                 }
+
+                // 9. Archived on another device while this page shows the topic: the reconnect looks once, stops,
+                // says so once and continues in the main chat. A Bot moved to the trash elsewhere continues with
+                // another Bot. Neither retries in the background.
+                if (await page.locator('#pi-session-pane.open').count()) {
+                    await page.locator('#pi-session-pane .pi-bot-window[aria-current="page"]').click();
+                    await page.waitForFunction(() => !document.getElementById('pi-session-pane').classList.contains('open'));
+                }
+                await page.evaluate(([profileId, windowId]) => window.PiWorkspaceRoute.navigate('bot', { profileId, windowId }), [BOT, T3]);
+                await connected('✈️ 日本旅行');
+                windows = windows.map(item => item.id === T3 ? { ...item, archivedAt: '2026-10-26T09:00:00Z' } : item);
+                const looked = sessionReads(T3);
+                await page.waitForTimeout(300); // nothing of the opening still in flight
+                world.socket.close({ code: 1012, reason: 'Session runtime changed' });
+                await page.locator('.pi-toast').filter({ hasText: '这个话题已在别处归档' }).waitFor({ timeout: 9000 });
+                await page.waitForFunction(id => decodeURIComponent(location.hash).includes(`windowId=${id}`), MAIN);
+                await connected('');
+                assert.equal(await page.locator('.pi-toast').filter({ hasText: '这个话题已在别处归档' }).count(), 1, 'said once');
+                const tried = sessionReads(T3);
+                assert.equal(tried - looked, 1, 'one look at the archived topic');
+                await shot('bot-topic-archived-elsewhere');
+                await page.waitForTimeout(4000);
+                assert.equal(sessionReads(T3), tried, 'no reconnect loop for an archived topic');
+                await openPane();
+                assert.equal(await page.locator(`.pi-bot-topic-row [data-window-id="${T3}"]`).count(), 0, 'the pane no longer lists it as live');
+                if (phone) {
+                    await page.locator('#pi-session-pane .pi-bot-window[aria-current="page"]').click();
+                    await page.waitForFunction(() => !document.getElementById('pi-session-pane').classList.contains('open'));
+                }
+                trashed = true;
+                await page.waitForTimeout(300);
+                world.socket.close({ code: 1012, reason: 'Session runtime changed' });
+                await page.locator('.pi-toast').filter({ hasText: '找不到 小狸 了' }).waitFor({ timeout: 9000 });
+                await page.waitForFunction(id => decodeURIComponent(location.hash).includes(`profileId=${id}`), BOT2);
+                await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-who strong')?.textContent === '阿豆'
+                    && document.querySelector('#pi-bot-header .pi-bot-status')?.dataset.state === 'connected');
+                const gone = sessionReads(MAIN);
+                await page.waitForTimeout(3000);
+                assert.equal(sessionReads(MAIN), gone, 'no reconnect loop for a Bot in the trash');
                 assert.deepEqual(errors, []);
                 console.log(JSON.stringify({ width, status: 'passed', requests: bodies.length }));
             } finally { await context.close(); }

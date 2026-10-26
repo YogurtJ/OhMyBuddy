@@ -5,6 +5,9 @@
     // the window's current native session through PiChatNavigation.openBotWindow.
     const translateUi = globalThis.PiI18n?.t || ((text, ...values) => text.replace(/\{(\d+)\}/g, (_, index) => values[index] ?? `{${index}}`));
     const LAST_KEY = 'pivane.bot.last';
+    // Topic badges are reread on events only (a reply settling, the phone drawer opening), at most
+    // once in this many milliseconds; a request inside the gap waits for its end once.
+    const TOPIC_INDEX_GAP = 5000;
     const DEFAULT_FACE = '✨';
     const el = (tag, className, text) => { const n = document.createElement(tag); if (className) n.className = className; if (text != null) n.textContent = text; return n; };
     const icon = name => { const i = el('i', `fa-solid ${name}`); i.setAttribute('aria-hidden', 'true'); return i; };
@@ -58,10 +61,15 @@
                 load: profileId => this.api(`/api/pi/bots/${encodeURIComponent(profileId)}/settings`),
                 submit: (profileId, body) => this.onboardingStep(profileId, body),
                 say: text => this.say?.(text), draft: () => Boolean(this.draft?.()), focusComposer: () => this.focusComposer?.(),
-                notify: message => this.toast(message, 'info'), face: () => this.face('sm'), changed: () => this.onChange?.('panel') }) || null;
+                notify: (message, timeout) => this.toast(message, 'info', timeout), face: () => this.face('sm'), changed: () => this.onChange?.('panel') }) || null;
+            if (this.closure) input.addEventListener('input', () => this.closure.composerChanged());
             // Topic ids being restored, and unsettled items per topic (when the server lists them).
             this.restoring = new Set(); this.topicIndex = null; this.topicIndexMissing = false; this.topicIndexSerial = 0; this.archivedOpen = false;
+            this.topicIndexAt = 0; this.topicIndexTimer = 0; this.leavingWindow = null;
         }
+
+        // The user sent a message of their own (from the composer) in the open chat.
+        ownMessage() { this.closure?.ownMessage(); }
 
         async checkModels() {
             try { this.models = (await this.api('/api/pi/bots/readiness')).models ?? null; } catch { this.models = null; }
@@ -145,6 +153,7 @@
 
         deactivate() {
             this.epoch++; this.active = false;
+            clearTimeout(this.topicIndexTimer); this.topicIndexTimer = 0;
             this.closure?.hide();
             this.motion?.update({ key: '', connected: false });
             this.pane.closest('#chat-tab')?.classList.remove('pi-bot-welcome');
@@ -174,12 +183,52 @@
                 return;
             }
             const profileId = bot.id;
+            this.topicIndexAt = Date.now();
             try {
                 const data = await this.api(`/api/pi/bots/${encodeURIComponent(profileId)}/topics/open-items`);
                 if (serial !== this.topicIndexSerial || this.profileId !== profileId || !this.active) return;
                 this.topicIndex = { botId: profileId, map: window.PiBotTopics.index(data, this.bot()?.windows) };
                 this.renderPane();
             } catch (error) { if (error.status === 404) this.topicIndexMissing = true; }
+        }
+
+        // Reread the topic badges after an event, throttled; never a timer loop.
+        refreshTopicIndex() {
+            if (!this.active || this.topicIndexMissing || this.topicIndexTimer) return;
+            const wait = this.topicIndexAt + TOPIC_INDEX_GAP - Date.now();
+            if (wait <= 0) { void this.loadTopicIndex(); return; }
+            this.topicIndexTimer = setTimeout(() => { this.topicIndexTimer = 0; if (this.active) void this.loadTopicIndex(); }, wait);
+        }
+
+        // The open window cannot be opened again: its topic was archived, or it or its Bot was removed
+        // (moved to the trash) on another device. Reread the Bots, say so once and continue in the
+        // Bot's main chat, with another Bot or on the welcome page. Nothing happens for a window this
+        // page has already left.
+        async leaveGoneWindow(target, { archived = false } = {}) {
+            const epoch = this.epoch;
+            const here = () => this.active && epoch === this.epoch && this.profileId === target.profileId && this.windowId === target.windowId;
+            if (!here() || this.leavingWindow === target.windowId) return false;
+            this.leavingWindow = target.windowId;
+            const name = this.bot()?.name || 'Bot';
+            try {
+                try { await this.load(); } catch { /* go on with what is known */ }
+                if (!here()) return false;
+                this.render();
+                const bot = this.bots.find(item => item.id === target.profileId && item.enabled);
+                const main = bot?.windows.find(item => item.kind === 'main' && item.generation !== null && item.id !== target.windowId);
+                if (main) {
+                    this.toast(archived ? translateUi("这个话题已在别处归档，聊天记录都保留着；已回到主聊天。")
+                        : translateUi("这个聊天已经不在了，已回到主聊天。"), 'info');
+                    this.go(bot.id, main.id);
+                    return true;
+                }
+                this.toast(translateUi("找不到 {0} 了，可能已在别处移到回收站。", name), 'info');
+                if (localStorage.getItem(LAST_KEY) === target.profileId) localStorage.removeItem(LAST_KEY);
+                const next = this.bots.find(item => item.id !== target.profileId && item.enabled);
+                if (next) this.go(next.id);
+                else { window.PiWorkspaceRoute?.navigate('bot', {}, true); void this.activate(new URLSearchParams()); }
+                return true;
+            } finally { if (this.leavingWindow === target.windowId) this.leavingWindow = null; }
         }
 
         go(profileId, windowId) {
@@ -401,7 +450,9 @@
             } else if (action === 'settings') {
                 if (window.innerWidth <= 900) document.getElementById('pi-session-pane')?.classList.remove('open');
                 this.openSettings();
-            } else if (action === 'menu') document.getElementById('pi-session-pane')?.classList.toggle('open');
+            } else if (action === 'menu') {
+                if (document.getElementById('pi-session-pane')?.classList.toggle('open')) this.refreshTopicIndex();
+            }
         }
 
         // What the Bot keeps in mind for the open chat (M2-5).
@@ -481,6 +532,8 @@
         // ---- status --------------------------------------------------------------------
 
         status(kind, projection = {}) {
+            const busy = (value, view) => ['working', 'waiting'].includes(value) || Boolean(view?.queued || view?.stopping);
+            const wasBusy = busy(this.statusKind, this.projection);
             this.statusKind = STATUS[kind] ? kind : 'connected';
             this.projection = { key: projection.key || `${this.profileId}/${this.windowId}`, connected: !['connecting', 'offline', 'error'].includes(this.statusKind),
                 waiting: kind === 'waiting', working: kind === 'working', ...projection,
@@ -488,6 +541,8 @@
             this.motion?.update(this.projection);
             this.paintMotion();
             this.closure?.sync();
+            // A reply that settles may have changed what topics have open (the index is not live).
+            if (wasBusy && this.statusKind === 'connected' && !busy(this.statusKind, this.projection)) this.refreshTopicIndex();
         }
         paintMotion() {
             const node = this.header.querySelector('.pi-bot-identity > .pi-bot-face');
