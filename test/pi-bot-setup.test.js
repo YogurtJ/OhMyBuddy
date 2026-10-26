@@ -259,6 +259,37 @@ test('the setup tool reports only what the Bot page actually saved', { timeout: 
     assert.equal(failedReceipt.current.interview, 'interview');
     assert.equal(failedReceipt.current.workStyle, 'free');
     assert.equal((await profiles.getProfile(botId)).bot.onboarding.steps.about, undefined);
+
+
+    const preset = { kind: 'preset', id: 'pivane-bean' };
+    const avatarSchema = tool.parameters.properties.avatar.anyOf;
+    assert.equal(avatarSchema[0].type, 'string', 'legacy clients can still propose an emoji');
+    assert.equal(avatarSchema[1].additionalProperties, false);
+    assert.equal(avatarSchema[1].properties.kind.const, 'preset');
+    assert.deepEqual(avatarSchema[1].properties.id.anyOf.map(item => item.const), ['pivane-pebble', 'pivane-bean', 'pivane-tile']);
+    const appendPresetCall = (id, avatar) => manager.appendMessage({ role: 'assistant', content: [{ type: 'toolCall', id, name: setup.SETUP_TOOL, arguments: { avatar } }],
+        api: 'openai-completions', provider: 'fixture', model: 'small', usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: 'toolUse', timestamp: Date.now() });
+    appendPresetCall('preset-save', preset);
+    onSelect = async () => bots.setup(botId, { windowId, toolCallId: 'preset-save', expectedRevision: (await profiles.state()).revision });
+    const presetReceipt = await run({ avatar: preset });
+    assert.equal(presetReceipt.status, 'saved');
+    assert.deepEqual(presetReceipt.saved, { avatar: preset });
+    assert.deepEqual(presetReceipt.current.avatar, preset);
+    await bots.onboarding(botId, { action: 'restart', expectedRevision: (await profiles.state()).revision });
+    appendPresetCall('preset-kept', { id: preset.id, kind: 'preset' });
+    onSelect = async () => bots.setup(botId, { windowId, toolCallId: 'preset-kept', changes: {}, expectedRevision: (await profiles.state()).revision });
+    const keptReceipt = await run({ avatar: preset });
+    assert.equal(keptReceipt.status, 'not_saved', 'rereading an equal preset object is not an avatar change');
+    assert.deepEqual(keptReceipt.saved, {});
+    assert.deepEqual(keptReceipt.kept, ['avatar']);
+    assert.deepEqual(keptReceipt.current.avatar, preset);
+    assert.equal((await profiles.getProfile(botId)).bot.onboarding.steps.avatar, 'done');
+    onSelect = null;
+    assert.deepEqual((await run({ avatar: '🦊' })).current.avatar, preset, 'later cards keep the preset until a change is saved');
+    const version = 'f'.repeat(64);
+    await profiles.saveAvatar(botId, (await profiles.state()).revision, version, async () => () => {});
+    assert.equal((await run({ avatar: preset })).current.avatar, '(picture ffffffff)', 'picture snapshot compatibility stays intact');
 });
 
 async function services2(store, profiles, supervisor, documents) { return new BotService({ store, profiles, supervisor, documents }); }

@@ -7,6 +7,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
+const { isDeepStrictEqual } = require('node:util');
 const { getSdk } = require('../pi-session-store');
 const { validateProfile, profileRevision } = require('../pi-profile-registry');
 const settings = require('./bot-settings');
@@ -619,16 +620,16 @@ class BotService extends EventEmitter {
                     fail('The face is no longer the uploaded picture; upload it again', 409, 'BOT_PICTURE_CHANGED');
                 const base = validateProfile({ name: changes.name ?? previous.name, description: previous.description,
                     soul: changes.personality ?? previous.soul, enabled: previous.enabled, memory: previous.memory, skills: previous.skills,
-                    ...(changes.avatar ? { avatar: { kind: 'emoji', value: changes.avatar } } : {}) }, previous);
+                    ...(changes.avatar ? { avatar: typeof changes.avatar === 'string' ? { kind: 'emoji', value: changes.avatar } : changes.avatar } : {}) }, previous);
                 if (changes.workStyle && !setup.moreCareful(changes.workStyle, bot.permissions.preset))
                     fail('A setup card can only make the Bot more careful; give it more freedom in Bot settings', 409, 'BOT_WORK_STYLE_FREER');
                 const onboarding = { ...bot.onboarding, steps: { ...bot.onboarding.steps } };
                 // A proposed value the Bot already has is left off the card; that step is answered.
-                const has = { name: previous.name, avatar: previous.avatar?.kind === 'emoji' ? previous.avatar.value : null, job: bot.job,
+                const has = { name: previous.name, avatar: previous.avatar?.kind === 'emoji' ? previous.avatar.value : previous.avatar?.kind === 'preset' ? previous.avatar : null, job: bot.job,
                     personality: previous.soul, workStyle: bot.permissions.preset };
                 for (const [field, step] of Object.entries(setup.STEP_OF)) {
                     if (!Object.hasOwn(proposal, field)) continue;
-                    if (changes[field] !== undefined || field === 'avatar' && picture || !later && has[field] === proposal[field]) onboarding.steps[step] = 'done';
+                    if (changes[field] !== undefined || field === 'avatar' && picture || !later && isDeepStrictEqual(has[field], proposal[field])) onboarding.steps[step] = 'done';
                     else if (!settled(onboarding.steps, step)) onboarding.steps[step] = 'skipped';
                 }
                 if (onboarding.phase === 'greeting') onboarding.phase = 'interview';
@@ -787,10 +788,9 @@ class BotService extends EventEmitter {
                 if (base.avatar?.kind === 'image' && (previous.avatar?.kind !== 'image' || previous.avatar.version !== base.avatar.version)) fail('Image avatar must be uploaded');
                 const patched = botPatch === undefined ? bot : settings.applyBotPatch(bot, botPatch);
                 // A name or face set here is the user's choice, even one that looks like a new Bot's.
-                const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
                 // A picture is uploaded first and then saved here as the face (it is already the
                 // current face by then), which is the user's choice too.
-                const faced = avatar !== undefined && (!same(base.avatar, previous.avatar) || base.avatar?.kind === 'image');
+                const faced = avatar !== undefined && (!isDeepStrictEqual(base.avatar ?? null, previous.avatar ?? null) || base.avatar?.kind === 'image');
                 const chosen = { ...patched.chosen, ...(name !== undefined && base.name !== previous.name ? { name: true } : {}),
                     ...(faced ? { avatar: true } : {}) };
                 // What the user sets here during the interview is not asked again there.

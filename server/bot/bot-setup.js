@@ -4,6 +4,7 @@
 // an editable card. The server re-reads the still-pending tool call from the verified
 // native transcript, accepts only the proposed fields (values may be edited or dropped),
 // and saves under the profile reservation with revision checks.
+const avatarPresets = require('../../public/pi-avatar-presets');
 const SETUP_TOOL = 'bot_setup_propose';
 const SETUP_TITLE = '保存这些设置？ / Save these settings?';
 const SAVE = '保存 / Save', DECLINE = '先不改 / Not now';
@@ -38,8 +39,15 @@ function normalizeProposal(raw, { partial = false } = {}) {
     const out = {};
     if (input.name != null) out.name = line(input.name, LIMITS.name, 'name');
     if (input.avatar != null) {
-        out.avatar = line(input.avatar, LIMITS.avatar, 'avatar');
-        if (Buffer.byteLength(out.avatar) > 64 || /[<>]/.test(out.avatar) || /[\p{L}\p{N}]/u.test(out.avatar)) fail('avatar must be an emoji');
+        if (object(input.avatar)) {
+            if (input.avatar.kind !== 'preset' || Object.keys(input.avatar).length !== 2
+                || Object.keys(input.avatar).some(key => !['kind', 'id'].includes(key))
+                || !avatarPresets.find(input.avatar.id)) fail('Invalid preset avatar');
+            out.avatar = { kind: 'preset', id: input.avatar.id };
+        } else {
+            out.avatar = line(input.avatar, LIMITS.avatar, 'avatar');
+            if (Buffer.byteLength(out.avatar) > 64 || /[<>]/.test(out.avatar) || /[\p{L}\p{N}]/u.test(out.avatar)) fail('avatar must be an emoji');
+        }
     }
     if (input.job != null) out.job = line(input.job, LIMITS.job, 'job');
     if (input.workStyle != null) {
