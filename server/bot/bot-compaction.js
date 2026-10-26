@@ -9,6 +9,7 @@
 // drops changes that fail. The summary text itself is assembled here, with the notebook
 // rendered by the program, never written by the model.
 const ledger = require('./bot-ledger');
+const { TOPIC_INDEX_MESSAGE } = require('./bot-topic-context');
 
 const SUMMARY_SCHEMA = 1;
 const MAX_TOPIC = 800;
@@ -62,7 +63,7 @@ function summarizedEntries(projection, firstKeptEntryId) {
         const entry = item.sourceEntry;
         if (!entry || entry.id === firstKeptEntryId) break;
         // The compaction itself and earlier notebook renderings are passed separately.
-        if (entry.type === 'compaction' || entry.type === 'custom_message' && entry.customType === 'pivane-bot-notebook') continue;
+        if (entry.type === 'compaction' || entry.type === 'custom_message' && ['pivane-bot-notebook', TOPIC_INDEX_MESSAGE].includes(entry.customType)) continue;
         if (entry.type === 'custom_message' && entry.customType === HANDOFF_MESSAGE) {
             for (const message of item.messages || []) result.push(...seedItems(entry, message));
             continue;

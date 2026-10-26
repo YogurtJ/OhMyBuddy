@@ -1,8 +1,10 @@
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
+import { createHash } from 'node:crypto';
 import { topicFields } from './bot-topic.js';
 import { APPROVAL_TITLE, BLOCKED, approvalMessage, newToken } from './bot-guard.js';
 import { renderOpenItems } from './bot-topic-index.js';
+import { TOPIC_INDEX_MESSAGE, topicIndexUnchanged } from './bot-topic-context.js';
 
 async function request(action: string, input: any, signal?: AbortSignal) {
     signal?.throwIfAborted();
@@ -42,7 +44,7 @@ export function registerBotTopic(pi: ExtensionAPI, verified: (ctx: any) => boole
                 const allowed = await ctx.ui.confirm(APPROVAL_TITLE,
                     approvalMessage({ kind: 'topic', token, detail: `${input.emoji ? input.emoji + ' ' : ''}${input.title}${input.focus ? '\n' + input.focus : ''}` }),
                     { signal: activeSignal, timeout: 30 * 60 * 1000 });
-                if (!allowed || activeSignal?.aborted) return reply(BLOCKED.not_approved);
+                if (allowed !== true || activeSignal?.aborted) return reply(BLOCKED.not_approved);
                 if (!verified(ctx) || unattended(ctx.sessionManager)) throw new Error('This conversation changed while the topic was awaiting approval');
                 const result = await request('create', { ...input, toolCallId: id }, activeSignal);
                 return { content: [{ type: 'text' as const, text: JSON.stringify(result) }], details: { pivaneBotTopic: result } };
@@ -54,9 +56,11 @@ export function registerBotTopic(pi: ExtensionAPI, verified: (ctx: any) => boole
     } as any);
 }
 
-export async function topicIndexNotice(signal?: AbortSignal) {
+export async function topicIndexNotice(manager: any, signal?: AbortSignal) {
     let index = null;
     try { index = await request('open-items', {}, signal ? AbortSignal.any([signal, AbortSignal.timeout(1500)]) : AbortSignal.timeout(1500)); }
     catch { /* A failed read is unknown, never an empty notebook. */ }
-    return { customType: 'pivane-bot-topic-index', display: false, content: renderOpenItems(index), details: { v: 1 } };
+    const notice = { customType: TOPIC_INDEX_MESSAGE, display: false, content: renderOpenItems(index),
+        details: { v: 1, fingerprint: createHash('sha256').update(JSON.stringify(index)).digest('hex') } };
+    return topicIndexUnchanged(manager.buildSessionProjection().entries, notice) ? null : notice;
 }
