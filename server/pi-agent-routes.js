@@ -192,7 +192,8 @@ function createPiAgentGateway(options = {}) {
     router.get('/profiles', profileRoute(req => profiles.list(req.query.cwd)));
     router.put('/profiles', profileRoute(req => profiles.save(req.body)));
     router.put('/profiles/default', profileRoute(req => profiles.saveDefault(req.body)));
-    router.post('/profiles/:id/trash', profileRoute(req => profiles.trash(req.params.id, req.body)));
+    router.post('/profiles/:id/trash', profileRoute(async req => require('./bot/bot-settings').readBot(await profiles.getProfile(req.params.id))
+        ? bots.trash(req.params.id, req.body) : profiles.trash(req.params.id, req.body)));
     router.post('/profiles/:id/restore', profileRoute(req => profiles.restore(req.params.id, req.body)));
     router.get('/assistant-projects', profileRoute(req => assistantProjects.list(req.query.profileId)));
     router.put('/assistant-projects', profileRoute(req => assistantProjects.save(req.body)));
@@ -255,6 +256,7 @@ function createPiAgentGateway(options = {}) {
     const cron = new (require('./pi-cron-service').CronService)({ store, supervisor, profiles, bots, reloadBotWorker,
         catalog: cwd => agentThreads.catalog(cwd), isSuspended: () => maintenance.locked || maintenance.referenceLocked || Boolean(store.sessionMoves?.running), filename: options.cronFilePath });
     require('./pi-cron-service').mountCron(router, cron);
+    bots.trashBlockers = require('./bot/bot-trash').createTrashBlockers({ cron, deferred, learning });
     require('./bot/bot-schedule').mountBotSchedule(router, { cron, bots, authenticate: req => agentThreads.authenticate(req) });
     const channels = new (require('./channels/service').ChannelsService)({ store, supervisor,
         mediaLabService: options.mediaLabService, mediaRoot: options.artifactMediaRoot,

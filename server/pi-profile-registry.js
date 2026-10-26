@@ -239,7 +239,15 @@ class PiProfileRegistry {
     }
 
     trash(id, input) {
-        return this.reserve(() => this.mutate(input?.expectedRevision, state => {
+        return this.reserve(() => this.trashReserved(id, input));
+    }
+
+    // Internal companion for coordinators that already hold this registry's reservation.
+    // The same transition backs both profile trash and Bot trash; no native history is removed.
+    trashReserved(id, input, beforeChange = null) {
+        if (!this.busy) throw fail('Profile reservation is required', 409);
+        return this.mutate(input?.expectedRevision, state => {
+            beforeChange?.(state);
             const profile = state.profiles.find(record => record.id === id);
             if (!profile) throw fail('Profile not found', 404);
             if (profile.trashedAt !== undefined) throw fail('Profile is already in trash', 409);
@@ -252,7 +260,7 @@ class PiProfileRegistry {
                 if (profileId === id) delete state.defaults[cwd];
             }
             return { ok: true, profile };
-        }));
+        });
     }
 
     restore(id, input) {

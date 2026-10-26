@@ -12,6 +12,7 @@ function mountBotRoutes(router, { bots }) {
     router.post('/bots', route(req => bots.create(req.body)));
     router.get('/bots/:id/settings', route(req => bots.settings(req.params.id)));
     router.patch('/bots/:id', route(req => bots.update(req.params.id, req.body)));
+    router.post('/bots/:id/trash', route(req => bots.trash(req.params.id, req.body)));
     router.post('/bots/:id/setup', route(req => bots.setup(req.params.id, req.body)));
     router.post('/bots/:id/onboarding', route(req => bots.onboarding(req.params.id, req.body)));
     router.get('/bots/:id/about-sources', route(req => bots.aboutSources(req.params.id)));
