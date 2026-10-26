@@ -67,7 +67,8 @@ export function notebookNotice(branch: any[], now: string) {
     const full = (reason: string) => ({ customType: NOTEBOOK_MESSAGE, display: false, details: { v: 1, reason },
         content: renderLedger(state, { now }) });
     if (!visible) return state.items.length ? full('render') : null;
-    const describe = (ops: any[]) => [...new Set(ops.map(op => op?.id).filter((id: any) => typeof id === 'string'))]
+    // A note that replaces another also changed that one (now superseded): both are described.
+    const describe = (ops: any[]) => [...new Set(ops.flatMap(op => [op?.id, op?.supersedes]).filter((id: any) => typeof id === 'string'))]
         .map(id => describeItem(state.items.find((item: any) => item.id === id))).filter(Boolean);
     const userLines = describe(userOps), unseenLines = describe(unseenOps);
     if (!userLines.length && !unseenLines.length) return null;

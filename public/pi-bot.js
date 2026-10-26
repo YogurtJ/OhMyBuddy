@@ -559,8 +559,9 @@
             }
             const facts = [...new Set((Array.isArray(args.aboutUser) ? args.aboutUser : []).filter(item => typeof item === 'string' && item.trim()))]
                 .map(text => ({ text, checked: true }));
-            // pictureVersion: the uploaded picture, once the avatar service has it.
-            return { fields, facts, picture: null, pictureVersion: null };
+            // pictureVersion: the chosen picture, once the avatar service has it; uploaded: the last
+            // picture this card put up, which stays the face even if the draft changes afterwards.
+            return { fields, facts, picture: null, pictureVersion: null, uploaded: null };
         }
 
         function fieldRow(field, draft) {
@@ -646,8 +647,10 @@
             later.disabled = confirm.disabled = Boolean(current.saving);
             later.hidden = nothing && args.finish !== true;
             later.addEventListener('click', () => {
-                // A picture already uploaded for this card stays the face even though the rest is not saved.
-                if (draft.pictureVersion) notify?.(translateUi("上传的图片已经是头像了；要换回可以在设置里改。"));
+                // A picture this card uploaded stays the face even though the rest is not saved.
+                const face = identity()?.avatar;
+                if (draft.uploaded && (!face || face.kind === 'image' && face.version === draft.uploaded))
+                    notify?.(translateUi("上传的图片已经是头像了；要换回可以在设置里改。"));
                 respond({ id: event.id, value: DECLINE }); hide();
             });
             confirm.addEventListener('click', () => void submit());
@@ -683,7 +686,7 @@
                 if (picture && !draft.pictureVersion) {
                     const uploaded = await uploadPicture(draft.picture);
                     if (!/^[a-f0-9]{64}$/.test(uploaded?.profile?.avatar?.version || '')) throw new Error(translateUi("头像图片没有保存成功，请再试一次"));
-                    draft.pictureVersion = uploaded.profile.avatar.version;
+                    draft.pictureVersion = draft.uploaded = uploaded.profile.avatar.version;
                 }
                 await save(target.call.id, changes, { picture: picture ? draft.pictureVersion : null });
                 if (current !== target) return;

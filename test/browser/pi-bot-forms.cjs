@@ -49,12 +49,17 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
             // fail: how many saves fail with a plain conflict, or the error codes of the failing saves in turn.
             const mount = (args, identity, fail = 0) => page.evaluate(({ args, identity, fail, select }) => {
                 document.querySelector('.pi-bot-setup')?.remove();
-                window.t = { saves: [], uploads: [], responses: [], notes: [], fail: Array.isArray(fail) ? fail : Array(fail).fill(null) };
+                window.t = { saves: [], uploads: [], responses: [], notes: [], fail: Array.isArray(fail) ? fail : Array(fail).fill(null), identity };
                 const cards = PiBot.setupCards({ enabled: () => true, calls: () => [{ id: 'call-1', args }], respond: value => t.responses.push(value),
                     face: () => Object.assign(document.createElement('span'), { className: 'pi-bot-face is-sm', textContent: '🦉' }), changed: () => {},
-                    identity: () => identity, notify: message => t.notes.push(message),
-                    // Each upload is a new picture version, as the avatar service reports it.
-                    uploadPicture: async dataUrl => { t.uploads.push(dataUrl.slice(0, 22)); return { ok: true, profile: { avatar: { kind: 'image', version: String(t.uploads.length).repeat(64) } } }; },
+                    identity: () => t.identity, notify: message => t.notes.push(message),
+                    // Each upload is a new picture version, as the avatar service reports it, and becomes the face.
+                    uploadPicture: async dataUrl => {
+                        t.uploads.push(dataUrl.slice(0, 22));
+                        const avatar = { kind: 'image', version: String(t.uploads.length).repeat(64) };
+                        t.identity = { ...t.identity, avatar };
+                        return { ok: true, profile: { avatar } };
+                    },
                     save: async (id, changes, options) => {
                         t.saves.push({ id, changes, options, uploadsBefore: t.uploads.length });
                         if (t.fail.length) { const code = t.fail.shift(); throw Object.assign(new Error('synthetic conflict'), { status: 409, ...(code ? { code } : {}) }); }
@@ -137,6 +142,18 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
             await page.locator('.pi-bot-setup-note.is-error').waitFor();
             await page.locator('.pi-bot-setup-later').click();
             assert.deepEqual(await page.evaluate(() => [t.notes, t.responses]), [['上传的图片已经是头像了；要换回可以在设置里改。'], [{ id: 'ui-1', value: '先不改 / Not now' }]]);
+            // Still said after switching the draft back to an emoji; not said once the face was changed elsewhere.
+            for (const [elsewhere, notes] of [[false, 1], [true, 0]]) {
+                await mount({ avatar: '👋', job: '整理计划' }, fresh, 1);
+                await page.locator('[data-setup-picture-file]').setInputFiles({ name: 'face.png', mimeType: 'image/png', buffer: PNG });
+                await page.locator('.pi-bot-setup-picture img').waitFor();
+                await page.locator('.pi-bot-setup-save').click();
+                await page.locator('.pi-bot-setup-note.is-error').waitFor();
+                await page.locator('[data-setup-picture="clear"]').click();
+                if (elsewhere) await page.evaluate(() => { t.identity = { ...t.identity, avatar: { kind: 'emoji', value: '🐯' } }; });
+                await page.locator('.pi-bot-setup-later').click();
+                assert.equal(await page.evaluate(() => t.notes.length), notes, `face changed elsewhere: ${elsewhere}`);
+            }
             // Back to an emoji: no upload.
             await mount({ avatar: '👋' }, fresh);
             await page.locator('[data-setup-picture-file]').setInputFiles({ name: 'face.png', mimeType: 'image/png', buffer: PNG });

@@ -184,6 +184,11 @@ test('the window_note tool writes branch-following operations and the model sees
     assert.match(notice.content, /^The user changed these notes[^]*\[n6\] \(decision, active\) 地板选白橡木\n\nThese notes were saved by your own window_note calls[^]*\[n5\]/);
     manager.appendCustomMessageEntry(notice.customType, notice.content, false, notice.details);
     assert.equal(notebook.notebookNotice(manager.getBranch(), T2), null, 'shown once');
+    // A note that replaces another inside a script changed that one too: both are described.
+    manager.appendMessage(assistant([{ type: 'toolCall', id: 'c10', name: 'codemode', arguments: {} }]));
+    await call('c10/1', { action: 'add', kind: 'ref', text: '物业电话 6124', replaces: 'n5' });
+    notice = notebook.notebookNotice(manager.getBranch(), T2);
+    assert.match(notice.content, /- \[n7\] \(ref, active, replaces n5\) 物业电话 6124\n- \[n5\] \(ref, superseded\) 物业电话 6123$/);
     // An empty notebook says nothing.
     assert.equal(notebook.notebookNotice(SessionManager.inMemory('/tmp').getBranch(), T2), null);
 });

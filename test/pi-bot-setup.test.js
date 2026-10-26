@@ -130,6 +130,13 @@ test('a confirmed card saves identity, onboarding progress and about-you notes o
     assert.deepEqual([listedManual.bot.onboarding.steps, listedManual.chosen], [{}, { name: true, avatar: false }]);
     await bots.update(manual.bot.id, { expectedRevision: (await profiles.state()).revision, changes: { avatar: { kind: 'emoji', value: '🐼' } } });
     assert.deepEqual((await bots.list()).bots.find(bot => bot.id === manual.bot.id).chosen, { name: true, avatar: true });
+    // An explicit choice that looks like a new Bot's (the other language's placeholder) is recorded,
+    // and stays chosen when the interview starts over.
+    const lookalike = await bots.create({ expectedRevision: (await profiles.state()).revision });
+    await bots.update(lookalike.bot.id, { expectedRevision: (await profiles.state()).revision, changes: { name: 'New buddy' } });
+    await bots.onboarding(lookalike.bot.id, { action: 'restart', expectedRevision: (await profiles.state()).revision });
+    assert.deepEqual((await bots.list()).bots.find(bot => bot.id === lookalike.bot.id).chosen, { name: true, avatar: false });
+    assert.deepEqual((await profiles.getProfile(lookalike.bot.id)).bot.chosen, { name: true });
     const skipped = await bots.onboarding(botId, { action: 'skip', expectedRevision: (await profiles.state()).revision });
     assert.equal(skipped.bot.bot.onboarding.phase, 'skipped');
     await assert.rejects(bots.onboarding(botId, { action: 'other', expectedRevision: (await profiles.state()).revision }), /Invalid/);

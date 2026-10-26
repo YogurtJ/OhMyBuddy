@@ -69,7 +69,15 @@ function normalizeBot(bot) {
     if (typeof bot.workspace !== 'string' || !path.isAbsolute(bot.workspace) || bot.workspace.length > 4096) fail('Invalid bot workspace');
     if (!iso(bot.createdAt)) fail('Invalid bot creation time');
     return { ...bot, model: normalizeModel(bot.model), permissions: normalizePermissions(bot.permissions),
-        notify: normalizeNotify(bot.notify), onboarding: normalizeOnboarding(bot.onboarding) };
+        notify: normalizeNotify(bot.notify), onboarding: normalizeOnboarding(bot.onboarding), chosen: normalizeChosen(bot.chosen) };
+}
+
+// The name and face the user explicitly picked (a setup card or Bot settings); server-owned and
+// kept when the interview starts over. Only true flags are kept.
+function normalizeChosen(value) {
+    const chosen = {};
+    for (const key of ['name', 'avatar']) if (object(value) && value[key] === true) chosen[key] = true;
+    return chosen;
 }
 
 function readBot(profile) {
