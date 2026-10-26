@@ -180,7 +180,10 @@ Each new receipt adds `origin` (`manual` for the HTTP route, `agent` or
 (`correction|review|extraction|manual`, learning only), `preview` (memory: the
 body after the change, or the removed body on delete, first 160 characters;
 skill: `name`, plus ` — ` and the first 120 characters of a non-empty
-description) and, for memory, the resulting `category`. `summary` is unchanged.
+description) and, for memory, the resulting `category`. Receipts for about-user
+or long-term memory items also include `target: 'user' | 'memory'`, identifying
+`USER.md` or `MEMORY.md`; project memory receipts omit this field. `summary`
+is unchanged.
 Archived receipt digests keep `origin` but not `preview`; older receipts have
 none of these fields. A `ready` snapshot with memory enabled adds
 `usage: { memory: {chars, limit}, user: {chars, limit}, failure?: {chars, readOnly: true} }`
