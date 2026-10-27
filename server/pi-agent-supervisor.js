@@ -497,7 +497,7 @@ class AgentWorker extends EventEmitter {
     }
 
     async taskReturn(input) {
-        return this.exclusive(rpc => this.navigate(rpc, { mode: 'task-result', input }, { timeoutMs: 30000 }));
+        return this.exclusive(rpc => this.navigate(rpc, { mode: 'task-result', input }, { timeoutMs: 30000 }), { idle: !input?.read });
     }
 
     async agentMessages(input) {

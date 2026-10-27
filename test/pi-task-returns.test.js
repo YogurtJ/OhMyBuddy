@@ -24,7 +24,7 @@ test('result delivery waits for the source, never starts a worker, and recovers 
     assert.equal((await service.list('/fixture', 'parent')).results.length, 0, 'old tasks are not flooded into the new inbox');
 });
 
-test('managed receipt append is idle-only, deduplicated, Agent-origin, and does not trigger a turn', async t => {
+test('managed receipt append is idle-only, read state persists while busy, and neither triggers a turn', async t => {
     const { SessionManager } = await import('@earendil-works/pi-coding-agent');
     const manager = SessionManager.inMemory('/fixture'); let idle = true, starts = 0, sends = 0;
     const ctx = { cwd: '/fixture', isIdle: () => idle, hasPendingMessages: () => false, sessionManager: manager };
@@ -32,6 +32,10 @@ test('managed receipt append is idle-only, deduplicated, Agent-origin, and does 
         appendEntry(type, data) { manager.appendCustomEntry(type, data); } };
     const result = { sourceSessionId: manager.getSessionId(), deliveryId: 'a'.repeat(64), session: { cwd: '/fixture', id: 'child', name: '<script>unsafe()</script>' }, requestId: 'one', preview: 'A result', status: 'completed' };
     idle = false; assert.throws(() => receiveTaskReturn(pi, ctx, { result }), /busy/); assert.equal(sends, 0);
+    const busyRead = receiveTaskReturn(pi, ctx, { result, read: true });
+    assert.deepEqual(busyRead, { delivered: false, deliveryId: result.deliveryId, read: true });
+    assert.equal(sends, 0, 'marking read while busy does not inject a transcript custom message');
+    assert.equal(manager.getEntries().filter(e => e.customType === 'pivane-agent-task-read').length, 1);
     idle = true; receiveTaskReturn(pi, ctx, { result }); receiveTaskReturn(pi, ctx, { result, read: true });
     assert.equal(sends, 1); assert.equal(starts, 0);
     assert.equal(manager.getEntries().filter(e => e.customType === 'pivane-agent-task-read').length, 1);
