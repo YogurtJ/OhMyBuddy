@@ -108,6 +108,35 @@ test('bots are profiles with a private workspace and a native-marked main window
     assert.equal(second.data.bot.bot.onboarding.firstBot, false);
     assert.equal(second.data.bot.bot.order, 1);
 
+    // Exercise card presence through the real owner HTTP route and verified native proposal.
+    const secondWindowId = second.data.window.id;
+    const secondResolved = await call('GET', `/bots/${second.data.bot.id}/windows/${secondWindowId}/session`);
+    assert.equal(secondResolved.status, 200);
+    const secondManager = SessionManager.open(secondResolved.data.session.path);
+    secondManager.appendMessage({ role: 'user', content: 'Synthetic setup over HTTP', timestamp: Date.now() });
+    const propose = (id, args) => secondManager.appendMessage({ role: 'assistant',
+        content: [{ type: 'toolCall', id, name: 'bot_setup_propose', arguments: args }], api: 'openai-completions',
+        provider: 'fixture', model: 'small', usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: 'toolUse', timestamp: Date.now() });
+    const answer = id => secondManager.appendMessage({ role: 'toolResult', toolCallId: id, toolName: 'bot_setup_propose',
+        content: [{ type: 'text', text: '{}' }], isError: false, timestamp: Date.now() });
+    propose('http-hidden-work', { job: 'Organize tasks', workStyle: 'ask' });
+    const hidden = await call('POST', `/bots/${second.data.bot.id}/setup`, { expectedRevision: second.data.revision,
+        windowId: secondWindowId, toolCallId: 'http-hidden-work', changes: { job: 'Organize tasks' }, workStyleShown: false });
+    assert.equal(hidden.status, 200, JSON.stringify(hidden.data));
+    assert.deepEqual(hidden.data.saved, { job: 'Organize tasks' });
+    assert.equal(hidden.data.bot.bot.permissions.preset, 'free');
+    assert.equal(hidden.data.bot.bot.onboarding.steps.work, undefined, 'the HTTP layer preserves the hidden-selector flag');
+    answer('http-hidden-work');
+    propose('http-visible-work', { workStyle: 'free' });
+    const visible = await call('POST', `/bots/${second.data.bot.id}/setup`, { expectedRevision: hidden.data.revision,
+        windowId: secondWindowId, toolCallId: 'http-visible-work', changes: { workStyle: 'free' }, workStyleShown: true });
+    assert.equal(visible.status, 200, JSON.stringify(visible.data));
+    assert.deepEqual(visible.data.saved, { workStyle: 'free' });
+    assert.equal(visible.data.bot.bot.onboarding.steps.work, 'done');
+    assert.equal(visible.data.bot.bot.permissions.preset, 'free');
+    answer('http-visible-work');
+
     // Settings: user-editable fields only, revision-checked.
     const before = await call('GET', '/bots');
     const patch = await call('PATCH', `/bots/${botId}`, { expectedRevision: before.data.revision,
