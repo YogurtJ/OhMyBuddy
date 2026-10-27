@@ -30,18 +30,24 @@
         }
         return svg;
     }
+    const DEFAULT_PRESET_ID = 'pivane-pebble';
+    function fallbackPreset(node) {
+        const svg = preset(DEFAULT_PRESET_ID);
+        if (svg) { node.classList.add('is-preset'); node.append(svg); }
+    }
     function render(profile, className = '') {
         const node = document.createElement('span'); node.className = className; node.setAttribute('aria-hidden', 'true');
         const avatar = profile?.avatar;
         if (avatar?.kind === 'preset') {
             const svg = preset(avatar.id);
             if (svg) { node.classList.add('is-preset'); node.append(svg); }
-            else { node.dataset.missingPreset = ''; node.textContent = '✨'; }
+            else { node.dataset.missingPreset = ''; fallbackPreset(node); }
         } else if (avatar?.kind === 'image' && profile?.id && /^[a-f0-9]{64}$/.test(avatar.version || '')) {
             const img = document.createElement('img'); img.alt = ''; img.decoding = 'async';
             img.src = `/api/pi/profiles/${encodeURIComponent(profile.id)}/avatar?version=${encodeURIComponent(avatar.version)}`;
-            img.addEventListener('error', () => { img.remove(); node.textContent = '✨'; }, { once: true }); node.append(img);
-        } else node.textContent = avatar?.kind === 'emoji' ? avatar.value : '✨';
+            img.addEventListener('error', () => { img.remove(); fallbackPreset(node); }, { once: true }); node.append(img);
+        } else if (avatar?.kind === 'emoji' && avatar.value) node.textContent = avatar.value;
+        else fallbackPreset(node);
         return node;
     }
     function choices(selected, onSelect) {

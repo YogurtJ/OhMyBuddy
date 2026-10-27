@@ -68,6 +68,7 @@ function approvalFor({ permissions, preset = permissions?.preset, toolName, inpu
         if (operation.status === 'blocked') return { block: true, reason: BLOCKED.protected };
         const outside = !insideWorkspace(cwd, input?.path);
         if (operation.status === 'risk' || annotations?.destructiveHint === true) return ask(outside ? 'outside' : 'write');
+        if (preset === 'free') return null;
         return outside ? ask('outside', true) : preset === 'ask' ? ask('write', true) : null;
     }
     if (annotations?.destructiveHint === true) return ask('action');

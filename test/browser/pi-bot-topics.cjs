@@ -53,7 +53,7 @@ const REV = letter => letter.repeat(64);
                     if (attempt === 1) { windowsRevision = REV('b'); return { status: 409, json: { error: 'Windows changed' } }; }
                     assert.equal(body.expectedRevision, windowsRevision);
                     // As the server: a topic created without an emoji has none.
-                    const window = windowRecord(T3, { kind: 'topic', title: body.title, emoji: body.emoji ?? '', focus: body.focus });
+                    const window = windowRecord(T3, { kind: 'topic', title: body.title || '新话题', emoji: body.emoji ?? '', focus: body.focus ?? '' });
                     windows = [...windows, window]; windowsRevision = REV('c');
                     return { json: { ok: true, window, windowsRevision } };
                 }
@@ -125,38 +125,25 @@ const REV = letter => letter.repeat(64);
                 await page.waitForTimeout(6500);
                 assert.equal(indexReads(), reads, 'no polling without an event');
 
-                // 2. Create: the topic limit and a conflict keep the draft (the conflict rereads the revision);
-                // a multi-line focus is saved as one line; the user's own save opens the topic.
-                await page.locator('.pi-bot-topic-add').click();
+                // 2. Create: clicking "+ 新话题" opens a fresh topic chat immediately without a modal,
+                // handles a topic limit refusal with a toast, retries once after a windowsRevision conflict,
+                // and focuses the composer ready for the user's first question.
                 const sheet = page.locator('.pi-bot-topic-sheet[open]');
-                await sheet.waitFor();
-                assert.equal(await page.locator('#pi-session-pane.open').count(), 0, 'the phone drawer closes for the sheet');
-                assert.equal(await sheet.locator('.pi-bot-sheet-save').isDisabled(), true, 'a topic needs a name');
-                assert.equal(await sheet.locator('[data-topic-field="emoji"]').count(), 0, 'a new topic is a title and a focus');
-                assert.deepEqual(await sheet.locator('[data-topic-field]').evaluateAll(nodes => nodes.map(node => [node.dataset.topicField, node.placeholder])),
-                    [['title', '比如：功能开发'], ['focus', '围绕这项功能讨论需求、实现思路和待解决的问题。']]);
-                await shot('bot-topic-create-empty');
-                await sheet.locator('[data-topic-field="title"]').fill('日本旅行');
-                await sheet.locator('[data-topic-field="focus"]').fill('十二月去大阪\n先订酒店');
-                if (phone) for (const field of ['title', 'focus'])
-                    assert.equal(await sheet.locator(`[data-topic-field="${field}"]`).evaluate(node => getComputedStyle(node).fontSize), '16px', `${field} does not zoom on phones`);
-                await shot('bot-topic-create');
-                const typed = ['日本旅行', '十二月去大阪\n先订酒店'];
-                await sheet.locator('.pi-bot-sheet-save').click();
-                await sheet.locator('.pi-bot-sheet-status[data-tone="error"]').filter({ hasText: '话题已经到上限了' }).waitFor();
-                assert.deepEqual(await sheet.locator('[data-topic-field]').evaluateAll(nodes => nodes.map(node => node.value)), typed);
-                await sheet.locator('.pi-bot-sheet-save').click();
-                await sheet.locator('.pi-bot-sheet-status[data-tone="warn"]').filter({ hasText: '别处改过' }).waitFor();
-                assert.deepEqual(await sheet.locator('[data-topic-field]').evaluateAll(nodes => nodes.map(node => node.value)), typed);
-                await sheet.locator('.pi-bot-sheet-save').click();
+                await page.locator('.pi-bot-topic-add').click();
+                assert.equal(await sheet.count(), 0, 'no modal blocks starting a new topic');
+                await page.locator('.pi-toast').filter({ hasText: '话题已经到上限了' }).waitFor();
+                await openPane();
+                await page.locator('.pi-bot-topic-add').click();
                 await page.waitForFunction(id => decodeURIComponent(location.hash).includes(`windowId=${id}`), T3);
+                assert.equal(await page.locator('#pi-session-pane.open').count(), 0, 'the phone drawer closes when opening the new topic');
                 assert.deepEqual(bodies.slice(0, 3).map(([, body]) => body), [
-                    { expectedRevision: REV('a'), title: '日本旅行', focus: '十二月去大阪 先订酒店' },
-                    { expectedRevision: REV('a'), title: '日本旅行', focus: '十二月去大阪 先订酒店' },
-                    { expectedRevision: REV('b'), title: '日本旅行', focus: '十二月去大阪 先订酒店' }], 'one line for the server, no emoji; no blind retry: every save is the user\'s');
-                await page.locator('.pi-bot-empty h2').filter({ hasText: '日本旅行' }).waitFor();
-                assert.match(await page.locator('.pi-bot-empty p').textContent(), /这个话题专心聊：十二月去大阪 先订酒店/);
-                await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-who-topic')?.textContent === '日本旅行');
+                    { expectedRevision: REV('a') },
+                    { expectedRevision: REV('a') },
+                    { expectedRevision: REV('b') }]);
+                await page.locator('.pi-bot-empty h2').filter({ hasText: '新话题' }).waitFor();
+                assert.match(await page.locator('.pi-bot-empty p').textContent(), /想聊什么都可以直接说/);
+                await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-who-topic')?.textContent === '新话题');
+                assert.equal(await page.evaluate(() => document.activeElement?.id), 'pi-input', 'composer is focused immediately');
                 assert.equal(await page.locator(`.pi-bot-window[data-window-id="${T3}"] .pi-bot-window-mark i.fa-hashtag`).count(), 1, 'the usual topic mark');
                 const badge = await page.locator('#pi-bot-header .pi-bot-who').boundingBox();
                 assert.ok(badge.x >= 0 && badge.x + badge.width <= width, 'the name badge with the topic fits');
@@ -191,7 +178,11 @@ const REV = letter => letter.repeat(64);
                 await page.locator(`.pi-bot-topic-edit[data-window-id="${T3}"]`).click();
                 await sheet.waitFor();
                 assert.deepEqual(await sheet.locator('[data-topic-field]').evaluateAll(nodes => nodes.map(node => node.dataset.topicField)), ['title', 'focus']);
-                await page.keyboard.press('Escape');
+                await sheet.locator('[data-topic-field="title"]').fill('日本旅行');
+                await sheet.locator('[data-topic-field="focus"]').fill('十二月去大阪\n先订酒店');
+                await sheet.locator('.pi-bot-sheet-save').click();
+                await page.locator('.pi-bot-topic-sheet').waitFor({ state: 'detached' });
+                assert.deepEqual(bodies.at(-1), ['PATCH', T3, { expectedRevision: REV('e'), title: '日本旅行', focus: '十二月去大阪 先订酒店' }]);
                 await page.locator('.pi-bot-topic-sheet').waitFor({ state: 'detached' });
 
                 // 4. Archive: two clicks; a busy topic is refused and the sheet stays; then it is archived.
@@ -200,7 +191,7 @@ const REV = letter => letter.repeat(64);
                 await sheet.waitFor();
                 await sheet.locator('[data-topic-action="archive"]').click();
                 assert.equal(await sheet.locator('[data-topic-action="archive"] span').textContent(), '再点一次确认归档');
-                assert.equal(bodies.filter(([method]) => method === 'PATCH').length, 3, 'the first click only asks');
+                assert.equal(bodies.filter(([method]) => method === 'PATCH').length, 4, 'the first click only asks');
                 await sheet.locator('[data-topic-action="archive"]').click();
                 await sheet.locator('.pi-bot-sheet-status[data-tone="error"]').filter({ hasText: '还在忙' }).waitFor();
                 await shot('bot-topic-archive-refused');

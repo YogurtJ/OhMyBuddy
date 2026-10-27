@@ -85,7 +85,11 @@ test('topic HTTP create and metadata CAS preserve Bot identity, defaults and a f
         const result = await f.call('PATCH', `${url}/${f.mainId}`, { expectedRevision: await f.revision(), ...fields });
         assert.equal(result.status, 409); assert.equal(result.data.code, 'BOT_MAIN_WINDOW_FIXED');
     }
-    for (const bad of [{}, { title: '' }, { title: 'x'.repeat(81) }, { title: null }, { title: 'x', focus: 'x'.repeat(501) },
+    const quick = await f.call('POST', url, { expectedRevision: await f.revision() });
+    assert.equal(quick.status, 200, JSON.stringify(quick.data));
+    assert.equal(quick.data.window.title, '新话题');
+    assert.equal(quick.data.window.focus, '');
+    for (const bad of [{ title: '' }, { title: 'x'.repeat(81) }, { title: null }, { title: 'x', focus: 'x'.repeat(501) },
         { title: 'x', emoji: 'x'.repeat(17) }, { title: 'x', focus: null }, { title: 'x', extra: 1 }, { title: 'x', generation: 9 },
         { title: 'x', archived: false }, { title: 'x\nmalformed' }]) {
         const result = await f.call('POST', url, { expectedRevision: await f.revision(), ...bad });
@@ -448,4 +452,36 @@ test('main index notices suppress unchanged native appends and split notebook pr
     assert.match(empty.model.find(message => message.customType === TOPIC_INDEX_MESSAGE).content, /No other active topics/);
     assert.doesNotMatch(JSON.stringify(empty.model), /Fresh topic title/);
     assert.equal((await run()).injected.length, 0, 'the new empty snapshot is also suppressed until it changes');
+});
+
+test('untitled topics learn title and focus from auto-naming and structured summaries without overwriting user edits', async t => {
+    const f = await fixture(t);
+    const created = await f.bots.createTopic(f.profileId, { expectedRevision: await f.revision() });
+    const topicId = created.window.id;
+    assert.equal(created.window.title, '新话题');
+    assert.equal(created.window.focus, '');
+    const session = (await f.bots.resolve(f.profileId, topicId)).session;
+    const worker = f.workerFor(session, topicId);
+
+    // 1. Auto-title learns both title and focus when the topic is still at its default title and empty focus.
+    const learned = await f.bots.learnTopicMeta(worker, { title: '数据库索引优化', focus: '分析联合索引与覆盖索引在慢查询中的表现' });
+    assert.equal(learned.title, '数据库索引优化');
+    assert.equal(learned.focus, '分析联合索引与覆盖索引在慢查询中的表现');
+
+    // 2. Subsequent auto-learning never overwrites a non-default title or non-empty focus.
+    assert.equal(await f.bots.learnTopicMeta(worker, { title: '另一个标题', focus: '另一个专注点' }), null);
+    const record = await f.bots.windowRecord(f.profileId, topicId);
+    assert.equal(record.title, '数据库索引优化');
+    assert.equal(record.focus, '分析联合索引与覆盖索引在慢查询中的表现');
+
+    // 3. If focus is still empty when a structured compaction happens, syncTopicFromSummary fills it from sections.topic.
+    const second = (await f.bots.createTopic(f.profileId, { expectedRevision: await f.revision(), title: '手动命名的话题' })).window;
+    const secondSession = (await f.bots.resolve(f.profileId, second.id)).session;
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+    const manager = SessionManager.open(secondSession.path);
+    const msg = manager.appendMessage({ role: 'user', content: 'Discuss compiler passes', timestamp: Date.now() });
+    manager.appendCompaction('Summary text', msg, 50, { pivaneBot: { sections: { topic: '围绕编译器中间表示与优化遍设计展开讨论' } } }, true);
+    const synced = await f.bots.syncTopicFromSummary(f.profileId, second.id, secondSession.path);
+    assert.equal(synced.title, '手动命名的话题', 'custom title stays untouched');
+    assert.equal(synced.focus, '围绕编译器中间表示与优化遍设计展开讨论');
 });

@@ -12,7 +12,7 @@ const { getSdk } = require('../pi-session-store');
 const { validateProfile, profileRevision } = require('../pi-profile-registry');
 const settings = require('./bot-settings');
 const { BotWindowRegistry, MAX_WINDOWS } = require('./bot-window-registry');
-const { MAX_TOPICS, topicFields, topicId, sameThreadTarget } = require('./bot-topic');
+const { MAX_TOPICS, defaultTopicTitle, topicFields, topicId, sameThreadTarget } = require('./bot-topic');
 const { WINDOW_ENTRY, windowMarker, readWindowBinding } = require('./bot-window-state');
 const { HANDOFF_MESSAGE, buildHandoff } = require('./bot-handoff');
 const ledger = require('./bot-ledger');
@@ -209,7 +209,7 @@ class BotService extends EventEmitter {
     }
 
     proposeTopic(worker, toolCallId, fields) {
-        fields = topicFields(fields);
+        fields = topicFields(fields, { requireTitle: true });
         return this.profiles.reserve(async () => {
             await this.assertTopicWorker(worker);
             if (worker.cronRun) fail('Topics require the user in an attended conversation', 409, 'BOT_TOPIC_UNATTENDED');
@@ -257,6 +257,7 @@ class BotService extends EventEmitter {
         if (matches.length > 1) fail('Multiple native conversations claim this topic; recovery is required', 409, 'BOT_TOPIC_CONFLICT');
         let session = matches[0] && { id: matches[0].sessionId, path: matches[0].path };
         if (!session) session = await this.store.createSession(record.cwd, '', { agentProfileId: profileId,
+            autoTitle: record.kind === 'topic' && (!record.title || defaultTopicTitle(record.title) || !record.focus),
             initializeSession: manager => manager.appendCustomEntry(WINDOW_ENTRY,
                 windowMarker({ sessionId: manager.getSessionId(), profileId, windowId: record.id, kind: record.kind, generation: 0,
                     ...(record.topicSeed ? { topicSeed: record.topicSeed } : {}) })) });
@@ -507,6 +508,9 @@ class BotService extends EventEmitter {
             const bytes = fs.statSync(sessionPath).size;
             const reason = rotationReason({ bytes, entries: bytes >= 1024 * 1024 ? countLines(sessionPath) : 0, startedAt: started, now });
             if (!reason || trigger !== 'compaction' || !this.supervisor.isSessionIdle(sessionPath)) return null;
+            if (trigger === 'compaction' && window.kind === 'topic' && !window.focus?.trim()) {
+                await this.syncTopicFromSummary(loaded.profileId, loaded.windowId, sessionPath).catch(() => {});
+            }
             const ready = await this.store.withSessionRead(window.cwd, window.current.sessionId, (session, read) => {
                 const fresh = freshRotationSummary(read.manager().getBranch());
                 read.validate();
@@ -518,6 +522,57 @@ class BotService extends EventEmitter {
             if (error?.status !== 409) console.error(`Bot window maintenance failed: ${error?.message || error}`);
             return null;
         } finally { this.maintaining.delete(key); }
+    }
+
+    // Automatically fill an untitled/unfocused topic from its first auto-title or structured summary.
+    // Never overwrites a title or focus the user already set.
+    learnTopicMeta(worker, { title, focus } = {}) {
+        const loaded = worker?.loadedBot;
+        if (!loaded) return Promise.resolve(null);
+        return this.applyLearnedTopicMeta(loaded.profileId, loaded.windowId, { title, focus }).catch(() => null);
+    }
+
+    async syncTopicFromSummary(profileId, windowId, sessionPath) {
+        const { state } = await this.windows.read(profileId);
+        const window = state.windows.find(item => item.id === windowId);
+        if (!window?.current || window.kind !== 'topic' || window.focus?.trim()) return null;
+        const topic = await this.store.withSessionRead(window.cwd, window.current.sessionId, (session, read) => {
+            const branch = read.manager().getBranch();
+            read.validate();
+            if (session.path !== sessionPath) return null;
+            for (let i = branch.length - 1; i >= 0; i--) {
+                const text = branch[i]?.type === 'compaction' ? branch[i].details?.pivaneBot?.sections?.topic : null;
+                if (typeof text === 'string' && text.trim()) return text.trim();
+            }
+            return null;
+        });
+        if (!topic) return null;
+        return this.applyLearnedTopicMeta(profileId, windowId, { focus: topic });
+    }
+
+    applyLearnedTopicMeta(profileId, windowId, { title, focus } = {}) {
+        const clean = (value, max) => typeof value === 'string' ? value.replace(/[\x00-\x1f\x7f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max) : '';
+        const nextTitle = clean(title, 80), nextFocus = clean(focus, 500);
+        if (!nextTitle && !nextFocus) return Promise.resolve(null);
+        return this.profiles.reserve(async () => {
+            const { state, revision } = await this.windows.read(profileId);
+            const current = state.windows.find(item => item.id === windowId && item.kind === 'topic' && !item.archivedAt);
+            if (!current) return null;
+            const takeTitle = Boolean(nextTitle && (!current.title || defaultTopicTitle(current.title)));
+            const takeFocus = Boolean(nextFocus && !current.focus?.trim());
+            if (!takeTitle && !takeFocus) return null;
+            const saved = await this.windows.mutate(profileId, revision, windowState => {
+                const item = windowState.windows.find(entry => entry.id === windowId);
+                if (!item || item.archivedAt) return {};
+                if (takeTitle && (!item.title || defaultTopicTitle(item.title))) item.title = nextTitle;
+                if (takeFocus && !item.focus?.trim()) item.focus = nextFocus;
+                item.updatedAt = new Date().toISOString();
+                return {};
+            });
+            const updated = saved.state.windows.find(entry => entry.id === windowId);
+            this.emit('botChanged', { profileId, windowId });
+            return updated ? publicWindow(updated) : null;
+        });
     }
 
     async commitRotationLocked(profileId, windowId, requestId, from, to) {
