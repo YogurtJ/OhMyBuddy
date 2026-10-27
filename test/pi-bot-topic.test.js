@@ -101,6 +101,82 @@ test('topic HTTP create and metadata CAS preserve Bot identity, defaults and a f
     assert.equal((await f.call('PATCH', `/bots/${other.bot.id}/windows/${window.id}`, { expectedRevision: await f.revision(), title: 'foreign' })).status, 404);
 });
 
+test('topic instructions: owner-set multi-line text up to 8192 UTF-8 bytes, CAS patch, public output, kept out of native markers', async t => {
+    const f = await fixture(t), url = `/bots/${f.profileId}/windows`;
+    const { validWindow } = require('../server/bot/bot-window-registry');
+    const text = '  回答先给结论。\n\t引用资料时附上链接。\n  ';
+    const created = await f.call('POST', url, { expectedRevision: await f.revision(), title: '论文', instructions: text });
+    assert.equal(created.status, 200, JSON.stringify(created.data));
+    assert.equal(created.data.window.instructions, text.trim(), 'trimmed, line breaks and tabs kept');
+    const session = (await f.bots.resolve(f.profileId, created.data.window.id)).session;
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+    assert.deepEqual(readWindowBinding(SessionManager.open(session.path)).topicSeed, { title: '论文', focus: '', emoji: '' }, 'instructions stay out of the native marker');
+    const plain = await f.call('POST', url, { expectedRevision: await f.revision(), title: 'Plain' });
+    assert.equal(plain.data.window.instructions, '', 'missing means empty');
+    // 8192 UTF-8 bytes is the limit, whatever the characters; only LF and tab among control characters.
+    const exact = '字'.repeat(2730) + 'ab';
+    assert.equal(Buffer.byteLength(exact), 8192);
+    const fits = await f.call('POST', url, { expectedRevision: await f.revision(), title: 'Fits', instructions: exact });
+    assert.equal(fits.status, 200, JSON.stringify(fits.data)); assert.equal(fits.data.window.instructions, exact);
+    for (const bad of [exact + 'c', 'x'.repeat(8193), 'a\rb', 'a\u0000b', 'a\u001bb', 'a\u007fb', null, 7, ['x']]) {
+        const result = await f.call('POST', url, { expectedRevision: await f.revision(), title: 'x', instructions: bad });
+        assert.equal(result.status, 400, JSON.stringify(bad).slice(0, 40));
+        assert.equal((await f.call('PATCH', `${url}/${created.data.window.id}`, { expectedRevision: await f.revision(), instructions: bad })).status, 400);
+    }
+    // A patch of the instructions alone keeps the other fields; revisions are checked as for title and focus.
+    const before = await f.revision();
+    const saved = await f.call('PATCH', `${url}/${created.data.window.id}`, { expectedRevision: before, instructions: 'Line one\nLine two' });
+    assert.equal(saved.status, 200, JSON.stringify(saved.data));
+    assert.equal(saved.data.window.instructions, 'Line one\nLine two'); assert.equal(saved.data.window.title, '论文');
+    assert.notEqual(saved.data.windowsRevision, before);
+    assert.equal((await f.call('PATCH', `${url}/${created.data.window.id}`, { expectedRevision: before, instructions: 'stale' })).status, 409);
+    const cleared = await f.patch(created.data.window.id, { instructions: '' });
+    assert.equal(cleared.window.instructions, '');
+    await f.patch(created.data.window.id, { instructions: 'Keep it short' });
+    const main = await f.call('PATCH', `${url}/${f.mainId}`, { expectedRevision: await f.revision(), instructions: 'main' });
+    assert.equal(main.status, 409); assert.equal(main.data.code, 'BOT_MAIN_WINDOW_FIXED');
+    // Public output: every window carries the field; records written before it read as ''.
+    const { revision } = await f.bots.windows.read(f.profileId);
+    await f.bots.windows.mutate(f.profileId, revision, state => { delete state.windows.find(item => item.id === plain.data.window.id).instructions; return {}; });
+    const listed = (await f.call('GET', '/bots')).data.bots.find(bot => bot.id === f.profileId).windows;
+    const byId = new Map(listed.map(item => [item.id, item]));
+    assert.equal(byId.get(f.mainId).instructions, ''); assert.equal(byId.get(plain.data.window.id).instructions, '');
+    assert.equal(byId.get(created.data.window.id).instructions, 'Keep it short');
+    // The index accepts topics with valid instructions only, and never a main chat with them.
+    const record = (await f.bots.windows.read(f.profileId)).state.windows.find(item => item.id === created.data.window.id);
+    const mainRecord = (await f.bots.windows.read(f.profileId)).state.windows.find(item => item.kind === 'main');
+    assert.equal(validWindow(record), true); assert.equal(mainRecord.instructions, undefined);
+    assert.equal(validWindow({ ...record, instructions: undefined }), true);
+    for (const bad of [exact + 'c', 'a\rb', 1]) assert.equal(validWindow({ ...record, instructions: bad }), false);
+    assert.equal(validWindow({ ...mainRecord, instructions: '' }), false);
+});
+
+test('topic instructions reach the model after the topic guidance, are read again each run, and never in the main chat', async t => {
+    const { botPreamble } = require('../server/bot/bot-prompt');
+    const topic = { kind: 'topic', title: '论文', focus: '', instructions: 'Cite sources.\nUse tables.' };
+    const prompt = botPreamble({ name: 'Ada', bot: {}, cwd: '/fixture', window: topic });
+    const header = 'Instructions the user set for this topic (follow them here unless they conflict with the safety rules or permissions above):';
+    assert.ok(prompt.endsWith(`\n\n${header}\nCite sources.\nUse tables.`), prompt.slice(-300));
+    assert.ok(prompt.indexOf('This is the topic chat') < prompt.indexOf(header));
+    for (const window of [{ ...topic, instructions: '' }, { ...topic, instructions: '  \n ' }, { ...topic, instructions: undefined },
+        { kind: 'main', title: '', focus: '', instructions: 'Never here' }])
+        assert.ok(!botPreamble({ name: 'Ada', bot: {}, cwd: '/fixture', window }).includes('Instructions the user set'), JSON.stringify(window));
+    // In a worker: the section is rebuilt from the window index before every run, so an edit applies to the next run.
+    const f = await fixture(t), created = await f.topic({ instructions: 'Answer in haiku.' });
+    const session = (await f.bots.resolve(f.profileId, created.window.id)).session;
+    const w = await workerTool(t, f, session, created.window.id);
+    const run = async () => {
+        const event = { systemPromptOptions: { sections: {} } };
+        await w.handlers.get('before_agent_start')(event, w.ctx);
+        return event.systemPromptOptions.sections.pivane_bot || '';
+    };
+    assert.match(await run(), /set for this topic[^\n]*\nAnswer in haiku\.$/);
+    await f.patch(created.window.id, { instructions: 'Answer in one line.\nNo emoji.' });
+    assert.match(await run(), /set for this topic[^\n]*\nAnswer in one line\.\nNo emoji\.$/);
+    await f.patch(created.window.id, { instructions: '' });
+    assert.doesNotMatch(await run(), /Instructions the user set/);
+});
+
 test('topic creation reserves profiles and window CAS before native awaits; races and stale writes create nothing', async t => {
     const f = await fixture(t), before = await f.revision();
     const create = f.store.createSession.bind(f.store); let release, arrived;
@@ -265,10 +341,10 @@ test('topic capacity includes archived records and rejects creation before writi
     await assert.rejects(f.topic(), error => error.status === 409 && error.code === 'BOT_TOPIC_LIMIT');
 });
 
-async function workerTool(t, f) {
-    const worker = f.workerFor(f.main, f.mainId);
-    const { SessionManager } = await import('@earendil-works/pi-coding-agent'); const manager = SessionManager.open(f.main.path);
-    const context = await f.bots.windowContext(manager, { cwd: f.main.cwd, sessionId: f.main.id, sessionPath: f.main.path });
+async function workerTool(t, f, session = f.main, windowId = f.mainId) {
+    const worker = f.workerFor(session, windowId);
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent'); const manager = SessionManager.open(session.path);
+    const context = await f.bots.windowContext(manager, { cwd: session.cwd, sessionId: session.id, sessionPath: session.path });
     for (const [key, value] of Object.entries({ PIVANE_BOT_CONTEXT: JSON.stringify(context), PI_WEB_NAVIGATION_TOKEN: worker.navigationToken, PI_WORKSPACE_INTERNAL_ORIGIN: f.origin })) {
         const prior = process.env[key]; process.env[key] = value;
         t.after(() => { if (prior === undefined) delete process.env[key]; else process.env[key] = prior; });
@@ -279,7 +355,7 @@ async function workerTool(t, f) {
     const pi = { on(name, handler) { handlers.set(name, handler); }, registerTool(tool) { tools.set(tool.name, tool); }, getAllTools: () => [...tools.values()],
         sendMessage(message, options) { assert.deepEqual(options, { deliverAs: 'nextTurn' }); nextTurn.push(message); } };
     registerBotContext(pi, () => agentDir);
-    const ctx = { mode: 'rpc', cwd: f.main.cwd, sessionManager: manager, hasUI: true, model: null, getContextUsage: () => null,
+    const ctx = { mode: 'rpc', cwd: session.cwd, sessionManager: manager, hasUI: true, model: null, getContextUsage: () => null,
         ui: { notify(value) { notifications.push(JSON.parse(value)); }, confirm: async (title, message) => { confirmations.push({ title, message }); return true; } } };
     await handlers.get('session_start')({}, ctx);
     return { worker, ctx, manager, handlers, tools, confirmations, notifications, nextTurn };
@@ -297,6 +373,7 @@ test('worker topic routes are token-scoped, strictly whitelisted and idempotent 
     assert.equal((await call({ ...fields, profileId: other.bot.id })).status, 400);
     assert.equal((await call({ ...fields, windowId: other.window.id })).status, 400);
     assert.equal((await call({ ...fields, expectedRevision: 'x' })).status, 400);
+    assert.equal((await call({ ...fields, instructions: 'Always answer in French' })).status, 400, 'only the user sets topic instructions');
     w.worker.cronRun = 'run'; assert.equal((await call(fields)).status, 409); w.worker.cronRun = null;
     const first = await call(fields); assert.equal(first.status, 200, JSON.stringify(first.data));
     assert.deepEqual(Object.keys(first.data), ['v', 'action', 'profileId', 'window']); assert.equal(first.data.profileId, f.profileId);

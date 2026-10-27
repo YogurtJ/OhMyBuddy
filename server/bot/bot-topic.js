@@ -5,11 +5,17 @@ const object = value => value !== null && typeof value === 'object' && !Array.is
 const MAX_TOPICS = 100;
 const DEFAULT_TOPIC_TITLES = Object.freeze({ 'zh-CN': '新话题', en: 'New topic' });
 const defaultTopicTitle = value => Object.values(DEFAULT_TOPIC_TITLES).includes(String(value ?? '').trim());
+// Topic instructions: multi-line plain text the user sets for one topic (line breaks and tabs only).
+const MAX_INSTRUCTION_BYTES = 8192;
+const validInstructions = value => typeof value === 'string' && Buffer.byteLength(value, 'utf8') <= MAX_INSTRUCTION_BYTES
+    && !/[\x00-\x08\x0b-\x1f\x7f]/.test(value);
 
 // Shared by HTTP and the worker: no coercion, unknown fields or empty titles.
 // Optional title on create defaults to '新话题' so one click opens a fresh topic immediately.
-function topicFields(raw, { patch = false, revision = false, requireTitle = false } = {}) {
-    const allowed = ['title', 'focus', 'emoji', ...(patch ? ['archived'] : []), ...(revision ? ['expectedRevision'] : [])];
+// withInstructions: only the owner's API sets instructions; the Bot's topic proposal cannot.
+function topicFields(raw, { patch = false, revision = false, requireTitle = false, withInstructions = false } = {}) {
+    const allowed = ['title', 'focus', 'emoji', ...(withInstructions ? ['instructions'] : []), ...(patch ? ['archived'] : []),
+        ...(revision ? ['expectedRevision'] : [])];
     if (!object(raw) || Object.keys(raw).some(key => !allowed.includes(key))) fail('Invalid topic fields');
     if (revision && (typeof raw.expectedRevision !== 'string' || !/^[a-f0-9]{64}$/.test(raw.expectedRevision))) fail('Expected windows revision is required');
     const result = {};
@@ -20,6 +26,11 @@ function topicFields(raw, { patch = false, revision = false, requireTitle = fals
             fail(`Invalid topic ${key} (maximum ${max} characters)`);
         result[key] = value.trim();
     }
+    if (Object.hasOwn(raw, 'instructions')) {
+        if (!validInstructions(raw.instructions))
+            fail(`Invalid topic instructions (maximum ${MAX_INSTRUCTION_BYTES} UTF-8 bytes; line breaks and tabs are the only control characters)`);
+        result.instructions = raw.instructions.trim();
+    }
     if (!patch && !Object.hasOwn(result, 'title')) {
         if (requireTitle) fail('A topic title is required');
         result.title = DEFAULT_TOPIC_TITLES['zh-CN'];
@@ -29,7 +40,7 @@ function topicFields(raw, { patch = false, revision = false, requireTitle = fals
         result.archived = raw.archived;
     }
     if (patch && !Object.keys(result).length) fail('Nothing to update');
-    return patch ? result : { focus: '', emoji: '', ...result };
+    return patch ? result : { focus: '', emoji: '', ...(withInstructions ? { instructions: '' } : {}), ...result };
 }
 
 // Private stable namespace: one native tool call can create at most one logical topic.
@@ -66,4 +77,4 @@ function sameThreadTarget(target, refs, resolveProject = value => value) {
     return refs.some(ref => ref.cwd === cwd && ref.sessionId === target.sessionId);
 }
 
-module.exports = { MAX_TOPICS, DEFAULT_TOPIC_TITLES, defaultTopicTitle, topicFields, topicId, mountBotTopics, sameThreadTarget };
+module.exports = { MAX_TOPICS, DEFAULT_TOPIC_TITLES, defaultTopicTitle, validInstructions, topicFields, topicId, mountBotTopics, sameThreadTarget };

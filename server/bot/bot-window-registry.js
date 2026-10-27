@@ -10,6 +10,7 @@ const { safeFile } = require('../pi-native-service');
 const privateFiles = require('../pi-private-files');
 const { PrivateJsonDocument } = require('./bot-json-store');
 const { validTopicSeed } = require('./bot-window-state');
+const { validInstructions } = require('./bot-topic');
 
 const UUID = /^[a-f0-9-]{36}$/;
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -41,6 +42,8 @@ function validWindow(value) {
         || value.archivedAt !== null && !iso(value.archivedAt) || !Array.isArray(value.generations)
         || value.generations.length > MAX_GENERATIONS || !value.generations.every(validGeneration) || !validRotation(value.rotation ?? null)) return false;
     if (value.topicSeed !== undefined && (value.kind !== 'topic' || !validTopicSeed(value.topicSeed))) return false;
+    // Topics only; records written before topic instructions have none (read as '').
+    if (value.instructions !== undefined && (value.kind !== 'topic' || !validInstructions(value.instructions))) return false;
     const last = value.generations.at(-1);
     if (value.current === null) return value.generations.length === 0;
     return object(value.current) && Boolean(last) && value.current.generation === last.generation
@@ -79,7 +82,7 @@ class BotWindowRegistry {
     }
 }
 
-// Synchronous, read-only lookup for worker extensions (title/focus may change between runs).
+// Synchronous, read-only lookup for worker extensions (title/focus/instructions may change between runs).
 function readWindowRecord(agentDir, profileId, windowId) {
     if (typeof profileId !== 'string' || !UUID.test(profileId)) return null;
     const file = safeFile(agentDir, ['pivane-bots', profileId, 'windows.json']);

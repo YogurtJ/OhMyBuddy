@@ -1,7 +1,8 @@
 // Bot topics (public/pi-bot-topics.js with the session pane in pi-bot.js): create with just a
 // title and focus (no emoji; an older topic's emoji stays editable on that topic), a topic
 // limit refusal and a windows-revision conflict that keep the draft, multi-line text saved as one
-// line, edit only what changed (with refusals in plain words), archive refused while busy and then
+// line, multi-line topic instructions (grow then scroll, byte limit, lines kept), edit only what
+// changed (with refusals in plain words), archive refused while busy and then
 // archived, restore from the archived list, the open-items index reread on events (a reply
 // settling, the phone drawer opening) and never polled, the topic approval card, the receipt
 // card's explicit "Open topic" (also safe for a stale owner), and a chat archived or a Bot moved to
@@ -156,12 +157,14 @@ const REV = letter => letter.repeat(64);
                 await sheet.waitFor();
                 assert.equal(await sheet.locator('h2').textContent(), '编辑话题');
                 await sheet.locator('[data-topic-field="focus"]').fill('a\nb');
+                await sheet.locator('[data-topic-field="instructions"]').fill('每次先列出单词\n再出题');
                 // Closing with an unsaved edit warns once.
                 await page.keyboard.press('Escape');
                 await sheet.locator('.pi-bot-sheet-status').filter({ hasText: '还有修改没保存' }).waitFor();
                 await sheet.locator('.pi-bot-sheet-save').click();
                 await sheet.locator('.pi-bot-sheet-status[data-tone="warn"]').filter({ hasText: '别处改过' }).waitFor();
-                assert.deepEqual(await sheet.locator('[data-topic-field]').evaluateAll(nodes => nodes.map(node => node.value)), ['📚', '英语考试（12月）', 'a\nb']);
+                assert.deepEqual(await sheet.locator('[data-topic-field]').evaluateAll(nodes => nodes.map(node => node.value)),
+                    ['📚', '英语考试（12月）', 'a\nb', '每次先列出单词\n再出题'], 'the draft stays, the other device’s name is taken');
                 await sheet.locator('.pi-bot-sheet-save').click();
                 await sheet.locator('.pi-bot-sheet-status[data-tone="error"]').filter({ hasText: '内容没有通过检查' }).waitFor();
                 assert.doesNotMatch(await sheet.locator('.pi-bot-sheet-status').textContent(), /Invalid|maximum/);
@@ -169,20 +172,68 @@ const REV = letter => letter.repeat(64);
                 await sheet.locator('.pi-bot-sheet-save').click();
                 await page.locator('.pi-bot-topic-sheet').waitFor({ state: 'detached' });
                 assert.deepEqual(bodies.filter(([method, , body]) => method === 'PATCH' && body.archived === undefined).map(([, id, body]) => [id, body]), [
-                    [T1, { expectedRevision: REV('c'), focus: 'a b' }],
-                    [T1, { expectedRevision: REV('d'), focus: 'a b' }],
-                    [T1, { expectedRevision: REV('d'), focus: 'a b' }]], 'only the changed field, as one line');
+                    [T1, { expectedRevision: REV('c'), focus: 'a b', instructions: '每次先列出单词\n再出题' }],
+                    [T1, { expectedRevision: REV('d'), focus: 'a b', instructions: '每次先列出单词\n再出题' }],
+                    [T1, { expectedRevision: REV('d'), focus: 'a b', instructions: '每次先列出单词\n再出题' }]],
+                    'only the changed fields; the focus as one line, the instructions keep theirs');
                 assert.equal(windows.find(item => item.id === T1).emoji, '📚', 'the older topic keeps its emoji');
                 // A topic without an emoji is edited as a title and a focus too.
                 await openPane();
                 await page.locator(`.pi-bot-topic-edit[data-window-id="${T3}"]`).click();
                 await sheet.waitFor();
-                assert.deepEqual(await sheet.locator('[data-topic-field]').evaluateAll(nodes => nodes.map(node => node.dataset.topicField)), ['title', 'focus']);
+                assert.deepEqual(await sheet.locator('[data-topic-field]').evaluateAll(nodes => nodes.map(node => node.dataset.topicField)), ['title', 'focus', 'instructions']);
                 await sheet.locator('[data-topic-field="title"]').fill('日本旅行');
                 await sheet.locator('[data-topic-field="focus"]').fill('十二月去大阪\n先订酒店');
                 await sheet.locator('.pi-bot-sheet-save').click();
                 await page.locator('.pi-bot-topic-sheet').waitFor({ state: 'detached' });
                 assert.deepEqual(bodies.at(-1), ['PATCH', T3, { expectedRevision: REV('e'), title: '日本旅行', focus: '十二月去大阪 先订酒店' }]);
+                await page.locator('.pi-bot-topic-sheet').waitFor({ state: 'detached' });
+
+                // 3b. Topic instructions, under the focus: the box grows with its lines up to a bound and then scrolls
+                // inside, is 16px on phones and fits the width; over the byte limit it says so and cannot be saved;
+                // only the changed field is sent, with its lines; reopened, it shows what was saved.
+                await openPane();
+                await page.locator(`.pi-bot-topic-edit[data-window-id="${T3}"]`).click();
+                await sheet.waitFor();
+                const area = sheet.locator('[data-topic-field="instructions"]');
+                const instructionField = sheet.locator('.pi-bot-sheet-field:has([data-topic-field="instructions"])');
+                assert.equal(await instructionField.locator('.pi-bot-sheet-label').textContent(), '话题指令（可不填）');
+                assert.match(await instructionField.locator('.pi-bot-sheet-hint').textContent(), /回答格式、资料来源。最多 8 KB（约 2700 个汉字）/);
+                const metrics = () => area.evaluate(node => {
+                    const style = getComputedStyle(node), box = node.getBoundingClientRect();
+                    return { height: box.height, left: box.left, right: box.right, client: node.clientHeight, scroll: node.scrollHeight,
+                        max: parseFloat(style.maxHeight), font: style.fontSize, overflowY: style.overflowY };
+                });
+                const empty = await metrics();
+                await area.fill(Array.from({ length: 6 }, (_, index) => `第 ${index + 1} 条：先给结论。`).join('\n'));
+                const grown = await metrics();
+                assert.ok(grown.height > empty.height + 20, `grows with its lines (${empty.height} → ${grown.height})`);
+                assert.ok(grown.scroll <= grown.client + 1, 'no inner scrolling while it fits');
+                await area.fill(Array.from({ length: 40 }, (_, index) => `第 ${index + 1} 条`).join('\n'));
+                const full = await metrics();
+                assert.ok(Math.abs(full.height - full.max) <= 1, `stops at its bound (${full.height} vs ${full.max})`);
+                assert.ok(full.scroll > full.client + 20, 'then scrolls inside'); assert.equal(full.overflowY, 'auto');
+                if (phone) assert.equal(full.font, '16px', 'no zoom on phones');
+                assert.ok(full.left >= 0 && full.right <= width, 'the box fits the width');
+                assert.equal((await layout(page)).overflow, false, `no horizontal overflow with the sheet at ${width}`);
+                await shot('bot-topic-instructions');
+                await area.fill('字'.repeat(2731));
+                await sheet.locator('.pi-bot-sheet-status[data-tone="error"]').filter({ hasText: '话题指令太长了' }).waitFor();
+                assert.equal(await sheet.locator('.pi-bot-sheet-save').isDisabled(), true, 'over 8192 bytes cannot be saved');
+                assert.equal(await area.getAttribute('aria-invalid'), 'true');
+                await area.fill('  先给结论再展开。\n\t引用资料时附上链接。\n');
+                assert.equal(await sheet.locator('.pi-bot-sheet-status').textContent(), '');
+                assert.equal(await area.getAttribute('aria-invalid'), 'false');
+                await sheet.locator('.pi-bot-sheet-save').click();
+                await page.locator('.pi-bot-topic-sheet').waitFor({ state: 'detached' });
+                assert.deepEqual(bodies.at(-1), ['PATCH', T3, { expectedRevision: REV('f'), instructions: '先给结论再展开。\n\t引用资料时附上链接。' }],
+                    'only the instructions, trimmed, with their lines and tab');
+                await openPane();
+                await page.locator(`.pi-bot-topic-edit[data-window-id="${T3}"]`).click();
+                await sheet.waitFor();
+                assert.equal(await area.inputValue(), '先给结论再展开。\n\t引用资料时附上链接。');
+                assert.equal(await sheet.locator('.pi-bot-sheet-save').isDisabled(), true, 'nothing to save yet');
+                await sheet.locator('.pi-bot-sheet-close').click();
                 await page.locator('.pi-bot-topic-sheet').waitFor({ state: 'detached' });
 
                 // 4. Archive: two clicks; a busy topic is refused and the sheet stays; then it is archived.
@@ -191,7 +242,7 @@ const REV = letter => letter.repeat(64);
                 await sheet.waitFor();
                 await sheet.locator('[data-topic-action="archive"]').click();
                 assert.equal(await sheet.locator('[data-topic-action="archive"] span').textContent(), '再点一次确认归档');
-                assert.equal(bodies.filter(([method]) => method === 'PATCH').length, 4, 'the first click only asks');
+                assert.equal(bodies.filter(([method]) => method === 'PATCH').length, 5, 'the first click only asks');
                 await sheet.locator('[data-topic-action="archive"]').click();
                 await sheet.locator('.pi-bot-sheet-status[data-tone="error"]').filter({ hasText: '还在忙' }).waitFor();
                 await shot('bot-topic-archive-refused');
