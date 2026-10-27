@@ -268,12 +268,16 @@ class ChannelsService {
                 const activeCount = v.jobs.filter(j => pending(j) && j.accountId === accountId && j.peerId === msg.peerId).length;
                 const slash = !msg.images?.length ? parseSlash(msg.text) : null;
                 // Answers to a waiting Bot approval go ahead of the turn that waits for them.
-                const isControl = Boolean(slash && ['/stop', '/status', '/help'].includes(slash.command)) || Boolean(!msg.images?.length && parseApproval(msg.text));
+                const isApproval = Boolean(!msg.images?.length && parseApproval(msg.text));
+                const isControl = Boolean(slash && ['/stop', '/status', '/help'].includes(slash.command)) || isApproval;
+                const approvalsWaiting = isApproval ? v.jobs.filter(j => pending(j) && j.accountId === accountId && j.peerId === msg.peerId
+                    && (j.kind === 'approval' || j.status === 'queued' && parseApproval(j.text))).length : 0;
                 const isStop = slash?.command === '/stop';
                 const stopQueued = isStop && v.jobs.some(j => pending(j) && j.accountId === accountId && j.peerId === msg.peerId && parseSlash(j.text)?.command === '/stop');
                 const hasContent = Boolean(msg.text.trim() || msg.images?.length);
                 const reason = !binding ? 'unbound' : msg.unsupported ? 'unsupported-message' : !hasContent ? 'empty-message'
-                    : !peer.contextToken && !isStop ? 'reply-context-missing' : stopQueued ? 'stop-already-queued' : activeCount >= 20 && !isControl ? 'queue-full' : null;
+                    : !peer.contextToken && !isStop ? 'reply-context-missing' : stopQueued ? 'stop-already-queued'
+                    : activeCount >= 20 && !isControl || approvalsWaiting >= 3 ? 'queue-full' : null;
                 v.jobs.push({ id, accountId, peerId: msg.peerId, target: binding ? { cwd: binding.cwd, sessionId: binding.sessionId } : null,
                     bindingId: binding?.id, status: reason ? 'ignored' : 'queued', reason, at: Date.now(),
                     ...(reason ? {} : { text: msg.text, ...(msg.images?.length ? { images: msg.images } : {}) }) });
@@ -388,9 +392,10 @@ class ChannelsService {
         if (this.stopping || this.isSuspended() || this.mutating || this.error || !this.db?.owner) return;
         for (const job of this.db.value.jobs) {
             const slash = job.status === 'queued' && !job.images?.length ? parseSlash(job.text) : null;
-            const control = Boolean(slash && ['/stop', '/status', '/help'].includes(slash.command))
-                || Boolean(job.status === 'queued' && !job.images?.length && parseApproval(job.text));
-            if (this.runs.size >= (control ? 4 : 3)) continue;
+            const answer = Boolean(job.status === 'queued' && !job.images?.length && parseApproval(job.text));
+            const control = Boolean(slash && ['/stop', '/status', '/help'].includes(slash.command)) || answer;
+            // An approval answer is applied at once (bot-approvals.js): it always has room, as the turn waits for it.
+            if (this.runs.size >= (answer ? 8 : control ? 4 : 3)) continue;
             if (!['queued', 'ready'].includes(job.status) || this.runs.has(job.id)) continue;
             const account = this.db.value.accounts.find(a => a.id === job.accountId);
             if (!account?.enabled || !account.allowedUsers.includes(job.peerId)) continue;
@@ -430,6 +435,23 @@ class ChannelsService {
     }
     async run(id, run) {
         let job = this.job(id);
+        const approvals = this.approvals ||= new ChannelApprovals();
+        const approval = job.status === 'queued' && !job.images?.length ? parseApproval(job.text) : null;
+        if (approval) {
+            // Never a chat message: it answers one pending approval of a turn this chat started, or
+            // nothing. It belongs to the chat, not to where the chat talks now (a switch or a moved
+            // window does not stop it); the answer is replied in the chat's current place.
+            const account = this.db.value.accounts.find(a => a.id === job.accountId);
+            const binding = this.db.value.bindings.find(b => b.accountId === job.accountId && b.peerId === job.peerId);
+            if (!account?.enabled || !account.allowedUsers.includes(job.peerId) || !binding) {
+                this.updateJob(id, { status: 'cancelled', reason: 'admission-changed', text: undefined }); return;
+            }
+            const answered = approvals.answer({ accountId: job.accountId, peerId: job.peerId, code: approval.code, allow: approval.allow });
+            this.updateJob(id, { status: 'ready', kind: 'approval', text: undefined, bindingId: binding.id, target: { cwd: binding.cwd, sessionId: binding.sessionId },
+                directReply: answered === 'done' ? approval.allow ? `✅ 已同意 ${approval.code}，继续进行。` : `已拒绝 ${approval.code}，这一步不会做。`
+                    : `❌ 确认 ${approval.code} 已失效（已处理、超时或不是这个聊天发起的），没有改变什么。` });
+            job = this.job(id);
+        }
         if (!this.bindingFor(job)) {
             const current = this.db.value.bindings.find(b => b.accountId === job.accountId && b.peerId === job.peerId);
             if (!current || job.status !== 'queued' || job.kind === 'cron') {
@@ -463,16 +485,7 @@ class ChannelsService {
                 if (error.message === 'Session file changed' || error.code === 'SESSION_BUSY') return;
                 throw error;
             }
-            const approvals = this.approvals ||= new ChannelApprovals();
-            const approval = job.status === 'queued' && !job.images?.length ? parseApproval(job.text) : null;
-            if (approval) {
-                // Never a chat message: it answers one pending approval of a turn this chat started, or nothing.
-                if (!this.canAdmit(this.job(id))) { this.updateJob(id, { status: 'cancelled', reason: 'admission-changed', text: undefined }); return; }
-                const answered = approvals.answer({ accountId: job.accountId, peerId: job.peerId, code: approval.code, allow: approval.allow });
-                this.updateJob(id, { status: 'ready', kind: 'approval', text: undefined, directReply: answered === 'done'
-                    ? approval.allow ? `✅ 已同意 ${approval.code}，继续进行。` : `已拒绝 ${approval.code}，这一步不会做。`
-                    : `❌ 确认 ${approval.code} 已失效（已处理、超时或不是这个聊天发起的），没有改变什么。` });
-            } else if (job.status === 'queued') {
+            if (job.status === 'queued') {
                 slash = !job.images?.length ? parseSlash(job.text) : null;
                 if (slash) {
                     await require('./command-control').executeCommand(this, job, slash, run);

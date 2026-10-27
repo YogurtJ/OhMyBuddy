@@ -27,9 +27,12 @@ class ChannelApprovals {
         if (event?.type !== 'extension_ui_request' || event.method !== 'confirm' || event.title !== APPROVAL_TITLE || typeof event.id !== 'string') return null;
         const parsed = parseApprovalMessage(event.message);
         if (!parsed || !worker || !job) return null;
+        // Requests answered on the web, timed out or from a closed runtime are over.
+        for (const [code, entry] of this.pending) if (entry.worker.disposed || !entry.worker.pendingUi?.has(entry.requestId)) this.pending.delete(code);
         if ([...this.pending.values()].some(entry => entry.worker === worker && entry.requestId === event.id)) return null;
-        this.serial = this.serial >= 9999 ? 1 : this.serial + 1;
-        const code = `A${this.serial}`;
+        if (this.pending.size >= 9000) return null;
+        let code;
+        do { this.serial = this.serial >= 9999 ? 1 : this.serial + 1; code = `A${this.serial}`; } while (this.pending.has(code));
         this.pending.set(code, { accountId: job.accountId, peerId: job.peerId, jobId: job.id, worker, requestId: event.id });
         const detail = parsed.detail.length > DETAIL ? `${parsed.detail.slice(0, DETAIL)}…` : parsed.detail;
         return `🔐 ${botName || 'Bot'} 想${KIND_TEXT[parsed.kind] || '做一步操作'}，需要你同意：\n${detail}\n\n`
