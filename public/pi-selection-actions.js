@@ -73,7 +73,9 @@
             const source = (start.closest('#pi-side-messages') ? 'side-' : '') + (article.classList.contains('assistant') ? 'assistant' : 'user');
             this.selected = { text, source, key: this.host.context().key, range };
             if (globalThis.Highlight && CSS.highlights) CSS.highlights.set('pi-selection', new Highlight(range));
-            this.menu.querySelector('[data-selection-action="side"]').disabled = !this.host.sideEnabled();
+            // Hosts without a side chat (the Bot page) leave the entry out instead of offering a dead button.
+            const side = this.menu.querySelector('[data-selection-action="side"]');
+            side.hidden = Boolean(this.host.sideHidden?.()); side.disabled = side.hidden || !this.host.sideEnabled();
             this.menu.querySelector('[data-selection-action="tts"]').disabled = !window.PiReplyTts?.enabled;
             this.menu.hidden = false;
             const rect = range.getBoundingClientRect(); this.position(rect.left, rect.bottom + 8);
@@ -93,7 +95,7 @@
             getSelection()?.removeAllRanges();
             try {
                 if (action === 'main') this.host.addMain(quote);
-                else if (action === 'side') await this.host.addSide(quote);
+                else if (action === 'side') { if (!this.host.sideHidden?.()) await this.host.addSide(quote); }
                 else if (window.PiReplyTts.enabled) await window.PiReplyTts.speak({ text: quote.text, plain: true, key: JSON.stringify(['selection', selected.key, quote.source, quote.text]) });
             } catch (error) { this.host.toast(error.message, 'error'); }
         }

@@ -1,4 +1,4 @@
-import { type SubagentDelegationRequest, type SubagentDelegationResponse, type SubagentDelegationThinking, type SubagentDelegationUpdate, type SubagentDelegationUpdateUsage } from "../api/delegation.ts";
+import { type SubagentDelegationProviderDiagnostics, type SubagentDelegationRequest, type SubagentDelegationResponse, type SubagentDelegationThinking, type SubagentDelegationUpdate, type SubagentDelegationUpdateUsage } from "../api/delegation.ts";
 import type { AcceptanceInput, AgentContract, EffectsProjection, ExecutionProjection, IntercomBridgeConfig, JsonSchemaObject, ReviewProjection, ToolBudgetConfig, Usage } from "../shared/types.ts";
 export interface PromptTemplateDelegationRequest {
     requestId: string;
@@ -88,6 +88,7 @@ export interface PromptTemplateBridgeResult {
             review?: ReviewProjection;
             effects?: EffectsProjection;
             usage?: Usage;
+            providerDiagnostics?: SubagentDelegationProviderDiagnostics;
             progressSummary?: {
                 toolCount?: number;
                 durationMs?: number;
@@ -116,6 +117,7 @@ export interface PromptTemplateBridgeResult {
             cacheRead?: number;
             cacheWrite?: number;
             turnCount?: number;
+            providerDiagnostics?: SubagentDelegationProviderDiagnostics;
         }>;
     };
 }

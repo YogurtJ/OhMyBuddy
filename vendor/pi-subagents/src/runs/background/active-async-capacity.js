@@ -4,7 +4,8 @@ import * as path from "node:path";
 import { writePrivateAtomicJson } from "../../shared/atomic-json.js";
 import { TEMP_ROOT_DIR } from "../../shared/types.js";
 import { readStatus } from "../../shared/utils.js";
-import { checkPidLiveness } from "./stale-run-reconciler.js";
+import { checkPidLiveness, checkRecordedPidLiveness } from "./stale-run-reconciler.js";
+import { currentBootId } from "./boot-id.js";
 import { currentPidNamespaceScope } from "./pid-namespace.js";
 import { readProcessTerminal } from "./process-terminal.js";
 import { isTerminalAsyncState as terminalState, readWorkflowChildEvidence, readWorkflowChildProcessEvidence } from "./workflow-terminal-proof.js";
@@ -201,9 +202,14 @@ function abandonedRunnerReleaseVerdict(status, proofState, options, anyTerminalS
     if (typeof status.pid !== "number" || !Number.isInteger(status.pid) || status.pid < 1)
         return { state: "retained", reason: `${proofReason}; runner PID is missing or invalid` };
     // A PID from another namespace can look dead here while the runner is alive.
-    if (status.pidNamespaceScope !== undefined && status.pidNamespaceScope !== (options.pidNamespaceScope ?? currentPidNamespaceScope)())
+    const observedScope = (options.pidNamespaceScope ?? currentPidNamespaceScope)();
+    if (status.pidNamespaceScope !== undefined && status.pidNamespaceScope !== observedScope)
         return { state: "retained", reason: `${proofReason}; runner PID namespace differs from this process, so liveness is unknown` };
-    const liveness = (options.pidLiveness ?? checkPidLiveness)(status.pid);
+    const liveness = checkRecordedPidLiveness({ pid: status.pid, pidNamespaceScope: status.pidNamespaceScope, bootId: status.bootId }, {
+        observedScope,
+        observedBootId: (options.bootId ?? currentBootId)(),
+        probe: options.pidLiveness ?? ((pid) => checkPidLiveness(pid)),
+    });
     if (liveness !== "dead")
         return { state: "retained", reason: `${proofReason}; runner PID liveness is ${liveness}` };
     const lastActivityAt = status.lastActivityAt ?? status.lastUpdate ?? status.endedAt;

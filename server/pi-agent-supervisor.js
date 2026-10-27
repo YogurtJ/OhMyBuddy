@@ -11,6 +11,7 @@ const { workerLifecycle } = require('./pi-worker-lifecycle');
 const { PiRuntimeControls } = require('./pi-runtime-controls');
 const { PiShellExecution } = require('./pi-shell-execution');
 const subagentRuntime = require('./pi-subagent-runtime');
+const { APPROVAL_TITLE, parseApprovalMessage } = require('./bot/bot-guard');
 const DEFAULT_IDLE_MS = 15 * 60 * 1000;
 // A healthy worker answers get_state in milliseconds. The window is long enough
 // that brief synchronous work in an extension does not cause a replacement.
@@ -75,6 +76,7 @@ class AgentWorker extends EventEmitter {
         this.loadedAssistantProjectId = null;
         this.loadedAssistantProjectRevision = null;
         this.loadedAssistantProjectConfirmed = false;
+        this.loadedBot = null;
         this.autoTitleEligible = false;
         this.titleResults = new Map();
         this.titleGeneration = false;
@@ -85,7 +87,7 @@ class AgentWorker extends EventEmitter {
         this.contextCapture = null;
         this.client = new PiRpcClient({ ...options,
             extraArgs: [...(options.extraArgs || []), ...(options.profile === 'side-chat' ? [] : ['-e', path.join(__dirname, 'pi-web-session-extension.ts')])],
-            env: { PIVANE_AGENT_PROFILE_CONTEXT: undefined, PIVANE_HERMES_BUNDLE: undefined,
+            env: { PIVANE_AGENT_PROFILE_CONTEXT: undefined, PIVANE_BOT_CONTEXT: undefined, PIVANE_HERMES_BUNDLE: undefined,
                 PIVANE_ASSISTANT_PROJECT_CONTEXT: undefined, PIVANE_PROFILE_AUTHORING_CONTEXT: undefined,
                 PIVANE_PROFILE_MEMORY_REVIEW_MODEL: undefined, ...options.env,
                 PI_WEB_NAVIGATION_TOKEN: this.navigationToken, PIVANE_QUEUE_TOKEN: this.queueStore ? this.queueToken : undefined }
@@ -471,7 +473,7 @@ class AgentWorker extends EventEmitter {
             this.once('exit', exited); this.once('disposed', exited);
             unsubscribe = this.subscribe(event => {
                 if (event.type === 'agent_settled') setImmediate(finish);
-                if (event.type === 'extension_ui_request' && ['confirm', 'select', 'input', 'editor'].includes(event.method)) waiting();
+                if (event.type === 'extension_ui_request' && ['confirm', 'select', 'input', 'editor'].includes(event.method)) waiting(event);
             });
             try {
                 const started = await this.navigate(rpc, { mode: 'channel', input: { ...input, action: 'start', sessionId: this.sessionId } }, { timeoutMs: 30000, beforeSend: admit });
@@ -489,8 +491,13 @@ class AgentWorker extends EventEmitter {
         return this.exclusive(rpc => this.navigate(rpc, { mode: 'cron', input }, { timeoutMs: 30000 }), { cron: true });
     }
 
+    // A panel edit of a Bot window's notebook, written by this worker while it is idle.
+    async botNotebook(input) {
+        return this.exclusive(rpc => this.navigate(rpc, { mode: 'bot-notebook', input }, { timeoutMs: 15000 }));
+    }
+
     async taskReturn(input) {
-        return this.exclusive(rpc => this.navigate(rpc, { mode: 'task-result', input }, { timeoutMs: 30000 }));
+        return this.exclusive(rpc => this.navigate(rpc, { mode: 'task-result', input }, { timeoutMs: 30000 }), { idle: !input?.read });
     }
 
     async agentMessages(input) {
@@ -712,6 +719,7 @@ class AgentWorker extends EventEmitter {
             if (payload.mode === 'channel' && !command.description?.includes('channels-v1')) throw new Error('消息渠道接口尚未加载，请在线程空闲后重开运行实例');
             if (payload.mode === 'cron' && !command.description?.includes('cron-v1')) throw new Error('Scheduled task bridge is not loaded; reopen the idle thread');
             if (payload.mode === 'task-result' && !command.description?.includes('task-results-v1')) throw new Error('Task result bridge is not loaded');
+            if (payload.mode === 'bot-notebook' && !command.description?.includes('bot-notebook-v1')) throw new Error('Notebook bridge is not loaded; reopen the chat');
             if (payload.mode === 'agent-message' && !command.description?.includes('agent-messages-v1')) throw new Error('Agent message bridge is not loaded; reopen the thread after it is idle');
             if (payload.mode === 'tree' && !command.description?.includes('tree-v1')) throw new Error('当前实例尚未加载会话树导航，请在任务结束后退出并重新打开线程');
             if (options.beforeSend && !options.beforeSend()) return { cancelled: true };
@@ -719,7 +727,7 @@ class AgentWorker extends EventEmitter {
             await rpc('prompt', { message: `/${command.name} ${JSON.stringify({ ...payload, id, token: this.navigationToken })}` }, options.timeoutMs || 120000);
             const result = this.navigationResults.get(id);
             if (!result) throw new Error('未收到原生回退结果，请重新读取会话状态');
-            if (!result.success) throw new Error(result.error || '会话回退失败');
+            if (!result.success) throw Object.assign(new Error(result.error || '会话回退失败'), typeof result.code === 'string' ? { code: result.code } : {});
             return result.data;
         } catch (error) {
             if (error.code === 'RPC_TIMEOUT') {
@@ -824,6 +832,27 @@ class AgentWorker extends EventEmitter {
                         this.loadedAssistantProjectConfirmed = true;
                     }
                     return;
+                }
+                if (result && Object.hasOwn(result, 'pivaneBot')) {
+                    const value = result.pivaneBot;
+                    if (this.managed && !this.noSession && result.sessionId === this.sessionId && value && typeof value === 'object') {
+                        const id = /^[a-f0-9-]{36}$/;
+                        if (value.event === 'loaded') this.loadedBot = typeof value.profileId === 'string' && id.test(value.profileId)
+                            && typeof value.windowId === 'string' && id.test(value.windowId) && Number.isSafeInteger(value.generation)
+                            ? { profileId: value.profileId, windowId: value.windowId, generation: value.generation } : null;
+                        else if (value.event === 'model' && value.status === 'unavailable' && typeof value.provider === 'string'
+                            && value.provider.length <= 200 && typeof value.id === 'string' && value.id.length <= 300)
+                            this._broadcast({ type: 'gateway_bot_notice', notice: 'model_unavailable', provider: value.provider, id: value.id });
+                        // An approval request ended in the worker (answered, cancelled with its
+                        // call, timed out): one still pending here can no longer be answered.
+                        else if (value.event === 'approval-done' && typeof value.token === 'string' && /^[a-f0-9]{16}$/.test(value.token)) {
+                            for (const [requestId, pending] of [...this.pendingUi]) {
+                                const request = pending.event;
+                                if (request.method === 'confirm' && request.title === APPROVAL_TITLE && parseApprovalMessage(request.message)?.token === value.token) this.resolveUi(requestId);
+                            }
+                        }
+                    }
+                    return; // Private bridge record; never a browser notification.
                 }
                 if (result && Object.hasOwn(result, 'pivaneCron')) {
                     const state = result.pivaneCron;
@@ -942,6 +971,8 @@ class AgentWorker extends EventEmitter {
         if (completed && !this.noSession && this.sessionId) {
             this.emit('completion', { cwd: this.cwd, sessionId: this.sessionId, completionId: randomUUID(), completedAt: new Date().toISOString() });
         }
+        // pi-subagents snapshot/inspect lines reach browsers only via gateway_controls.
+        if (subagentRuntime.privateWidget(event)) return;
         this._broadcast(event);
     }
 
@@ -1297,4 +1328,4 @@ class PiAgentSupervisor extends EventEmitter {
     }
 }
 
-module.exports = { PiAgentSupervisor };
+module.exports = { PiAgentSupervisor, AgentWorker };

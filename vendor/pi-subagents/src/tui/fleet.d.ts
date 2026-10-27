@@ -1,5 +1,5 @@
 import { type ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { type Component, type MarkdownTheme } from "@earendil-works/pi-tui";
+import { type Component, type MarkdownTheme, type TuiMouseEvent, type TuiMouseEventResult } from "@earendil-works/pi-tui";
 import { type ExternalRun } from "../api/external-runs.ts";
 import { type FleetKeybindingAction, type FleetKeybindingsConfig, type ForegroundChildControl, type ForegroundResumeChild, type ForegroundResumeRun, type ForegroundRunControl, type SubagentState } from "../shared/types.ts";
 import { type AsyncRunSummary } from "../runs/background/async-status.ts";
@@ -46,6 +46,7 @@ export type FleetItem = ({
     updatedAt: number;
     run: AsyncRunSummary;
     step?: AsyncStep;
+    task?: string;
 } | {
     key: string;
     kind: "external";
@@ -111,11 +112,8 @@ export declare class SubagentFleetComponent implements Component {
     private snapshot;
     private selected;
     private selectedKey;
-    private detailScroll;
-    private detailAutoFollow;
-    private detailLineCount;
-    private detailViewportHeight;
-    private bodyHeight;
+    private readonly viewport;
+    private renderedLayout;
     private expandedTools;
     private promptAuditOpen;
     private promptAuditView;
@@ -141,6 +139,7 @@ export declare class SubagentFleetComponent implements Component {
     private stopRefresh;
     private refresh;
     private moveSelection;
+    private selectItem;
     private selectedPromptAudit;
     private promptAuditItems;
     private selectedPromptText;
@@ -155,6 +154,7 @@ export declare class SubagentFleetComponent implements Component {
     private setActionNotice;
     private runAction;
     private scrollDetail;
+    handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined;
     handleInput(data: string): void;
     private rosterLines;
     private renderedTranscript;

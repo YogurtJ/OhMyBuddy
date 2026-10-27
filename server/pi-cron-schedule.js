@@ -100,4 +100,4 @@ function latestTime(schedule, after, before, graceMinutes) {
     }
     return null;
 }
-module.exports = { parseCron, localParts, dayKey, nextTimes, latestTime };
+module.exports = { parseCron, localParts, dayKey, nextTimes, latestTime, wallInstant };

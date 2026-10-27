@@ -27,7 +27,9 @@
     // Non-ready injection states are valid server answers, not failures.
     const injectionStatus = { disabled: '此身份的记忆未启用，不会注入记忆。', pending: '记忆正在同步，稍后再看。',
         unsupported: '记忆插件未安装，无法预览注入。', missing: '身份不存在或已删除。' };
-    function create({ root, fetch, scope, transcript, anchors }) {
+    // agentName: in Bot mode the Bot's name, so its own notes read "<name> 记下了", naming where
+    // the note went when the receipt says ("about you" or long-term memory; UAT-13).
+    function create({ root, fetch, scope, transcript, anchors, agentName }) {
         let key = '', identity = '', epoch = 0, busy = false, snapshot = null, draft = '', uncertain = null, notice = '', hintNotice = '', latest = null, conflict = false;
         // Background learning saves after the turn settles; follow queued/running jobs for a bounded time.
         let learning = false, polls = 0, timer = null;
@@ -74,7 +76,9 @@
             box.append(icon(hintIcon[kind], 'pi-memory-hint-icon'));
             const main = el('div', undefined, 'pi-memory-hint-main');
             const meta = el('div', undefined, 'pi-memory-hint-meta');
-            meta.append(el('strong', t(hintLabel[kind]), 'pi-memory-hint-label'));
+            const writer = kind === 'agent' && typeof agentName === 'function' ? agentName() : '';
+            const where = receipt.kind === 'memory' ? { user: '{0} 记到了“关于你”', memory: '{0} 记到了长期记忆' }[receipt.target] : null;
+            meta.append(el('strong', writer ? t(where || '{0} 记下了', writer) : t(hintLabel[kind]), 'pi-memory-hint-label'));
             if (receipt.kind === 'memory' && receipt.category) meta.append(el('span', t(categoryLabel[receipt.category] || receipt.category), 'pi-memory-hint-tag'));
             if (receipt.kind === 'skill') meta.append(el('small', t('需重载会话后生效'), 'pi-memory-hint-note'));
             const text = el('p', preview, 'pi-memory-hint-text');

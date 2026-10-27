@@ -27,12 +27,15 @@ class ChannelStore {
                 || typeof b.cwd !== 'string' || !path.isAbsolute(b.cwd) || b.cwd.length > 4096
                 || b.replyMode !== undefined && !['all', 'wechat'].includes(b.replyMode)
                 || b.boundAt !== undefined && (!Number.isFinite(b.boundAt) || b.boundAt < 0)
-                || b.excludedTurnId != null && !/^[a-f0-9]{64}$/.test(b.excludedTurnId))
+                || b.excludedTurnId != null && !/^[a-f0-9]{64}$/.test(b.excludedTurnId)
+                || !require('./bot-channel').validBotBinding(b))
             || value.jobs.some(j => !j || typeof j.id !== 'string' || typeof j.status !== 'string'
                 || ['retryCount', 'recoveryAttempts', 'readAttempts'].some(key => j[key] !== undefined && (!Number.isSafeInteger(j[key]) || j[key] < 0 || j[key] > 1000))
                 || j.nextAttemptAt !== undefined && (!Number.isFinite(j.nextAttemptAt) || j.nextAttemptAt < 0)
                 || j.platformCode !== undefined && !Number.isSafeInteger(j.platformCode)
                 || j.deliveryError !== undefined && (typeof j.deliveryError !== 'string' || j.deliveryError.length > 64)
+                || j.bot !== undefined && (!j.bot || typeof j.bot !== 'object' || !/^[a-f0-9-]{36}$/.test(j.bot.profileId || '')
+                    || !(j.bot.windowId === null || /^[a-f0-9-]{36}$/.test(j.bot.windowId || '')))
                 || j.commandSubmitted !== undefined && typeof j.commandSubmitted !== 'boolean'
                 || j.deliveryIssues !== undefined && (!Array.isArray(j.deliveryIssues) || j.deliveryIssues.length > 20
                     || j.deliveryIssues.some(i => !i || typeof i.name !== 'string' || i.name.length > 120 || typeof i.reason !== 'string' || i.reason.length > 64)))

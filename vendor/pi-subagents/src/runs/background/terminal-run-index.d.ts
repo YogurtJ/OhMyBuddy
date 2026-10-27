@@ -5,4 +5,6 @@ export declare function readTerminalRunToolCallIndex(asyncDirRoot: string, toolC
 export declare function readRecentTerminalRunIndex(asyncDirRoot: string, options?: {
     sessionId?: string;
     limit?: number;
+    endedAfter?: number;
+    onCorruptStatus?: (warning: string) => void;
 }): string[];

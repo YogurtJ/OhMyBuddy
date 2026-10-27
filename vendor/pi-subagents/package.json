@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "pi-subagents",
-  "version": "0.80.0",
+  "version": "0.82.1",
   "description": "Pi extension for single-agent delegation and scripted multi-agent workflows",
   "author": "Nico Bailon",
   "license": "MIT",
@@ -20,7 +20,7 @@
     "@js-temporal/polyfill": "0.5.1",
     "acorn": "8.18.0",
     "jiti": "2.7.0",
-    "undici": "8.10.2",
+    "undici": "8.12.3",
     "yaml": "2.8.3"
   },
   "peerDependencies": {
@@ -61,72 +61,72 @@
   "exports": {
     ".": {
       "types": "./index.d.ts",
-      "default": "./index.js"
+      "default": "./bundle/index.js"
     },
     "./background-work": {
       "types": "./src/api/background-work.d.ts",
-      "default": "./src/api/background-work.js"
+      "default": "./bundle/background-work.js"
     },
     "./external-job-provider": {
       "types": "./src/api/external-job-provider.d.ts",
-      "default": "./src/api/external-job-provider.js"
+      "default": "./bundle/external-job-provider.js"
     },
     "./external-runs": {
       "types": "./src/api/external-runs.d.ts",
-      "default": "./src/api/external-runs.js"
+      "default": "./bundle/external-runs.js"
     },
     "./agents": {
       "types": "./src/api/agents.d.ts",
-      "default": "./src/api/agents.js"
+      "default": "./bundle/agents.js"
     },
     "./inspectors": {
       "types": "./src/api/inspectors.d.ts",
-      "default": "./src/api/inspectors.js"
+      "default": "./bundle/inspectors.js"
     },
     "./delegation": {
       "types": "./src/api/delegation.d.ts",
-      "default": "./src/api/delegation.js"
+      "default": "./bundle/delegation.js"
     },
     "./capability-ceiling": {
       "types": "./src/api/capability-ceiling.d.ts",
-      "default": "./src/api/capability-ceiling.js"
+      "default": "./bundle/capability-ceiling.js"
     },
     "./workflow-resources": {
       "types": "./src/api/workflow-resources.d.ts",
-      "default": "./src/api/workflow-resources.js"
+      "default": "./bundle/workflow-resources.js"
     },
     "./required-child-extensions": {
       "types": "./src/api/required-child-extensions.d.ts",
-      "default": "./src/api/required-child-extensions.js"
+      "default": "./bundle/required-child-extensions.js"
     },
     "./preflight": {
       "types": "./src/api/preflight.d.ts",
-      "default": "./src/api/preflight.js"
+      "default": "./bundle/preflight.js"
     },
     "./control-channel": {
       "types": "./src/api/control-channel.d.ts",
-      "default": "./src/api/control-channel.js"
+      "default": "./bundle/control-channel.js"
     },
     "./intercom-bridge": {
       "types": "./src/api/intercom-bridge.d.ts",
-      "default": "./src/api/intercom-bridge.js"
+      "default": "./bundle/intercom-bridge.js"
     },
     "./child-tool-plan": {
       "types": "./src/api/child-tool-plan.d.ts",
-      "default": "./src/api/child-tool-plan.js"
+      "default": "./bundle/child-tool-plan.js"
     },
     "./shared-types": {
       "types": "./src/api/shared-types.d.ts",
-      "default": "./src/api/shared-types.js"
+      "default": "./bundle/shared-types.js"
     },
     "./project-panes": {
       "types": "./src/api/project-panes.d.ts",
-      "default": "./src/api/project-panes.js"
+      "default": "./bundle/project-panes.js"
     }
   },
   "pi": {
     "extensions": [
-      "./index.js"
+      "./bundle/index.js"
     ],
     "skills": [
       "./skills"

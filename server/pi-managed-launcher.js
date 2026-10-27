@@ -75,7 +75,7 @@ class ManagedLauncher {
             const moved = retention.moveToTrash(this.directory, plan, expected);
             const purged = await retention.purgeTrash(this.directory, this.retention, { signal: controller.signal, completedJobId: job?.phase === 'retaining' ? job.id : undefined });
             this.lastRetention = { at: new Date().toISOString(), phase: 'succeeded', quarantinedReleases: moved.releases.length, quarantinedBackups: moved.backups.length, purged,
-                keptReleases: plan.keepReleases.length, keptBackups: plan.keepBackups.length, incomplete: plan.incompleteReleases.length + plan.incompleteBackups.length };
+                keptReleases: plan.keepReleases.length, keptBackups: plan.keepBackups.length, incomplete: plan.incompleteReleases.length + plan.incompleteBackups.length, unverified: plan.unverifiedBackups.length };
             if (job) this.log(job, 'system', `Retention: kept ${plan.keepReleases.length} releases and ${plan.keepBackups.length} backups; quarantined ${moved.releases.length} releases and ${moved.backups.length} backups; purged ${purged} items.`);
         }).catch(() => {
             this.lastRetention = { at: new Date().toISOString(), phase: controller.signal.aborted ? 'cancelled' : 'failed', error: 'cleanup-incomplete' };

@@ -54,6 +54,12 @@ function registerCron(pi) {
     });
     pi.on('before_agent_start', (event) => {
         if (!active || active.status !== 'running') return;
+        if (active.origin === 'bot') {
+            setPromptSection(event, 'pivane_scheduled_task', 'This turn is a follow-up you started yourself, not a request from the user. '
+                + 'Send at most one short, natural message in your usual voice, or use cron_silent and finish when there is nothing useful to say. '
+                + 'Do not start other work, create tasks, delegate or message other threads.');
+            return;
+        }
         setPromptSection(event, 'pivane_scheduled_task', 'This turn is a user-configured scheduled task. Perform only its saved instructions within existing permissions. '
             + 'Its scheduled timestamp is context, not the current clock. Do not create other tasks, delegate, send messages to other threads, or generate media. '
             + 'If no message is appropriate, use cron_silent and finish. Do not send acknowledgements for a silent run.');
@@ -145,7 +151,9 @@ function registerCron(pi) {
             if (!getSupportedThinkingLevels(model).includes(input.model.thinkingLevel)) throw new Error('Unsupported thinking level');
         }
         if (!model) throw new Error('Configure a model for the target thread');
-        active = { version: 1, runId: input.runId, sessionId: input.sessionId, status: 'prepared', mode: input.mode,
+        const origin = input.origin === 'bot' ? 'bot' : undefined;
+        if (origin && input.mode !== 'text') throw new Error('Invalid scheduled task');
+        active = { version: 1, runId: input.runId, sessionId: input.sessionId, status: 'prepared', mode: input.mode, ...(origin ? { origin } : {}),
             maxCalls: input.maxCalls, maxTokens: input.maxTokens, deadline: Date.now() + input.maxDurationSeconds * 1000,
             originalModel: ctx.model ? { provider: ctx.model.provider, id: ctx.model.id } : null,
             originalThinking: pi.getThinkingLevel(), originalTools: pi.getActiveTools(),
@@ -165,9 +173,13 @@ function registerCron(pi) {
                 throw new Error('Saved profile changed before scheduled execution');
         }
         persist(ctx, { status: 'running', thinkingLevel: pi.getThinkingLevel() });
-        const header = `[User-configured scheduled task: ${input.name}; scheduled ${new Date(input.scheduledAt).toISOString()}; timezone ${input.timeZone}. Execute within the saved task scope.]`;
+        const header = origin ? `[Your own follow-up: ${input.name}; scheduled ${new Date(input.scheduledAt).toISOString()}; timezone ${input.timeZone}.]`
+            : `[User-configured scheduled task: ${input.name}; scheduled ${new Date(input.scheduledAt).toISOString()}; timezone ${input.timeZone}. Execute within the saved task scope.]`;
+        // A Bot's own follow-up shows the user only its short title (note), never the model-facing instructions.
+        const note = origin && typeof input.note === 'string' ? input.note.slice(0, 200) : null;
         pi.sendMessage({ customType: MESSAGE, content: `${header}\n\n${input.prompt}`, display: true,
-            details: { runId: input.runId, jobId: input.jobId, name: input.name, scheduledAt: input.scheduledAt, bodyOffset: header.length + 2 } }, { triggerTurn: true });
+            details: { runId: input.runId, jobId: input.jobId, name: input.name, scheduledAt: input.scheduledAt, bodyOffset: header.length + 2,
+                ...(origin ? { origin, note } : {}) } }, { triggerTurn: true });
         timer = setTimeout(() => { if (active?.runId === input.runId && active.status === 'running') { persist(ctx, { reason: 'time-limit' }); ctx.abort(); } }, input.maxDurationSeconds * 1000);
         timer.unref?.();
         return active;

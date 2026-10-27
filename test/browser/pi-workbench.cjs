@@ -27,7 +27,7 @@ async function run(browser, base, viewport, preferences = {}, { touch = viewport
     await page.route('**/api/**', route => {
         const request = route.request(), url = new URL(request.url());
         if (request.method() !== 'GET') writes.push(url.pathname);
-        const data = url.pathname === '/api/pi/status' ? { projectRoots: ['/synthetic'], sessionSearch: true }
+        const data = url.pathname === '/api/pi/status' ? { bots: true, projectRoots: ['/synthetic'], sessionSearch: true }
             : url.pathname === '/api/pi/projects' ? { projects: [{ cwd, name: 'Workbench', sessionCount: 1 }], roots: ['/synthetic'] }
                 : url.pathname === '/api/pi/sessions' ? { sessions: [session] }
                     : url.pathname === '/api/pi/activity' ? { runtimes: [], pinnedProjects: [], hiddenProjects: [], replyNotices: [] }
@@ -233,15 +233,6 @@ async function run(browser, base, viewport, preferences = {}, { touch = viewport
     await page.waitForFunction(() => document.querySelector('#pi-composer-chips > #pi-task-progress:not([hidden])') && !document.querySelector('#pi-task-progress').open);
     assert.equal(await page.locator('#pi-input').inputValue(), 'Keep the draft');
     assert.equal(await page.locator('#pi-attachments .pi-attachment-chip').count(), 1);
-    // Assistant previews cap long lists but preserve the active thread and never mutate input arrays.
-    const groups = await page.evaluate(() => {
-        const rows = Array.from({ length: 9 }, (_, index) => ({ id: `s${index}` }));
-        const input = JSON.stringify(rows), map = new Map([['group', rows]]), group = [{ id: 'group', cwd: '/synthetic', name: '<unsafe>' }];
-        const render = options => { const root = document.createElement('div'); root.innerHTML = window.PiAssistantProjects.renderGroups(group, map, 'group', row => `<span data-test-row="${row.id}"></span>`, options); return { rows: [...root.querySelectorAll('[data-test-row]')].map(node => node.dataset.testRow), unsafe: root.querySelectorAll('unsafe').length }; };
-        return { preview: render({ cwd: '/synthetic', sessionId: 's8' }), search: render({ query: 'x' }), unchanged: input === JSON.stringify(rows) };
-    });
-    assert.deepEqual(groups.preview.rows, ['s0', 's1', 's2', 's3', 's4', 's5', 's8']);
-    assert.equal(groups.search.rows.length, 9); assert.equal(groups.preview.unsafe, 0); assert.equal(groups.unchanged, true);
     // Running input with a draft keeps Send; queue mode lives in the plus menu.
     streaming = true; emit({ type: 'agent_start' });
     await page.waitForFunction(() => document.querySelector('.pi-composer').dataset.running === 'true');
@@ -282,7 +273,7 @@ async function run(browser, base, viewport, preferences = {}, { touch = viewport
         assert.ok(await page.locator('#pi-input').evaluate(node => node.scrollHeight > node.clientHeight && node.getBoundingClientRect().height <= 180), 'long drafts scroll inside the full-width input');
         await page.locator('#pi-input').fill('Keep the draft');
         // All bottom navigation entries activate directly from an open project drawer.
-        for (const selector of ['#workspace-theme-toggle', '#workspace-more-toggle', '#workspace-settings-toggle', '#workspace-assistant-toggle', '.nav-btn[data-tab="chat"]']) {
+        for (const selector of ['#workspace-theme-toggle', '#workspace-more-toggle', '#workspace-settings-toggle', '.nav-btn[data-tab="chat"]']) {
             await page.locator('#pi-toggle-sessions').click();
             await page.waitForFunction(() => document.querySelector('#pi-session-pane').classList.contains('open') && !document.querySelector('#workspace-sidebar').inert);
             if (selector === '.nav-btn[data-tab="chat"]') { await page.locator(selector).focus(); await page.keyboard.press('Enter'); }
@@ -296,12 +287,6 @@ async function run(browser, base, viewport, preferences = {}, { touch = viewport
             } else if (selector === '#workspace-settings-toggle') {
                 assert.match(page.url(), /#\/settings/);
                 await page.locator('#workspace-settings-close').click();
-            } else if (selector === '#workspace-assistant-toggle') {
-                assert.match(page.url(), /#\/assistant/);
-                await page.locator('.nav-btn[data-tab="chat"]').click();
-                await page.locator('#pi-toggle-sessions').click();
-                await page.locator('[data-session-id="empty"] .pi-session-main').click();
-                await page.waitForFunction(() => !document.querySelector('#pi-input').disabled);
             }
             assert.equal(await page.locator('#pi-input').inputValue(), 'Keep the draft');
             assert.equal(await page.locator('#pi-attachments .pi-attachment-chip').count(), 1);

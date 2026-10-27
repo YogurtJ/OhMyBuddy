@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { snapshotWidget, normalizeSnapshot, backgroundWork, validateControl, controlResult } = require('../server/pi-subagent-runtime');
+const { snapshotWidget, normalizeSnapshot, snapshotKey, privateWidget, backgroundWork, validateControl, controlResult } = require('../server/pi-subagent-runtime');
 const { PiRuntimeControls } = require('../server/pi-runtime-controls');
 const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-subagent-runtime-')));
 process.env.PI_CODING_AGENT_DIR = path.join(root, 'agent');
@@ -54,6 +54,51 @@ test('status snapshots are parsed from the raw line, bounded and never shown as 
     assert.equal(controls.setBackgroundWork({ supported: true, active: true, sources: ['pi-subagents'] }), false, 'unchanged state is not rebroadcast');
 });
 
+test('step identity, activity and host monitor facts survive; only a content change is rebroadcast', () => {
+    const rich = snapshot([{ id: 'wf', kind: 'workflow', label: 'worker, worker', state: 'running', startedAt: 1700000000000,
+        children: [
+            { id: 'lane-a', kind: 'step', label: 'Validate Linux', state: 'running', agent: 'worker', model: 'bit-gpt/gpt-6.1-sol', thinking: 'xhigh',
+                activity: { state: 'needs_attention', currentTool: 'bash', currentToolStartedAt: 1700000000500, lastActivityAt: 1700000000400 } },
+            { id: 'lane-b', kind: 'step', label: 'Validate macOS', state: 'complete', agent: 'worker', thinking: 'ultra', activity: { state: 'made-up' } },
+            { id: 'gate', kind: 'host-step', label: 'CI', state: 'failed', hostStep: { kind: 'ci', state: 'done', verdict: 'fail', detail: 'lint failed', stale: true,
+                report: 'report.md', target: 'main', provider: 'gh', reasonCode: 'x' } }
+        ] }]);
+    const [linux, mac, gate] = normalizeSnapshot(rich).runs[0].children;
+    assert.deepEqual([linux.agent, linux.model, linux.thinking], ['worker', 'bit-gpt/gpt-6.1-sol', 'xhigh']);
+    assert.deepEqual(linux.activity, { state: 'needs_attention', currentTool: 'bash', currentToolStartedAt: 1700000000500, lastActivityAt: 1700000000400 });
+    assert.equal(mac.thinking, undefined, 'unknown thinking levels are dropped');
+    assert.equal(mac.activity, undefined, 'unknown activity states are dropped');
+    assert.deepEqual(gate.hostStep, { kind: 'ci', state: 'done', verdict: 'fail', detail: 'lint failed', stale: true }, 'report paths and other host fields stay private');
+
+    const controls = new PiRuntimeControls();
+    assert.equal(controls.handle(widget(rich)), true);
+    const revision = controls.revision;
+    assert.equal(controls.handle(widget({ ...rich, generatedAt: rich.generatedAt + 1000 })), false, 'a heartbeat with a new generatedAt only is not a change');
+    assert.equal(controls.revision, revision);
+    const changed = structuredClone(rich); changed.runs[0].children[0].activity.currentTool = 'read';
+    assert.equal(controls.handle(widget(changed)), true);
+    assert.equal(snapshotKey(null), 'null');
+    assert.equal(controls.handle({ type: 'extension_ui_request', method: 'setWidget', widgetKey: 'subagent-async', widgetLines: null }), true);
+    assert.equal(controls.handle({ type: 'extension_ui_request', method: 'setWidget', widgetKey: 'subagent-async', widgetLines: null }), false, 'repeated clears are not rebroadcast');
+
+    assert.equal(privateWidget(widget(rich)), true);
+    assert.equal(privateWidget({ type: 'extension_ui_request', method: 'setWidget', widgetKey: 'subagent-async', widgetLines: null }), true);
+    assert.equal(privateWidget({ type: 'extension_ui_request', method: 'setWidget', widgetKey: 'subagent-inspect', widgetLines: ['PI_SUBAGENT_INSPECT_JSON:{}'] }), true);
+    assert.equal(privateWidget({ type: 'extension_ui_request', method: 'setWidget', widgetKey: 'subagent-async', widgetLines: ['A TUI line'] }), false, 'older text widgets still reach the generic widget view');
+    assert.equal(privateWidget({ type: 'extension_ui_request', method: 'setWidget', widgetKey: 'other', widgetLines: ['x'] }), false);
+    assert.equal(privateWidget({ type: 'extension_ui_request', method: 'notify', widgetKey: 'subagent-async' }), false);
+});
+
+test('steer and resume results carry the plugin receipt, not an assumed delivery', () => {
+    assert.deepEqual(controlResult('steer', { text: 'Steering queued', delivery: 'queued', state: 'pending' }), { text: 'Steering queued', state: 'pending', delivery: 'queued' });
+    assert.equal(controlResult('steer', { text: 'ok', delivery: 'teleported' }).delivery, undefined);
+    assert.equal(controlResult('steer', { text: 'ok' }).delivery, undefined, 'missing receipts stay unknown');
+    assert.equal(controlResult('resume', { text: 'Resumed', runId: 'run-2' }).runId, 'run-2');
+    assert.equal(controlResult('resume', { text: 'Resumed', runId: '../x' }).runId, undefined);
+    assert.equal(controlResult('stop', { text: 'x', runId: 'run-2', delivery: 'delivered' }).runId, undefined);
+    assert.equal(controlResult('stop', { text: 'x', delivery: 'delivered' }).delivery, undefined);
+});
+
 test('control requests are allow-listed and results keep private fields out', () => {
     assert.throws(() => validateControl({ method: 'spawn', params: {} }), /不支持/);
     assert.throws(() => validateControl({ method: 'manage', params: {} }), /不支持/);
@@ -96,6 +141,8 @@ test('managed worker hosts the liveness registry, retains background work and re
             const reply = data => pi.events.emit('subagents:rpc:v1:reply:' + request.requestId, { version: 1, requestId: request.requestId, method: request.method, success: true, data });
             if (request.method === 'ping') return reply({ version: 1, capabilities: { cost: { version: 1 } } });
             if (request.method === 'status') return reply({ text: 'log line', details: { asyncDir: '/private/async' }, asyncSnapshot: ${JSON.stringify(snapshot())} });
+            if (request.method === 'steer') return reply({ text: 'Steering queued', details: { mode: 'management', results: [], steering: { requestId: 'r', state: 'pending', deliveryStatus: 'queued', sourceRunId: 'run-1', targets: [] } } });
+            if (request.method === 'resume') return reply({ text: 'Resumed', details: { mode: 'single', results: [], asyncId: 'run-2', asyncDir: '/private/async/run-2' } });
             if (request.method === 'cost') return reply({ version: 1, parent: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0, turns: 1 }, children: [], childTotal: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0, turns: 0 }, total: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0, turns: 1 }, unresolvedAsyncChildren: 0 });
             pi.events.emit('subagents:rpc:v1:reply:' + request.requestId, { version: 1, requestId: request.requestId, success: false, error: { code: 'invalid_state', message: 'Async run run-1 is complete; stop only supports running async runs.' } });
         });
@@ -132,11 +179,17 @@ test('managed worker hosts the liveness registry, retains background work and re
         assert.equal(JSON.stringify(status).includes('/private/async'), false);
         const cost = await worker.subagentRequest({ method: 'cost' });
         assert.deepEqual(cost.cost.total, { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, turns: 1, cost: 0 });
+        const steer = await worker.subagentRequest({ method: 'steer', params: { id: 'run-1', message: 'focus', mode: 'steer' } });
+        assert.deepEqual([steer.delivery, steer.state], ['queued', 'pending']);
+        const resume = await worker.subagentRequest({ method: 'resume', params: { id: 'run-1', message: 'go on' } });
+        assert.equal(resume.runId, 'run-2');
+        assert.equal(JSON.stringify(resume).includes('/private'), false);
         await assert.rejects(worker.subagentRequest({ method: 'stop', params: { id: 'run-1' } }), /stop only supports running/);
         await assert.rejects(worker.subagentRequest({ method: 'spawn', params: { agent: 'worker' } }), /不支持/);
         const relayed = fs.readFileSync(requests, 'utf8').trim().split('\n').map(line => JSON.parse(line));
         assert.deepEqual(relayed.filter(item => item.method !== 'ping').map(item => [item.method, item.params]),
-            [['status', {}], ['cost', undefined], ['stop', { id: 'run-1' }]]);
+            [['status', {}], ['cost', undefined], ['steer', { id: 'run-1', message: 'focus', mode: 'steer' }], ['resume', { id: 'run-1', message: 'go on' }], ['stop', { id: 'run-1' }]]);
+        assert.equal(events.some(event => event.type === 'extension_ui_request' && event.widgetKey === 'subagent-async'), false, 'raw snapshot lines are not relayed to browsers');
         assert.equal(worker.subagentResults.size, 0);
 
         fs.rmSync(flag);

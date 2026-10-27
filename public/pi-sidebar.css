@@ -516,17 +516,19 @@
     .workspace-nav-heading,
     .sidebar .status-panel { display: none; }
 
-    /* Five equal columns: three routes and two utilities. */
+    /* Equal columns: two or three routes (depending on Bot availability) and two utilities. */
     .nav-menu {
         min-width: 0;
         height: auto;
-        flex: 3 1 0;
+        flex: 2 1 0;
         flex-direction: row;
         align-items: stretch;
         gap: 2px;
         padding: 4px 3px;
         overflow: visible;
     }
+
+    body.pv-bots-on .nav-menu { flex: 3 1 0; }
 
     .sidebar-footer {
         min-width: 0;

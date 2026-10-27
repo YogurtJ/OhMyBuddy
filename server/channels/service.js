@@ -8,16 +8,21 @@ const { outcome } = require('./runtime');
 const { bindingBoundary, threadOutcome } = require('./thread-results');
 const { DeliverableStore } = require('../pi-deliverables');
 const { customTypeIs } = require('../pivane-compat');
+const botChannel = require('./bot-channel');
+const { readWindowBinding } = require('../bot/bot-window-state');
+const { ChannelApprovals, parseApproval } = require('./bot-approvals');
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const same = (a, b) => a?.cwd === b?.cwd && a?.sessionId === b?.sessionId;
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
-const SLASH_COMMANDS = new Set(['/help', '/status', '/stop', '/new', '/reset', '/resume', '/name', '/model', '/thinking', '/compact', '/reload', '/confirm']);
+const SLASH_COMMANDS = new Set(['/help', '/status', '/stop', '/new', '/reset', '/resume', '/name', '/model', '/thinking', '/compact', '/reload', '/confirm', '/bot', '/topic']);
+// Chinese names for the Bot commands (M4-4).
+const SLASH_ALIASES = new Map([['/切换', '/bot'], ['/话题', '/topic']]);
 function parseSlash(text) {
     const trimmed = String(text || '').trim();
     if (!trimmed.startsWith('/')) return null;
-    const match = /^(\/[a-zA-Z0-9_-]+)(?:\s+([\s\S]*))?$/.exec(trimmed);
+    const match = /^(\/[\p{L}\p{N}_-]+)(?:\s+([\s\S]*))?$/u.exec(trimmed);
     if (!match) return null;
-    const cmd = match[1].toLowerCase();
+    const cmd = SLASH_ALIASES.get(match[1]) || match[1].toLowerCase();
     return SLASH_COMMANDS.has(cmd) ? { command: cmd, args: (match[2] || '').trim() } : null;
 }
 class ChannelsService {
@@ -52,7 +57,10 @@ class ChannelsService {
     }
     track(promise) { this.operations.add(promise); promise.finally(() => this.operations.delete(promise)).catch(() => {}); return promise; }
     start() {
-        if (!this.timer) { this.timer = setInterval(() => { void this.pump(); }, 1000); this.timer.unref?.(); }
+        if (!this.timer) {
+            this.timer = setInterval(() => { void this.pump(); }, 1000); this.timer.unref?.();
+            void this.track(botChannel.reconcile(this)).catch(() => {});
+        }
         for (const account of this.db.value.accounts) if (account.enabled && !this.pollers.has(account.id)) this.startPoll(account.id);
     }
     async snapshot() {
@@ -80,7 +88,7 @@ class ChannelsService {
         await this.ready; this.healthy();
         if (this.mutating) throw fail('渠道配置正在处理，请刷新核对', 409);
         if (!input || input.confirmed !== true || typeof input.action !== 'string' || input.expectedRevision !== this.db.value.revision) throw fail('配置已变化或操作未确认，请刷新核对', 409);
-        const fields = ['action', 'confirmed', 'expectedRevision', 'accountId', 'enabled', 'allowedUsers', 'peerId', 'cwd', 'sessionId', 'newSession', 'replyMode', 'jobId', 'loginId', 'code'];
+        const fields = ['action', 'confirmed', 'expectedRevision', 'accountId', 'enabled', 'allowedUsers', 'peerId', 'cwd', 'sessionId', 'newSession', 'replyMode', 'jobId', 'loginId', 'code', 'botProfileId'];
         if (Object.keys(input).some(key => !fields.includes(key))) throw fail('未知渠道参数');
         this.mutating = true;
         try {
@@ -120,6 +128,7 @@ class ChannelsService {
                 if (!['all', 'wechat'].includes(input.replyMode ?? 'all')) throw fail('无效的微信接收方式');
                 if (this.db.value.bindings.length >= 200) throw fail('绑定数量超过限制');
                 this.assertPeerIdle(account.id, input.peerId);
+                if (input.botProfileId !== undefined) { await botChannel.bindBot(this, account, input); return { ...await this.snapshot(), busy: false }; }
                 const cwd = this.store.resolveProject(input.cwd);
                 let session;
                 if (input.newSession === true) session = await this.store.createSession(cwd, '微信对话');
@@ -132,6 +141,8 @@ class ChannelsService {
                             name: target.name || '微信对话', replyMode: input.replyMode ?? 'all', ...boundary });
                     }, { config: true, revision: input.expectedRevision });
                 });
+            } else if (action === 'unbind-bot') {
+                await botChannel.unbindBot(this, input);
             } else if (action === 'unbind') {
                 this.assertPeerIdle(input.accountId, input.peerId);
                 this.db.change(v => { v.bindings = v.bindings.filter(b => !(b.accountId === input.accountId && b.peerId === input.peerId)); }, { config: true });
@@ -153,12 +164,20 @@ class ChannelsService {
             return { ...await this.snapshot(), busy: false };
         } finally { this.mutating = false; }
     }
-    async withBindingTarget(cwd, sessionId, commit) {
+    async withBindingTarget(cwd, sessionId, commit, { bot } = {}) {
         return this.store.withSessionRead(cwd, sessionId, (session, read) => {
             if (read.manager().getEntries().some(e => e.type === 'custom'
                 && (customTypeIs(e, 'pivane-extension-assistant') || customTypeIs(e, 'pivane-profile-authoring')))) {
                 throw fail('管理助手线程不能绑定外部聊天');
             }
+            // A thread binding names one session file; a Bot chat moves to new files over time, so it
+            // is only reachable through a Bot binding that names its window (bot-channel.js).
+            const marked = read.manager().getEntries().some(e => e.type === 'custom' && e.customType === 'pivane-bot-window');
+            if (marked && !bot) throw fail('Bot 聊天请在 Bot 设置或渠道设置里按 Bot 连接微信');
+            // The same native ownership proof the Bot service uses (one marker, bound to this session and its profile).
+            const owner = bot ? readWindowBinding(read.manager()) : null;
+            if (bot && (owner?.profileId !== bot.profileId || owner.windowId !== bot.windowId || owner.sessionId !== session.id))
+                throw fail('Bot 聊天与微信绑定不一致，请刷新核对', 409);
             read.validate();
             // The caller's synchronous commit shares this validated file snapshot.
             return commit(session, bindingBoundary(read.manager()));
@@ -253,12 +272,17 @@ class ChannelsService {
                 const binding = v.bindings.find(b => b.accountId === accountId && b.peerId === msg.peerId);
                 const activeCount = v.jobs.filter(j => ['queued', 'dispatching', 'running'].includes(j.status) && j.accountId === accountId && j.peerId === msg.peerId).length;
                 const slash = !msg.images?.length ? parseSlash(msg.text) : null;
-                const isControl = Boolean(slash && ['/stop', '/status', '/help'].includes(slash.command));
+                // Answers to a waiting Bot approval go ahead of the turn that waits for them.
+                const isApproval = Boolean(!msg.images?.length && parseApproval(msg.text));
+                const isControl = Boolean(slash && ['/stop', '/status', '/help'].includes(slash.command)) || isApproval;
+                const approvalsWaiting = isApproval ? v.jobs.filter(j => pending(j) && j.accountId === accountId && j.peerId === msg.peerId
+                    && (j.kind === 'approval' || j.status === 'queued' && parseApproval(j.text))).length : 0;
                 const isStop = slash?.command === '/stop';
                 const stopQueued = isStop && v.jobs.some(j => pending(j) && j.accountId === accountId && j.peerId === msg.peerId && parseSlash(j.text)?.command === '/stop');
                 const hasContent = Boolean(msg.text.trim() || msg.images?.length);
                 const reason = !binding ? 'unbound' : msg.unsupported ? 'unsupported-message' : !hasContent ? 'empty-message'
-                    : !peer.contextToken && !isStop ? 'reply-context-missing' : stopQueued ? 'stop-already-queued' : activeCount >= 20 && !isControl ? 'queue-full' : null;
+                    : !peer.contextToken && !isStop ? 'reply-context-missing' : stopQueued ? 'stop-already-queued'
+                    : activeCount >= 20 && !isControl || approvalsWaiting >= 3 ? 'queue-full' : null;
                 v.jobs.push({ id, accountId, peerId: msg.peerId, target: binding ? { cwd: binding.cwd, sessionId: binding.sessionId } : null,
                     bindingId: binding?.id, status: reason ? 'ignored' : 'queued', reason, at: Date.now(),
                     ...(reason ? {} : { text: msg.text, ...(msg.images?.length ? { images: msg.images } : {}) }) });
@@ -283,6 +307,7 @@ class ChannelsService {
                 const peer = v.peers.find(p => p.accountId === b.accountId && p.peerId === b.peerId);
                 v.jobs.push({ id, kind: 'thread', turnId: event.id, accountId: b.accountId, peerId: b.peerId,
                     target: { cwd: b.cwd, sessionId: b.sessionId }, bindingId: b.id, at: event.completedAt,
+                    ...(b.bot ? { bot: { profileId: b.bot.profileId, windowId: b.bot.windowId } } : {}),
                     status: 'ready', reason: peer?.contextToken ? null : 'reply-context-missing' });
             }
             this.trimJobs(v);
@@ -290,15 +315,17 @@ class ChannelsService {
     }
     captureScheduledRecipients(event) {
         if (!this.db || this.error) throw fail('渠道状态尚不可读取');
-        return this.db.value.bindings.filter(b => same(b, event.target)
-            && (event.notificationMode !== 'inherit' || b.replyMode !== 'wechat')
+        const accepts = b => event.notificationMode !== 'inherit' || b.replyMode !== 'wechat';
+        // A Bot window's results reach every chat connected to the Bot (bot-channel.js).
+        if (event.target?.bot) return botChannel.pushRecipients(this, event, accepts);
+        return this.db.value.bindings.filter(b => same(b, event.target) && accepts(b)
             && this.db.value.accounts.some(a => a.id === b.accountId && a.enabled && a.allowedUsers.includes(b.peerId)))
             .map(b => ({ bindingId: b.id, accountId: b.accountId, peerId: b.peerId, cwd: b.cwd, sessionId: b.sessionId }));
     }
     scheduledRecipient(ref, event) {
         if (!ref || !same(ref, event.target)) return null;
         const binding = this.db.value.bindings.find(b => b.id === ref.bindingId && b.accountId === ref.accountId
-            && b.peerId === ref.peerId && same(b, ref));
+            && b.peerId === ref.peerId && (ref.bot ? b.bots?.includes(ref.bot.profileId) && ref.bot.profileId === event.target.bot?.profileId : same(b, ref)));
         const account = this.db.value.accounts.find(a => a.id === ref.accountId);
         return binding && (event.notificationMode !== 'inherit' || binding.replyMode !== 'wechat')
             && account?.enabled && account.allowedUsers.includes(ref.peerId) ? binding : null;
@@ -307,7 +334,8 @@ class ChannelsService {
         await this.ready;
         if (this.stopping || this.isSuspended() || this.error) return { status: 'retry', reason: 'channel-unavailable' };
         if (!event?.target || !Array.isArray(event.recipients)) return { status: 'skipped', reason: 'recipient-proof-missing' };
-        if (this.canNotifyScheduled && !this.canNotifyScheduled(event.jobId)) return { status: 'skipped', reason: 'configuration-revoked' };
+        // A Bot-started message has no saved task; bot-proactive.js already cleared it for pushing.
+        if (!event.proactive && this.canNotifyScheduled && !this.canNotifyScheduled(event.jobId)) return { status: 'skipped', reason: 'configuration-revoked' };
         const bindings = event.recipients.map(ref => this.scheduledRecipient(ref, event)).filter(Boolean);
         if (!bindings.length) return { status: 'skipped', reason: 'recipients-revoked' };
         if (!this.db.owner) return { status: 'retry', reason: 'channel-unavailable' };
@@ -317,18 +345,24 @@ class ChannelsService {
         try {
             result = await this.store.withSessionRead(event.target.cwd, event.target.sessionId, (_s, read) => {
                 const value = require('./turn-results').scheduledOutcome(read.manager(), event);
+                // A Bot window's own marker names the window the push came from.
+                if (value && event.target.bot) value.window = readWindowBinding(read.manager());
                 read.validate(); return value;
             });
         } catch { return { status: 'retry', reason: 'native-result-unavailable' }; }
         if (!result) return { status: 'retry', reason: 'native-result-unproven' };
+        if (event.target.bot && (result.window?.profileId !== event.target.bot.profileId || result.window.sessionId !== event.target.sessionId))
+            return { status: 'skipped', reason: 'bot-window-unproven' };
         if (this.stopping || this.isSuspended()) return { status: 'retry', reason: 'channel-unavailable' };
         const header = '⏰ 定时任务「' + event.name + '」';
-        const body = event.status === 'stopped' ? header + '已停止。'
+        // A message a Bot started itself reads like any message from it; failures are not pushed.
+        if (event.proactive && (event.status !== 'completed' || !result.body)) return { status: 'skipped', reason: 'nothing-to-push' };
+        const body = event.proactive ? result.body : event.status === 'stopped' ? header + '已停止。'
             : event.status === 'error' ? header + '执行失败，请在 Pivane 网页查看。'
             : header + '\n\n' + (result.body || '已完成，请在 Pivane 网页查看结果。');
         let accepted = false;
         this.db.change(v => {
-            if (this.canNotifyScheduled && !this.canNotifyScheduled(event.jobId)) return;
+            if (!event.proactive && this.canNotifyScheduled && !this.canNotifyScheduled(event.jobId)) return;
             for (const ref of event.recipients) {
                 const binding = this.scheduledRecipient(ref, event);
                 if (!binding) continue;
@@ -336,9 +370,11 @@ class ChannelsService {
                 if (v.jobs.some(j => j.id === id)) continue;
                 const peer = v.peers.find(p => p.accountId === binding.accountId && p.peerId === binding.peerId);
                 const reason = !peer?.contextToken ? 'reply-context-missing' : null;
-                v.jobs.push({ id, kind: 'cron', followsThread: event.notificationMode === 'inherit', cronRunId: event.runId, cronJobId: event.jobId,
+                v.jobs.push({ id, kind: event.proactive ? 'bot-push' : 'cron', followsThread: event.notificationMode === 'inherit', cronRunId: event.runId, cronJobId: event.jobId,
                     accountId: binding.accountId, peerId: binding.peerId,
-                    target: { cwd: binding.cwd, sessionId: binding.sessionId }, bindingId: binding.id,
+                    // A Bot push keeps the generation it came from as its target (bot-channel.js).
+                    ...(ref.bot ? { target: { cwd: event.target.cwd, sessionId: event.target.sessionId }, bot: { profileId: ref.bot.profileId, windowId: result.window.windowId } }
+                        : { target: { cwd: binding.cwd, sessionId: binding.sessionId } }), bindingId: binding.id,
                     status: 'ready', reason, at: Date.now(),
                     directReply: body.slice(0, 60000), deliverables: result.deliverables, mediaPlans: result.mediaPlans });
             }
@@ -350,7 +386,7 @@ class ChannelsService {
     trimJobs(value) {
         while (value.jobs.length > 4500) {
             const index = value.jobs.findIndex(j => !pending(j)
-                && !(j.kind === 'cron' && this.scheduledAdmissionPending?.(j.cronRunId)));
+                && !(['cron', 'bot-push'].includes(j.kind) && this.scheduledAdmissionPending?.(j.cronRunId)));
             if (index < 0) throw fail('渠道消息记录已满');
             value.jobs.splice(index, 1);
         }
@@ -361,8 +397,10 @@ class ChannelsService {
         if (this.stopping || this.isSuspended() || this.mutating || this.error || !this.db?.owner) return;
         for (const job of this.db.value.jobs) {
             const slash = job.status === 'queued' && !job.images?.length ? parseSlash(job.text) : null;
-            const control = Boolean(slash && ['/stop', '/status', '/help'].includes(slash.command));
-            if (this.runs.size >= (control ? 4 : 3)) continue;
+            const answer = Boolean(job.status === 'queued' && !job.images?.length && parseApproval(job.text));
+            const control = Boolean(slash && ['/stop', '/status', '/help'].includes(slash.command)) || answer;
+            // An approval answer is applied at once (bot-approvals.js): it always has room, as the turn waits for it.
+            if (this.runs.size >= (answer ? 8 : control ? 4 : 3)) continue;
             const recover = job.status === 'uncertain' && !job.sendStarted && job.kind !== 'slash' && (job.recoveryAttempts || 0) < 5;
             if ((!['queued', 'ready'].includes(job.status) && !recover) || this.runs.has(job.id) || job.nextAttemptAt > Date.now()) continue;
             const account = this.db.value.accounts.find(a => a.id === job.accountId);
@@ -408,7 +446,12 @@ class ChannelsService {
         }
     }
     bindingFor(job) {
-        const binding = this.db.value.bindings.find(b => b.id === job.bindingId && b.accountId === job.accountId && b.peerId === job.peerId && same(b, job.target));
+        // A Bot's reply or push stays deliverable after the chat switched to another of its connected
+        // Bot windows, or the window moved to a new generation (job.bot names where it came from).
+        // Never for admitting a message or command: those run only where the chat currently is.
+        const produced = !['queued', 'dispatching'].includes(job.status);
+        const binding = this.db.value.bindings.find(b => b.id === job.bindingId && b.accountId === job.accountId && b.peerId === job.peerId
+            && (same(b, job.target) || Boolean(produced && job.bot && b.bot && b.bots?.includes(job.bot.profileId))));
         return binding && (!(job.kind === 'thread' || job.followsThread) || binding.replyMode !== 'wechat') ? binding : null;
     }
     canAdmit(job) {
@@ -424,6 +467,23 @@ class ChannelsService {
     }
     async run(id, run) {
         let job = this.job(id);
+        const approvals = this.approvals ||= new ChannelApprovals();
+        const approval = job.status === 'queued' && !job.images?.length ? parseApproval(job.text) : null;
+        if (approval) {
+            // Never a chat message: it answers one pending approval of a turn this chat started, or
+            // nothing. It belongs to the chat, not to where the chat talks now (a switch or a moved
+            // window does not stop it); the answer is replied in the chat's current place.
+            const account = this.db.value.accounts.find(a => a.id === job.accountId);
+            const binding = this.db.value.bindings.find(b => b.accountId === job.accountId && b.peerId === job.peerId);
+            if (!account?.enabled || !account.allowedUsers.includes(job.peerId) || !binding) {
+                this.updateJob(id, { status: 'cancelled', reason: 'admission-changed', text: undefined }); return;
+            }
+            const answered = approvals.answer({ accountId: job.accountId, peerId: job.peerId, code: approval.code, allow: approval.allow });
+            this.updateJob(id, { status: 'ready', kind: 'approval', text: undefined, bindingId: binding.id, target: { cwd: binding.cwd, sessionId: binding.sessionId },
+                directReply: answered === 'done' ? approval.allow ? `✅ 已同意 ${approval.code}，继续进行。` : `已拒绝 ${approval.code}，这一步不会做。`
+                    : `❌ 确认 ${approval.code} 已失效（已处理、超时或不是这个聊天发起的），没有改变什么。` });
+            job = this.job(id);
+        }
         if (!this.bindingFor(job)) {
             const current = this.db.value.bindings.find(b => b.accountId === job.accountId && b.peerId === job.peerId);
             if (!current || job.status !== 'queued' || job.kind === 'cron') {
@@ -438,9 +498,18 @@ class ChannelsService {
         let stopTyping = () => Promise.resolve();
         let slash = null;
         try {
+            // A Bot chat runs in its window's current generation (bot-channel.js).
+            if (job.status === 'queued' && this.bindingFor(job)?.bot) {
+                if (await botChannel.ensureCurrent(this, id) === 'retry') return;
+                job = this.job(id); run.target = job.target;
+            }
+            const current = this.bindingFor(job);
+            const botWindow = job.status === 'queued' ? current?.bot : null;
+            // Which Bot window the target must be: the chat's own, or where a reply or push came from.
+            const proof = current?.bot && same(current, job.target) ? current.bot : job.bot;
             // Old versions could persist a binding to a legacy management
             // thread. Preserve that record, but never execute or deliver through it.
-            try { await this.withBindingTarget(job.target.cwd, job.target.sessionId, () => {}); }
+            try { await this.withBindingTarget(job.target.cwd, job.target.sessionId, () => {}, { bot: proof }); }
             catch (error) {
                 // This proof has not executed or delivered anything. A native
                 // append may invalidate it; keep queued/ready for the next pump,
@@ -459,6 +528,12 @@ class ChannelsService {
                     worker = await this.supervisor.getWorker({ cwd: session.cwd, sessionPath: session.path, sessionId: session.id });
                     run.worker = worker;
                     if (!worker.isIdle() || !this.canAdmit(this.job(id)) || this.job(id).status !== 'queued') return;
+                    // Checked again once the runtime is open: a move committed meanwhile leaves the message queued.
+                    if (botWindow) {
+                        try { await this.bots.assertCurrentWindowSession(botWindow.profileId, botWindow.windowId, session); }
+                        catch (error) { if (botChannel.transient(error)) return; throw error; }
+                    }
+                    const moved = () => Boolean(botWindow && this.bots.sessionMoved(session.id));
                     const account = this.db.value.accounts.find(a => a.id === job.accountId);
                     stopTyping = await this.startTyping(account, job.peerId);
                     let images = [];
@@ -471,23 +546,26 @@ class ChannelsService {
                         }
                     }
                     if (images !== null) {
-                        if (!worker.isIdle() || !this.canAdmit(this.job(id)) || this.job(id).status !== 'queued') return;
+                        if (moved() || !worker.isIdle() || !this.canAdmit(this.job(id)) || this.job(id).status !== 'queued') return;
                         this.updateJob(id, { status: 'dispatching' });
                         let waitingNotified = false;
                         let result;
                         try {
                             result = await worker.channelTurn({ id, peerId: job.peerId, text: job.text, images }, {
-                                admit: () => this.canAdmit(this.job(id)),
+                                admit: () => !moved() && this.canAdmit(this.job(id)),
                                 accepted: () => this.updateJob(id, { status: 'running', text: undefined, images: undefined }),
-                                waiting: () => {
+                                waiting: event => {
                                     try { this.updateJob(id, { waiting: true }); } catch { this.error = '渠道记录保存失败'; }
-                                    if (waitingNotified) return;
-                                    waitingNotified = true;
                                     const currentAccount = this.db.value.accounts.find(a => a.id === job.accountId);
                                     const peer = this.db.value.peers.find(p => p.accountId === job.accountId && p.peerId === job.peerId);
-                                    if (currentAccount?.enabled && currentAccount.allowedUsers.includes(job.peerId) && this.bindingFor(this.job(id)) && peer?.contextToken) {
-                                        void this.adapter.send(currentAccount, peer, '⚠️ 当前任务正在等待交互确认，请打开 Pivane 网页端处理。', `pivane-wait-${id}`).catch(() => {});
-                                    }
+                                    const binding = this.bindingFor(this.job(id));
+                                    if (!currentAccount?.enabled || !currentAccount.allowedUsers.includes(job.peerId) || !binding || !peer?.contextToken) return;
+                                    // A Bot approval can be answered right here (bot-approvals.js); each one is offered once.
+                                    const offer = botWindow ? approvals.offer({ event, worker, job, botName: binding.name }) : null;
+                                    if (offer) { void this.adapter.send(currentAccount, peer, offer, `pivane-approval-${id}-${event.id}`.slice(0, 120)).catch(() => {}); return; }
+                                    if (waitingNotified) return;
+                                    waitingNotified = true;
+                                    void this.adapter.send(currentAccount, peer, '⚠️ 当前任务正在等待交互确认，请打开 Pivane 网页端处理。', `pivane-wait-${id}`).catch(() => {});
                                 }
                             });
                         } catch (error) {
@@ -497,7 +575,11 @@ class ChannelsService {
                                 result = null;
                             } else throw error;
                         }
-                        if (result?.cancelled) { this.updateJob(id, { status: 'cancelled', reason: 'admission-changed', text: undefined, images: undefined }); return; }
+                        if (result?.cancelled) {
+                            // The Bot window moved on just before the hand-off: nothing was sent; it runs in the new generation.
+                            if (moved() && this.canAdmit(this.job(id))) { this.updateJob(id, { status: 'queued' }); return; }
+                            this.updateJob(id, { status: 'cancelled', reason: 'admission-changed', text: undefined, images: undefined }); return;
+                        }
                         if (result) {
                             if (!['completed', 'stopped', 'error'].includes(result.status)) throw fail('No native completion proof');
                             this.updateJob(id, { status: 'ready', text: undefined, images: undefined, waiting: false });
@@ -507,6 +589,7 @@ class ChannelsService {
             }
         } finally {
             await stopTyping();
+            this.approvals?.forgetJob(id);
         }
         if (this.stopping || this.isSuspended()) return;
         job = this.job(id);
@@ -544,7 +627,9 @@ class ChannelsService {
             mediaFiles = [];
         }
         const warning = this.deliveryWarning(deliveryIssues);
-        const text = [baseText, mediaSummary, warning].filter(Boolean).join('\n\n');
+        // Command answers and notices speak for the chat itself, not for a Bot.
+        const speaker = job.bot && !['slash', 'notice', 'approval'].includes(job.kind) ? await botChannel.speakerPrefix(this, this.bindingFor(job), job.bot) : '';
+        const text = [speaker ? `${speaker}${baseText}` : baseText, mediaSummary, warning].filter(Boolean).join('\n\n');
         const chunks = Array.from(text.matchAll(/[\s\S]{1,1800}/gu), m => m[0]);
         await require('./delivery').deliver(this, job, { chunks, mediaFiles, deliveryIssues, isStop });
     }

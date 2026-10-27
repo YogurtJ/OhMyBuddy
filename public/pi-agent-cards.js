@@ -73,6 +73,11 @@
             icon.className = 'fa-regular fa-calendar-check'; title.textContent = t('定时任务');
             peer = str(details.name, 120);
             body = textOf(message.content).slice(Number.isInteger(details.bodyOffset) && details.bodyOffset >= 0 ? details.bodyOffset : 0);
+            // A follow-up the Bot started itself: its title only, not the instructions it was given.
+            if (details.origin === 'bot') {
+                article.dataset.agentCard = 'follow-up'; icon.className = 'fa-regular fa-bell'; title.textContent = t("主动跟进");
+                peer = ''; body = str(details.note, 200) || str(details.name, 120);
+            }
         } else if (TASK.includes(message.customType)) {
             article.dataset.agentCard = 'task'; article.classList.add('pi-agent-turn-start');
             icon.className = 'fa-solid fa-inbox'; title.textContent = t("来自 Agent 的任务");

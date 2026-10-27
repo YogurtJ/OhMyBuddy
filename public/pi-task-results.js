@@ -96,7 +96,9 @@
                 const results = data.results || [], tasks = data.tasks || [];
                 const unread = results.filter(r => !r.read);
                 const busy = Boolean(current.busy);
-                root.hidden = results.length === 0 && tasks.length === 0;
+                const visible = unread.length > 0 || tasks.length > 0;
+                if (!visible) root.open = false;
+                root.hidden = !visible;
                 root.dataset.state = unread.some(r => tone(r.status) === 'error' || tone(r.status) === 'attention') ? 'attention'
                     : unread.length ? 'unread' : tasks.length ? 'active' : 'idle';
                 const parts = [];
@@ -112,7 +114,7 @@
                 readAll.textContent = words('全部标为已读', 'Mark all read');
                 readAll.hidden = unread.length === 0;
                 readAll.disabled = busy || marking;
-                readAll.title = busy ? words('线程空闲后可标记', 'Available when the thread is idle') : '';
+                readAll.title = busy ? words('会话连接或压缩结束后可标记', 'Available after connection or compaction completes') : '';
                 readAll.onclick = () => runMark(current, unread.map(r => r.deliveryId), null);
                 const rows = [];
                 for (const task of tasks) {
@@ -162,7 +164,7 @@
                     if (!result.read) {
                         const button = iconButton('pi-task-result-read', 'fa-check', words('标为已读', 'Mark read'));
                         button.disabled = busy || marking;
-                        if (busy) button.title = words('线程空闲后可标记', 'Available when the thread is idle');
+                        if (busy) button.title = words('会话连接或压缩结束后可标记', 'Available after connection or compaction completes');
                         button.addEventListener('click', () => { if (key(scope()) === nextKey) void runMark(current, [result.deliveryId], button); });
                         line.append(button);
                     }

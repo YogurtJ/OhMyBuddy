@@ -94,12 +94,18 @@ class CronStore {
     homes() { return this.db.prepare('SELECT profileId,data FROM homes').all().map(row => ({ profileId: row.profileId, ...JSON.parse(row.data) })); }
     saveHome(id, data) { this.db.prepare('INSERT OR REPLACE INTO homes VALUES (?,?)').run(id, JSON.stringify(data)); }
     limits() { return this.meta('limits') || DEFAULT_LIMITS; }
+    // The user's scheduled tasks; messages Bots start themselves (origin 'bot') have their own
+    // per-Bot count (proactiveRuns) and never use up the user's daily budget.
     usage(day, jobId) {
-        const sql = "SELECT json_extract(data,'$.usage') AS usage, json_extract(data,'$.reservedTokens') AS reservedTokens, json_extract(data,'$.reservedCost') AS reservedCost FROM runs WHERE json_extract(data,'$.budgetDay')=? AND json_extract(data,'$.reservedTokens')>0";
+        const sql = "SELECT json_extract(data,'$.usage') AS usage, json_extract(data,'$.reservedTokens') AS reservedTokens, json_extract(data,'$.reservedCost') AS reservedCost FROM runs WHERE json_extract(data,'$.budgetDay')=? AND json_extract(data,'$.reservedTokens')>0 AND json_extract(data,'$.origin') IS NULL";
         const runs = (jobId ? this.db.prepare(sql + ' AND jobId=?').all(day, jobId) : this.db.prepare(sql).all(day)).map(row => ({ ...row, usage: row.usage ? JSON.parse(row.usage) : null }));
         return { runs: runs.length, tokens: runs.reduce((sum, run) => sum + (run.usage?.tokens ?? run.reservedTokens), 0),
             cost: runs.reduce((sum, run) => sum + (run.usage?.cost ?? run.reservedCost ?? 0), 0),
             unknownCost: runs.some(run => run.usage?.cost == null && run.reservedCost == null) };
+    }
+    proactiveRuns(day, profileId) {
+        return this.db.prepare("SELECT count(*) AS n FROM runs WHERE json_extract(data,'$.origin')='bot' AND json_extract(data,'$.profileId')=? AND json_extract(data,'$.budgetDay')=?")
+            .get(profileId, day).n;
     }
     close() {
         if (!this.db) return;

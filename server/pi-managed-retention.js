@@ -57,23 +57,37 @@ function backupProof(root, item, budget) {
     return { ...item, release: installation.release, order: complete.mtimeNs, proof };
 }
 const newestFirst = (a, b) => a.order === b.order ? a.id.localeCompare(b.id) : a.order > b.order ? -1 : 1;
-function planRetention(directory, state, limits = DEFAULT_RETENTION, { completedJobId } = {}) {
+// Each backup is verified within its own budget; one round verifies newest first while the round
+// budget still holds a whole backup's budget. Older backups past it stay untouched (unverified this
+// round: never kept as a restore point, never removed) instead of skipping the whole round.
+const BACKUP_BUDGET = Object.freeze({ bytes: 50 * 1024 ** 3, entries: 100000 });
+const ROUND_BUDGET = Object.freeze({ bytes: 500 * 1024 ** 3, entries: 1000000 });
+function planRetention(directory, state, limits = DEFAULT_RETENTION, { completedJobId, budgets = { backup: BACKUP_BUDGET, round: ROUND_BUDGET } } = {}) {
     if (!state || state.version !== 1 || state.needsRecovery || state.job && !['succeeded', 'failed', 'interrupted'].includes(state.job.phase) && !(state.job.phase === 'retaining' && ID.test(completedJobId || '') && state.job.id === completedJobId)) throw new Error('Retention requires a settled maintenance state');
     if ([state.active, state.previous].some(id => id !== null && !ID.test(id || ''))) throw new Error('Invalid retention state identity');
     for (const kind of ['releases', 'backups']) if (limits[kind] !== null && (!Number.isInteger(limits[kind]) || limits[kind] < MINIMUM[kind] || limits[kind] > 9999)) throw new Error('Invalid retention limits');
     const root = path.dirname(directory);
     if (path.basename(directory) !== '.pivane-runtime' || fs.realpathSync.native(directory) !== directory) throw new Error('Invalid retention root');
-    const plan = { keepReleases: [], removeReleases: [], incompleteReleases: [], keepBackups: [], removeBackups: [], incompleteBackups: [] };
+    const plan = { keepReleases: [], removeReleases: [], incompleteReleases: [], keepBackups: [], removeBackups: [], incompleteBackups: [], unverifiedBackups: [] };
     const releases = [], backups = [], items = [];
-    const budget = { bytes: 50 * 1024 ** 3, entries: 100000 };
-    let proofBudgetExceeded = false;
+    const round = { ...budgets.round }, each = budgets.backup;
     for (const item of realDirectories(path.join(directory, 'releases'))) {
         try { releaseProof(root, item.id); const marker = fs.lstatSync(path.join(item.dir, 'PI_INSTALL_COMPLETE.json'), { bigint: true }); releases.push({ ...item, order: marker.mtimeNs }); }
         catch { plan.incompleteReleases.push(item.id); }
     }
-    for (const item of realDirectories(path.join(directory, 'backups'))) {
-        try { backups.push(backupProof(root, item, budget)); }
-        catch { plan.incompleteBackups.push(item.id); if (budget.bytes < 0 || budget.entries < 0) proofBudgetExceeded = true; }
+    const candidates = realDirectories(path.join(directory, 'backups')).map(item => {
+        let order = null;
+        try { order = fs.lstatSync(path.join(item.dir, 'complete.json'), { bigint: true }).mtimeNs; } catch { /* not a complete backup */ }
+        return { ...item, order };
+    });
+    candidates.sort((a, b) => a.order === null || b.order === null ? (a.order === null) - (b.order === null) || a.id.localeCompare(b.id) : newestFirst(a, b));
+    for (const item of candidates) {
+        if (item.order === null) { plan.incompleteBackups.push(item.id); continue; }
+        if (round.bytes < each.bytes || round.entries < each.entries) { plan.unverifiedBackups.push(item.id); continue; }
+        const budget = { ...each };
+        try { backups.push(backupProof(root, { id: item.id, dir: item.dir, stamp: item.stamp }, budget)); }
+        catch { plan.incompleteBackups.push(item.id); }
+        round.bytes -= each.bytes - Math.max(0, budget.bytes); round.entries -= each.entries - Math.max(0, budget.entries);
     }
     backups.sort(newestFirst); releases.sort(newestFirst);
     const protectedReleases = new Set([state.active ?? null, state.previous ?? null]);
@@ -95,11 +109,17 @@ function planRetention(directory, state, limits = DEFAULT_RETENTION, { completed
         if (newest.has(r.id) || protectedReleases.has(r.id)) plan.keepReleases.push(r.id);
         else { plan.removeReleases.push(r.id); items.push({ ...r, kind: 'releases' }); }
     }
+    // Older backups not verified this round would be kept if too few newer ones verified: the
+    // releases they may restore stay too.
+    if (plan.unverifiedBackups.length && (limits.backups === null || backups.length < limits.backups)) {
+        plan.keepReleases.push(...plan.removeReleases); plan.removeReleases = [];
+        for (let i = items.length - 1; i >= 0; i--) if (items[i].kind === 'releases') items.splice(i, 1);
+    }
     // Incomplete/malformed items never establish a restore point or eligibility.
-    if (missingBackups.length || proofBudgetExceeded) { plan.skipped = proofBudgetExceeded ? 'verification-budget-exceeded' : 'missing-current-or-previous-restore-backup'; plan.removeBackups = []; plan.removeReleases = []; }
+    if (missingBackups.length) { plan.skipped = 'missing-current-or-previous-restore-backup'; plan.removeBackups = []; plan.removeReleases = []; }
     let context;
     try {
-        context = { directory, stateHash: storage.stateProof(directory), roots: Object.fromEntries([root, directory, ...['releases', 'backups'].map(k => path.join(directory, k))].filter(p => fs.existsSync(p)).map(p => [p, storage.directoryIdentity(p, p !== root)])), items, limits: { ...limits }, completedJobId };
+        context = { directory, stateHash: storage.stateProof(directory), roots: Object.fromEntries([root, directory, ...['releases', 'backups'].map(k => path.join(directory, k))].filter(p => fs.existsSync(p)).map(p => [p, storage.directoryIdentity(p, p !== root)])), items, limits: { ...limits }, completedJobId, budgets };
     } catch (error) { plan.skipped = error.message; }
     plans.set(plan, context); return plan;
 }
@@ -117,7 +137,7 @@ function moveToTrash(directory, plan, expectedState) {
         if (state.active !== expectedState.active || state.previous !== expectedState.previous) throw new Error('Maintenance state changed before retention');
         // Repeat bounded native proof verification before moving anything; a
         // protected restore point changed since planning must stop all pruning.
-        const fresh = planRetention(directory, state, context.limits, { completedJobId: context.completedJobId });
+        const fresh = planRetention(directory, state, context.limits, { completedJobId: context.completedJobId, budgets: context.budgets });
         if (fresh.skipped || !storage.equal(fresh, plan)) throw new Error('Retention proofs changed');
         const trashPath = path.join(directory, TRASH);
         if (!fs.existsSync(trashPath)) fs.mkdirSync(handles.find(h => h.directory === directory).at(TRASH), { mode: 0o700 });
@@ -149,7 +169,7 @@ function moveToTrash(directory, plan, expectedState) {
         return moved;
     } finally { for (const handle of handles.reverse()) handle.close(); }
 }
-async function purgeTrash(directory, limits = DEFAULT_RETENTION, { signal, completedJobId } = {}) {
+async function purgeTrash(directory, limits = DEFAULT_RETENTION, { signal, completedJobId, budgets } = {}) {
     if (limits.releases === null && limits.backups === null) return 0;
     storage.supported();
     const trashPath = path.join(directory, TRASH);
@@ -162,7 +182,7 @@ async function purgeTrash(directory, limits = DEFAULT_RETENTION, { signal, compl
         const stateHash = storage.stateProof(directory), state = JSON.parse(readSafe(path.join(directory, 'state.json')));
         if (state.version !== 1 || state.needsRecovery) throw new Error('Retention requires settled state');
         // Verify actual protected native backups again before touching old trash.
-        const protection = planRetention(directory, state, limits, { completedJobId });
+        const protection = planRetention(directory, state, limits, { completedJobId, ...(budgets ? { budgets } : {}) });
         if (protection.skipped) throw new Error('Retention protected backups are unavailable');
         const guard = () => { if (signal?.aborted) throw new Error('Retention cancelled'); for (const h of handles) storage.check(h); if (storage.stateProof(directory) !== stateHash) throw new Error('Retention state changed during purge'); };
         let count = 0;

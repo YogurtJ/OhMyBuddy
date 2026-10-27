@@ -1,0 +1,276 @@
+import {
+  rewriteSubagentPrompt
+} from "./chunk-3JCDWF4V.js";
+import {
+  package_default
+} from "./chunk-UTT254JE.js";
+import "./chunk-VSUSLDNW.js";
+import {
+  MODEL_ONLY_TOOL
+} from "./chunk-6XJB7PIX.js";
+import "./chunk-NF7IEKBH.js";
+import {
+  appendAgentRefinementOverlay
+} from "./chunk-PLCCBLPY.js";
+import "./chunk-46XKCPJR.js";
+import "./chunk-NIXWDZZV.js";
+import "./chunk-XSWOTIA3.js";
+import "./chunk-7F6RKT6W.js";
+import {
+  assertNoToolModifierEntries
+} from "./chunk-4SDU2BZX.js";
+import "./chunk-CTPAE36Y.js";
+import "./chunk-5TYMSZX3.js";
+import {
+  HERDR_PI_MAX_FRAME_BYTES,
+  HERDR_PI_PROTOCOL,
+  HERDR_PI_RUNTIME_DIR_ENV,
+  HERDR_PI_RUN_ENV,
+  HerdrPiFrameDecoder,
+  encodeHerdrPiFrame,
+  validateHerdrPiRunId
+} from "./chunk-4QFZZV3O.js";
+import "./chunk-N2BN7BF5.js";
+import {
+  buildAgentMemoryInjection,
+  buildSkillInjection,
+  discoverAgents,
+  resolveExistingReadPaths,
+  resolveSkills
+} from "./chunk-CIZQXJ5Q.js";
+import "./chunk-5LFLVSTM.js";
+import "./chunk-YFCK7H2S.js";
+import "./chunk-Z7KVHQHL.js";
+
+// src/extension/herdr-pi-bridge.ts
+import { spawnSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as net from "node:net";
+import * as path from "node:path";
+import { Type } from "typebox";
+function gitEvidence(cwd) {
+  const run = (args) => spawnSync("git", args, { cwd, encoding: "utf8", timeout: 5e3, maxBuffer: 128 * 1024 });
+  const inside = run(["rev-parse", "--is-inside-work-tree"]);
+  if (inside.status !== 0) return void 0;
+  const head = run(["rev-parse", "HEAD"]);
+  const branch = run(["symbolic-ref", "--quiet", "--short", "HEAD"]);
+  const dirty = run(["status", "--porcelain"]);
+  return { ...head.status === 0 ? { head: head.stdout.trim() } : {}, ...branch.status === 0 ? { branch: branch.stdout.trim() } : {}, dirty: Boolean(dirty.stdout.trim()) };
+}
+function resolveRemoteHerdrResources(cwd, resources, remoteDefaultTools = []) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(resources.agent) || resources.skills?.some((name) => !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(name)) || resources.toolCeiling?.some((name) => !/^[A-Za-z0-9_-]{1,64}$/u.test(name)) || resources.reads !== void 0 && resources.reads !== false && (!Array.isArray(resources.reads) || resources.reads.some((name) => typeof name !== "string"))) throw new Error("Remote logical resource names are invalid.");
+  const discovered = discoverAgents(cwd, "both").agents.filter((agent2) => agent2.name === resources.agent || agent2.aliases?.includes(resources.agent));
+  if (discovered.length !== 1) throw new Error(`Remote agent '${resources.agent}' was not found unambiguously in ${cwd}.`);
+  const agent = discovered[0];
+  const names = resources.skills ?? agent.skills ?? [];
+  const skills = resolveSkills(names, cwd);
+  if (skills.missing.length) throw new Error(`Remote Pi skills not found: ${skills.missing.join(", ")}. Configure them on the saved machine.`);
+  const skillPrompt = buildSkillInjection(skills.resolved);
+  const reads = resources.reads === void 0 ? agent.defaultReads ?? false : resources.reads;
+  const readPaths = Array.isArray(reads) ? resolveExistingReadPaths(reads, cwd) : [];
+  const systemPrompt = appendAgentRefinementOverlay(`${agent.systemPrompt}${buildAgentMemoryInjection(agent, cwd)}${skillPrompt ? `
+
+${skillPrompt}` : ""}${readPaths.length ? `
+
+[Read from: ${readPaths.join(", ")}]` : ""}`, { cwd, agentName: agent.name });
+  assertNoToolModifierEntries(agent.name, agent.tools ?? []);
+  const denied = new Set(agent.excludeTools ?? []);
+  const tools = (agent.tools === void 0 ? remoteDefaultTools : agent.tools).filter((tool) => !denied.has(tool) && (!resources.toolCeiling || resources.toolCeiling.includes(tool)));
+  if (agent.tools === void 0 && !tools.length) throw new Error(`Remote agent '${agent.name}' resolved no default active tools within the inherited ceiling.`);
+  return { agent: agent.name, skills: names, tools, systemPrompt, inheritProjectContext: agent.inheritProjectContext, inheritGlobalContext: agent.inheritGlobalContext, inheritSkills: agent.inheritSkills };
+}
+function registerHerdrPiBridge(pi) {
+  const runId = validateHerdrPiRunId(process.env[HERDR_PI_RUN_ENV]);
+  const runDir = process.env[HERDR_PI_RUNTIME_DIR_ENV];
+  if (!runDir || !path.isAbsolute(runDir) || fs.lstatSync(runDir).isSymbolicLink()) throw new Error("Herdr bridge runtime directory was not authoritatively provisioned.");
+  fs.chmodSync(runDir, 448);
+  const socketPath = path.join(runDir, "bridge.sock");
+  const manifestPath = path.join(runDir, "manifest.json");
+  for (const candidate of [socketPath, manifestPath]) {
+    try {
+      const stat = fs.lstatSync(candidate);
+      if (stat.isSymbolicLink()) throw new Error(`Refusing symlink at '${candidate}'.`);
+      fs.rmSync(candidate, { force: true });
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  let client;
+  let context;
+  let nativeSessionId;
+  let finalAssistant;
+  let activeRequestId;
+  let resolvedSystemPrompt;
+  let resolvedContextPolicy;
+  let configured = false;
+  const pending = /* @__PURE__ */ new Map();
+  const supervisor = /* @__PURE__ */ new Map();
+  let evidenceCursor = 0;
+  let journalBytes = 0;
+  const journal = [];
+  const send = (frame) => {
+    const record = { protocol: HERDR_PI_PROTOCOL, runId, ...frame, cursor: ++evidenceCursor };
+    const size = Buffer.byteLength(JSON.stringify(record));
+    journal.push(record);
+    journalBytes += size;
+    while (journal.length > 512 || journalBytes > 8 * 1024 * 1024) {
+      const removed = journal.shift();
+      if (removed) journalBytes -= Buffer.byteLength(JSON.stringify(removed));
+    }
+    if (!client || client.destroyed) return;
+    client.write(encodeHerdrPiFrame(record));
+  };
+  const sessionId = (ctx) => ctx.sessionManager?.getSessionId?.();
+  pi.registerTool({
+    name: "contact_supervisor",
+    ...MODEL_ONLY_TOOL,
+    label: "Contact supervisor",
+    description: "Contact the parent/supervisor session for a blocking decision, structured interview, or progress update.",
+    parameters: Type.Object({ reason: Type.Union([Type.Literal("need_decision"), Type.Literal("interview_request"), Type.Literal("progress_update")]), message: Type.Optional(Type.String({ maxLength: 65536 })), interview: Type.Optional(Type.Unknown()) }, { additionalProperties: false }),
+    execute: async (_toolCallId, input) => {
+      if (input.reason !== "interview_request" && !input.message?.trim()) throw new Error("message is required for supervisor decisions and progress updates.");
+      const id = `sup_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+      send({ type: "supervisor-request", requestId: id, reason: input.reason, message: input.message?.slice(0, 65536) ?? "", ...input.interview !== void 0 ? { interview: input.interview } : {}, expectsReply: input.reason !== "progress_update", nativeSessionId });
+      if (input.reason === "progress_update") {
+        await new Promise((resolve, reject) => supervisor.set(id, { reason: input.reason, resolve, reject }));
+        return { content: [{ type: "text", text: "Supervisor progress update queued." }], details: { delivered: true, requestId: id, reason: input.reason } };
+      }
+      const reason = input.reason;
+      const answer = await new Promise((resolve, reject) => supervisor.set(id, { reason, resolve, reject }));
+      const details = { requestId: id, reason };
+      if (reason === "interview_request") try {
+        details.structuredReply = JSON.parse(answer.replace(/^```(?:json)?\s*|\s*```$/giu, ""));
+      } catch {
+        details.structuredReplyParseError = "Supervisor interview reply was not valid JSON.";
+      }
+      return { content: [{ type: "text", text: `**Reply from supervisor:**
+${answer}` }], details };
+    }
+  });
+  const execute = async (requestId, ctx) => {
+    const request = pending.get(requestId);
+    if (!request) throw new Error(`Unknown or already consumed bridge request '${requestId}'.`);
+    pending.delete(requestId);
+    if (sessionId(ctx) !== nativeSessionId) throw new Error("Native Pi session identity changed.");
+    send({ type: "accepted", requestId, operation: request.operation, nativeSessionId });
+    const api = pi;
+    if (request.operation === "prompt") {
+      activeRequestId = requestId;
+      finalAssistant = void 0;
+      api.sendUserMessage(request.text ?? "");
+    } else if (request.operation === "steer") api.sendUserMessage(request.text ?? "", { deliverAs: "steer" });
+    else if (request.operation === "follow-up") api.sendUserMessage(request.text ?? "", { deliverAs: "followUp" });
+    else if (request.operation === "abort") api.abort();
+    else {
+      const entry = request.supervisorId ? supervisor.get(request.supervisorId) : void 0;
+      if (!entry) throw new Error("Unknown supervisor request.");
+      supervisor.delete(request.supervisorId);
+      if (request.error !== void 0) entry.reject(new Error(request.error));
+      else entry.resolve(request.text ?? "");
+    }
+    send({ type: "control-ack", requestId, operation: request.operation, nativeSessionId });
+  };
+  pi.registerCommand("pi-subagents-bridge", { description: "Internal pane-native request dispatch", handler: (args, ctx) => execute(args.trim(), ctx) });
+  const on = pi.on;
+  on("before_agent_start", (event) => {
+    const options = event.systemPromptOptions;
+    if (typeof options?.appendSystemPrompt === "string") options.appendSystemPrompt = "";
+    return resolvedSystemPrompt && resolvedContextPolicy ? { systemPrompt: `${rewriteSubagentPrompt(typeof event.systemPrompt === "string" ? event.systemPrompt : "", { inheritProjectContext: resolvedContextPolicy.inheritProjectContext, inheritGlobalContext: resolvedContextPolicy.inheritGlobalContext, inheritSkills: resolvedContextPolicy.inheritSkills })}
+
+<active_agent name=${JSON.stringify(resolvedContextPolicy.agent)}/>
+
+${resolvedSystemPrompt}` } : void 0;
+  });
+  on("session_start", (_event, ctx) => {
+    context = ctx;
+    nativeSessionId = sessionId(ctx);
+    if (!nativeSessionId) throw new Error("Pane-native Pi bridge requires a persisted native session identity.");
+    fs.writeFileSync(manifestPath, JSON.stringify({ protocol: HERDR_PI_PROTOCOL, packageVersion: package_default.version, runId, socketPath, nativeSessionId, pid: process.pid }), { mode: 384, flag: "wx" });
+    send({ type: "ready", packageVersion: package_default.version, nativeSessionId, sessionFile: ctx.sessionManager?.getSessionFile?.(), cwd: process.cwd(), tools: pi.getActiveTools(), model: ctx.model?.provider && ctx.model.id ? `${ctx.model.provider}/${ctx.model.id}` : void 0, configured, activeRequestId, evidenceCursor, evidenceFloor: journal[0]?.cursor ?? evidenceCursor + 1, initialGit: gitEvidence(process.cwd()) });
+  });
+  on("message_end", (event) => {
+    const message = event.message;
+    if (message?.role === "assistant") finalAssistant = message;
+    send({ type: "event", requestId: activeRequestId, event: { ...event, message }, nativeSessionId });
+  });
+  on("agent_settled", (_event, ctx) => {
+    const requestId = activeRequestId;
+    send({ type: "settled", requestId, nativeSessionId, idle: ctx.isIdle(), pending: ctx.hasPendingMessages(), finalAssistant, finalGit: gitEvidence(process.cwd()) });
+    if (ctx.isIdle() && !ctx.hasPendingMessages()) activeRequestId = void 0;
+  });
+  on("session_shutdown", () => {
+    server.close();
+    client?.destroy();
+    try {
+      fs.rmSync(runDir, { recursive: true, force: true });
+    } catch {
+    }
+  });
+  const server = net.createServer((socket) => {
+    if (client && !client.destroyed) {
+      socket.destroy();
+      return;
+    }
+    client = socket;
+    const decoder = new HerdrPiFrameDecoder();
+    let total = 0;
+    for (const record of journal) socket.write(encodeHerdrPiFrame(record));
+    socket.on("data", (chunk) => {
+      total += chunk.byteLength;
+      if (total > HERDR_PI_MAX_FRAME_BYTES * 32) {
+        socket.destroy(new Error("Bridge byte budget exceeded."));
+        return;
+      }
+      try {
+        for (const frame of decoder.push(chunk)) {
+          if (frame.runId !== runId) throw new Error("Bridge run identity mismatch.");
+          if (frame.type === "supervisor-delivered" && typeof frame.requestId === "string") {
+            const entry = supervisor.get(frame.requestId);
+            if (!entry || entry.reason !== "progress_update") throw new Error("Unknown supervisor delivery acknowledgement.");
+            supervisor.delete(frame.requestId);
+            entry.resolve("delivered");
+            continue;
+          }
+          if (frame.type === "configure") {
+            if (configured || typeof frame.requestId !== "string" || !frame.resources || typeof frame.resources !== "object") throw new Error("Invalid or duplicate bridge configuration.");
+            const resources = frame.resources;
+            const invalidSkills = resources.skills !== void 0 && (!Array.isArray(resources.skills) || resources.skills.some((name) => typeof name !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(name)));
+            const invalidReads = resources.reads !== void 0 && resources.reads !== false && (!Array.isArray(resources.reads) || resources.reads.some((name) => typeof name !== "string"));
+            if (typeof resources.agent !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(resources.agent) || invalidSkills || invalidReads) throw new Error("Remote logical resource names are invalid.");
+            const resolved = resolveRemoteHerdrResources(process.cwd(), { agent: resources.agent, ...resources.skills ? { skills: resources.skills } : {}, ...resources.toolCeiling ? { toolCeiling: resources.toolCeiling } : {}, ...resources.reads !== void 0 ? { reads: resources.reads } : {} }, context ? pi.getActiveTools() : []);
+            resolvedSystemPrompt = resolved.systemPrompt;
+            resolvedContextPolicy = resolved;
+            pi.setActiveTools(resolved.tools);
+            const acknowledged = context ? pi.getActiveTools() : [];
+            if (acknowledged.some((tool) => !resolved.tools.includes(tool)) || resolved.tools.some((tool) => !acknowledged.includes(tool))) throw new Error("Remote Pi did not apply the resolved active-tool set exactly.");
+            configured = true;
+            send({ type: "configured", requestId: frame.requestId, nativeSessionId, agent: resolved.agent, skills: resolved.skills, model: context?.model?.provider && context.model.id ? `${context.model.provider}/${context.model.id}` : void 0, tools: acknowledged });
+            continue;
+          }
+          if (frame.type !== "prepare" || typeof frame.requestId !== "string" || pending.has(frame.requestId) || !configured) throw new Error("Invalid, duplicate, or unconfigured bridge request.");
+          const operation = frame.operation;
+          if (!["prompt", "steer", "follow-up", "abort", "supervisor-reply"].includes(operation)) throw new Error("Unsupported bridge operation.");
+          const text = frame.text;
+          if (text !== void 0 && (typeof text !== "string" || Buffer.byteLength(text) > 256 * 1024)) throw new Error("Bridge request text is invalid or too large.");
+          const error = frame.error;
+          if (error !== void 0 && (operation !== "supervisor-reply" || typeof error !== "string" || Buffer.byteLength(error) > 256 * 1024)) throw new Error("Bridge supervisor error is invalid or too large.");
+          pending.set(frame.requestId, { operation, ...text !== void 0 ? { text } : {}, ...typeof frame.supervisorId === "string" ? { supervisorId: frame.supervisorId } : {}, ...error !== void 0 ? { error } : {} });
+          send({ type: "prepared", requestId: frame.requestId, nativeSessionId });
+        }
+      } catch (error) {
+        socket.destroy(error);
+      }
+    });
+    socket.on("close", () => {
+      if (client === socket) client = void 0;
+    });
+    if (context && nativeSessionId) send({ type: "ready", packageVersion: package_default.version, nativeSessionId, sessionFile: context.sessionManager?.getSessionFile?.(), cwd: process.cwd(), tools: pi.getActiveTools(), model: context.model?.provider && context.model.id ? `${context.model.provider}/${context.model.id}` : void 0, configured, activeRequestId, evidenceCursor, evidenceFloor: journal[0]?.cursor ?? evidenceCursor + 1, initialGit: gitEvidence(process.cwd()) });
+  });
+  server.listen(socketPath, () => {
+    fs.chmodSync(socketPath, 384);
+  });
+}
+export {
+  registerHerdrPiBridge as default,
+  resolveRemoteHerdrResources
+};

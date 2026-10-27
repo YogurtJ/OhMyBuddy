@@ -15,6 +15,8 @@ import { COMPLETION_ACTION } from "../../shared/parent-wake.js";
 import { resolveSubagentResultStatus } from "../../intercom/result-intercom.js";
 import { isUnexplainedProcessSignal } from "../shared/process-signal.js";
 import { capSummaryOutputs } from "../shared/single-output.js";
+import { describeWorkflowResume } from "../../workflows/workflow-resume-claim.js";
+import { isReusableWorkflowStopCause } from "../../workflows/workflow-stop-cause.js";
 const CHILD_OUTPUT_PREVIEW_MAX_BYTES = 2_000;
 const ERROR_LINE_MAX_BYTES = 300;
 const CHILD_OUTPUT_PREVIEW_COUNT = 8;
@@ -187,10 +189,13 @@ function formatCorrelationLines(details) {
     return [
         details.asyncDir ? `Retention-managed async directory: ${boundedSafeText(details.asyncDir)}` : undefined,
         details.workflowRunId ? `Workflow run: ${details.workflowRunId}` : undefined,
+        details.resumeNotice,
         details.childRuns?.length ? `Child runs: ${details.childRuns.map(formatChildRun).join(", ")}` : undefined,
         details.reconciledFromDetachedChild ? `Reconciled detached child: ${details.reconciledFromDetachedChild}` : undefined,
     ].filter((line) => line !== undefined);
 }
+// The forms of describeWorkflowResume, so a re-render keeps the line out of the result preview.
+const RESUME_NOTICE_PREFIXES = ["Auto-resumed as ", "Resumed as ", "Relaunched as ", "Not auto-resumed: ", "Resume by hand: ", "Relaunch it by hand with "];
 const WATCHDOG_BLOCKERS_HEADING = "Watchdog blockers:";
 function formatWatchdogBlockerLines(details) {
     if (!details.watchdogBlockers?.length)
@@ -295,6 +300,9 @@ export function parseSubagentNotifyContent(content) {
     const workflowRunIndex = body.findIndex((line) => line.startsWith("Workflow run: "));
     const childRunsIndex = body.findIndex((line) => line.startsWith("Child runs: "));
     const reconciledIndex = body.findIndex((line) => line.startsWith("Reconciled detached child: "));
+    // Only the slot right after `Workflow run:` carries the resume line; the same text elsewhere is output.
+    const resumeNoticeLine = workflowRunIndex >= 0 ? body[workflowRunIndex + 1] : undefined;
+    const resumeNotice = resumeNoticeLine && RESUME_NOTICE_PREFIXES.some((prefix) => resumeNoticeLine.startsWith(prefix)) ? resumeNoticeLine : undefined;
     const watchdogIndex = body.findIndex((line) => line === WATCHDOG_BLOCKERS_HEADING);
     const watchdogBlockers = watchdogIndex >= 0 ? parseWatchdogBlockerLines(body.slice(watchdogIndex + 1)) : [];
     const metadataIndexes = [sessionIndex, handoffIndex, workflowRunIndex, childRunsIndex, reconciledIndex, watchdogIndex].filter((index) => index >= 0);
@@ -332,6 +340,7 @@ export function parseSubagentNotifyContent(content) {
         resultPreview,
         ...(handoffPath ? { handoffPath } : {}),
         ...(workflowRunId ? { workflowRunId } : {}),
+        ...(resumeNotice ? { resumeNotice } : {}),
         ...(childRuns?.length ? { childRuns } : {}),
         ...(reconciledFromDetachedChild ? { reconciledFromDetachedChild } : {}),
         ...(watchdogBlockers.length ? { watchdogBlockers } : {}),
@@ -614,6 +623,9 @@ export function buildCompletionDetails(result) {
         : undefined;
     const reconciledFromDetachedChild = typeof result.reconciledFromDetachedChild === "string" ? result.reconciledFromDetachedChild : undefined;
     const asyncDir = nonemptyPath(result.asyncDir);
+    // Read here, once per delivery; a re-render parses the line back instead of reading the run again.
+    const stopCause = result.workflow?.stopCause;
+    const resumeNotice = workflowRunId && asyncDir && isReusableWorkflowStopCause(stopCause) ? describeWorkflowResume(asyncDir, workflowRunId) : undefined;
     const watchdogBlockers = [];
     const watchdogConcerns = [];
     const collectWatchdogFindings = (owner, progress) => {
@@ -653,6 +665,7 @@ export function buildCompletionDetails(result) {
         ...(handoffPath ? { handoffPath } : {}),
         ...(rawRunId ? { runId: rawRunId } : {}),
         ...(workflowRunId ? { workflowRunId } : {}),
+        ...(resumeNotice ? { resumeNotice } : {}),
         ...(childRuns.length ? { childRuns } : {}),
         ...(childOutputs?.length ? { childOutputs } : {}),
         ...(reconciledFromDetachedChild ? { reconciledFromDetachedChild } : {}),

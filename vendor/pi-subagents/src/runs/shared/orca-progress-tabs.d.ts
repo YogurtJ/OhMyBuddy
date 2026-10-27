@@ -19,7 +19,6 @@ export interface OrcaProgressTab {
     finish(status: "completed" | "failed" | "stopped", sessionFile?: string): Promise<void>;
 }
 export declare function resolveOrcaCommand(env?: NodeJS.ProcessEnv): string | undefined;
-export declare function resolvePiSessionId(sessionFile: string | undefined): string | undefined;
 export declare function createOrcaProgressTab(input: {
     cwd: string;
     runId: string;

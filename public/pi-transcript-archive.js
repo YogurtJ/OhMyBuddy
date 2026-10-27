@@ -17,8 +17,11 @@
     }
 
     class PiTranscriptArchive {
-        constructor({ scroller, content, container, track, request, context, render, scroll, openEntry, toast, onChange }) {
-            Object.assign(this, { scroller, content, container, request, context, render, scroll, openEntry, toast, onChange });
+        // anchor(): optional identity of a fixed record (e.g. an earlier Bot window generation) used
+        // instead of the live compaction notice. labels(): optional replacement head texts.
+        // onIndex(count): optional, told how many turns each adopted index has.
+        constructor({ scroller, content, container, track, request, context, render, scroll, openEntry, toast, onChange, anchor, labels, onIndex }) {
+            Object.assign(this, { scroller, content, container, request, context, render, scroll, openEntry, toast, onChange, anchor, labels, onIndex });
             this.enabled = false; this.key = null; this.identity = null; this.generation = null; this.sequence = 0;
             this.items = []; this.slots = []; this.entries = new Map(); this.revision = null;
             this.state = 'idle'; this.armed = false; this.queue = Promise.resolve(); this.busy = null; this.failed = null;
@@ -61,8 +64,9 @@
         // The archive belongs to the compaction summary shown at the top of the live transcript.
         sync() {
             const c = this.context();
-            const notice = this.enabled && c.session && !c.session.ephemeral ? this.content.querySelector(':scope > .pi-summary-notice.compactionSummary') : null;
-            const identity = notice ? `${c.key}|${notice.dataset.messageKey || ''}` : null;
+            const anchored = this.anchor && this.enabled && c.session && !c.session.ephemeral ? this.anchor() : null;
+            const notice = !this.anchor && this.enabled && c.session && !c.session.ephemeral ? this.content.querySelector(':scope > .pi-summary-notice.compactionSummary') : null;
+            const identity = anchored ? `${c.key}|${anchored}` : notice ? `${c.key}|${notice.dataset.messageKey || ''}` : null;
             if (c.key !== this.key || identity !== this.identity) {
                 this.reset(); this.key = c.key; this.identity = identity; this.generation = c.generation;
                 if (identity && this.readable()) void this.loadIndex();
@@ -131,6 +135,7 @@
                 this.container.hidden = !items.length;
             });
             if (had || items.length) this.onChange?.();
+            this.onIndex?.(items.length);
         }
 
         paintHead() { this.scroll.preserve(() => this.fillHead()); }
@@ -138,6 +143,7 @@
         fillHead() {
             const head = this.head; head.replaceChildren();
             if (!head.isConnected) { this.container.replaceChildren(head); this.container.hidden = false; }
+            const custom = this.labels?.();
             if (this.state === 'loading') {
                 head.append(el('span', 'pi-spinner'), el('span', 'pi-archive-head-text', translateUi("正在读取压缩前的记录…")));
             } else if (this.state === 'error') {
@@ -147,8 +153,12 @@
             } else {
                 const count = this.items.filter(asked).length;
                 const text = el('span', 'pi-archive-head-text');
-                text.append(icon('fa-box-archive'), document.createTextNode(count ? translateUi("压缩前的 {0} 个问题", count) : translateUi("压缩前的记录")));
-                head.append(text, el('span', 'pi-archive-head-note', translateUi("仅供回看，模型不会再读取这些原文")));
+                text.append(icon(custom ? 'fa-clock-rotate-left' : 'fa-box-archive'), document.createTextNode(custom ? custom.head(count)
+                    : count ? translateUi("压缩前的 {0} 个问题", count) : translateUi("压缩前的记录")));
+                const note = custom ? custom.note?.() : translateUi("仅供回看，模型不会再读取这些原文");
+                head.append(text);
+                if (note) head.append(el('span', 'pi-archive-head-note', note));
+                if (custom?.extra) { const extra = custom.extra(); if (extra) head.append(extra); }
             }
         }
 

@@ -180,7 +180,10 @@ Each new receipt adds `origin` (`manual` for the HTTP route, `agent` or
 (`correction|review|extraction|manual`, learning only), `preview` (memory: the
 body after the change, or the removed body on delete, first 160 characters;
 skill: `name`, plus ` — ` and the first 120 characters of a non-empty
-description) and, for memory, the resulting `category`. `summary` is unchanged.
+description) and, for memory, the resulting `category`. Receipts for about-user
+or long-term memory items also include `target: 'user' | 'memory'`, identifying
+`USER.md` or `MEMORY.md`; project memory receipts omit this field. `summary`
+is unchanged.
 Archived receipt digests keep `origin` but not `preview`; older receipts have
 none of these fields. A `ready` snapshot with memory enabled adds
 `usage: { memory: {chars, limit}, user: {chars, limit}, failure?: {chars, readOnly: true} }`
@@ -698,11 +701,11 @@ Use the pinned upstream tarball; its SHA256 is
 (npm integrity
 `sha512-1cZzVieL1H3o5ZNtgunwu7nD1+Cn/7GQv5SvPpWDoN+7iLHEy4dkY5D30g/gKdVhW2Pm+63wFwQ3mXxc7k2/OA==`).
 The reviewed isolated lock at `server/profile-memory/upstream-lock.json` has
-SHA256 `7a4586cad2ad86e3f9c48576f41e85d470463e4eeaa7e5b7e07107746020e262`.
+SHA256 `235b0e77dc56de914f99fe68e9b8da0f9afa450b7b968f5af004467db539708c`.
 Upstream 0.9.10 declares `@earendil-works/pi-tui` as a peer dependency; the
 recipe already installs the host TUI directly, so the lock contains one copy.
 This source recipe pins Pi and the host TUI to the reviewed host version in
-`server/pi-reviewed-host.js` and verifies brace-expansion 5.0.12 / undici 8.12.2 through the shared installation boundary; earlier published archives keep their own historical locks.
+`server/pi-reviewed-host.js` and verifies brace-expansion 5.0.12 / undici 8.12.3 through the shared installation boundary; earlier published archives keep their own historical locks.
 The isolated installer retains the reviewed JSON lock and rejects a different lock, creates a
 fresh prefix, runs `npm ci
 --ignore-scripts` for that locked graph, then runs only pinned `better-sqlite3`

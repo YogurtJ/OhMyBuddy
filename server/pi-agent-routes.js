@@ -118,18 +118,47 @@ function createPiAgentGateway(options = {}) {
     Object.assign(profiles, { nativeService, settingsService, maintenance });
     const sideChat = new PiSideChatService({ store, supervisor, usage });
     const notifications = new (require('./pi-notification-service').PiNotificationService)({ access, store });
-    supervisor.on('attention', event => { void notifications.notify(event); });
+    let proactive = null;
+    supervisor.on('attention', event => {
+        // A Bot's own follow-up that ended in an error is pushed (or not) by its completion, under the
+        // Bot's quiet hours and daily limit, never through this immediate path.
+        try {
+            if (event.kind === 'error' && cron?.db?.activeRuns().some(run => run.origin === 'bot' && run.target?.cwd === event.cwd
+                && run.target?.sessionId === event.sessionId)) return;
+        } catch { /* Scheduler not ready: notify as usual. */ }
+        void notifications.notify(event);
+    });
     supervisor.on('completion', (notice, worker) => {
-        if (worker) { void titles.auto(worker); void learning?.register(worker, 'settled'); }
+        if (worker) {
+            void titles.auto(worker).then(result => {
+                if (result && worker.loadedBot) void bots.learnTopicMeta(worker, { title: result.name, focus: result.focus });
+            });
+            void learning?.register(worker, 'settled');
+        }
+        // Bot windows: a large, long or old generation moves on once the reply is shown (D-030).
+        if (worker?.loadedBot) setTimeout(() => { void bots.maintainWindow(worker, { trigger: 'completion' }); }, 3000).unref?.();
+        // Follow-ups for commitments with a due time keep in step with the notebook after each reply.
+        if (worker?.loadedBot) proactive?.afterReply(worker.loadedBot.profileId, worker.loadedBot.windowId);
         if (worker?.cronRun) return;
-        void notifications.notify(notice);
-        try { preferences.recordReplyNotice(notice); }
-        catch { console.error('Pi reply notice could not be persisted'); }
+        // A message a Bot started itself is pushed only outside quiet hours and within its daily
+        // limit (held ones are combined into one push when quiet hours end); it always stays in the chat.
+        const record = (value = 'push') => {
+            if (value === 'push') void notifications.notify(notice);
+            // WeChat chats connected to the Bot get the pushed message too (M4-4).
+            if (value === 'push' && notice.proactive) { try { cron.notifyProactive(notice.completionId); } catch { /* best effort; stays in the chat */ } }
+            try { preferences.recordReplyNotice(value === 'push' ? notice : { ...notice, quiet: true }); }
+            catch { console.error('Pi reply notice could not be persisted'); }
+        };
+        if (!notice.proactive) return record();
+        void (proactive ? proactive.decide(notice).catch(() => 'capped') : Promise.resolve('capped')).then(record);
     });
 
     supervisor.on('worker', worker => {
         // Do not subscribe: a subscriber keeps the worker from being reclaimed.
-        worker.on('compaction', () => { void learning?.register(worker, 'compaction'); });
+        worker.on('compaction', () => {
+            void learning?.register(worker, 'compaction');
+            if (worker.loadedBot) setTimeout(() => { void bots.maintainWindow(worker, { trigger: 'compaction' }); }, 3000).unref?.();
+        });
         worker.once('disposed', () => { void learning?.register(worker, 'exit'); });
         worker.once('exit', () => { void learning?.register(worker, 'exit'); });
     });
@@ -171,7 +200,11 @@ function createPiAgentGateway(options = {}) {
         read.validate();
         const memoryEnvironment = await profileMemory.environment(context);
         read.validate();
+        // Bot windows: `bots` is constructed below; workers start only after routes are mounted.
+        const botContext = await bots.windowContext(read.manager(), { cwd, sessionId, sessionPath });
+        read.validate();
         return { ...env, PIVANE_AGENT_PROFILE_CONTEXT: context ? JSON.stringify(context) : undefined,
+            PIVANE_BOT_CONTEXT: botContext ? JSON.stringify(botContext) : undefined,
             PIVANE_ASSISTANT_PROJECT_CONTEXT: projectContext ? JSON.stringify(projectContext) : undefined,
             PIVANE_PROFILE_AUTHORING_CONTEXT: undefined, ...authoringEnvironment, ...memoryEnvironment };
     });
@@ -183,7 +216,8 @@ function createPiAgentGateway(options = {}) {
     router.get('/profiles', profileRoute(req => profiles.list(req.query.cwd)));
     router.put('/profiles', profileRoute(req => profiles.save(req.body)));
     router.put('/profiles/default', profileRoute(req => profiles.saveDefault(req.body)));
-    router.post('/profiles/:id/trash', profileRoute(req => profiles.trash(req.params.id, req.body)));
+    router.post('/profiles/:id/trash', profileRoute(async req => require('./bot/bot-settings').readBot(await profiles.getProfile(req.params.id))
+        ? bots.trash(req.params.id, req.body) : profiles.trash(req.params.id, req.body)));
     router.post('/profiles/:id/restore', profileRoute(req => profiles.restore(req.params.id, req.body)));
     router.get('/assistant-projects', profileRoute(req => assistantProjects.list(req.query.profileId)));
     router.put('/assistant-projects', profileRoute(req => assistantProjects.save(req.body)));
@@ -210,12 +244,59 @@ function createPiAgentGateway(options = {}) {
     require('./pi-profile-documents').mountProfileDocumentRoutes(router, profileResources);
     require('./pi-profile-avatar').mountProfileAvatarRoutes(router, profileResources);
     require('./pi-profile-authoring').mountProfileAuthoringRoutes(router, { store, profiles });
+    const bots = new (require('./bot/bot-service').BotService)({ store, profiles, supervisor, getAgentDir,
+        documents: require('./pi-profile-documents').profileDocuments(profileResources),
+        // agentThreads is created just below; the catalog is only read on request.
+        catalog: cwd => agentThreads.catalog(cwd) });
+    bots.on('windowRotated', event => supervisor.emit('botWindowRotated', event));
+    require('./bot/bot-routes').mountBotRoutes(router, { bots });
     const agentThreads = require('./pi-agent-threads').mountAgentThreads(router, { store, supervisor, settingsService, access,
         isSuspended: () => maintenance.locked || maintenance.referenceLocked || Boolean(store.sessionMoves?.running) });
 
-    const cron = new (require('./pi-cron-service').CronService)({ store, supervisor, profiles,
+    // A scheduled run found an idle Bot window still on its previous settings. Reopen it with the
+    // same guards as an explicit restart, so open pages reconnect to the replacement. Anything
+    // the user is still waiting on (queue recoveries, drafts, side chats, delayed sends) keeps the
+    // old runtime: the run is refused instead of changing it silently.
+    // Passing conditions answer SESSION_BUSY, so the scheduler tries again within the task's
+    // grace period; queue recoveries and drafts need the user, so the run fails instead.
+    const reloadBotWorker = source => {
+        const busy = () => Object.assign(new Error('Target thread became busy'), { code: 'SESSION_BUSY' });
+        // Session-level admission happens before the worker's own reservation: inside it the
+        // worker counts as occupied by this very operation.
+        if (!supervisor.isSessionIdle(source.sessionPath)) return Promise.reject(busy());
+        // exclusive() refuses an active, pending or scheduled runtime and confirms idleness with it.
+        return source.exclusive(async () => {
+            if (source.retainsBackgroundWork() || supervisor.getActiveWorker(source.sessionPath) !== source) throw busy();
+            if (settingsService.mutating || nativeService.busy || settingsService.loginService?.busy) throw busy();
+            if ([...sideChat.connections].some(c => c.reference.source?.cwd === source.cwd && c.reference.source?.sessionId === source.sessionId)
+                || [...sideChat.parents.values()].some(p => p.preparing && p.source?.cwd === source.cwd && p.source?.sessionId === source.sessionId)) throw busy();
+            if (deferred.list(source.cwd, source.sessionId).some(job => ['scheduled', 'waiting'].includes(job.status))) throw busy();
+            if (source.controls?.recoveries?.length || source.controls?.drafts?.length) throw new Error('Reopen the idle target thread to load its saved profile');
+            settingsService.mutating = true;
+            try { return await supervisor.restartWorker(source); }
+            finally { settingsService.mutating = false; }
+        });
+    };
+    const cron = new (require('./pi-cron-service').CronService)({ store, supervisor, profiles, bots, reloadBotWorker,
         catalog: cwd => agentThreads.catalog(cwd), isSuspended: () => maintenance.locked || maintenance.referenceLocked || Boolean(store.sessionMoves?.running), filename: options.cronFilePath });
     require('./pi-cron-service').mountCron(router, cron);
+    bots.trashBlockers = require('./bot/bot-trash').createTrashBlockers({ cron, deferred, learning, store });
+    require('./bot/bot-schedule').mountBotSchedule(router, { cron, bots, authenticate: req => agentThreads.authenticate(req) });
+    bots.cron = cron;
+    bots.assertWindowQuiescent = window => {
+        const ids = new Set(window.generations.map(item => item.sessionId));
+        const matches = source => source?.cwd === window.cwd && ids.has(source.sessionId);
+        if ([...ids].some(id => deferred.list(window.cwd, id).some(job => !['sent', 'cancelled'].includes(job.status)))
+            || [...sideChat.connections].some(c => matches(c.reference.source))
+            || [...sideChat.parents.values()].some(p => (p.preparing || p.ticket) && matches(p.source)))
+            throw Object.assign(new Error('This topic has pending messages or side chats; finish them before archiving'), { status: 409, code: 'BOT_WINDOW_BUSY' });
+    };
+    require('./bot/bot-topic').mountBotTopics(router, { bots, authenticate: req => agentThreads.authenticate(req) });
+    // Messages Bots start themselves (M4-3): due follow-ups and check-ins, quiet hours and push limits.
+    proactive = new (require('./bot/bot-proactive').BotProactive)({ profiles, bots, cron, notifications, preferences, getAgentDir,
+        isSuspended: () => maintenance.locked || maintenance.referenceLocked || Boolean(store.sessionMoves?.running) });
+    bots.proactive = proactive;
+    proactive.start();
     const channels = new (require('./channels/service').ChannelsService)({ store, supervisor,
         mediaLabService: options.mediaLabService, mediaRoot: options.artifactMediaRoot,
         isSuspended: () => maintenance.locked || maintenance.referenceLocked || Boolean(store.sessionMoves?.running),
@@ -227,6 +308,9 @@ function createPiAgentGateway(options = {}) {
         return Boolean(job && !job.deleted && require('./pi-cron-service').weixinNotification(job) !== 'off');
     };
     channels.scheduledAdmissionPending = id => cron.db?.run(id)?.channelNotify?.status === 'pending';
+    // WeChat chats connected to a Bot follow its windows to new generations (M4-4).
+    channels.bots = bots;
+    bots.on('windowRotated', event => { try { require('./channels/bot-channel').windowRotated(channels, event); } catch { /* reconciled before the next turn */ } });
     require('./channels/service').mountChannels(router, channels);
 
     router.get('/status', async (req, res) => {
@@ -246,6 +330,7 @@ function createPiAgentGateway(options = {}) {
             scheduledTasks: true,
             messageChannels: true,
             agentProfiles: true,
+            bots: true,
             assistantProjects: true,
             sessionClassification: true,
             profileDocuments: true,
@@ -582,6 +667,8 @@ function createPiAgentGateway(options = {}) {
 
     const sessionClassificationListeners = new Set();
     supervisor.on('sessionClassification', session => { for (const listener of sessionClassificationListeners) listener(session); });
+    const windowRotationListeners = new Set();
+    supervisor.on('botWindowRotated', event => { for (const listener of windowRotationListeners) listener(event); });
     const sessionMoveListeners = new Set();
     supervisor.on('sessionMove', event => { for (const listener of sessionMoveListeners) listener(event); });
     const sessionRemovalListeners = new Set();
@@ -620,7 +707,7 @@ function createPiAgentGateway(options = {}) {
     });
 
     require('./pi-session-classification').mountSessionClassification(router, { store, supervisor, profiles, projects: assistantProjects, sideChat });
-    mountSessionWorkflows(router, { store, supervisor, deferred, preferences });
+    mountSessionWorkflows(router, { store, supervisor, deferred, preferences, assertDeferredSendable: session => bots.assertNativeSendable(session) });
     const sessionTransfer = require('./pi-session-transfer').mountSessionTransfer(router, { store, supervisor, preferences });
     const sessionMoves = require('./pi-session-moves').mountSessionMoves(router, { store, supervisor, preferences, usage, deferred, cron, sideChat, channels,
         isSuspended: () => maintenance.locked || maintenance.referenceLocked,
@@ -680,6 +767,14 @@ function createPiAgentGateway(options = {}) {
                 socket.close(1012, 'Session classification changed');
             };
             sessionClassificationListeners.add(sessionClassification);
+            const windowRotation = event => {
+                if (event.from.sessionPath !== workerSessionPath) return;
+                // 4007: the page must open the window's new generation, never reconnect to this one.
+                safeSend(socket, { type: 'gateway_window_rotated', profileId: event.profileId, windowId: event.windowId,
+                    generation: event.to.generation }, { code: 4007, reason: 'Window rotated' });
+                socket.close(4007, 'Window rotated');
+            };
+            windowRotationListeners.add(windowRotation);
             const sessionRemoval = event => {
                 if (event.path !== workerSessionPath) return;
                 if (event.deleted) safeSend(socket, { type: 'gateway_session_deleted', cwd: event.cwd, sessionId: event.id, trashed: event.result.trashed },
@@ -855,8 +950,14 @@ function createPiAgentGateway(options = {}) {
                                 ephemeral: true
                             };
                         } else {
+                            // Bot mode names its window: only the window's current generation may be
+                            // opened there (the Pi Agent page can still open any native session).
+                            const botWindow = message.botWindow;
+                            if (botWindow !== undefined && (!botWindow || typeof botWindow.profileId !== 'string' || typeof botWindow.windowId !== 'string'))
+                                throw new Error('Invalid Bot window');
                             await store.withSessionRead(message.cwd, message.sessionId, async prepared => {
                                 session = prepared;
+                                if (botWindow) await bots.assertCurrentWindowSession(botWindow.profileId, botWindow.windowId, session);
                                 source = await supervisor.getWorker({ cwd: session.cwd, sessionPath: session.path, sessionId: session.id });
                             });
                         }
@@ -871,6 +972,9 @@ function createPiAgentGateway(options = {}) {
                                 safeSend(socket, event, closing); socket.close(closing.code, closing.reason);
                             } else safeSend(socket, event);
                         });
+                        // Rechecked once subscribed: a rotation committed before the subscription
+                        // existed would otherwise leave this socket on the retired generation.
+                        if (message.botWindow) await bots.assertCurrentWindowSession(message.botWindow.profileId, message.botWindow.windowId, session);
                         const snapshot = await buildSnapshot(session, source);
                         if (socketClosed) { await releaseCurrentWorker(false); return; }
                         safeSend(socket, {
@@ -1095,6 +1199,7 @@ function createPiAgentGateway(options = {}) {
             socket.on('close', () => {
                 sessionRemovalListeners.delete(sessionRemoval);
                 sessionClassificationListeners.delete(sessionClassification);
+                windowRotationListeners.delete(windowRotation);
                 sessionMoveListeners.delete(sessionMove);
                 socketClosed = true;
                 clearTimeout(authTimer);
@@ -1124,6 +1229,7 @@ function createPiAgentGateway(options = {}) {
         const stoppingTranscription = transcription.dispose();
         const stoppingDocuments = documents.dispose();
         cron.stopping = true;
+        const stoppingProactive = proactive?.dispose();
         const stoppingDeferred = deferred.dispose();
         const stoppingMoves = sessionMoves.dispose();
         const stoppingThreads = agentThreads.dispose();
@@ -1137,8 +1243,9 @@ function createPiAgentGateway(options = {}) {
         await usage.dispose();
         await stoppingThreads;
         await Promise.all([stoppingChannels, stoppingFileRoots, stoppingDeferred, stoppingTitles, stoppingAuxiliaryModels, stoppingMoves, stoppingTranscription, stoppingDocuments]);
+        await stoppingProactive;
         await cron.dispose();
-    }, store, supervisor, channels, cron, deferred, sideChat, titles, auxiliaryModels, learning, knowledgeService, agentThreads, sessionMoves, transcription, documents, artifacts };
+    }, store, supervisor, bots, channels, cron, deferred, sideChat, titles, auxiliaryModels, learning, knowledgeService, agentThreads, sessionMoves, transcription, documents, artifacts };
 }
 
 module.exports = { createPiAgentGateway };

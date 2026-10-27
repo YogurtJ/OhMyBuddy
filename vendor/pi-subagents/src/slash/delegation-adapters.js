@@ -1,4 +1,5 @@
 import { cloneJsonWithinByteLimit } from "./delegation-json.js";
+import { clearProviderRetry, snapshotProviderDiagnostics } from "../shared/provider-diagnostics.js";
 export function parsePromptTemplateRequest(data) {
     if (!data || typeof data !== "object")
         return undefined;
@@ -207,6 +208,9 @@ export function toSubagentDelegationUpdate(request, result) {
         ...(typeof legacy.durationMs === "number" ? { durationMs: legacy.durationMs } : {}),
         ...(typeof legacy.tokens === "number" ? { tokens: legacy.tokens } : {}),
         ...(legacy.usage ? { usage: legacy.usage } : {}),
+        ...(result.details?.progress?.[0]?.providerDiagnostics ? {
+            providerDiagnostics: snapshotProviderDiagnostics(result.details.progress[0].providerDiagnostics),
+        } : {}),
     };
 }
 function resolveSubagentDelegationStatus(result, aborted) {
@@ -282,6 +286,9 @@ export function toSubagentDelegationResponse(request, result, aborted) {
         ...(typeof child?.exitCode === "number" ? { exitCode: child.exitCode } : {}),
         ...(childLaunchContractDigest ? { launchContractDigest: childLaunchContractDigest } : {}),
         ...(projectedResult ? { result: projectedResult } : {}),
+        ...(child?.providerDiagnostics ? {
+            providerDiagnostics: snapshotProviderDiagnostics(clearProviderRetry(child.providerDiagnostics)),
+        } : {}),
         ...(usage ? {
             usage: {
                 input: usage.input,

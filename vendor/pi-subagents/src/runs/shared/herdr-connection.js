@@ -30,8 +30,12 @@ function canonicalHerdrSession(session) { return session && session !== "default
 function sshEnvCommand(session, command) { const selected = canonicalHerdrSession(session), assignment = selected ? ` HERDR_SESSION=${shellQuoteRemote(selected)}` : ""; return `/usr/bin/env -u HERDR_SOCKET_PATH -u HERDR_SESSION${assignment} ${remoteShellCommand(command)}`; }
 export function runHerdrRemoteCommand(machine, command, options = {}) { return spawnSync(options.sshBin ?? "ssh", [...herdrSshArgs(options.env), machine.target, command], { encoding: "utf8", env: hardenedSshEnv(options.env), timeout: options.timeout ?? 15_000, maxBuffer: options.maxBuffer ?? MAX_DISCOVERY_BYTES, windowsHide: true }); }
 export function runHerdrRemoteCommandAsync(machine, command, options = {}) {
+    return runBoundedCommand(options.sshBin ?? "ssh", [...herdrSshArgs(options.env), machine.target, command], { env: hardenedSshEnv(options.env), timeout: options.timeout, maxBuffer: options.maxBuffer });
+}
+/** Spawns one process with bounded output and a SIGTERM-then-SIGKILL timeout; never rejects. */
+export function runBoundedCommand(file, args, options) {
     return new Promise((resolve) => {
-        const child = spawn(options.sshBin ?? "ssh", [...herdrSshArgs(options.env), machine.target, command], { env: hardenedSshEnv(options.env), stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+        const child = spawn(file, args, { env: options.env, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
         const stdout = [], stderr = [], maxBuffer = options.maxBuffer ?? MAX_DISCOVERY_BYTES;
         let stdoutBytes = 0, stderrBytes = 0, error, settled = false, escalation;
         const finish = (status, spawnError = error) => { if (settled)
@@ -226,10 +230,7 @@ async function terminateChild(child) { const wait = (ms) => child.exitCode !== n
     child.kill("SIGKILL");
     await wait(1_000);
 } }
-export async function connectHerdrMachine(machine, options = {}) {
-    if (process.platform === "win32")
-        throw new Error("Pane-native Herdr placement requires OpenSSH StreamLocal forwarding and is not supported on Windows.");
-    const endpoint = await discoverHerdrEndpoint(machine, options);
+function openSshSockets(machine, options) {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-subagents-herdr-"));
     fs.chmodSync(dir, 0o700);
     const children = new Set();
@@ -252,6 +253,17 @@ export async function connectHerdrMachine(machine, options = {}) {
         }
         return { socketPath: local, close: stop };
     };
-    const primary = await forward(endpoint.socket, "herdr").catch((error) => { fs.rmSync(dir, { recursive: true, force: true }); throw error; });
-    return { endpoint, socketPath: primary.socketPath, client: new SocketRpcClient(primary.socketPath), forwardRemoteSocket: forward, close: async () => { await Promise.all([...children].map(terminateChild)); children.clear(); fs.rmSync(dir, { recursive: true, force: true }); } };
+    return { forwardRemoteSocket: forward, close: async () => { await Promise.all([...children].map(terminateChild)); children.clear(); fs.rmSync(dir, { recursive: true, force: true }); } };
+}
+/** SSH machine access: hardened ssh commands and StreamLocal forwards that share one private local directory per socket scope. */
+export function sshMachineAccess(machine, options = {}) {
+    return { shellCommand: remoteShellCommand, run: (command, limits = {}) => runHerdrRemoteCommand(machine, command, { ...options, ...limits }), runAsync: (command, limits = {}) => runHerdrRemoteCommandAsync(machine, command, { ...options, ...limits }), openSockets: () => openSshSockets(machine, options) };
+}
+export async function connectHerdrMachine(machine, options = {}) {
+    if (process.platform === "win32")
+        throw new Error("Pane-native Herdr placement requires OpenSSH StreamLocal forwarding and is not supported on Windows.");
+    const endpoint = await discoverHerdrEndpoint(machine, options);
+    const sockets = sshMachineAccess(machine, options).openSockets();
+    const primary = await sockets.forwardRemoteSocket(endpoint.socket, "herdr").catch(async (error) => { await sockets.close(); throw error; });
+    return { endpoint, socketPath: primary.socketPath, client: new SocketRpcClient(primary.socketPath), forwardRemoteSocket: sockets.forwardRemoteSocket, close: sockets.close };
 }

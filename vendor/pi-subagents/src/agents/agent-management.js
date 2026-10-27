@@ -5,7 +5,7 @@ import { serializeAgent } from "./agent-serializer.js";
 import { mergeAgentsForScope } from "./agent-selection.js";
 import { discoverAvailableSkills, resolveSkills } from "./skills.js";
 import { buildProactiveSkillSubagentRecommendationLines, } from "./proactive-skills.js";
-import { parseFrontmatter, parseFrontmatterList } from "./frontmatter.js";
+import { parseFrontmatter, parseUnquotedList } from "./frontmatter.js";
 import { resolveEffectiveThinking, toModelInfo } from "../shared/model-info.js";
 import { resolveSubagentModelOverride } from "../runs/shared/model-resolution.js";
 import { validateToolBudgetConfig } from "../runs/shared/tool-budget.js";
@@ -175,9 +175,9 @@ function withDeclaredExtensionPaths(config, filePath) {
     const { extensions: _extensions, subagentOnlyExtensions: _subagentOnlyExtensions, ...withoutResolvedExtensions } = config;
     return {
         ...withoutResolvedExtensions,
-        ...(frontmatter.extensions !== undefined ? { extensions: parseFrontmatterList(frontmatter.extensions) } : {}),
+        ...(frontmatter.extensions !== undefined ? { extensions: parseUnquotedList(frontmatter.extensions) } : {}),
         ...(frontmatter.subagentOnlyExtensions !== undefined
-            ? { subagentOnlyExtensions: parseFrontmatterList(frontmatter.subagentOnlyExtensions) }
+            ? { subagentOnlyExtensions: parseUnquotedList(frontmatter.subagentOnlyExtensions) }
             : {}),
     };
 }

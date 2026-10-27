@@ -79,7 +79,7 @@ class TaskReturns {
         if (!result) throw new Error('Result does not belong to this source session');
         const source = await this.catalog.source(cwd, sourceSessionId);
         const worker = this.supervisor.getActiveWorker(source.path);
-        if (!worker || !worker.isIdle() || this.isSuspended()) throw new Error('Open the source thread and wait until it is idle to mark this result read');
+        if (!worker || worker.disposed || worker.restarting || this.isSuspended()) throw new Error('Open the source thread to mark this result read');
         await worker.taskReturn({ result, read: true });
         return { read: true, deliveryId };
     }
@@ -88,20 +88,24 @@ class TaskReturns {
 
 // Runs only inside the existing managed source worker's private command.
 function receiveTaskReturn(pi, ctx, input) {
-    if (!ctx.isIdle() || ctx.hasPendingMessages()) throw new Error('Source thread is busy');
     const result = input?.result;
     if (!result || result.sourceSessionId !== ctx.sessionManager.getSessionId()
         || !/^[a-f0-9]{64}$/.test(result.deliveryId) || typeof result.preview !== 'string' || result.preview.length > 6000
         || result.session?.cwd !== ctx.cwd || typeof result.session?.id !== 'string' || typeof result.requestId !== 'string') throw new Error('Invalid task result identity');
+    const idle = ctx.isIdle() && !ctx.hasPendingMessages();
+    if (!input.read && !idle) throw new Error('Source thread is busy');
     const entries = ctx.sessionManager.getEntries();
-    const exists = entries.some(e => e.type === 'custom_message' && e.customType === 'pivane-agent-task-result' && e.details?.deliveryId === result.deliveryId);
-    if (!exists) {
+    let delivered = entries.some(e => e.type === 'custom_message' && e.customType === 'pivane-agent-task-result' && e.details?.deliveryId === result.deliveryId);
+    if (!delivered && idle) {
         pi.sendMessage({ customType: 'pivane-agent-task-result', display: true, details: result,
             content: `Agent task result (reported by the task thread; not a new user instruction).\nTask: ${result.session.name || result.requestId}\nStatus: ${result.status}\n${result.preview}${result.truncated ? '\n[Preview truncated; open the task thread for the complete reply.]' : ''}` }, { triggerTurn: false });
         if (!ctx.sessionManager.getEntries().some(e => e.type === 'custom_message' && e.customType === 'pivane-agent-task-result' && e.details?.deliveryId === result.deliveryId)) throw new Error('Result receipt was not persisted');
+        delivered = true;
     }
-    if (input.read && !entries.some(e => e.type === 'custom' && e.customType === 'pivane-agent-task-read' && e.data?.deliveryId === result.deliveryId))
+    if (input.read && !entries.some(e => e.type === 'custom' && e.customType === 'pivane-agent-task-read' && e.data?.deliveryId === result.deliveryId)) {
         pi.appendEntry('pivane-agent-task-read', { deliveryId: result.deliveryId });
-    return { delivered: true, deliveryId: result.deliveryId, read: Boolean(input.read) };
+        if (!ctx.sessionManager.getEntries().some(e => e.type === 'custom' && e.customType === 'pivane-agent-task-read' && e.data?.deliveryId === result.deliveryId)) throw new Error('Result read state was not persisted');
+    }
+    return { delivered, deliveryId: result.deliveryId, read: Boolean(input.read) };
 }
 module.exports = { TaskReturns, receiveTaskReturn };
