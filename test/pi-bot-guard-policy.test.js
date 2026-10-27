@@ -48,7 +48,7 @@ test('free is full access: ordinary, opaque and unrecognised commands run; only 
 
 test('balanced classification still recognises understood commands and asks before danger or opaque shell syntax', () => {
     for (const command of ['pwd', 'date', "date '+%Y-%m-%d %H:%M:%S %:z %u'", 'date -u "+%Y-%m-%dT%H:%M:%SZ"', "date -d 'next friday' '+%F'", 'date --date="tomorrow" +%F', 'cal', 'cal 2026', 'ls -la', 'cat "notes.txt"', "cat 'notes.txt'", 'cat no\\ tes.txt', 'echo "hello; world"', 'printf "%s" "hi"',
-        'git status --short', 'git diff', 'git diff --no-ext-diff --no-textconv', 'git log -n 5 --oneline', 'rg -n pattern notes.txt',
+        'git status --short', 'git diff --no-ext-diff --no-textconv --stat', 'git diff --no-ext-diff --no-textconv', 'git show -s HEAD', 'fd notes', 'tree -L 2', 'uniq -c notes.txt', 'git log -n 5 --oneline', 'rg -n pattern notes.txt',
         'find . -maxdepth 2 -name notes.txt', 'ls | head -n 5', 'echo ok && pwd', 'cd .. && ls -la', 'mkdir -p notes/new', 'touch notes/new.txt']) {
         assert.equal(classify(command), 'safe', command);
         assert.equal(check('free', 'bash', { command }), null, command);
@@ -60,7 +60,7 @@ test('balanced classification still recognises understood commands and asks befo
     const opaque = ['echo ok; date', 'echo ok || pwd', 'echo ok\npwd', 'echo hi > ../outside/note.txt',
         'cat <(echo hi)', 'cat $(echo notes.txt)', 'cat `echo notes.txt`', 'cat *.txt', 'cat "$FILE"',
         "python -c 'print(1)'", 'node -e "console.log(1)"', "bash -c 'date'", "eval 'date'", 'command date',
-        'timeout 2 date', 'X=1 date', 'date -s "2026-01-01"', 'date --set="2026-01-01"', 'date -f notes.txt', 'date -r 1700000000', 'LS', 'ls.exe', './script.sh', '/tmp/ls', 'cat "unterminated', 'git -c core.pager=x status', 'git status --help', 'git log --no-ext-diff --no-textconv --help',
+        'timeout 2 date', 'X=1 date', 'date -s "2026-01-01"', 'date --set="2026-01-01"', 'date -f notes.txt', 'date -r 1700000000', 'fd -x sh -c id', 'fd -tfx id', 'tree -o out.txt', 'uniq notes.txt out.txt', 'rg -z pattern', 'rg --search-zip pattern', 'git diff', 'git log -p', 'git show HEAD', 'LS', 'ls.exe', './script.sh', '/tmp/ls', 'cat "unterminated', 'git -c core.pager=x status', 'git status --help', 'git log --no-ext-diff --no-textconv --help',
         'git log --no-ext-diff --no-textconv --output=notes.txt', 'find . -exec echo {} \\;'];
     for (const command of [...risky, ...opaque]) {
         const decision = check('balanced', 'bash', { command });
