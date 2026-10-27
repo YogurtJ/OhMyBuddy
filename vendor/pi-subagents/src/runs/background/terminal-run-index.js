@@ -12,6 +12,35 @@ const TOOL_CALL_INDEX_DIR = "@tool-calls";
 function isTerminalState(state) {
     return state === "complete" || state === "failed" || state === "partial" || state === "paused" || state === "stopped" || state === "rejected";
 }
+function isCorruptStatusError(error, statusPath) {
+    const message = error instanceof Error ? error.message : String(error);
+    return message.startsWith(`Failed to parse async status file '${statusPath}'`)
+        || message.startsWith(`Failed to validate async status file '${statusPath}'`);
+}
+// A corrupt indexed status is retried on every read. Emit a warning only when
+// its observed file identity or parse outcome changes, like active-run diagnostics.
+const reportedCorruptTerminalStatus = new Map();
+function warnCorruptTerminalStatus(runId, statusPath, error, onCorruptStatus) {
+    let fileSignature = "unavailable";
+    try {
+        const stat = fs.statSync(statusPath);
+        fileSignature = `${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}:${stat.ino}`;
+    }
+    catch (statError) {
+        if (statError.code !== "ENOENT")
+            throw statError;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    const signature = `${fileSignature}\n${message}`;
+    if (reportedCorruptTerminalStatus.get(statusPath) === signature)
+        return;
+    reportedCorruptTerminalStatus.set(statusPath, signature);
+    const warning = `Skipping indexed terminal run '${runId}' with corrupt status at '${statusPath}': ${message}`;
+    if (onCorruptStatus)
+        onCorruptStatus(warning);
+    else
+        console.error(`[pi-subagents] ${warning}`);
+}
 function indexRoot(asyncDirRoot) {
     return path.join(asyncDirRoot, TERMINAL_RUN_INDEX_DIR);
 }
@@ -99,8 +128,10 @@ function sessionDirs(asyncDirRoot, sessionId) {
         throw error;
     }
 }
-function recentMarkerFiles(dirs, limit) {
+function recentMarkerFiles(dirs, limit, endedAfter) {
     return dirs.flatMap(markerFiles)
+        // The name starts with the run's end time, so an old run is skipped without reading its marker.
+        .filter((marker) => endedAfter === undefined || !(Number(marker.name.slice(0, TIMESTAMP_WIDTH)) < endedAfter))
         .sort((left, right) => right.name.localeCompare(left.name))
         .slice(0, limit)
         .map((marker) => path.join(marker.dir, marker.name));
@@ -135,7 +166,7 @@ export function readTerminalRunToolCallIndex(asyncDirRoot, toolCallId) {
 }
 export function readRecentTerminalRunIndex(asyncDirRoot, options = {}) {
     const limit = options.limit === undefined ? Number.POSITIVE_INFINITY : Math.max(0, Math.floor(options.limit));
-    const candidates = recentMarkerFiles(sessionDirs(asyncDirRoot, options.sessionId), limit);
+    const candidates = recentMarkerFiles(sessionDirs(asyncDirRoot, options.sessionId), limit, options.endedAfter);
     const runIds = [];
     const seen = new Set();
     for (const marker of candidates) {
@@ -152,7 +183,17 @@ export function readRecentTerminalRunIndex(asyncDirRoot, options = {}) {
             continue;
         }
         const asyncDir = path.join(asyncDirRoot, entry.runId);
-        const status = readStatus(asyncDir);
+        const statusPath = path.join(asyncDir, "status.json");
+        let status;
+        try {
+            status = readStatus(asyncDir);
+        }
+        catch (error) {
+            if (!isCorruptStatusError(error, statusPath))
+                throw error;
+            warnCorruptTerminalStatus(entry.runId, statusPath, error, options.onCorruptStatus);
+            continue;
+        }
         if (!status || !isTerminalState(status.state) || status.sessionId !== entry.sessionId || (status.runId && status.runId !== entry.runId)) {
             removeInvalidMarker(marker);
             continue;

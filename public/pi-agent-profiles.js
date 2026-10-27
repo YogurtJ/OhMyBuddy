@@ -54,6 +54,7 @@
         const profileDirty = () => Boolean(draft && JSON.stringify(draft) !== original);
         const dirty = () => Boolean(profileDirty() || call(knowledge, 'dirty') || call(learning, 'dirty') || stagedDocuments.size);
         function avatar(profile, className = '') {
+            if (window.PiAvatar) return window.PiAvatar.render(profile, `pi-id-avatar ${className}`.trim());
             const node = el('span', { class: `pi-id-avatar ${className}`.trim() });
             if (profile.avatar?.kind === 'image' && profile.id) node.append(el('img', { src: `/api/pi/profiles/${encodeURIComponent(profile.id)}/avatar?version=${encodeURIComponent(profile.avatar.version)}`, alt: '' }));
             else node.textContent = profile.avatar?.kind === 'emoji' ? profile.avatar.value : profile.name?.trim().slice(0, 1).toUpperCase() || '✦';
@@ -129,6 +130,10 @@
                 el('div', { class: 'pi-id-header-copy' }, [el('h2', { text: profile.id ? profile.name : t('新建身份') }), el('p', { text: profile.description || t('从名称和协作方式开始') }), profile.id && meta]));
             if (profile.id) {
                 const menuItems = [{ label: t('与 Agent 起草'), icon: 'wand-magic-sparkles', disabled: !enabled || busy(), onSelect: () => void assist() }];
+                // An identity can become a Bot (M4-5b); a Bot is managed from the Bot page.
+                const stored = savedProfile();
+                if (stored && !stored.bot) menuItems.push({ label: t('变成 Bot'), icon: 'robot', disabled: !enabled || busy() || Boolean(reconcile) || !stored.enabled,
+                    title: !stored.enabled ? t('请先启用并保存此身份') : undefined, onSelect: () => void makeBot(stored) });
                 if (Array.isArray(snapshot?.trash)) menuItems.push({ label: t('移到回收站'), icon: 'trash-can', tone: 'danger', disabled: !enabled || busy() || Boolean(reconcile), onSelect: () => void trashAction(profile, 'trash') });
                 header.append(el('div', { class: 'pi-id-header-actions' }, [button({ label: t('用此身份对话'), icon: 'comments', variant: 'primary', disabled: !enabled || !profile.enabled || busy(), title: !profile.enabled ? t('请先启用并保存此身份') : undefined, attrs: { 'data-profile-chat': '' }, onClick: () => void chat() }),
                     button({ label: t('与 Agent 起草'), icon: 'wand-magic-sparkles', className: 'pi-id-btn-collapsible', disabled: !enabled || busy(), attrs: { 'data-profile-assist': '' }, onClick: () => void assist() }), U.menu({ label: t('更多操作'), items: menuItems })]));
@@ -191,10 +196,21 @@
             draft = null; selected = ''; ++editorVersion; ++overviewEpoch; ++proposalEpoch; ++openEpoch;
             reconcile = null; proposal = null; call(knowledge, 'close'); call(learning, 'close'); renderPersona(); showSection(); renderHeader(); renderList();
         }
-        async function chat(projectId) {
-            const id = selected;
-            if (!savedProfile()?.enabled || !await guard() || id !== selected) return;
-            window.PiWorkspaceRoute?.navigate('assistant', { profileId: id, ...(projectId ? { projectId } : {}) });
+        // The assistant chat page is retired (M4-5c): a Bot opens its own chat; another identity gets
+        // a new Pi Agent thread in the current project, or in a related category's folder (keeping
+        // that category's instructions).
+        async function chat(project) {
+            const id = selected, profile = savedProfile();
+            if (!profile?.enabled || !await guard() || id !== selected) return;
+            if (profile.bot) return void window.PiWorkspaceRoute?.navigate('bot', { profileId: id });
+            const target = project?.cwd || cwd();
+            if (!target) { ui.toast(t('请先在 Pi Agent 选择一个项目'), { tone: 'warning' }); return; }
+            try {
+                const session = await apiFetch('/api/pi/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cwd: target, profileId: id, ...(project ? { assistantProjectId: project.id } : {}) }) });
+                if (!active() || selected !== id) return;
+                window.PiWorkspaceRoute?.navigate('chat', { cwd: session.cwd, sessionId: session.id });
+            } catch (error) { ui.toast(t('没有新建线程：{0}', error.message), { tone: 'error' }); }
         }
         function field(label, name, value, attrs = {}, tag = 'input') {
             const id = `pi-profile-${name}`;
@@ -209,6 +225,7 @@
             avatarButton.className = 'pi-id-avatar is-xl'; avatarButton.setAttribute('aria-label', t('更换头像')); avatarButton.replaceChildren(...avatar(draft).childNodes);
             const updateAvatar = value => { draft.avatar = value; renderPersona(); syncSave(); };
             const avatarActions = el('div', { class: 'pi-id-toolbar' }, [button({ label: t('移除头像'), variant: 'ghost', attrs: { id: 'pi-profile-avatar-clear' }, onClick: () => updateAvatar(null) })]);
+            if (window.PiAvatar) picker.append(window.PiAvatar.choices(draft.avatar, updateAvatar));
             picker.append(el('div', { class: 'pi-profile-emoji-grid' }, [...'🍀 🌿 🦉 🧠 🔭 📚 ✍️ 🧪 💡 🎯 🛠️ 🐱 🦊 🌙 ⭐ 🤖'.split(' ')].map(emoji => button({ label: emoji, variant: 'ghost', onClick: () => updateAvatar({ kind: 'emoji', value: emoji }) }))),
                 field('自定义表情', 'emoji', draft.avatar?.kind === 'emoji' ? draft.avatar.value : '', { maxLength: 16 }),
                 avatarActions);
@@ -358,7 +375,7 @@
             }
             const changes = card({ title: t('最近变化'), icon: 'clock-rotate-left', actions: receipts.length > 6 && receiptLimit === 6 ? [button({ label: t('显示更多'), size: 'sm', variant: 'ghost', onClick: () => { receiptLimit = 30; renderOverview(); } })] : [] }, [!knowledgeData ? notice(t('{0}读取失败：{1}', t('记忆'), overviewData.knowledge.reason?.message || ''), [button({ label: t('重试'), size: 'sm', onClick: () => void loadOverview() })]) : receipts.length ? timeline : empty({ icon: 'clock', title: t('还没有变化记录'), compact: true })]);
             const projectsCard = card({ title: t('关联项目'), icon: 'folder-open', subtitle: t('这些项目中的新对话会使用此身份。') }, [
-                projectsData ? projectRows.length ? el('div', { class: 'pi-id-entries' }, projectRows.map(project => el('div', { class: 'pi-id-entry pi-profile-project' }, [el('div', { class: 'pi-id-entry-main' }, [el('span', { class: 'pi-id-entry-title' }, [icon('folder'), ' ', project.name]), el('span', { class: 'pi-id-entry-meta pi-profile-project-path', title: project.cwd, text: project.cwd }), el('span', { class: 'pi-id-entry-text', text: project.description || '' })]), button({ label: t('在此项目对话'), icon: 'arrow-right', variant: 'quiet', size: 'sm', onClick: () => void chat(project.id) })]))) : empty({ icon: 'folder-open', title: t('没有关联项目'), text: t('在“助手对话”中新建项目并选择此身份。'), compact: true })
+                projectsData ? projectRows.length ? el('div', { class: 'pi-id-entries' }, projectRows.map(project => el('div', { class: 'pi-id-entry pi-profile-project' }, [el('div', { class: 'pi-id-entry-main' }, [el('span', { class: 'pi-id-entry-title' }, [icon('folder'), ' ', project.name]), el('span', { class: 'pi-id-entry-meta pi-profile-project-path', title: project.cwd, text: project.cwd }), el('span', { class: 'pi-id-entry-text', text: project.description || '' })]), button({ label: t('在此项目对话'), icon: 'arrow-right', variant: 'quiet', size: 'sm', onClick: () => void chat(project) })]))) : empty({ icon: 'folder-open', title: t('没有关联项目'), text: t('在 Pi Agent 项目菜单中选“以身份新建…”，就能在那个项目里用此身份。'), compact: true })
                     : notice(t('关联项目读取失败：{0}', overviewData.projects.reason?.message || ''), [button({ label: t('重试'), size: 'sm', onClick: () => void loadOverview() })])]);
             projectsCard.dataset.projectsCard = '';
             overviewRoot.replaceChildren(stats, el('div', { class: 'pi-id-grid-2' }, [card({ title: t('需要处理'), icon: 'list-check' }, [attention]), changes]), projectsCard,
@@ -418,6 +435,37 @@
                 if (error.status === 409) ui.toast(t('身份已变化，请刷新核对。'), { tone: 'warning' });
                 else { reconcile = { kind: operation }; personaNotice = t('结果未确认，请刷新核对'); ui.toast(personaNotice, { tone: 'warning' }); }
             } finally { mutation = null; if (!reconcile) await load(); renderList(); renderHeader(); showSection(); renderPersonaNotice(); syncSave(); }
+        }
+        // POST /bots/from-profile after an explicit confirmation that says what changes and what stays.
+        async function makeBot(profile) {
+            if (!active() || busy() || reconcile || !snapshot) return;
+            const id = profile.id, revision = snapshot.revision;
+            if (selected !== id || !await guard()) return;
+            let schedules = 0;
+            try {
+                const cron = await apiFetch('/api/pi/cron');
+                schedules = (cron.jobs || []).filter(job => !job.deleted && job.target?.kind === 'profile' && job.target.profileId === id).length;
+            } catch { schedules = 0; }
+            const message = [t('{0} 会保留名字、头像、性格、记忆和技能，并有自己的主聊天和工作目录，出现在 Bot 页面。以前用它进行的对话保留在 Pi Agent 的线程列表里。', profile.name),
+                schedules ? t('以它为目标的 {0} 个定时任务以后会发到 Bot 的主聊天。', schedules) : '',
+                t('第一次打开时它会问问想让它主要帮你做什么、怎么做事。变成 Bot 后不能再变回普通身份，可以像其他 Bot 一样移到回收站。')].filter(Boolean).join('\n\n');
+            const accepted = await ui.confirm({ title: t('把“{0}”变成 Bot？', profile.name), message, accept: t('变成 Bot') });
+            if (!accepted || !active() || busy() || selected !== id || snapshot?.revision !== revision) return;
+            mutation = { kind: 'bot' }; renderList(); renderHeader(); syncSave();
+            let done = false;
+            try {
+                await apiFetch('/api/pi/bots/from-profile', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ profileId: id, expectedRevision: revision, language: globalThis.PiI18n?.locale === 'en' ? 'en' : 'zh-CN' }) });
+                done = true;
+                ui.toast(t('“{0}”已变成 Bot', profile.name)); window.dispatchEvent(new CustomEvent('workspace:agent-profiles-changed'));
+            } catch (error) {
+                if (error.status === 409 && error.code === 'PROFILE_ALREADY_BOT') ui.toast(t('它已经是 Bot 了。'), { tone: 'info' });
+                else if (error.status === 409 && error.code === 'PROFILE_DISABLED') ui.toast(t('请先启用并保存此身份'), { tone: 'warning' });
+                else if (error.status === 409 || error.status === 404) ui.toast(error.status === 404 ? t('找不到这个身份了，请刷新核对。') : t('身份已变化，请刷新核对。'), { tone: 'warning' });
+                else if (error.status >= 400 && error.status < 500) ui.toast(t('没有变成 Bot：{0}', error.message), { tone: 'error' });
+                else { reconcile = { kind: 'bot' }; personaNotice = t('结果未确认，请刷新核对'); ui.toast(personaNotice, { tone: 'warning' }); }
+            } finally { mutation = null; if (!reconcile) await load(); renderList(); renderHeader(); showSection(); renderPersonaNotice(); syncSave(); }
+            if (done && active()) window.PiWorkspaceRoute?.navigate('bot', { profileId: id });
         }
         async function uploadAvatar(file) {
             if (!active() || !file || !draft?.id || busy() || reconcile) return;

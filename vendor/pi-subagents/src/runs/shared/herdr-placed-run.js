@@ -1,30 +1,16 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import * as fs from "node:fs";
 import * as net from "node:net";
 import * as path from "node:path";
 import packageJson from "../../../package.json" with { type: "json" };
-import { connectHerdrMachine, remoteShellCommand, runHerdrRemoteCommand, runHerdrRemoteCommandAsync } from "./herdr-connection.js";
+import { herdrPaneHost, HerdrPlacedRunOwner } from "./herdr-pane-host.js";
 import { encodeHerdrPiFrame, HERDR_PI_MODE_ENV, HERDR_PI_PROTOCOL, HERDR_PI_RUN_ENV, HERDR_PI_RUNTIME_DIR_ENV, HerdrPiFrameDecoder, validateHerdrPiRunId } from "./herdr-pi-protocol.js";
-import { getAgentDir } from "../../shared/utils.js";
-function herdrRunState(status, fallback = "unknown") {
-    return status === "working" ? "working" : status === "blocked" ? "blocked" : status === "idle" || status === "done" ? "settled" : status === "unknown" ? "unknown" : fallback;
-}
-export function herdrStatusSubscriptions(paneId) {
-    return [{ type: "pane.agent_status_changed", pane_id: paneId }, { type: "pane.closed" }, { type: "pane.moved" }];
-}
-export function reconcileHerdrPlacedRun(identity, candidate, proveEvidence) {
-    if (candidate.endpoint.session !== identity.session)
-        return { ok: false, reason: "Herdr session changed during reconnect." };
-    const matches = candidate.agents.filter((agent) => agent.terminal_id === identity.terminalId);
-    if (matches.length !== 1 || typeof matches[0].pane_id !== "string")
-        return { ok: false, reason: matches.length ? "Terminal identity is ambiguous." : "Owned terminal is missing." };
-    const proof = proveEvidence();
-    if (!proof.ok)
-        return proof;
-    return { ok: true, state: herdrRunState(matches[0].agent_status), paneId: matches[0].pane_id, cursor: proof.cursor };
-}
-export function reconcileHerdrReconnect(identity, candidate, lastEvidenceCursor) {
-    return reconcileHerdrPlacedRun(identity, candidate, () => { const bridge = candidate.bridge; if (bridge.runId !== identity.runId || bridge.nativeSessionId !== identity.nativeSessionId || bridge.packageVersion !== packageJson.version || bridge.protocol !== HERDR_PI_PROTOCOL)
+import { discoverPlacedBridgeManifest } from "./placed-run-owner.js";
+import { RexPlacedRunOwner } from "./rex-pane-host.js";
+import { isRexLocalMachine } from "./rex-machine.js";
+/** The pane half comes from the host; the bridge half (run, package, protocol, native session, evidence cursor) is host-neutral. */
+export function reconcileHerdrReconnect(identity, candidate, lastEvidenceCursor, host = herdrPaneHost) {
+    return host.reconcile(identity, candidate, () => { const bridge = candidate.bridge; if (bridge.runId !== identity.runId || bridge.nativeSessionId !== identity.nativeSessionId || bridge.packageVersion !== packageJson.version || bridge.protocol !== HERDR_PI_PROTOCOL)
         return { ok: false, reason: "Bridge run, package, protocol, or native session identity changed." }; if (typeof bridge.evidenceCursor !== "number" || typeof bridge.evidenceFloor !== "number" || bridge.evidenceCursor < lastEvidenceCursor || bridge.evidenceFloor > lastEvidenceCursor + 1)
         return { ok: false, reason: "Bridge evidence has a gap after reconnect." }; return { ok: true, cursor: bridge.evidenceCursor }; });
 }
@@ -35,7 +21,7 @@ export async function boundedHerdrReconnect(identity, lastEvidenceCursor, attemp
         if (options.disposed?.())
             return { ok: false, reason: "Reconnect was disposed." };
         try {
-            const result = reconcileHerdrReconnect(identity, await attempt(number), lastEvidenceCursor);
+            const result = reconcileHerdrReconnect(identity, await attempt(number), lastEvidenceCursor, options.host);
             if (result.ok)
                 return result;
             last = result.reason;
@@ -48,172 +34,6 @@ export async function boundedHerdrReconnect(identity, lastEvidenceCursor, attemp
     return { ok: false, reason: last };
 }
 function safeRunId(value) { const prefix = value?.replace(/[^A-Za-z0-9_-]/gu, "_").slice(0, 48) ?? "run"; return validateHerdrPiRunId(`${prefix}_${randomBytes(8).toString("hex")}`); }
-function idOf(value, key) { const found = value && typeof value === "object" ? value[key] : undefined; if (typeof found !== "string" || !found)
-    throw new Error(`Herdr did not return ${key}.`); return found; }
-function list(value, key) { if (Array.isArray(value))
-    return value; const found = value && typeof value === "object" ? value[key] : undefined; return Array.isArray(found) ? found : []; }
-function tagged(value, type, key) { if (!value || typeof value !== "object" || value.type !== type || !(key in value) || typeof value[key] !== "object")
-    throw new Error(`Herdr returned an invalid ${type} envelope.`); return value[key]; }
-export function parseHerdrCreated(value, type) { const envelope = value; if (envelope?.type !== type)
-    throw new Error(`Herdr returned an invalid ${type} envelope.`); const tab = envelope.tab; const pane = envelope.root_pane; return { ...(type === "workspace_created" ? { workspaceId: idOf(envelope.workspace, "workspace_id") } : {}), tabId: idOf(tab, "tab_id"), paneId: idOf(pane, "pane_id") }; }
-export function parseHerdrAgent(value, type) { return tagged(value, type, "agent"); }
-export function parseHerdrSessionSnapshot(value) { return tagged(value, "session_snapshot", "snapshot"); }
-export function ownsHerdrPane(agent, terminalId, paneId) { return agent.terminal_id === terminalId && agent.pane_id === paneId; }
-function snapshotAgents(snapshot) { return list(snapshot, "agents").filter((agent) => Boolean(agent && typeof agent === "object")).map((agent) => ({ terminal_id: typeof agent.terminal_id === "string" ? agent.terminal_id : undefined, pane_id: typeof agent.pane_id === "string" ? agent.pane_id : undefined, agent_status: typeof agent.agent_status === "string" ? agent.agent_status : undefined })); }
-export const HERDR_MAX_OWNED_PANES = 20;
-const HERDR_ALLOCATION_LOCK_TIMEOUT_MS = 10_000, HERDR_ALLOCATION_LOCK_POLL_MS = 25;
-export function herdrPaneAllocationKey(target, session, cwd) { return JSON.stringify([target, session, cwd]); }
-function assertPrivateDir(directory) { const stat = fs.lstatSync(directory); if (!stat.isDirectory() || stat.isSymbolicLink() || (stat.mode & 0o777) !== 0o700 || (typeof process.getuid === "function" && stat.uid !== process.getuid()))
-    throw new Error("Herdr allocation path is not a mode-0700 agent-private owned directory."); }
-function ensurePrivateChild(parent, name) { const directory = path.join(parent, name); try {
-    fs.mkdirSync(directory, { mode: 0o700 });
-}
-catch (error) {
-    if (error.code !== "EEXIST")
-        throw error;
-} assertPrivateDir(directory); return directory; }
-function allocationLockRoot() { const agentDir = getAgentDir(); fs.mkdirSync(agentDir, { recursive: true, mode: 0o700 }); assertPrivateDir(agentDir); const packageDir = ensurePrivateChild(agentDir, "pi-subagents"); return ensurePrivateChild(packageDir, "herdr-allocation-locks"); }
-function livePid(pid) { try {
-    process.kill(pid, 0);
-    return true;
-}
-catch (error) {
-    return error.code === "EPERM";
-} }
-function readAllocationOwner(ownerPath) { const descriptor = fs.openSync(ownerPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0)); try {
-    const stat = fs.fstatSync(descriptor);
-    if (!stat.isFile() || (stat.mode & 0o777) !== 0o600 || (typeof process.getuid === "function" && stat.uid !== process.getuid()))
-        throw new Error("Herdr allocation lock owner record is unsafe.");
-    const value = JSON.parse(fs.readFileSync(descriptor, "utf8"));
-    if (typeof value.pid !== "number" || !Number.isSafeInteger(value.pid) || value.pid <= 0 || typeof value.token !== "string" || !/^[a-f0-9]{32}$/u.test(value.token))
-        throw new Error("Herdr allocation lock owner record is malformed.");
-    return { pid: value.pid, token: value.token, dev: stat.dev, ino: stat.ino };
-}
-finally {
-    fs.closeSync(descriptor);
-} }
-function sameOwner(left, right) { return left.token === right.token && left.dev === right.dev && left.ino === right.ino; }
-export async function withHerdrPaneAllocationLock(key, action, options = {}) {
-    const root = allocationLockRoot(), digest = createHash("sha256").update(key).digest("hex"), lockPath = path.join(root, `${digest}.lock`), recoveryPath = path.join(root, `${digest}.recovery`), token = randomBytes(16).toString("hex"), tempPath = path.join(root, `.${digest}.${token}.tmp`), deadline = Date.now() + (options.timeoutMs ?? HERDR_ALLOCATION_LOCK_TIMEOUT_MS);
-    let published;
-    try {
-        fs.writeFileSync(tempPath, JSON.stringify({ pid: process.pid, token, createdAt: Date.now() }), { mode: 0o600, flag: "wx" });
-        const tempOwner = readAllocationOwner(tempPath);
-        for (;;) {
-            let recovering = false;
-            try {
-                readAllocationOwner(recoveryPath);
-                recovering = true;
-            }
-            catch (error) {
-                if (error.code !== "ENOENT")
-                    throw error;
-            }
-            if (!recovering) {
-                let linked = false;
-                try {
-                    fs.linkSync(tempPath, lockPath);
-                    linked = true;
-                    try {
-                        readAllocationOwner(recoveryPath);
-                        const current = readAllocationOwner(lockPath);
-                        if (!sameOwner(current, tempOwner))
-                            throw new Error("Herdr allocation lock changed during publication.");
-                        fs.unlinkSync(lockPath);
-                    }
-                    catch (recoveryError) {
-                        if (recoveryError.code !== "ENOENT")
-                            throw recoveryError;
-                        published = readAllocationOwner(lockPath);
-                        if (!sameOwner(published, tempOwner))
-                            throw new Error("Herdr allocation lock publication identity changed.");
-                        break;
-                    }
-                }
-                catch (publishError) {
-                    if (linked) {
-                        try {
-                            const current = readAllocationOwner(lockPath);
-                            if (sameOwner(current, tempOwner))
-                                fs.unlinkSync(lockPath);
-                        }
-                        catch { }
-                    }
-                    if (publishError.code !== "EEXIST" && publishError.code !== "ENOENT")
-                        throw publishError;
-                }
-            }
-            if (published)
-                break;
-            try {
-                const current = readAllocationOwner(lockPath);
-                if (!livePid(current.pid)) {
-                    let claimed = false;
-                    try {
-                        fs.linkSync(lockPath, recoveryPath);
-                        claimed = true;
-                        const recovery = readAllocationOwner(recoveryPath), latest = readAllocationOwner(lockPath);
-                        if (!sameOwner(recovery, current) || !sameOwner(latest, current))
-                            throw new Error("Herdr stale lock identity changed during recovery.");
-                        fs.unlinkSync(lockPath);
-                    }
-                    catch (error) {
-                        if (error.code !== "EEXIST" && error.code !== "ENOENT")
-                            throw error;
-                    }
-                    finally {
-                        if (claimed)
-                            fs.unlinkSync(recoveryPath);
-                    }
-                    if (claimed)
-                        continue;
-                }
-            }
-            catch (error) {
-                if (error.code !== "ENOENT")
-                    throw error;
-            }
-            if (Date.now() >= deadline)
-                throw new Error("Timed out waiting for the Herdr pane allocation lock.");
-            await new Promise((resolve) => setTimeout(resolve, options.pollMs ?? HERDR_ALLOCATION_LOCK_POLL_MS));
-        }
-        fs.unlinkSync(tempPath);
-        let value, actionError, releaseError, actionFailed = false, releaseFailed = false;
-        try {
-            value = await action();
-        }
-        catch (error) {
-            actionFailed = true;
-            actionError = error;
-        }
-        try {
-            const current = readAllocationOwner(lockPath);
-            if (!published || !sameOwner(current, published))
-                throw new Error("Herdr pane allocation lock ownership changed before release.");
-            fs.unlinkSync(lockPath);
-        }
-        catch (error) {
-            releaseFailed = true;
-            releaseError = error;
-        }
-        if (actionFailed && releaseFailed)
-            throw new AggregateError([actionError, releaseError], "Herdr pane allocation action and release both failed.", { cause: actionError });
-        if (actionFailed)
-            throw actionError;
-        if (releaseFailed)
-            throw releaseError;
-        return value;
-    }
-    finally {
-        try {
-            fs.unlinkSync(tempPath);
-        }
-        catch (error) {
-            if (error.code !== "ENOENT")
-                throw error;
-        }
-    }
-}
 export function serializeHerdrPiLaunch(launch) {
     if (launch.storage.kind === "file")
         throw new Error("Pane-native remote Pi does not support fork, resume, or revival; use fresh context.");
@@ -236,177 +56,6 @@ export function serializeHerdrPiLaunch(launch) {
     if (launch.model)
         args.push("--model", launch.model);
     return { args, resources: { agent: resources.agent, ...(resources.skills ? { skills: [...resources.skills] } : {}), ...(resources.toolCeiling ? { toolCeiling: [...resources.toolCeiling] } : {}), ...(resources.reads !== undefined ? { reads: resources.reads === false ? false : [...resources.reads] } : {}) } };
-}
-export async function provisionHerdrPane(client, cwd, runId, runtimeDir, environment, allocationKey = cwd) {
-    return withHerdrPaneAllocationLock(allocationKey, async () => {
-        const snapshot = parseHerdrSessionSnapshot(await client.call("session.snapshot"));
-        const panes = list(snapshot, "panes").filter((item) => Boolean(item && typeof item === "object")), workspaces = list(snapshot, "workspaces").filter((item) => Boolean(item && typeof item === "object"));
-        const ownedLabel = `pi-subagents-${createHash("sha256").update(cwd).digest("hex").slice(0, 10)}`, owned = workspaces.filter((item) => item.label === ownedLabel);
-        if (owned.length > 1)
-            throw new Error("Herdr deterministic owned workspace identity is ambiguous.");
-        const cwdWorkspaceIds = new Set(panes.filter((item) => item.cwd === cwd || item.foreground_cwd === cwd).map((item) => item.workspace_id).filter((id) => typeof id === "string")), cwdWorkspaces = workspaces.filter((item) => typeof item.workspace_id === "string" && cwdWorkspaceIds.has(item.workspace_id));
-        const selected = owned[0] ?? (cwdWorkspaces.length === 1 ? cwdWorkspaces[0] : undefined), selectedId = selected ? idOf(selected, "workspace_id") : undefined, actual = selectedId ? panes.filter((pane) => pane.workspace_id === selectedId).length : 0;
-        if (actual >= HERDR_MAX_OWNED_PANES)
-            throw new Error(`Herdr workspace pane limit of ${HERDR_MAX_OWNED_PANES} is reached; close an existing pane before launching another placed run.`);
-        const env = environment ?? { [HERDR_PI_MODE_ENV]: "1", [HERDR_PI_RUN_ENV]: runId, [HERDR_PI_RUNTIME_DIR_ENV]: runtimeDir };
-        if (selectedId) {
-            const tab = parseHerdrCreated(await client.call("tab.create", { workspace_id: selectedId, cwd, label: `subagent-${runId.slice(-8)}`, env, focus: false }), "tab_created");
-            return { workspaceId: selectedId, tabId: tab.tabId, paneId: tab.paneId };
-        }
-        const workspace = parseHerdrCreated(await client.call("workspace.create", { cwd, label: ownedLabel, env, focus: false }), "workspace_created");
-        return { workspaceId: workspace.workspaceId, tabId: workspace.tabId, paneId: workspace.paneId };
-    });
-}
-export async function discoverBridgeManifest(machine, runId, runtimeDir, options = {}) {
-    const script = `p="$1/manifest.json"; test -f "$p" && test ! -L "$p" && cat "$p"`;
-    for (let attempt = 0; attempt < 100; attempt++) {
-        const result = await runHerdrRemoteCommandAsync(machine, remoteShellCommand(script, [runtimeDir]), { ...options, timeout: 5_000, maxBuffer: 64 * 1024 });
-        if (result.error)
-            throw new Error(`Remote bridge manifest discovery failed: ${result.error.message}`, { cause: result.error });
-        if (result.status === 0 && result.stdout.trim()) {
-            let value;
-            try {
-                value = JSON.parse(result.stdout);
-            }
-            catch {
-                throw new Error("Remote bridge manifest is malformed.");
-            }
-            const p = value;
-            if (p.runId !== runId || typeof p.socketPath !== "string" || path.posix.dirname(p.socketPath) !== runtimeDir || typeof p.nativeSessionId !== "string" || typeof p.packageVersion !== "string" || typeof p.protocol !== "number")
-                throw new Error("Remote bridge manifest identity is incomplete or outside its owned runtime directory.");
-            return p;
-        }
-        await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-    throw new Error("The remote Pi did not expose the packaged pi-subagents bridge. Install/configure the same package version as an ambient Pi extension on the saved machine.");
-}
-export async function createRemoteRuntimeDir(machine, runId, options = {}) { const result = await runHerdrRemoteCommandAsync(machine, remoteShellCommand("umask 077; mktemp -d \"${TMPDIR:-/tmp}/pi-subagents-herdr-$1-XXXXXXXX\"", [runId]), { ...options, timeout: 10_000, maxBuffer: 4096 }); if (result.error)
-    throw new Error(`Could not provision a run-private remote bridge runtime directory: ${result.error.message}`, { cause: result.error }); const value = result.stdout.trim(); if (result.status !== 0 || !path.posix.isAbsolute(value) || value.includes("\n"))
-    throw new Error("Could not provision a run-private remote bridge runtime directory."); return value; }
-export function removeRemoteRuntimeDir(machine, runtimeDir, options = {}) { const result = runHerdrRemoteCommand(machine, remoteShellCommand("p=$1; case \"${p##*/}\" in pi-subagents-herdr-*) test -d \"$p\" && test ! -L \"$p\" && rm -rf -- \"$p\";; *) exit 64;; esac", [runtimeDir]), { ...options, timeout: 10_000, maxBuffer: 4096 }); if (result.status !== 0 || result.stdout)
-    throw new Error(`Could not remove the exact owned remote runtime directory: ${String(result.stderr).slice(0, 512)}`); }
-/** The single private owner for allocation shared by every pane-native backend projection. */
-export class HerdrPlacedRunOwner {
-    machine;
-    runId;
-    runtimeDir;
-    connection;
-    owned;
-    terminalId;
-    agentName;
-    startedArgv;
-    identity;
-    #unsubscribe = () => { };
-    #snapshot = { connection: "connected", state: "ready", revision: 0 };
-    #cleanupPromise;
-    #removeRuntime;
-    constructor(machine, runId, runtimeDir, connection, removeRuntime = () => removeRemoteRuntimeDir(machine, runtimeDir)) { this.machine = machine; this.runId = runId; this.runtimeDir = runtimeDir; this.connection = connection; this.#removeRuntime = removeRuntime; }
-    static async create(machine, runId, beforePane) { const runtimeDir = await createRemoteRuntimeDir(machine, runId); let connection; try {
-        connection = await connectHerdrMachine(machine);
-        const owner = new HerdrPlacedRunOwner(machine, runId, runtimeDir, connection);
-        await beforePane?.(owner);
-        return owner;
-    }
-    catch (error) {
-        const cleanupErrors = [];
-        try {
-            await connection?.close();
-        }
-        catch (cleanupError) {
-            cleanupErrors.push(cleanupError);
-        }
-        try {
-            removeRemoteRuntimeDir(machine, runtimeDir);
-        }
-        catch (cleanupError) {
-            cleanupErrors.push(cleanupError);
-        }
-        if (cleanupErrors.length)
-            throw new AggregateError([error, ...cleanupErrors], "Herdr owner creation failed and cleanup also failed.", { cause: error });
-        throw error;
-    } }
-    observeEvent(event) { const data = event && typeof event === "object" ? event.data : undefined; if (data && (!this.terminalId || data.terminal_id === this.terminalId || data.pane_id === this.owned?.paneId))
-        this.#snapshot = { ...this.#snapshot, revision: this.#snapshot.revision + 1, state: herdrRunState(data.agent_status, this.#snapshot.state) }; }
-    markConnectionUnknown(observed) { if (this.connection !== observed)
-        return false; this.#snapshot = { ...this.#snapshot, connection: "unknown", state: "unknown", revision: this.#snapshot.revision + 1 }; return true; }
-    statusSubscriptions(paneId = this.owned?.paneId) { if (!paneId)
-        throw new Error("Herdr status subscription requires a provisioned pane."); return herdrStatusSubscriptions(paneId); }
-    async subscribe(listener, disconnected) { const observed = this.connection; let adopted = false, candidateLost; const unsubscribe = await observed.client.subscribe(this.statusSubscriptions(), (event) => { this.observeEvent(event); listener(event); }, (error) => { if (!adopted) {
-        candidateLost ??= error;
-        return;
-    } if (!this.markConnectionUnknown(observed))
-        return; disconnected(error); }); if (candidateLost) {
-        unsubscribe();
-        throw candidateLost;
-    } this.#unsubscribe = unsubscribe; adopted = true; }
-    async provision(environment) { this.owned = await provisionHerdrPane(this.connection.client, this.machine.cwd, this.runId, this.runtimeDir, environment, herdrPaneAllocationKey(this.machine.target, this.connection.endpoint.session, this.machine.cwd)); return this.owned; }
-    async start(kind, name, args, options = {}) {
-        if (!this.owned)
-            throw new Error("Herdr placement owner has not provisioned its pane.");
-        const clock = options.clock ?? { now: () => Date.now(), wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)) }, deadline = clock.now() + (options.timeoutMs ?? 5_000), pollMs = options.pollMs ?? 50;
-        let response;
-        for (;;) {
-            try {
-                response = await this.connection.client.call("agent.start", { name, kind, pane_id: this.owned.paneId, args, timeout_ms: 45_000 }, 60_000);
-                break;
-            }
-            catch (error) {
-                if (!(error instanceof Error) || !error.message.includes("is not an available shell"))
-                    throw error;
-                const pane = tagged(await this.connection.client.call("pane.get", { pane_id: this.owned.paneId }), "pane_info", "pane");
-                if (pane.pane_id !== this.owned.paneId || pane.workspace_id !== this.owned.workspaceId || pane.tab_id !== this.owned.tabId)
-                    throw new Error("Herdr startup pane identity changed after a transient start rejection.", { cause: error });
-                if (pane.agent != null || pane.agent_session != null)
-                    throw new Error("Herdr startup pane became occupied after a transient start rejection.", { cause: error });
-                if (clock.now() >= deadline)
-                    throw new Error("Herdr owned pane remained unavailable until the startup deadline.", { cause: error });
-                await clock.wait(Math.min(pollMs, deadline - clock.now()));
-            }
-        }
-        const started = parseHerdrAgent(response, "agent_started"), argv = [kind, ...args], terminalId = idOf(started, "terminal_id"), paneId = idOf(started, "pane_id");
-        if (paneId !== this.owned.paneId)
-            throw new Error("Herdr started the native agent in an unexpected pane.");
-        this.agentName = name;
-        this.terminalId = terminalId;
-        this.startedArgv = argv;
-        return { terminalId, paneId, argv };
-    }
-    journal(identity) { this.identity = identity; this.#snapshot = { ...this.#snapshot, identity }; const journalDir = path.join(getAgentDir(), "pi-subagents", "herdr-run-journal"); fs.mkdirSync(journalDir, { recursive: true, mode: 0o700 }); fs.writeFileSync(path.join(journalDir, `${this.runId}.json`), JSON.stringify({ version: 1, identity, state: "ready", updatedAt: Date.now() }), { mode: 0o600, flag: "wx" }); }
-    get snapshot() { return this.#snapshot; }
-    runRemote(command, options = {}) { return runHerdrRemoteCommand(this.machine, command, options); }
-    async replaceConnection(input) { const oldConnection = this.connection, oldUnsubscribe = this.#unsubscribe; this.connection = input.connection; this.#unsubscribe = input.unsubscribe; if (this.identity)
-        this.identity = { ...this.identity, paneId: input.paneId }; this.#snapshot = { connection: "connected", state: input.state, identity: this.identity, revision: this.#snapshot.revision + 1 }; oldUnsubscribe(); await oldConnection.close(); }
-    cleanup(closeStartedPane = true) { return this.#cleanupPromise ??= this.#performCleanup(closeStartedPane); }
-    async #performCleanup(closeStartedPane) { let failure; try {
-        if (closeStartedPane && this.owned) {
-            let closed = false;
-            if (this.terminalId && this.agentName) {
-                const current = parseHerdrAgent(await this.connection.client.call("agent.get", { target: this.agentName }), "agent_info");
-                if (ownsHerdrPane(current, this.terminalId, this.owned.paneId)) {
-                    await this.connection.client.call("pane.close", { pane_id: this.owned.paneId });
-                    closed = true;
-                }
-            }
-            if (!closed) {
-                const snapshot = parseHerdrSessionSnapshot(await this.connection.client.call("session.snapshot"));
-                const occupants = snapshotAgents(snapshot).filter((agent) => agent.pane_id === this.owned.paneId);
-                if (occupants.length !== 0)
-                    throw new Error("Refusing cleanup because startup pane ownership is uncertain.");
-                await this.connection.client.call("pane.close", { pane_id: this.owned.paneId });
-            }
-        }
-    }
-    catch (error) {
-        failure = error;
-    } try {
-        this.#unsubscribe();
-        await this.connection.close();
-        this.#removeRuntime();
-    }
-    catch (error) {
-        failure ??= error;
-    } this.#snapshot = { ...this.#snapshot, connection: "closed", revision: this.#snapshot.revision + 1 }; if (failure)
-        throw failure; }
 }
 export class BridgeChannel {
     socket;
@@ -450,7 +99,7 @@ export class BridgeChannel {
     wait(type, requestId) { return new Promise((resolve, reject) => this.waiters.set(`${type}:${requestId}`, { resolve, reject })); }
     configure(resources) { const requestId = `cfg_${randomBytes(6).toString("hex")}`; const waiting = this.wait("configured", requestId); this.socket.write(encodeHerdrPiFrame({ protocol: HERDR_PI_PROTOCOL, runId: this.runId, type: "configure", requestId, resources })); return waiting; }
     supervisorDelivered(requestId) { this.socket.write(encodeHerdrPiFrame({ protocol: HERDR_PI_PROTOCOL, runId: this.runId, type: "supervisor-delivered", requestId })); }
-    prepare(requestId, operation, text, supervisorId) { const waiting = this.wait("prepared", requestId); this.socket.write(encodeHerdrPiFrame({ protocol: HERDR_PI_PROTOCOL, runId: this.runId, type: "prepare", requestId, operation, ...(text !== undefined ? { text } : {}), ...(supervisorId ? { supervisorId } : {}) })); return waiting; }
+    prepare(requestId, operation, text, supervisorId, supervisorError) { const waiting = this.wait("prepared", requestId); this.socket.write(encodeHerdrPiFrame({ protocol: HERDR_PI_PROTOCOL, runId: this.runId, type: "prepare", requestId, operation, ...(text !== undefined ? { text } : {}), ...(supervisorId ? { supervisorId } : {}), ...(supervisorError !== undefined ? { error: supervisorError } : {}) })); return waiting; }
     close() { this.socket.destroy(); }
 }
 function waitForReadyBridgeFrame(bridge, timeoutMs, timeoutMessage, configured = false) {
@@ -475,7 +124,6 @@ export class HerdrPiSession {
     #initialGit;
     #finalGit;
     #operations = new Map();
-    #snapshot;
     bridgeForward;
     bridge;
     requestedTools;
@@ -488,18 +136,19 @@ export class HerdrPiSession {
     supervisorDir;
     runtime;
     owner;
-    constructor(owner, bridgeForward, bridge, requestedTools, model, runtime, initialGit) { this.owner = owner; this.bridgeForward = bridgeForward; this.bridge = bridge; this.requestedTools = requestedTools; this.model = model; this.runtime = runtime; this.supervisorDir = runtime.supervisorChannelDir; this.#snapshot = { connection: "connected", state: "ready", identity: owner.identity, revision: 0 }; this.#initialGit = initialGit; bridge.adopt((frame) => this.#frame(frame)); if (this.supervisorDir) {
+    constructor(owner, bridgeForward, bridge, requestedTools, model, runtime, initialGit) { this.owner = owner; this.bridgeForward = bridgeForward; this.bridge = bridge; this.requestedTools = requestedTools; this.model = model; this.runtime = runtime; this.supervisorDir = runtime.supervisorChannelDir; this.#initialGit = initialGit; bridge.adopt((frame) => this.#frame(frame)); if (this.supervisorDir) {
         this.#replyTimer = setInterval(() => { const replies = path.join(this.supervisorDir, "replies"); for (const name of fs.existsSync(replies) ? fs.readdirSync(replies) : []) {
             const file = path.join(replies, name);
             try {
                 const value = JSON.parse(fs.readFileSync(file, "utf8"));
                 if (typeof value.message === "string" && typeof value.requestId === "string")
-                    void this.#operation("supervisor-reply", value.message, value.requestId).then(() => fs.rmSync(file, { force: true }));
+                    void this.#operation("supervisor-reply", value.message, value.requestId, typeof value.error === "string" ? value.error : undefined).then(() => fs.rmSync(file, { force: true }));
             }
             catch { }
         } }, 50);
         this.#replyTimer.unref?.();
     } }
+    get host() { return this.owner.host; }
     get identity() { return this.owner.identity; }
     set identity(value) { this.owner.identity = value; }
     get connection() { return this.owner.connection; }
@@ -508,7 +157,7 @@ export class HerdrPiSession {
         void this.reconnect(); }); }
     get evidenceCursor() { return this.#evidenceCursor; }
     async reconnect() { if (this.#disposed || !this.#reconnectFactory || this.#reconnectFailure)
-        return; this.#snapshot = { ...this.#snapshot, connection: "unknown", state: "unknown", revision: this.#snapshot.revision + 1 }; this.#reconnecting ??= this.#reconnectFactory().catch((error) => { const unknown = this.#reconnectFailure = new Error(`Remote Pi reconciliation failed; task state is unknown: ${error instanceof Error ? error.message : String(error)}`); for (const operation of this.#operations.values())
+        return; this.#reconnecting ??= this.#reconnectFactory().catch((error) => { const unknown = this.#reconnectFailure = new Error(`Remote Pi reconciliation failed; task state is unknown: ${error instanceof Error ? error.message : String(error)}`); for (const operation of this.#operations.values())
         if (!operation.settled) {
             operation.settled = true;
             operation.reject(unknown);
@@ -525,12 +174,10 @@ export class HerdrPiSession {
         if (!operation.accepted && !operation.settled) {
             operation.settled = true;
             operation.reject(new Error("Remote operation was not accepted before transport loss; task state is unknown."));
-        } this.#evidenceCursor = Math.max(this.#evidenceCursor, input.cursor); this.#snapshot = { connection: "connected", state: input.state, identity: this.identity, revision: this.#snapshot.revision + 1 }; const ownerReplacement = this.owner.replaceConnection({ connection: input.connection, unsubscribe: input.unsubscribe, paneId: input.paneId, state: input.state }); old.bridge.close(); await old.bridgeForward.close(); await ownerReplacement; if (this.#disposed) {
+        } this.#evidenceCursor = Math.max(this.#evidenceCursor, input.cursor); const ownerReplacement = this.owner.replaceConnection({ connection: input.connection, unsubscribe: input.unsubscribe, paneId: input.paneId, state: input.state }); old.bridge.close(); await old.bridgeForward.close(); await ownerReplacement; if (this.#disposed) {
         await this.owner.cleanup(this.#aborted);
         return;
     } this.armReconnect(this.#reconnectFactory); }
-    observeHerdr(value) { const data = value && typeof value === "object" ? value.data : undefined; if (!data || (data.terminal_id !== this.identity.terminalId && data.pane_id !== this.identity.paneId))
-        return; this.#snapshot = { ...this.#snapshot, revision: this.#snapshot.revision + 1, state: herdrRunState(data.agent_status, this.#snapshot.state) }; }
     #frame(frame) { if (typeof frame.cursor === "number") {
         if (frame.cursor <= this.#evidenceCursor)
             return;
@@ -581,10 +228,10 @@ export class HerdrPiSession {
             throw new Error("Supervisor relay identity changed during replay.");
     } if (reason === "progress_update")
         this.bridge.supervisorDelivered(frame.requestId); }
-    async #operation(operation, text, supervisorId) { const requestId = `${++this.#sequence}_${randomBytes(5).toString("hex")}`; let completion = Promise.resolve(); if (operation === "prompt")
+    async #operation(operation, text, supervisorId, supervisorError) { const requestId = `${++this.#sequence}_${randomBytes(5).toString("hex")}`; let completion = Promise.resolve(); if (operation === "prompt")
         completion = new Promise((resolve, reject) => this.#operations.set(requestId, { resolve, reject, accepted: false, settled: false })); try {
-        await Promise.race([this.bridge.prepare(requestId, operation, text, supervisorId), this.bridge.failure]);
-        await this.connection.client.call("agent.prompt", { target: this.identity.agentName, text: `/pi-subagents-bridge ${requestId}` });
+        await Promise.race([this.bridge.prepare(requestId, operation, text, supervisorId, supervisorError), this.bridge.failure]);
+        await this.host.prompt(this.connection, this.identity, `/pi-subagents-bridge ${requestId}`);
         await completion;
     }
     catch (error) {
@@ -609,16 +256,16 @@ export class HerdrPiSession {
     async abort() { this.#aborted = true; await this.#operation("abort"); }
     async dispose() { if (this.#disposed)
         return; this.#disposed = true; if (this.#replyTimer)
-        clearInterval(this.#replyTimer); this.bridge.close(); await this.bridgeForward.close(); await this.owner.cleanup(this.#aborted); this.#snapshot = { ...this.#snapshot, connection: "closed" }; }
+        clearInterval(this.#replyTimer); this.bridge.close(); await this.bridgeForward.close(); await this.owner.cleanup(this.#aborted); }
     get messages() { return this.#messages; }
     get sessionFile() { return undefined; }
     get sessionId() { return this.identity.nativeSessionId; }
     get modelId() { return this.model; }
-    get machineEvidence() { return { machineId: this.identity.machineId, ...(this.#initialGit ? { initial: this.#initialGit } : {}), ...(this.#finalGit ? { final: this.#finalGit } : {}) }; }
+    get machineEvidence() { return { provider: this.owner.machine.provider, machineId: this.identity.machineId, ...(this.#initialGit ? { initial: this.#initialGit } : {}), ...(this.#finalGit ? { final: this.#finalGit } : {}) }; }
     get placementSnapshot() { return this.owner.snapshot; }
 }
 export async function reconnectHerdrPiSession(session, launch, dependencies = {}) {
-    const connect = dependencies.connect ?? connectHerdrMachine, discoverManifest = dependencies.discoverManifest ?? discoverBridgeManifest, createBridge = dependencies.createBridge ?? ((socketPath, runId) => new BridgeChannel(socketPath, runId));
+    const host = session.host, connect = dependencies.connect ?? ((machine) => host.connect(machine)), discoverManifest = dependencies.discoverManifest ?? ((runId, runtimeDir) => discoverPlacedBridgeManifest(session.owner.access, runId, runtimeDir)), createBridge = dependencies.createBridge ?? ((socketPath, runId) => new BridgeChannel(socketPath, runId));
     let validated;
     const result = await boundedHerdrReconnect(session.identity, session.evidenceCursor, async () => {
         const connection = await connect(launch.machine);
@@ -627,17 +274,16 @@ export async function reconnectHerdrPiSession(session, launch, dependencies = {}
         let bridge;
         const generation = { adopted: false };
         try {
-            const snapshot = parseHerdrSessionSnapshot(await connection.client.call("session.snapshot"));
-            const agents = snapshotAgents(snapshot);
-            const manifest = await discoverManifest(launch.machine, session.identity.runId, session.identity.runtimeDir);
+            const panes = await host.panes(connection, session.identity);
+            const manifest = await discoverManifest(session.identity.runId, session.identity.runtimeDir);
             bridgeForward = await connection.forwardRemoteSocket(manifest.socketPath, "bridge-reconnect");
             bridge = createBridge(bridgeForward.socketPath, session.identity.runId);
             const ready = await waitForReadyBridgeFrame(bridge, 8_000, "Reconnected bridge handshake timed out.", true);
-            const candidate = { endpoint: connection.endpoint, agents, bridge: { runId: ready.runId, nativeSessionId: ready.nativeSessionId, packageVersion: ready.packageVersion, protocol: ready.protocol, evidenceCursor: ready.evidenceCursor, evidenceFloor: ready.evidenceFloor } };
-            const check = reconcileHerdrReconnect(session.identity, candidate, session.evidenceCursor);
+            const candidate = { ...panes, bridge: { runId: ready.runId, nativeSessionId: ready.nativeSessionId, packageVersion: ready.packageVersion, protocol: ready.protocol, evidenceCursor: ready.evidenceCursor, evidenceFloor: ready.evidenceFloor } };
+            const check = reconcileHerdrReconnect(session.identity, candidate, session.evidenceCursor, host);
             if (!check.ok)
                 throw new Error(check.reason);
-            unsubscribe = await connection.client.subscribe(herdrStatusSubscriptions(check.paneId), (event) => { session.owner.observeEvent(event); session.observeHerdr(event); }, (error) => { if (!generation.adopted) {
+            unsubscribe = await host.subscribe(connection, check.paneId, (event) => session.owner.observeEvent(event), (error) => { if (!generation.adopted) {
                 generation.lost ??= error;
                 return;
             } session.owner.markConnectionUnknown(connection); void session.reconnect(); });
@@ -653,7 +299,7 @@ export async function reconnectHerdrPiSession(session, launch, dependencies = {}
             await connection.close();
             throw error;
         }
-    }, { attempts: 3, deadlineMs: 15_000, disposed: () => session.placementSnapshot.connection === "closed" });
+    }, { attempts: 3, deadlineMs: 15_000, disposed: () => session.placementSnapshot.connection === "closed", host });
     if (!result.ok)
         throw new Error(`Pane-native reconnect remains unknown: ${result.reason}`);
     if (!validated)
@@ -671,26 +317,33 @@ export async function reconnectHerdrPiSession(session, launch, dependencies = {}
 export async function createHerdrPiSession(launch) {
     if (!launch.machine)
         throw new Error("Pane-native Pi launch requires a saved machine.");
+    if (launch.machine.provider !== "herdr")
+        throw new Error("Herdr pane-native Pi launch requires a Herdr saved machine.");
     const policy = serializeHerdrPiLaunch(launch);
     const runId = safeRunId(launch.runtime.runId);
-    const owner = await HerdrPlacedRunOwner.create(launch.machine, runId);
-    const runtimeDir = owner.runtimeDir, connection = owner.connection;
-    let owned;
-    let agentName;
-    let observeHerdr;
+    return startPlacedPiSession(launch, await HerdrPlacedRunOwner.create(launch.machine, runId), policy);
+}
+/** A Rex machine: the same bridge session, with the Rex pane host and local (`machine: "local"`) or SSH machine access. */
+export async function createRexPiSession(launch) {
+    if (launch.machine?.provider !== "rex")
+        throw new Error("Rex pane-native Pi launch requires a Rex machine.");
+    const policy = serializeHerdrPiLaunch(launch);
+    const runId = safeRunId(launch.runtime.runId);
+    return startPlacedPiSession(launch, await RexPlacedRunOwner.create(launch.machine, runId), policy);
+}
+async function startPlacedPiSession(launch, owner, policy) {
+    const machine = owner.machine, runId = owner.runId, runtimeDir = owner.runtimeDir, connection = owner.connection;
     try {
         let reconnectSession;
-        owned = await owner.provision();
-        await owner.subscribe((event) => observeHerdr?.(event), () => void reconnectSession?.reconnect());
-        agentName = `pi-${runId.slice(-20)}`;
-        const { terminalId } = await owner.start("pi", agentName, policy.args);
-        const manifest = await discoverBridgeManifest(launch.machine, runId, runtimeDir);
+        const agentName = `pi-${runId.slice(-20)}`;
+        const { owned, terminalId } = await owner.launch({ kind: "pi", name: agentName, args: policy.args, environment: { [HERDR_PI_MODE_ENV]: "1", [HERDR_PI_RUN_ENV]: runId, [HERDR_PI_RUNTIME_DIR_ENV]: runtimeDir } }, () => owner.subscribe(() => { }, () => void reconnectSession?.reconnect()));
+        const manifest = await discoverPlacedBridgeManifest(owner.access, runId, runtimeDir, "The placed Pi did not start the pi-subagents bridge, so its pane was closed. Start pi in a new pane on that machine to see why: it may wait on a prompt (such as a macOS folder-access prompt for the terminal app), exit at startup, or not load the same pi-subagents version as an extension.");
         if (manifest.protocol !== HERDR_PI_PROTOCOL || manifest.packageVersion !== packageJson.version)
             throw new Error(`Remote pi-subagents bridge version mismatch (remote ${manifest.packageVersion}, local ${packageJson.version}).`);
         const bridgeForward = await connection.forwardRemoteSocket(manifest.socketPath, "bridge");
         const bridge = new BridgeChannel(bridgeForward.socketPath, runId);
         const ready = await waitForReadyBridgeFrame(bridge, 15_000, "Remote Pi bridge handshake timed out.");
-        if (ready.packageVersion !== packageJson.version || ready.nativeSessionId !== manifest.nativeSessionId || ready.cwd !== launch.machine.cwd)
+        if (ready.packageVersion !== packageJson.version || ready.nativeSessionId !== manifest.nativeSessionId || ready.cwd !== machine.cwd)
             throw new Error("Remote Pi bridge handshake identity mismatch.");
         const configured = await Promise.race([bridge.configure(policy.resources), bridge.failure]);
         if (configured.nativeSessionId !== manifest.nativeSessionId || configured.agent !== policy.resources.agent)
@@ -699,11 +352,10 @@ export async function createHerdrPiSession(launch) {
             throw new Error("Remote Pi active-tool ceiling acknowledgement mismatch.");
         if (launch.model && configured.model !== launch.model.split(":")[0])
             throw new Error(`Remote Pi model '${launch.model}' did not resolve to the requested provider/model.`);
-        const identity = { runId, machineId: launch.machine.id, target: launch.machine.target, session: connection.endpoint.session, workspaceId: owned.workspaceId, tabId: owned.tabId, paneId: owned.paneId, terminalId, agentName, nativeSessionId: manifest.nativeSessionId, cwd: launch.machine.cwd, runtimeDir };
+        const identity = { runId, machineId: machine.id, target: isRexLocalMachine(machine) ? machine.id : machine.target, session: owner.host.sessionOf(connection), workspaceId: owned.workspaceId, tabId: owned.tabId, paneId: owned.paneId, terminalId, agentName, nativeSessionId: manifest.nativeSessionId, cwd: machine.cwd, runtimeDir };
         owner.journal(identity);
         const session = new HerdrPiSession(owner, bridgeForward, bridge, configured.tools, typeof ready.model === "string" ? ready.model : undefined, launch.runtime, ready.initialGit);
         reconnectSession = session;
-        observeHerdr = (event) => session.observeHerdr(event);
         session.armReconnect(() => reconnectHerdrPiSession(session, launch));
         return session;
     }
@@ -712,7 +364,8 @@ export async function createHerdrPiSession(launch) {
         throw error;
     }
 }
-export function createPlacementAwareChildSessionFactory(local, createRemote = createHerdrPiSession) {
+function createPlacedPiSession(launch) { return launch.machine?.provider === "rex" ? createRexPiSession(launch) : createHerdrPiSession(launch); }
+export function createPlacementAwareChildSessionFactory(local, createRemote = createPlacedPiSession) {
     const remote = new Set();
     return { async create(launch) { if (!launch.machine)
             return local.create(launch); serializeHerdrPiLaunch(launch); const child = await createRemote(launch); remote.add(child); return child; }, async dispose() { await Promise.allSettled([...remote].map((child) => child.dispose())); remote.clear(); await local.dispose(); } };

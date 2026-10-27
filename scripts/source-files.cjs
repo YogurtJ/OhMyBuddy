@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const AVATAR_FILES = new Set(require('../public/pi-avatar-presets').presets.map(preset => `public/${preset.asset}`));
 
 // Application source discovery is shared by checking, testing and packaging.
 // Data, vendored assets and maintainer records are never discovered as source.
@@ -25,7 +26,8 @@ function sourceFiles(root, group) {
             const file = `${relative}/${entry.name}`;
             if (entry.isSymbolicLink()) throw new Error(`Source entry is a symlink: ${file}`);
             if (entry.isDirectory()) visit(file);
-            else if (entry.isFile() && (rule.pattern ? rule.pattern.test(entry.name) : rule.extensions.includes(path.extname(entry.name)))) files.push(file);
+            else if (entry.isFile() && (rule.pattern ? rule.pattern.test(entry.name) : rule.extensions.includes(path.extname(entry.name))
+                || group === 'public' && AVATAR_FILES.has(file))) files.push(file);
         }
     }
     visit(rule.directory);

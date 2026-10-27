@@ -281,3 +281,31 @@ test('admission mutations cannot change the frozen event on a later attempt', as
     await f.service.tick(); assert.equal(calls, 2);
 });
 test.after(() => fs.rmSync(root, { recursive: true, force: true }));
+test('a pushed Bot-started message is admitted for WeChat once; other runs are not', async t => {
+    const f = await fixture(t), { service, clock } = f;
+    const profileId = randomUUID(), captured = [];
+    service.captureChannelNotify = event => { captured.push(event); return f.recipients; };
+    const job = { id: randomUUID(), revision: 1, name: 'Bot follow-up', enabled: false, origin: 'bot',
+        target: { kind: 'profile', profileId }, nextAt: null };
+    const target = { cwd: root, sessionId: randomUUID(), bot: { profileId, windowId: null } };
+    const run = { id: randomUUID(), jobId: job.id, job, origin: 'bot', profileId, target, status: 'running', scheduledAt: clock.value - 1000 };
+    service.db.saveRun(run); // like enqueueProactive: the job is inline, never a saved task
+    service.applyResult(run, { status: 'completed', replyEntryId: 'native-reply', completedAt: clock.value });
+    assert.equal(service.db.run(run.id).channelNotify, undefined, 'never on completion: the push decision comes first');
+    assert.equal(service.notifyProactive(run.id), true);
+    assert.equal(service.notifyProactive(run.id), false, 'once');
+    assert.deepEqual([captured.length, captured[0].proactive, captured[0].notificationMode, captured[0].target.bot.profileId], [1, true, 'inherit', profileId]);
+    assert.equal(service.notifyProactive(f.run.id), false, 'a user task run is not a Bot push');
+    await service.reconcileChannelNotifications();
+    assert.equal(service.db.run(run.id).channelNotify.status, 'accepted');
+});
+test('reconciliation leaves a running run alone while its session file is being written', async t => {
+    const f = await fixture(t), { service, run } = f;
+    let failure = Object.assign(new Error('Session file changed'));
+    service.store.getSession = async () => { throw failure; };
+    await service.reconcile();
+    assert.equal(service.db.run(run.id).status, 'running', 'a transient read conflict is not an uncertain outcome');
+    failure = new Error('disk unreadable');
+    await service.reconcile();
+    assert.deepEqual([service.db.run(run.id).status, service.db.run(run.id).reason], ['uncertain', 'disk unreadable']);
+});

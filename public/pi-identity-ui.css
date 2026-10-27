@@ -442,6 +442,8 @@ button.pi-id-stat:hover { border-color: color-mix(in srgb, var(--tone) 45%, var(
     .pi-id-seg.is-fill > .pi-id-seg-item { padding: 4px 6px; flex-wrap: wrap; column-gap: 5px; row-gap: 1px; }
     .pi-id-seg.is-fill > .pi-id-seg-item > span:not(.pi-id-seg-count) { white-space: normal; text-overflow: clip; line-height: 1.2; text-align: center; overflow-wrap: anywhere; }
 }
+/* Touch-sized menu items on phones. */
+@media (max-width: 680px) { .pi-id-menu-item { min-height: 44px; align-items: center; } .pi-id-menu-item > i { margin-top: 0; } }
 @media (max-width: 420px) { .pi-id-seg.is-fill > .pi-id-seg-item > i { display: none; } .pi-id-seg-item { padding: 0 9px; } }
 @media (max-width: 360px) {
     .pi-id-attention-row { grid-template-columns: 30px minmax(0, 1fr); }

@@ -69,7 +69,7 @@ PiRpcClient 使用 StringDecoder 并严格按 LF 分帧，不能使用会拆分 
 - 侧聊使用受限内存 SessionManager，冻结主会话背景，历史工具调用转换为引用。工具与逐回复确认由独立侧聊管理，关闭、断线和待确认请求有各自生命周期；共享目录不意味着写入隔离。独立模型选择由 SideConnection 专用协议执行，使用 worker.exclusive 预占空闲操作；预算/图片检查后调用原生模型与思考 RPC，不重建 SessionManager 或写全局偏好。浏览器模型控件属于每段 SideThread，不跨线程共享选择。侧聊生命周期由SideConnection负责12小时settled闲置回收，原生exclusive核对空闲并同步最终可见记录后释放worker；SideThread仅保留本页历史分段DOM，不传给新seed。点击不捕获背景，首次发送才prepare；新段关闭以专用空闲协议返回最终记录，清空/退出释放当前及历史展示。
 - 扩展助手仍是受 Supervisor 管理的原生会话，仅身份标记有效的 worker 获得专用管理凭据。安装与配置复用原生资源服务的锁、修订和 trust。
 - 任务进度由内置 `update_plan` 工具同步写原生 `pivane-task-progress` custom entry，以完整替换形成确定顺序。启动、分支导航和压缩后从完整当前 branch 恢复，Supervisor 只持有有界展示投影，快照沿用 live sequence 边界；不增加 worker 工作类型或外部任务数据库。模型上下文缺少最新工具结果时由 context hook 补入最新计划数据。
-- pi-subagents 适配位于受管会话扩展：worker 在扩展加载时提供其可选的 `@agegr/pi-web/session-liveness/v1` 进程内登记，每 2 秒及回合结束时经私有 notify 报告当前会话的聚合后台状态。Supervisor 把它作为保留状态而非回合忙碌：阻止空闲回收和全局维护，但不延迟任务回执等按回合空闲执行的操作。状态快照 widget 在 Supervisor 侧解析原始行并规范化，不进入通用 widget；控制经私有命令转发到插件的进程内 RPC，方法与参数由 Supervisor 白名单校验，所有权与运行状态仍由插件判断。
+- pi-subagents 适配位于受管会话扩展：worker 在扩展加载时提供其可选的 `@agegr/pi-web/session-liveness/v1` 进程内登记，每 2 秒及回合结束时经私有 notify 报告当前会话的聚合后台状态。Supervisor 把它作为保留状态而非回合忙碌：阻止空闲回收和全局维护，但不延迟任务回执等按回合空闲执行的操作。状态快照 widget 在 Supervisor 侧解析原始行并规范化，不进入通用 widget；控制经私有命令转发到插件的进程内 RPC，方法与参数由 Supervisor 白名单校验，所有权与运行状态仍由插件判断。插件运行期间每秒带新的 `generatedAt` 重发快照：投影比较时忽略它，内容不变不增加修订、不广播；原始快照与 inspect widget 行只在 Supervisor 内消费，不转发给浏览器。
 - 档案知识由网关创建的唯一 `ProfileKnowledgeService` 管理：HTTP 管理页、原生工具适配和后台学习共用它的跨进程互斥锁、私有日志（v2 单调序号、回执窗口、请求 ID 与防复活墓碑）和待发布标记。只有服务端原生路径可写物理 cwd 范围；它在发布前后各做一次流式来源证明（会话头、唯一当前 ID 绑定、条目位于当前叶到根路径），只保留 id/parentId，不复制正文。
 - `ProfileLearningService` 是服务端队列，不是 worker 工作类型：Supervisor 在 worker 就绪、回合结束、压缩成功和退出时发出内部事件，服务只登记原生问答引用与游标，按学习设置和专用辅助模型在空闲时调用独立 ModelRuntime，再以原生条目为来源经知识服务提交。队列、预算和动作 ID 写私有学习日志；启动时把执行中的作业标为不确定且不重放。它纳入维护空闲判断，停机时先停 Supervisor、登记退出边界，再中止并等待模型请求结束。
 - 工具来源是调用时捕获的有界展示元数据，绑定调用 ID/工具名；旧记录不按当前清单追认来源，也不把来源标记当成权限验证。
@@ -156,7 +156,7 @@ POSIX 私密权限和目录刷盘、Windows 受保护 DACL 和写透替换分别
 
 `workspace-ui.js` 提供 `PiActionFeedback`，负责异步按钮的加载图标、动作文字、无障碍属性及恢复；请求互斥、上下文代次与结果归属继续由各功能组件管理。
 
-`pi-subagent-runs.js` 拥有输入框上方的子 Agent 面板与操作对话框，只读取当前连接的 controls 投影，经 `subagent_control` 请求并按连接代次丢弃迟到结果；`pi-subagent-notices.js` 只为插件自定义消息补标题、语气和折叠，正文仍经 marked + DOMPurify。
+`pi-subagent-runs.js` 拥有输入框上方的子 Agent 面板与操作对话框，只读取当前连接的 controls 投影，经 `subagent_control` 请求并按连接代次丢弃迟到结果；卡片按运行 ID 原地更新，保留焦点、“⋯”菜单与折叠状态，耗时由浏览器每秒本地刷新，停止确认复用 `pi-profile-dialog.js`；`pi-subagent-notices.js` 只为插件自定义消息补标题、语气和折叠，正文仍经 marked + DOMPurify。
 
 左侧导航栏的展示只在 `pi-sidebar.css`：桌面展开、桌面收起与平板共用的窄栏、手机底栏三种形态；折叠偏好、平板强制窄栏（不改写已保存的桌面选择）和切换后的焦点由 `workspace-ui.js` 管理。`pi-workbench.js` / `pi-workbench.css` 管理布局投影、停靠／抽屉、inert 与焦点；复用现有控件节点，不持有 RPC、会话或任务数据。手机采用整宽文本区与独立操作行，起步卡只追加草稿并保留附件。分栏偏好和调宽由 `workspace-ui.js` 管理；面板内容与异步生命周期属于原功能组件，切换布局保留阅读状态。计划、子 Agent 和任务结果由输入区组件拥有。
 

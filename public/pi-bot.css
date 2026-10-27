@@ -1,0 +1,806 @@
+/* Bot mode: the chat panel without workbench concepts. Everything here is scoped to
+   #chat-tab.pi-bot-mode so Pi Agent and assistant conversations are unaffected. */
+
+/* ---- hide workbench controls ------------------------------------------------------- */
+#chat-tab.pi-bot-mode #pi-session-pane > :not(#pi-bot-pane),
+#chat-tab.pi-bot-mode .pi-project-button,
+#chat-tab.pi-bot-mode #pi-mobile-summary,
+#chat-tab.pi-bot-mode .pi-runtime-controls,
+#chat-tab.pi-bot-mode #pi-connection-banner,
+#chat-tab.pi-bot-mode #pi-mobile-composer-summary,
+#chat-tab.pi-bot-mode #pi-mobile-context-trigger,
+#chat-tab.pi-bot-mode #pi-delivery-toggle,
+#chat-tab.pi-bot-mode #pi-delivery-choices,
+#chat-tab.pi-bot-mode #pi-composer-identity,
+#chat-tab.pi-bot-mode #pi-attachment-limit,
+#chat-tab.pi-bot-mode #pi-toggle-sessions,
+#chat-tab.pi-bot-mode .pi-composer-models,
+#chat-tab.pi-bot-mode .pi-tool-rail,
+#chat-tab.pi-bot-mode .pi-inspector:not(.show-changes),
+#chat-tab.pi-bot-mode #pi-inspector-tabs,
+#chat-tab.pi-bot-mode #pi-inspector-title,
+#chat-tab.pi-bot-mode #pi-files-toolbar,
+#chat-tab.pi-bot-mode #pi-file-explorer,
+#chat-tab.pi-bot-mode #pi-changes-file-list,
+#chat-tab.pi-bot-mode #pi-chat-knowledge,
+#chat-tab.pi-bot-mode .pi-turn-edits,
+#chat-tab.pi-bot-mode #pi-composer-status,
+#chat-tab.pi-bot-mode.pi-bot-welcome .pi-composer-wrap,
+#chat-tab.pi-bot-mode.pi-bot-welcome .pi-session-pane,
+#chat-tab.pi-bot-mode.pi-bot-welcome [data-split-key="agent-sessions"],
+#chat-tab.pi-bot-mode.pi-bot-welcome #pi-bot-header,
+#chat-tab.pi-bot-mode .pi-message.assistant > header > span:not(.pi-bot-face) { display: none !important; }
+#chat-tab:not(.pi-bot-mode) #pi-bot-pane,
+#chat-tab:not(.pi-bot-mode) #pi-bot-header { display: none !important; }
+/* The row under the composer only holds the three items hidden above; with nothing else in it, it
+   takes no room and the composer sits near the bottom edge (attachment problems show above the
+   composer, send problems as notices). Its own rule: browsers without :has() keep the row. */
+#chat-tab.pi-bot-mode .pi-composer-meta:not(:has(> :not(#pi-composer-identity, #pi-composer-status, #pi-attachment-limit))) { display: none; }
+/* The right panel appears in Bot mode only as the file preview (delivery cards, file links);
+   pi-chat.js closes it when anything else would open there. */
+#chat-tab.pi-bot-mode .pi-inspector.show-changes .inspector-heading { justify-content: flex-end; }
+#chat-tab.pi-bot-mode .pi-bot-approval-detail {
+    max-height: 30vh; margin: 0; padding: 10px 12px; overflow: auto; overscroll-behavior: contain; border-radius: 10px;
+    background: var(--surface-1); color: var(--text-main); font: .86rem/1.55 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    white-space: pre-wrap; overflow-wrap: anywhere;
+}
+#chat-tab.pi-bot-mode .pi-bot-approval-detail:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
+
+/* ---- workspace navigation ----------------------------------------------------------- */
+/* .nav-btn sets display, which would otherwise override the hidden attribute. */
+#workspace-bot-toggle[hidden] { display: none !important; }
+/* Phones: with Bots available the bar holds Bot, Pi Agent and More (assistant conversations
+   move into More, pi-sidebar.css), the same count as without Bots, so cells stay equal. */
+
+/* ---- session pane: rail + windows ---------------------------------------------------- */
+#pi-bot-pane { display: flex; flex: 1; min-height: 0; height: 100%; }
+#pi-bot-pane[hidden] { display: none; }
+.pi-bot-rail {
+    flex: 0 0 60px; display: flex; flex-direction: column; align-items: center; gap: 10px;
+    padding: 14px 0; border-right: 1px solid var(--line); background: var(--surface-0); overflow-y: auto;
+}
+.pi-bot-rail-item, .pi-bot-rail-add {
+    position: relative; width: 42px; height: 42px; padding: 0; display: grid; place-items: center;
+    border: 0; border-radius: 14px; background: transparent; color: var(--text-muted); cursor: pointer;
+    transition: border-radius 140ms ease, background 140ms ease, transform 140ms ease;
+}
+.pi-bot-rail-item:hover { background: var(--surface-2); border-radius: 12px; }
+.pi-bot-rail-item[aria-current="true"]::before {
+    content: ""; position: absolute; left: -9px; top: 9px; bottom: 9px; width: 4px; border-radius: 0 4px 4px 0; background: var(--primary, var(--green));
+}
+.pi-bot-rail-item.is-disabled { opacity: .45; }
+.pi-bot-rail-add { border: 1px dashed var(--line-strong); font-size: .85rem; }
+.pi-bot-rail-add:hover:not(:disabled) { color: var(--primary, var(--green)); border-color: color-mix(in srgb, var(--primary, var(--green)) 55%, var(--line)); background: color-mix(in srgb, var(--primary, var(--green)) 10%, transparent); }
+.pi-bot-rail-add:disabled { cursor: progress; }
+.pi-bot-rail-item:focus-visible, .pi-bot-rail-add:focus-visible, .pi-bot-window:focus-visible,
+.pi-bot-settings:focus-visible, .pi-bot-notes-link:focus-visible, .pi-bot-menu:focus-visible, .pi-bot-primary:focus-visible {
+    outline: 2px solid var(--primary, var(--green)); outline-offset: 2px;
+}
+
+.pi-bot-side { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--surface-sidebar, var(--surface-1)); }
+.pi-bot-side-head { display: flex; align-items: center; gap: 12px; padding: 18px 14px 14px; }
+.pi-bot-side-copy { min-width: 0; display: grid; gap: 3px; }
+.pi-bot-side-copy strong { color: var(--text-main); font-size: .98rem; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-bot-side-copy span { color: var(--text-muted); font-size: .78rem; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pi-bot-windows { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: 2px; padding: 4px 8px; }
+.pi-bot-section { margin: 14px 8px 4px; color: var(--text-soft, var(--text-muted)); font-size: .72rem; font-weight: 600; }
+.pi-bot-window {
+    display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 8px 10px;
+    border: 0; border-radius: 9px; background: transparent; color: var(--text-muted); font-size: .86rem; text-align: left; cursor: pointer;
+}
+.pi-bot-window:hover { background: var(--pv-nav-hover, var(--surface-2)); color: var(--text-main); }
+.pi-bot-window[aria-current="page"] { background: var(--surface-3); color: var(--text-main); font-weight: 600; }
+.pi-bot-window-mark { width: 22px; display: grid; place-items: center; font-size: .95rem; }
+.pi-bot-window-mark i { font-size: .82rem; color: var(--primary, var(--green)); }
+.pi-bot-window-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-bot-side-foot { padding: 10px 8px 12px; border-top: 1px solid var(--line); }
+.pi-bot-settings, .pi-bot-notes-link {
+    display: flex; align-items: center; gap: 10px; width: 100%; min-height: 38px; padding: 8px 10px;
+    border: 0; border-radius: 9px; background: transparent; color: var(--text-muted); font-size: .82rem; text-align: left; cursor: pointer;
+}
+.pi-bot-settings:hover, .pi-bot-notes-link:hover { background: var(--pv-nav-hover, var(--surface-2)); color: var(--text-main); }
+.pi-bot-settings span, .pi-bot-notes-link span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-bot-side-state { padding: 22px 16px; color: var(--text-muted); font-size: .84rem; display: grid; gap: 10px; justify-items: start; }
+.pi-bot-link { border: 0; background: none; padding: 0; color: var(--primary, var(--green)); font: inherit; cursor: pointer; }
+
+/* ---- faces ---------------------------------------------------------------------------- */
+.pi-bot-face {
+    flex: 0 0 auto; display: inline-grid; place-items: center; overflow: hidden; line-height: 1;
+    border-radius: 32%; background: color-mix(in srgb, var(--primary, var(--green)) 13%, var(--surface-2)); user-select: none;
+}
+.pi-bot-face img { width: 100%; height: 100%; object-fit: cover; }
+.pi-bot-face.is-xs { width: 22px; height: 22px; font-size: .8rem; }
+.pi-bot-face.is-sm { width: 32px; height: 32px; font-size: 1.05rem; }
+.pi-bot-face.is-md { width: 40px; height: 40px; font-size: 1.3rem; }
+.pi-bot-face.is-lg { width: 46px; height: 46px; font-size: 1.5rem; }
+.pi-bot-face.is-xl { width: 76px; height: 76px; font-size: 2.6rem; border-radius: 28%; }
+
+/* ---- header in the command bar ------------------------------------------------------ */
+#pi-bot-header { display: flex; align-items: center; gap: 10px; min-width: 0; }
+#pi-bot-header[hidden] { display: none; }
+.pi-bot-menu {
+    display: none; width: 40px; height: 40px; place-items: center; border: 0; border-radius: 10px;
+    background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.pi-bot-who { min-width: 0; display: grid; gap: 2px; }
+.pi-bot-who strong { color: var(--text-main); font-size: .95rem; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-bot-status { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: .74rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pi-bot-status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); flex: 0 0 auto; }
+.pi-bot-status[data-state="connected"] .pi-bot-status-dot { background: var(--green); }
+.pi-bot-status[data-state="working"] .pi-bot-status-dot { background: var(--green); animation: pi-bot-pulse 1.2s ease-in-out infinite; }
+.pi-bot-status[data-state="waiting"] .pi-bot-status-dot { background: var(--amber); }
+.pi-bot-status[data-state="offline"] .pi-bot-status-dot,
+.pi-bot-status[data-state="error"] .pi-bot-status-dot { background: var(--danger); }
+@keyframes pi-bot-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .pi-bot-status-dot { animation: none !important; } }
+
+/* ---- replies carry the Bot's face and name ------------------------------------------ */
+#chat-tab.pi-bot-mode .pi-message.assistant > header { display: flex; align-items: center; gap: 8px; }
+
+/* ---- empty and welcome states ------------------------------------------------------- */
+.pi-bot-empty {
+    max-width: none; margin: 0; min-height: 100%; display: grid; place-content: center; justify-items: center; gap: 12px;
+    padding: 48px 24px; text-align: center; color: var(--text-muted);
+}
+.pi-bot-empty h2 { margin: 6px 0 0; color: var(--text-main); font-size: 1.35rem; font-weight: 650; }
+.pi-bot-empty p { margin: 0; max-width: 420px; line-height: 1.6; font-size: .92rem; }
+.pi-bot-empty.is-welcome .pi-bot-face { animation: pi-bot-float 3.2s ease-in-out infinite; }
+@keyframes pi-bot-float { 50% { transform: translateY(-4px); } }
+@media (prefers-reduced-motion: reduce) { .pi-bot-empty .pi-bot-face { animation: none; } }
+.pi-bot-primary {
+    margin-top: 10px; min-width: 148px; min-height: 44px; padding: 0 22px; border: 0; border-radius: 12px;
+    background: var(--primary, var(--green)); color: var(--primary-contrast, #fff); font-size: .95rem; font-weight: 650; cursor: pointer;
+    transition: transform 120ms ease, filter 120ms ease;
+}
+.pi-bot-primary:hover:not(:disabled) { background: var(--primary-hover, var(--primary, var(--green))); }
+.pi-bot-primary:active:not(:disabled) { transform: translateY(1px); }
+.pi-bot-primary:disabled { opacity: .6; cursor: progress; }
+
+/* ---- phones: the pane is a drawer opened from the header --------------------------- */
+@media (max-width: 900px) {
+    #chat-tab.pi-bot-mode .pi-command-left { width: auto; flex: 1; min-width: 0; }
+    #chat-tab.pi-bot-mode #pi-bot-header { flex: 1 1 auto; }
+    .pi-bot-menu { display: inline-grid; }
+    #chat-tab.pi-bot-mode .pi-session-pane { width: min(340px, 88vw); }
+    .pi-bot-rail { flex-basis: 64px; }
+    .pi-bot-rail-item, .pi-bot-rail-add { width: 46px; height: 46px; }
+    .pi-bot-window, .pi-bot-settings, .pi-bot-notes-link { min-height: 46px; font-size: .92rem; }
+}
+
+/* ---- the first hello (local, before any model call) --------------------------------- */
+.pi-bot-empty.is-greeting { place-content: end start; justify-items: stretch; padding: 32px max(16px, calc((100% - 760px) / 2)) 28px; text-align: left; }
+.pi-bot-greeting {
+    max-width: 560px; display: grid; gap: 10px; padding: 14px 16px 16px; border: 1px solid var(--line); border-radius: 18px 18px 18px 6px;
+    background: var(--surface-2); color: var(--text-main); animation: pi-bot-rise .24s ease-out;
+}
+.pi-bot-greeting-head { display: flex; align-items: center; gap: 8px; font-size: .84rem; }
+.pi-bot-greeting p { margin: 0; max-width: none; line-height: 1.65; font-size: .95rem; color: var(--text-main); }
+.pi-bot-greeting-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.pi-bot-greeting-actions .pi-bot-primary { margin-top: 0; min-width: 104px; min-height: 40px; }
+.pi-bot-chip {
+    min-height: 40px; padding: 0 18px; border: 1px solid var(--line-strong); border-radius: 12px; background: transparent;
+    color: var(--text-main); font-size: .92rem; cursor: pointer;
+}
+.pi-bot-chip:hover:not(:disabled) { background: var(--pv-nav-hover, var(--surface-3)); }
+.pi-bot-chip:disabled { opacity: .6; cursor: progress; }
+@keyframes pi-bot-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .pi-bot-greeting, .pi-bot-setup { animation: none !important; } }
+
+/* ---- setup card: docked above the composer like the question panel ------------------- */
+/* --pi-bot-card-room: the height the page leaves the panel below the floating identity, measured
+   by pi-bot.js (docked panels) from the laid-out page; without it (another page) 66vh. */
+.pi-bot-setup {
+    display: flex; flex-direction: column; gap: 12px; max-height: min(var(--pi-bot-card-room, 66vh), 600px); margin: 0 0 10px; padding: 14px 14px 12px;
+    border: 1px solid var(--line); border-radius: 18px; background: var(--surface-2); color: var(--text-main);
+    box-shadow: 0 10px 30px color-mix(in srgb, var(--shadow-tint, #000) 10%, transparent), 0 1px 3px color-mix(in srgb, var(--shadow-tint, #000) 6%, transparent);
+    animation: pi-bot-rise .18s ease-out;
+}
+.pi-bot-setup[hidden] { display: none; }
+/* With too little room the panel keeps its title and actions and is drawn above the identity. */
+#chat-tab.pi-bot-mode .pi-composer-wrap > .pi-bot-setup { position: relative; z-index: 7; }
+/* Only an open Bot panel may lift its composer above a keyboard that leaves layout height intact. */
+#chat-tab.pi-bot-mode .pi-composer-wrap.is-bot-dock-lifted { position: relative; z-index: 7; transform: translateY(calc(-1 * var(--pi-bot-dock-lift))); }
+.pi-bot-setup > .pi-bot-setup-head, .pi-bot-setup > .pi-bot-setup-foot { flex: none; }
+.pi-bot-setup-head { display: flex; align-items: center; gap: 10px; font-size: .95rem; }
+.pi-bot-setup-head > strong { min-width: 0; overflow-wrap: anywhere; }
+.pi-bot-setup-fields { display: grid; gap: 10px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 2px; }
+.pi-bot-setup-field { display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: start; gap: 6px 10px; }
+.pi-bot-setup-label { padding-top: 9px; color: var(--text-muted); font-size: .82rem; }
+.pi-bot-setup-value { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.pi-bot-setup-value .pi-bot-chip { margin: 0; min-height: 36px; padding: 0 12px; font-size: .85rem; }
+.pi-bot-setup-picture img { display: block; width: 44px; height: 44px; border-radius: 50%; object-fit: cover; }
+.pi-bot-setup-current { grid-column: 2; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 14px; color: var(--text-muted); font-size: .82rem; }
+.pi-bot-setup-current > span { display: inline-flex; align-items: center; gap: 6px; }
+.pi-bot-setup-use { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; color: var(--text-main); cursor: pointer; }
+.pi-bot-setup-use input { width: 18px; height: 18px; margin: 0; accent-color: var(--primary, var(--green)); }
+.pi-bot-setup-field.is-kept .pi-bot-setup-value input, .pi-bot-setup-field.is-kept .pi-bot-setup-value textarea,
+.pi-bot-setup-field.is-kept .pi-bot-setup-picture { opacity: .5; }
+.pi-bot-setup-value input:not([type="file"]), .pi-bot-setup-value textarea {
+    width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 10px;
+    background: var(--surface-1); color: var(--text-main); font: inherit; font-size: .92rem; line-height: 1.5; resize: vertical;
+}
+.pi-bot-setup-field.is-avatar .pi-bot-setup-value input { width: 64px; text-align: center; font-size: 1.3rem; padding: 4px; }
+/* Long text wraps and grows with what is typed (pi-bot.js fitTextarea), then scrolls inside. */
+.pi-bot-setup-value textarea { resize: none; overflow-y: auto; }
+.pi-bot-setup-field.is-job .pi-bot-setup-value textarea { max-height: calc(6 * 1.5em + 18px); }
+.pi-bot-setup-field.is-personality .pi-bot-setup-value textarea { max-height: calc(10 * 1.5em + 18px); }
+.pi-bot-setup-field input:focus-visible, .pi-bot-setup-field textarea:focus-visible, .pi-bot-setup-fact input:focus-visible,
+.pi-bot-setup-later:focus-visible, .pi-bot-chip:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
+.pi-bot-setup-about { display: grid; gap: 6px; margin: 0; padding: 0; border: 0; }
+.pi-bot-setup-about legend { margin-bottom: 4px; padding: 0; color: var(--text-muted); font-size: .82rem; }
+.pi-bot-setup-fact { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--surface-1); font-size: .9rem; line-height: 1.5; cursor: pointer; }
+.pi-bot-setup-fact input { margin-top: 3px; accent-color: var(--primary, var(--green)); }
+/* Personality quick styles fill the text below them; the way of working is a choice of three (UAT-14). */
+.pi-bot-setup-styles { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+.pi-bot-setup-field.is-workStyle { grid-template-columns: minmax(0, 1fr); }
+.pi-bot-setup-work { display: grid; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.pi-bot-setup-work legend { margin-bottom: 4px; padding: 0; }
+.pi-bot-setup-work-option { display: flex; align-items: flex-start; gap: 10px; padding: 9px 10px; border: 1px solid transparent; border-radius: 10px; background: var(--surface-1); cursor: pointer; }
+.pi-bot-setup-work-option:has(input:checked) { border-color: var(--primary, var(--green)); }
+.pi-bot-setup-work-option input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--primary, var(--green)); }
+.pi-bot-setup-work-option input:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
+.pi-bot-setup-work-option span { display: grid; gap: 2px; min-width: 0; }
+.pi-bot-setup-work-option strong { font-size: .92rem; }
+.pi-bot-setup-work-option small { color: var(--text-muted); font-size: .8rem; line-height: 1.5; }
+.pi-bot-setup-work-note { margin: 2px 2px 0; color: var(--text-muted); font-size: .8rem; }
+.pi-bot-setup-foot { display: flex; align-items: center; gap: 8px; }
+.pi-bot-setup-note { flex: 1; min-width: 0; margin: 0; color: var(--text-muted); font-size: .8rem; }
+.pi-bot-setup-note.is-error { color: var(--danger); }
+.pi-bot-setup-later { min-height: 40px; padding: 0 16px; border: 0; border-radius: 12px; background: transparent; color: var(--text-muted); font-size: .9rem; cursor: pointer; }
+.pi-bot-setup-later:hover:not(:disabled) { background: var(--pv-nav-hover, var(--surface-3)); color: var(--text-main); }
+.pi-bot-setup .pi-bot-primary { margin-top: 0; min-width: 96px; min-height: 40px; }
+@media (max-width: 680px) {
+    .pi-bot-setup-field { grid-template-columns: 1fr; gap: 4px; }
+    .pi-bot-setup-label { padding-top: 0; }
+    .pi-bot-setup-current { grid-column: 1; }
+    .pi-bot-setup-value input:not([type="file"]), .pi-bot-setup-value textarea { font-size: 16px; }
+    .pi-bot-setup-value .pi-bot-chip, .pi-bot-setup-use { min-height: 44px; }
+    .pi-bot-setup-foot > .pi-bot-setup-later, .pi-bot-setup .pi-bot-setup-foot > .pi-bot-primary { min-height: 44px; }
+    /* A message gets the whole width above the actions instead of a narrow column beside them. */
+    .pi-bot-setup-foot { flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
+    .pi-bot-setup-foot > .pi-bot-setup-note:not(:empty) { flex-basis: 100%; }
+}
+
+/* ---- one lifelong conversation: compaction and generations stay invisible ----------- */
+#chat-tab.pi-bot-mode .pi-summary-notice.compactionSummary,
+#chat-tab.pi-bot-mode .pi-archive-turn.is-summary { display: none !important; }
+#pi-bot-history[hidden], #chat-tab:not(.pi-bot-mode) #pi-bot-history { display: none !important; }
+.pi-bot-empty.is-continuing { min-height: 0; padding: 0; }
+/* With earlier conversation above, the current part only takes the room it needs, so the
+   latest earlier messages sit right above the composer. */
+#chat-tab.pi-bot-mode #pi-bot-history:not([hidden]) ~ .pi-transcript-content { min-height: 0; height: auto; }
+
+/* ---- a later Bot offers to keep what another Bot knows about the user --------------- */
+.pi-bot-greeting.is-known { max-width: 600px; }
+.pi-bot-greeting-wait { color: var(--text-muted); }
+.pi-bot-known-sources { display: flex; flex-wrap: wrap; gap: 6px; }
+.pi-bot-known-source {
+    display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px 0 6px; border: 1px solid var(--line);
+    border-radius: 999px; background: transparent; color: var(--text-main); font-size: .86rem; cursor: pointer;
+}
+.pi-bot-known-source[aria-pressed="true"] { border-color: var(--primary, var(--green)); background: var(--surface-1, var(--surface)); font-weight: 600; }
+.pi-bot-known-source:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
+.pi-bot-known-list {
+    display: grid; gap: 2px; max-height: min(38vh, 320px); margin: 0; padding: 4px; overflow-y: auto; overscroll-behavior: contain;
+    list-style: none; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-1, var(--surface));
+}
+.pi-bot-known-list label {
+    display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer;
+    font-size: .92rem; line-height: 1.5; overflow-wrap: anywhere;
+}
+.pi-bot-known-list label:hover { background: var(--pv-nav-hover, var(--surface-3)); }
+.pi-bot-known-list input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--primary, var(--green)); }
+.pi-bot-known-list input:not(:checked) + span { color: var(--text-muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); }
+
+/* ---- Bot settings sheet: a centred sheet on desktop, full screen on phones ----------- */
+.pi-bot-sheet {
+    width: min(580px, calc(100vw - 32px)); max-height: min(88dvh, 860px); margin: auto; padding: 0; overflow: hidden;
+    border: 1px solid var(--line-strong); border-radius: 16px; background: var(--surface-2); color: var(--text-main);
+    box-shadow: 0 22px 70px rgb(0 0 0 / .28);
+}
+.pi-bot-sheet[open] { display: flex; }
+.pi-bot-sheet::backdrop { background: rgb(10 14 20 / .42); }
+.pi-bot-sheet-form { display: flex; flex-direction: column; width: 100%; min-height: 0; max-height: inherit; }
+.pi-bot-sheet-head {
+    display: flex; align-items: center; gap: 10px; padding: 14px 14px 12px 18px; border-bottom: 1px solid var(--line);
+}
+.pi-bot-sheet-head h2 { flex: 1; min-width: 0; margin: 0; font-size: 1.02rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-bot-sheet-close {
+    display: inline-grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 10px; background: transparent;
+    color: var(--text-muted); cursor: pointer;
+}
+.pi-bot-sheet-close:hover { background: var(--pv-nav-hover, var(--surface-3)); color: var(--text-main); }
+.pi-bot-sheet-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 4px 18px 18px; }
+.pi-bot-sheet-state { display: grid; justify-items: start; gap: 8px; margin: 18px 0; color: var(--text-muted); }
+.pi-bot-sheet-section { display: grid; gap: 10px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.pi-bot-sheet-section:last-child { border-bottom: 0; }
+.pi-bot-sheet-section h3 { margin: 0; font-size: .8rem; font-weight: 600; letter-spacing: .02em; color: var(--text-muted); }
+.pi-bot-sheet-row { display: grid; grid-template-columns: 76px 1fr; gap: 12px; }
+/* Face: built-in characters first, with picture upload and a custom emoji input. */
+.pi-bot-sheet-identity { display: grid; gap: 14px; }
+.pi-bot-sheet-avatar { display: flex; gap: 14px; align-items: flex-start; }
+.pi-bot-sheet-avatar-face { flex: none; }
+.pi-bot-sheet-avatar-side { display: grid; gap: 8px; min-width: 0; }
+.pi-bot-sheet-avatar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pi-bot-sheet .pi-bot-sheet-avatar-actions input.pi-bot-sheet-emoji[type="text"] { width: 64px; }
+.pi-bot-sheet-avatar-actions .pi-bot-chip { margin: 0; min-height: 40px; }
+.pi-bot-sheet-avatar-actions [hidden] { display: none; }
+@media (max-width: 600px) {
+    .pi-bot-sheet-avatar { flex-direction: column; align-items: center; }
+    .pi-bot-sheet-avatar-side { width: 100%; }
+    .pi-bot-sheet-avatar-actions .pi-bot-chip { min-height: 44px; }
+}
+.pi-bot-sheet-row[hidden], .pi-bot-sheet-field[hidden] { display: none; }
+.pi-bot-sheet-field { display: grid; gap: 6px; min-width: 0; }
+.pi-bot-sheet-label { font-size: .82rem; color: var(--text-muted); }
+.pi-bot-sheet-hint, .pi-bot-sheet-note { margin: 0; font-size: .8rem; line-height: 1.55; color: var(--text-muted); }
+.pi-bot-sheet input[type="text"], .pi-bot-sheet textarea, .pi-bot-sheet select {
+    width: 100%; min-height: 40px; padding: 8px 11px; border: 1px solid var(--line-strong); border-radius: 10px;
+    background: var(--surface-1, var(--surface)); color: var(--text-main); font: inherit; font-size: .92rem; line-height: 1.5;
+}
+.pi-bot-sheet textarea { resize: vertical; min-height: 64px; }
+/* Job, personality and topic instructions grow with their text (pi-bot.js fitTextarea) up to a bound, then scroll. */
+.pi-bot-sheet textarea.pi-bot-sheet-long { resize: none; overflow-y: auto; }
+.pi-bot-sheet textarea.pi-bot-sheet-long.is-job { max-height: calc(8 * 1.5em + 18px); }
+.pi-bot-sheet textarea.pi-bot-sheet-long.is-soul { max-height: calc(16 * 1.5em + 18px); }
+.pi-bot-sheet textarea.pi-bot-sheet-long.is-instructions { max-height: calc(10 * 1.5em + 18px); }
+.pi-bot-sheet input.pi-bot-sheet-emoji[type="text"] { text-align: center; font-size: 1.45rem; padding: 2px 4px; line-height: 1.2; }
+.pi-bot-sheet input:focus-visible, .pi-bot-sheet textarea:focus-visible, .pi-bot-sheet select:focus-visible,
+.pi-bot-sheet-link:focus-visible, .pi-bot-sheet-close:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
+.pi-bot-sheet-presets { display: grid; gap: 8px; }
+.pi-bot-sheet-preset {
+    display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer;
+}
+.pi-bot-sheet-preset:has(input:checked) { border-color: var(--primary, var(--green)); background: var(--surface-1, var(--surface)); }
+.pi-bot-sheet-preset input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--primary, var(--green)); }
+.pi-bot-sheet-preset-copy { display: grid; gap: 2px; font-size: .86rem; line-height: 1.5; color: var(--text-muted); }
+.pi-bot-sheet-preset-copy strong { font-size: .92rem; color: var(--text-main); }
+.pi-bot-sheet-link {
+    display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0 4px; border: 0; border-radius: 10px;
+    background: transparent; color: var(--text-main); font: inherit; font-size: .92rem; text-align: left; cursor: pointer;
+}
+.pi-bot-sheet-link > span { flex: 1; }
+.pi-bot-sheet-link > i { width: 18px; text-align: center; color: var(--text-muted); }
+.pi-bot-sheet-link:hover { background: var(--pv-nav-hover, var(--surface-3)); }
+.pi-bot-sheet-foot {
+    display: flex; align-items: center; gap: 8px; padding: 12px 14px 12px 18px; border-top: 1px solid var(--line); background: var(--surface-2);
+}
+.pi-bot-sheet-status { flex: 1; min-width: 0; margin: 0; font-size: .82rem; line-height: 1.45; color: var(--text-muted); }
+.pi-bot-sheet-status[data-tone="warn"] { color: var(--warning, #b7791f); }
+.pi-bot-sheet-status[data-tone="error"] { color: var(--danger, #c0392b); }
+.pi-bot-sheet-foot .pi-bot-primary { margin-top: 0; min-width: 88px; min-height: 40px; }
+.pi-bot-sheet-foot .pi-bot-primary:disabled { cursor: default; }
+
+@media (max-width: 600px) {
+    .pi-bot-sheet { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; }
+    .pi-bot-sheet-form { max-height: 100dvh; }
+    .pi-bot-sheet-head { padding-top: max(12px, env(safe-area-inset-top)); }
+    .pi-bot-sheet-foot { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+    .pi-bot-sheet input[type="text"], .pi-bot-sheet textarea, .pi-bot-sheet select { font-size: 16px; }
+    .pi-bot-sheet-status { font-size: .78rem; }
+}
+
+/* ---- notebook ("我记着的事"): header button, side entry and sheet ------------------------ */
+.pi-bot-notes-button {
+    margin-left: auto; flex: 0 0 auto; display: inline-grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 10px;
+    background: transparent; color: var(--text-muted); cursor: pointer;
+}
+.pi-bot-notes-button[hidden] { display: none; }
+.pi-bot-notes-button:hover { background: var(--pv-nav-hover, var(--surface-2)); color: var(--text-main); }
+.pi-bot-notes-button:focus-visible, .pi-bot-note-action:focus-visible, .pi-bot-note-source summary:focus-visible,
+.pi-bot-notes-closed > summary:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
+.pi-bot-side-foot { display: grid; gap: 2px; }
+.pi-bot-notes-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.pi-bot-note { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 4px 10px; margin: 0 -10px; padding: 9px 4px 9px 10px; border-radius: 10px; }
+.pi-bot-note:hover, .pi-bot-note:focus-within { background: var(--surface-1, var(--surface)); }
+.pi-bot-note-check {
+    flex: none; display: inline-grid; place-items: center; width: 22px; height: 22px; margin-top: 2px; padding: 0;
+    border: 1.5px solid var(--line-strong); border-radius: 50%; background: transparent; color: transparent; font-size: .66rem; cursor: pointer;
+    transition: border-color 120ms ease, color 120ms ease, background 120ms ease;
+}
+.pi-bot-note-check:hover:not(:disabled), .pi-bot-note-check:focus-visible { border-color: var(--green); color: var(--green); }
+.pi-bot-note-check:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 2px; }
+.pi-bot-note-check:disabled { opacity: .5; cursor: default; }
+.pi-bot-note-main { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.pi-bot-note-text { margin: 0; font-size: .93rem; line-height: 1.55; color: var(--text-main); overflow-wrap: anywhere; white-space: pre-wrap; }
+.pi-bot-note:not(.is-active) .pi-bot-note-text {
+    color: var(--text-muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+}
+.pi-bot-note-meta { margin: 0; font-size: .76rem; line-height: 1.45; color: var(--text-muted); }
+.pi-bot-note-source { font-size: .78rem; color: var(--text-muted); }
+.pi-bot-note-source summary { width: fit-content; cursor: pointer; }
+.pi-bot-note-source p {
+    margin: 4px 0 0; padding: 5px 9px; border-left: 2px solid var(--line-strong); line-height: 1.55; overflow-wrap: anywhere;
+}
+.pi-bot-note-tools { flex: none; display: flex; align-items: center; gap: 2px; }
+.pi-bot-note-action {
+    flex: none; display: inline-grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 8px;
+    background: transparent; color: var(--text-muted); font-size: .84rem; cursor: pointer;
+}
+.pi-bot-note-action:hover:not(:disabled) { background: var(--pv-nav-hover, var(--surface-3)); color: var(--text-main); }
+.pi-bot-note-action[data-note-action="delete"]:hover:not(:disabled) { color: var(--danger); }
+.pi-bot-note-action:disabled { opacity: .45; cursor: default; }
+.pi-bot-note-action[aria-expanded="true"] { background: var(--surface-3); color: var(--text-main); }
+/* Pointer screens show icons with the row (and on keyboard focus); touch or narrow screens get "more". */
+.pi-bot-note-action[data-note-action="more"] { display: none; }
+@media (hover: hover) and (pointer: fine) and (min-width: 601px) {
+    .pi-bot-note:not(:hover):not(:focus-within) .pi-bot-note-tools { opacity: 0; }
+}
+@media not all and (hover: hover) and (pointer: fine) and (min-width: 601px) {
+    .pi-bot-note-tools { display: none; }
+    .pi-bot-note-action[data-note-action="more"] { display: inline-grid; width: 40px; height: 40px; margin: -8px -2px -8px 0; }
+}
+/* Under the note: labelled choices, or the delete confirmation. */
+.pi-bot-note-panel { flex: 1 0 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 6px 2px 0; }
+.pi-bot-note-check ~ .pi-bot-note-panel { padding-left: 32px; }
+.pi-bot-note-panel .pi-bot-chip { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; margin: 0; }
+.pi-bot-note-panel .pi-bot-chip > i { font-size: .8rem; color: var(--text-muted); }
+.pi-bot-note-panel .pi-bot-chip.is-danger, .pi-bot-note-panel .pi-bot-chip.is-danger > i { color: var(--danger); }
+.pi-bot-note-panel.is-confirming { justify-content: flex-end; }
+.pi-bot-note-ask { flex: 1 1 100%; margin: 0; font-size: .82rem; line-height: 1.5; color: var(--text-main); }
+.pi-bot-danger {
+    min-height: 36px; padding: 0 14px; border: 0; border-radius: 9px; background: var(--danger); color: #fff; font: inherit; font-size: .85rem; cursor: pointer;
+}
+.pi-bot-danger:focus-visible { outline: 2px solid var(--danger); outline-offset: 2px; }
+.pi-bot-danger:disabled { opacity: .55; cursor: default; }
+.pi-bot-note-edit { padding-right: 6px; flex: 1; min-width: 0; display: grid; gap: 8px; }
+.pi-bot-note-due { display: flex; align-items: center; gap: 10px; font-size: .82rem; color: var(--text-muted); }
+.pi-bot-note-due-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.pi-bot-sheet input[type="time"]:disabled { opacity: .5; }
+.pi-bot-sheet input[type="date"], .pi-bot-sheet input[type="time"] {
+    min-height: 38px; padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: 10px;
+    background: var(--surface-1, var(--surface)); color: var(--text-main); font: inherit; font-size: .9rem;
+}
+.pi-bot-note-confirm { display: flex; justify-content: flex-end; gap: 8px; }
+.pi-bot-note-confirm .pi-bot-primary { margin-top: 0; min-height: 36px; min-width: 72px; }
+.pi-bot-notes-empty { display: grid; justify-items: center; gap: 6px; padding: 40px 12px 32px; text-align: center; color: var(--text-muted); }
+.pi-bot-notes-empty > i { margin-bottom: 6px; font-size: 1.35rem; color: var(--primary, var(--green)); }
+.pi-bot-notes-empty p { margin: 0; max-width: 360px; font-size: .88rem; line-height: 1.6; }
+/* Where lasting facts about the user live instead (UAT-13). */
+.pi-bot-notes-about { display: flex; align-items: center; gap: 10px; margin: 14px 2px 4px; padding-top: 12px; border-top: 1px solid var(--border-color, var(--border)); }
+.pi-bot-notes-about p { flex: 1; margin: 0; font-size: .82rem; line-height: 1.55; color: var(--text-muted); }
+.pi-bot-notes-about .pi-bot-chip { flex: none; }
+.pi-bot-notes-empty p:first-of-type { color: var(--text-main); font-weight: 600; }
+.pi-bot-notes-closed > summary { width: fit-content; font-size: .8rem; font-weight: 600; color: var(--text-muted); cursor: pointer; }
+.pi-bot-notes-closed[open] > summary { margin-bottom: 4px; }
+@media (max-width: 600px) {
+    .pi-bot-note-check { position: relative; }
+    .pi-bot-note-check::after { content: ""; position: absolute; inset: -9px; }
+    .pi-bot-note-panel .pi-bot-chip, .pi-bot-danger { min-height: 40px; }
+    .pi-bot-sheet input[type="date"], .pi-bot-sheet input[type="time"] { font-size: 16px; min-height: 44px; }
+}
+
+/* ---- no chat model yet ---------------------------------------------------------------- */
+.pi-bot-needs-model {
+    display: flex; align-items: flex-start; gap: 10px; max-width: 420px; padding: 10px 12px; border: 1px solid var(--line);
+    border-radius: 12px; background: var(--surface-1, var(--surface)); text-align: left;
+}
+.pi-bot-needs-model > i { margin-top: 4px; color: var(--primary, var(--green)); }
+.pi-bot-empty .pi-bot-needs-model p, .pi-bot-greeting .pi-bot-needs-model p { margin: 0; font-size: .9rem; line-height: 1.6; color: var(--text-main); }
+
+/* ---- shared ----------------------------------------------------------------------------- */
+.pi-bot-sr { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+
+/* ---- topics in the session pane: add, edit, unsettled items, archived ------------------ */
+.pi-bot-section-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 10px 0 2px; }
+.pi-bot-section-row .pi-bot-section { margin: 4px 8px; }
+.pi-bot-topic-add, .pi-bot-topic-edit {
+    flex: none; display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px;
+    background: transparent; color: var(--text-muted); font-size: .8rem; cursor: pointer;
+}
+.pi-bot-topic-add:hover, .pi-bot-topic-edit:hover { background: var(--pv-nav-hover, var(--surface-2)); color: var(--text-main); }
+.pi-bot-topic-add:focus-visible, .pi-bot-topic-edit:focus-visible, .pi-bot-archived > summary:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
+.pi-bot-topic-row { display: flex; align-items: center; gap: 2px; min-width: 0; border-radius: 9px; }
+.pi-bot-topic-row > .pi-bot-window { flex: 1; min-width: 0; }
+/* The whole row (with its edit button) carries hover and the open topic's highlight, as wide as the main chat's. */
+.pi-bot-topic-row:hover { background: var(--pv-nav-hover, var(--surface-2)); }
+.pi-bot-topic-row:has(> .pi-bot-window[aria-current="page"]) { background: var(--surface-3); }
+.pi-bot-topic-row > .pi-bot-window:hover, .pi-bot-topic-row > .pi-bot-window[aria-current="page"] { background: transparent; }
+.pi-bot-topic-row > .pi-bot-topic-edit:hover { background: color-mix(in srgb, var(--text-main) 8%, transparent); }
+@media (hover: hover) and (pointer: fine) and (min-width: 901px) {
+    .pi-bot-topic-row:not(:hover):not(:focus-within) .pi-bot-topic-edit { opacity: 0; }
+}
+.pi-bot-topic-badge {
+    flex: none; display: inline-flex; align-items: center; gap: 5px; margin-left: auto; padding: 1px 7px; border-radius: 999px;
+    background: var(--surface-3, var(--surface-2)); color: var(--text-muted); font-size: .72rem; font-weight: 600; line-height: 1.5;
+}
+.pi-bot-topic-badge .pi-bot-status-dot { width: 6px; height: 6px; background: var(--amber); }
+.pi-bot-topic-badge.is-busy .pi-bot-status-dot { background: var(--green); animation: pi-bot-pulse 1.2s ease-in-out infinite; }
+.pi-bot-topic-empty { margin: 2px 10px 6px; color: var(--text-muted); font-size: .78rem; line-height: 1.5; }
+.pi-bot-archived { margin: 10px 0 4px; }
+.pi-bot-archived > summary {
+    width: fit-content; min-height: 32px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border-radius: 8px;
+    color: var(--text-muted); font-size: .76rem; font-weight: 600; cursor: pointer; list-style: none;
+}
+.pi-bot-archived > summary::-webkit-details-marker { display: none; }
+.pi-bot-archived > summary::before {
+    content: ""; width: 5px; height: 5px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); transition: transform 120ms ease;
+}
+.pi-bot-archived[open] > summary::before { transform: rotate(45deg); }
+.pi-bot-archived > summary:hover { background: var(--pv-nav-hover, var(--surface-2)); color: var(--text-main); }
+.pi-bot-archived-row { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 4px 4px 4px 10px; color: var(--text-muted); font-size: .84rem; }
+.pi-bot-archived-row .pi-bot-window-title { flex: 1; }
+.pi-bot-archived-row .pi-bot-window-mark i { color: var(--text-muted); }
+.pi-bot-archived-row .pi-bot-chip { flex: none; min-height: 32px; margin: 0; padding: 0 12px; font-size: .8rem; }
+@media (max-width: 900px) {
+    .pi-bot-topic-add, .pi-bot-topic-edit { width: 44px; height: 44px; }
+    .pi-bot-archived > summary { min-height: 44px; }
+    .pi-bot-archived-row .pi-bot-chip { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .pi-bot-topic-badge .pi-bot-status-dot { animation: none !important; } .pi-bot-archived > summary::before { transition: none; } }
+
+/* ---- topic sheet ---------------------------------------------------------------------- */
+.pi-bot-topic-sheet .pi-bot-sheet-body { display: grid; align-content: start; gap: 14px; padding-top: 14px; }
+.pi-bot-topic-intro { margin: 0; }
+.pi-bot-topic-identity { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: end; }
+.pi-bot-sheet .pi-bot-topic-identity input.pi-bot-sheet-emoji[type="text"] { width: 100%; }
+.pi-bot-topic-sheet-mark { font-size: 1.3rem; line-height: 1; }
+.pi-bot-topic-sheet-mark[hidden] { display: none; }
+.pi-bot-topic-sheet .pi-bot-sheet-section { padding-bottom: 0; }
+.pi-bot-sheet-link:disabled { opacity: .55; cursor: default; }
+.pi-bot-sheet-link.is-danger, .pi-bot-sheet-link.is-danger > i:first-child { color: var(--danger); }
+.pi-bot-topic-archive > i:first-child { color: var(--text-muted); }
+
+/* ---- "always allow" grants in Bot settings --------------------------------------------- */
+.pi-bot-sheet-rules { display: grid; gap: 8px; margin-top: 4px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+.pi-bot-sheet-rules h4 { margin: 0; font-size: .86rem; font-weight: 650; color: var(--text-main); }
+.pi-bot-sheet-rule-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.pi-bot-sheet-rule { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--surface-1, var(--surface)); }
+.pi-bot-sheet-rule-copy { flex: 1; min-width: 0; display: grid; gap: 3px; font-size: .82rem; color: var(--text-muted); }
+.pi-bot-sheet-rule-copy strong { color: var(--text-main); font-size: .84rem; font-weight: 600; }
+.pi-bot-sheet-rule-copy code, .pi-bot-approval-rule code {
+    display: block; max-height: 6.5em; overflow: auto; padding: 4px 7px; border-radius: 7px; background: var(--surface-2); color: var(--text-main);
+    font: .8rem/1.5 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.pi-bot-sheet-rule-copy small { overflow-wrap: anywhere; }
+.pi-bot-sheet-rule.is-revoked .pi-bot-sheet-rule-copy > :not(.pi-bot-sheet-rule-state) { opacity: .55; text-decoration: line-through; }
+.pi-bot-sheet-rule-state { color: var(--danger); font-weight: 600; }
+.pi-bot-sheet-rule .pi-bot-chip { flex: none; margin: 0; min-height: 36px; padding: 0 12px; font-size: .82rem; }
+@media (max-width: 900px) { .pi-bot-sheet-rule .pi-bot-chip { min-height: 44px; } }
+@media (max-width: 600px) {
+    .pi-bot-sheet-rule { flex-wrap: wrap; }
+    .pi-bot-sheet-rule .pi-bot-chip { min-height: 44px; margin-left: auto; }
+    .pi-bot-topic-identity { grid-template-columns: 92px minmax(0, 1fr); }
+}
+
+/* ---- approval card: "always allow" ------------------------------------------------------ */
+.pi-bot-approval .pi-bot-setup-foot { flex-wrap: wrap; justify-content: flex-end; }
+.pi-bot-approval-scope {
+    display: grid; gap: 6px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--line)); border-radius: 12px;
+    background: color-mix(in srgb, var(--amber) 8%, var(--surface-1)); font-size: .84rem; line-height: 1.55;
+}
+.pi-bot-approval-scope p { margin: 0; }
+.pi-bot-approval-rule { display: grid; gap: 4px; }
+.pi-bot-approval-rule small { color: var(--text-muted); overflow-wrap: anywhere; }
+.pi-bot-approval-keep { margin: 0; }
+.pi-bot-approval-keep[aria-expanded="true"] { border-color: var(--amber); }
+@media (max-width: 680px) {
+    .pi-bot-approval .pi-bot-setup-note { flex-basis: 100%; }
+    .pi-bot-approval .pi-bot-setup-note:empty { display: none; }
+    .pi-bot-approval .pi-bot-setup-foot > button { flex: 1 1 auto; min-height: 44px; padding: 0 12px; }
+    .pi-bot-approval .pi-bot-setup-foot > .pi-bot-primary { min-width: 0; }
+}
+
+/* ---- the end of getting acquainted (flow 2) -------------------------------------------- */
+/* Only the body (facts and model) scrolls; the heading, the choices and any message keep their room. */
+.pi-bot-closure > .pi-bot-setup-head, .pi-bot-closure > .pi-bot-closure-tasks, .pi-bot-closure > .pi-bot-setup-foot { flex: none; }
+.pi-bot-closure-body {
+    gap: 14px;
+    /* Scroll shadows: a soft edge shows only where more content is hidden above or below. */
+    background:
+        linear-gradient(var(--surface-2) 40%, transparent) center top / 100% 20px no-repeat local,
+        linear-gradient(transparent, var(--surface-2) 60%) center bottom / 100% 20px no-repeat local,
+        radial-gradient(farthest-side at 50% 0, color-mix(in srgb, var(--text-main) 16%, transparent), transparent) center top / 100% 8px no-repeat scroll,
+        radial-gradient(farthest-side at 50% 100%, color-mix(in srgb, var(--text-main) 16%, transparent), transparent) center bottom / 100% 8px no-repeat scroll;
+}
+.pi-bot-closure-about { min-width: 0; }
+.pi-bot-closure-about > summary {
+    display: flex; align-items: center; gap: 8px; width: fit-content; max-width: 100%; min-height: 32px; padding: 0 8px 0 2px; border-radius: 8px;
+    color: var(--text-muted); font-size: .84rem; cursor: pointer; list-style: none;
+}
+.pi-bot-closure-about > summary::-webkit-details-marker { display: none; }
+.pi-bot-closure-about > summary > i { flex: none; width: 18px; text-align: center; color: var(--primary, var(--green)); font-size: .82rem; }
+.pi-bot-closure-about > summary::after {
+    content: ""; flex: none; width: 5px; height: 5px; margin-left: 2px; border: solid currentColor; border-width: 0 1.5px 1.5px 0;
+    transform: rotate(-45deg); transition: transform 120ms ease;
+}
+.pi-bot-closure-about[open] > summary::after { transform: rotate(45deg); }
+.pi-bot-closure-about[open] > summary { margin-bottom: 6px; }
+.pi-bot-closure-about > summary:hover { color: var(--text-main); }
+.pi-bot-closure-about > summary:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
+@media (prefers-reduced-motion: reduce) { .pi-bot-closure-about > summary::after { transition: none; } }
+.pi-bot-closure-facts { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.pi-bot-closure-facts li { display: flex; align-items: flex-start; gap: 10px; font-size: .86rem; line-height: 1.55; color: var(--text-main); }
+.pi-bot-closure-facts li > i { flex: none; width: 18px; margin-top: 4px; text-align: center; color: var(--primary, var(--green)); font-size: .82rem; }
+.pi-bot-closure-model, .pi-bot-closure-tasks { display: grid; gap: 8px; min-width: 0; }
+.pi-bot-closure-label { margin: 0; color: var(--text-muted); font-size: .82rem; }
+.pi-bot-closure-hint { margin: 0; color: var(--text-muted); font-size: .84rem; }
+.pi-bot-closure-saved { display: flex; align-items: center; gap: 8px; margin: 0; font-size: .88rem; }
+.pi-bot-closure-saved > i { color: var(--green); }
+.pi-bot-closure-model-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pi-bot-closure-model-row select {
+    flex: 1 1 140px; max-width: 360px; min-width: 0; min-height: 40px; padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: 10px;
+    background: var(--surface-1, var(--surface)); color: var(--text-main); font: inherit; font-size: .9rem;
+}
+.pi-bot-closure-model-row select[data-closure-thinking] { flex: 0 1 112px; }
+.pi-bot-closure-model-row .pi-bot-chip { flex: none; }
+.pi-bot-closure-model-row select:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
+.pi-bot-closure-model-row .pi-bot-chip, .pi-bot-closure-chips .pi-bot-chip { margin: 0; min-height: 40px; padding: 0 14px; font-size: .88rem; }
+.pi-bot-closure-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.pi-bot-closure-chips [data-closure-task="own"] { border-style: dashed; }
+.pi-bot-closure-chips .pi-bot-setup-later { margin-left: auto; }
+/* The footer only carries a message (an error or a hint); without one it takes no room. */
+.pi-bot-closure .pi-bot-setup-foot:has(.pi-bot-setup-note:empty) { display: none; }
+@media (max-width: 680px) {
+    /* Phones: a bounded panel leaves the Bot's last reply readable above it; the six choices sit
+       in two rows of three that never scroll away. */
+    .pi-bot-closure { gap: 10px; padding: 12px 12px 10px; max-height: min(42vh, 400px, var(--pi-bot-card-room, 42vh)); max-height: min(42dvh, 400px, var(--pi-bot-card-room, 42dvh)); }
+    .pi-bot-closure-model-row select { font-size: 16px; min-height: 44px; }
+    .pi-bot-closure-model-row .pi-bot-chip, .pi-bot-closure-chips .pi-bot-chip, .pi-bot-closure .pi-bot-setup-later { min-height: 44px; }
+    .pi-bot-closure-about > summary { min-height: 44px; }
+    .pi-bot-closure-body { gap: 8px; }
+    .pi-bot-closure-facts { gap: 5px; }
+    .pi-bot-closure-facts li { font-size: .8rem; line-height: 1.5; }
+    .pi-bot-closure-model-row select[data-closure-thinking] { flex-basis: 92px; }
+    .pi-bot-closure-model-row .pi-bot-chip { padding: 0 12px; }
+    .pi-bot-closure-chips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+    .pi-bot-closure-chips .pi-bot-chip, .pi-bot-closure-chips .pi-bot-setup-later { min-width: 0; margin: 0; padding: 0 4px; font-size: .86rem; }
+    .pi-bot-closure-chips .pi-bot-setup-later { margin-left: 0; }
+}
+
+/* ---- what each Bot is doing: rail marks, chat states, "All Bots" (pi-bot-home.js) ---------- */
+.pi-bot-rail-waiting, .pi-bot-rail-unread { position: absolute; pointer-events: none; }
+.pi-bot-rail-waiting { top: 0; right: 0; width: 10px; height: 10px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 2px var(--surface-0, var(--surface-1)); }
+.pi-bot-rail-unread {
+    right: -4px; bottom: -3px; min-width: 18px; height: 18px; padding: 0 5px; display: inline-grid; place-items: center; border-radius: 999px;
+    background: var(--primary, var(--green)); color: var(--primary-contrast, #0d1110); font-size: .68rem; font-weight: 700; line-height: 1;
+    font-variant-numeric: tabular-nums; box-shadow: 0 0 0 2px var(--surface-0, var(--surface-1));
+}
+.pi-bot-window-state { flex: none; display: inline-flex; align-items: center; gap: 5px; margin-left: auto; color: var(--text-muted); font-size: .72rem; font-weight: 600; }
+.pi-bot-window-state.is-waiting {
+    padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--amber) 16%, transparent); color: var(--amber); line-height: 1.5;
+}
+.pi-bot-window-state .pi-bot-status-dot { width: 7px; height: 7px; }
+.pi-bot-window-state.is-waiting .pi-bot-status-dot { width: 6px; height: 6px; background: var(--amber); }
+.pi-bot-window-state.is-new .pi-bot-status-dot { background: var(--primary, var(--green)); width: 8px; height: 8px; }
+.pi-bot-window-state.is-working .pi-bot-status-dot { background: var(--green); animation: pi-bot-pulse 1.2s ease-in-out infinite; }
+.pi-bot-window[data-state="new"] .pi-bot-window-title { color: var(--text-main); font-weight: 600; }
+/* The wide chat list is narrow: a waiting chat keeps only its amber dot there (the name stays readable;
+   the words are in the tooltip and for screen readers). Phone drawers have room for the words. */
+@media (min-width: 901px) {
+    .pi-bot-window-state.is-waiting { padding: 0; background: transparent; }
+    .pi-bot-window-state.is-waiting .pi-bot-status-dot { width: 8px; height: 8px; }
+    .pi-bot-window-state-text { display: none; }
+}
+/* Phones only: the drawer's way back to every Bot. Wide screens show all Bots in the rail. */
+.pi-bot-all { display: none; }
+.pi-bot-home { display: none; }
+@media (max-width: 900px) {
+    .pi-bot-all {
+        display: flex; align-items: center; gap: 8px; min-height: 48px; margin: 6px 8px 0; padding: 0 10px; border: 0; border-radius: 10px;
+        background: transparent; color: var(--text-main); font-size: .92rem; font-weight: 650; text-align: left; cursor: pointer;
+    }
+    .pi-bot-all > i { color: var(--text-muted); font-size: .8rem; }
+    .pi-bot-all:hover { background: var(--pv-nav-hover, var(--surface-2)); }
+    .pi-bot-all:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
+    .pi-bot-all-news {
+        margin-left: auto; display: inline-flex; align-items: center; gap: 5px; min-width: 0; padding: 2px 8px; border-radius: 999px;
+        background: var(--surface-3, var(--surface-2)); color: var(--text-muted); font-size: .74rem; font-weight: 600; white-space: nowrap;
+    }
+    .pi-bot-all-news .pi-bot-status-dot { width: 6px; height: 6px; background: var(--primary, var(--green)); }
+    .pi-bot-all + .pi-bot-side-head { padding-top: 8px; }
+
+    #chat-tab.pi-bot-mode .pi-bot-home:not([hidden]) {
+        position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain;
+        background: var(--surface-1);
+    }
+}
+.pi-bot-home-inner { width: 100%; max-width: 720px; margin: 0 auto; padding: 4px 12px calc(28px + env(safe-area-inset-bottom)); }
+.pi-bot-home-head { display: flex; align-items: center; gap: 6px; min-height: 60px; }
+.pi-bot-home-head h2 { margin: 0; color: var(--text-main); font-size: 1.25rem; font-weight: 650; }
+.pi-bot-home-count { flex: 1; min-width: 0; color: var(--text-muted); font-size: .84rem; }
+.pi-bot-home-back {
+    flex: none; display: inline-grid; place-items: center; width: 44px; height: 44px; margin-left: -6px; padding: 0; border: 0; border-radius: 12px;
+    background: transparent; color: var(--text-muted); font-size: .95rem; cursor: pointer;
+}
+.pi-bot-home-new {
+    flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px 0 12px; border: 1px solid var(--line-strong);
+    border-radius: 12px; background: var(--surface-2); color: var(--text-main); font-size: .9rem; cursor: pointer;
+}
+.pi-bot-home-new:disabled { cursor: progress; opacity: .7; }
+.pi-bot-home-back:hover, .pi-bot-home-new:hover:not(:disabled) { background: var(--surface-3, var(--surface-2)); color: var(--text-main); }
+.pi-bot-home-search { position: relative; margin: 2px 0 10px; }
+.pi-bot-home-search > i { position: absolute; left: 13px; top: 50%; translate: 0 -50%; color: var(--text-muted); font-size: .85rem; pointer-events: none; }
+.pi-bot-home-search input {
+    width: 100%; min-height: 44px; padding: 9px 12px 9px 38px; border: 1px solid var(--line-strong); border-radius: 12px;
+    background: var(--surface-2); color: var(--text-main); font: inherit; font-size: 16px; line-height: 1.4;
+}
+.pi-bot-home-search input::placeholder { color: var(--text-muted); }
+.pi-bot-home-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.pi-bot-home-filter {
+    display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 999px;
+    background: transparent; color: var(--text-muted); font-size: .88rem; cursor: pointer;
+}
+.pi-bot-home-filter[aria-pressed="true"] {
+    border-color: color-mix(in srgb, var(--primary, var(--green)) 45%, var(--line)); background: color-mix(in srgb, var(--primary, var(--green)) 13%, transparent);
+    color: var(--text-main); font-weight: 600;
+}
+.pi-bot-home-filter-count { font-variant-numeric: tabular-nums; font-weight: 500; color: var(--text-muted); }
+.pi-bot-home-bots { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.pi-bot-home-row { min-width: 0; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-2); }
+.pi-bot-home-row.is-disabled { opacity: .55; }
+.pi-bot-home-open {
+    display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: 12px; row-gap: 2px; align-items: center;
+    width: 100%; min-height: 72px; padding: 12px 12px 8px; border: 0; border-radius: 16px 16px 8px 8px; background: transparent; color: inherit;
+    text-align: left; cursor: pointer;
+}
+.pi-bot-home-open:hover { background: color-mix(in srgb, var(--text-main) 3%, transparent); }
+.pi-bot-home-open > .pi-bot-face { grid-row: 1 / span 2; }
+.pi-bot-home-name { grid-column: 2; grid-row: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-main); font-size: 1rem; font-weight: 650; }
+.pi-bot-home-state { grid-column: 2; grid-row: 2; display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--text-muted); font-size: .85rem; }
+.pi-bot-home-state > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-bot-home-state.is-waiting { color: var(--amber); }
+.pi-bot-home-state.is-waiting .pi-bot-status-dot { background: var(--amber); }
+.pi-bot-home-state.is-working { color: var(--text-main); }
+.pi-bot-home-state.is-working .pi-bot-status-dot { background: var(--green); animation: pi-bot-pulse 1.2s ease-in-out infinite; }
+.pi-bot-home-unread {
+    grid-column: 3; grid-row: 1 / span 2; min-width: 22px; height: 22px; padding: 0 6px; display: inline-grid; place-items: center; border-radius: 999px;
+    background: var(--primary, var(--green)); color: var(--primary-contrast, #0d1110); font-size: .74rem; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.pi-bot-home-quick { display: flex; align-items: center; gap: 8px; padding: 0 12px 12px; }
+@media (min-width: 420px) { .pi-bot-home-quick { padding-left: 70px; } }
+.pi-bot-home-topic, .pi-bot-home-all {
+    display: inline-flex; align-items: center; gap: 6px; min-width: 0; min-height: 44px; padding: 0 12px; border: 0; border-radius: 12px;
+    background: var(--surface-1); color: var(--text-main); font-size: .84rem; text-align: left; cursor: pointer;
+}
+.pi-bot-home-topic { flex: 0 1 auto; }
+.pi-bot-home-topic > i, .pi-bot-home-all > i { color: var(--text-muted); font-size: .78rem; }
+.pi-bot-home-all { flex: none; margin-left: auto; color: var(--text-muted); }
+.pi-bot-home-topic:hover, .pi-bot-home-all:hover { background: var(--surface-3, var(--surface-2)); }
+.pi-bot-home-topic-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-bot-home-topic-state { flex: none; display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted); font-size: .78rem; }
+.pi-bot-home-topic-state.is-waiting { color: var(--amber); }
+.pi-bot-home-topic-state.is-waiting .pi-bot-status-dot { background: var(--amber); }
+.pi-bot-home-topic-state.is-new .pi-bot-status-dot { background: var(--primary, var(--green)); }
+.pi-bot-home-topic-state.is-working .pi-bot-status-dot { background: var(--green); }
+.pi-bot-home-calm {
+    display: grid; justify-items: center; gap: 10px; margin: 18px 0; padding: 32px 20px; border: 1px dashed var(--line-strong); border-radius: 18px;
+    color: var(--text-muted); text-align: center;
+}
+.pi-bot-home-calm strong { color: var(--text-main); font-size: 1rem; }
+.pi-bot-home-calm p { margin: 0; font-size: .9rem; line-height: 1.6; }
+.pi-bot-home-back:focus-visible, .pi-bot-home-new:focus-visible, .pi-bot-home-filter:focus-visible, .pi-bot-home-open:focus-visible,
+.pi-bot-home-topic:focus-visible, .pi-bot-home-all:focus-visible, .pi-bot-home-search input:focus-visible {
+    outline: 2px solid var(--primary, var(--green)); outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+    .pi-bot-window-state .pi-bot-status-dot, .pi-bot-home-state .pi-bot-status-dot { animation: none !important; }
+}
+
+/* ---- messages a Bot starts itself, in Bot settings (M4-3) ------------------------------ */
+.pi-bot-sheet-notify { display: grid; gap: 10px; }
+.pi-bot-sheet-check { display: flex; align-items: center; gap: 10px; min-height: 40px; font-size: .92rem; color: var(--text-main); cursor: pointer; }
+.pi-bot-sheet-check input { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--primary, var(--green)); }
+.pi-bot-sheet-times { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: .86rem; color: var(--text-muted); }
+.pi-bot-sheet-times[hidden], .pi-bot-sheet-notify .pi-bot-sheet-note[hidden] { display: none; }
+.pi-bot-sheet-notify .is-off { opacity: .55; }
+.pi-bot-sheet-followups { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+.pi-bot-sheet-followups h4 { margin: 0; font-size: .86rem; font-weight: 650; color: var(--text-main); }
+.pi-bot-sheet-followups h4:focus { outline: none; }
+@media (max-width: 900px) { .pi-bot-sheet-check { min-height: 44px; } }
+/* ---- WeChat chats connected to the Bot (M4-4) ------------------------------------------ */
+.pi-bot-sheet-wechat { display: grid; gap: 10px; justify-items: start; }
+.pi-bot-sheet-wechat > .pi-bot-sheet-rule-list, .pi-bot-sheet-wechat > .pi-bot-sheet-note { justify-self: stretch; }
+.pi-bot-sheet-wechat-connect { display: flex; gap: 8px; align-items: center; justify-self: stretch; min-width: 0; }
+.pi-bot-sheet-wechat-connect select { flex: 1 1 auto; min-width: 0; }
+.pi-bot-sheet-wechat-connect .pi-bot-chip, .pi-bot-sheet-wechat > .pi-bot-chip { flex: none; margin: 0; min-height: 40px; padding: 0 14px; }
+@media (max-width: 900px) {
+    .pi-bot-sheet-wechat-connect select, .pi-bot-sheet-wechat-connect .pi-bot-chip, .pi-bot-sheet-wechat > .pi-bot-chip { min-height: 44px; }
+}
+.pi-bot-sheet-wechat .pi-bot-sheet-rule-copy strong { overflow-wrap: anywhere; }
+/* ---- background learning in Bot settings ----------------------------------------------- */
+.pi-bot-sheet-learning { display: grid; gap: 10px; justify-items: start; }
+.pi-bot-sheet-learning > .pi-bot-sheet-check, .pi-bot-sheet-learning > .pi-bot-sheet-note, .pi-bot-sheet-learning > .pi-bot-sheet-link { justify-self: stretch; }
+.pi-bot-sheet-learning > .pi-bot-chip { flex: none; margin: 0; min-height: 40px; padding: 0 14px; }
+@media (max-width: 900px) { .pi-bot-sheet-learning > .pi-bot-chip { min-height: 44px; } }
+

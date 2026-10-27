@@ -45,7 +45,8 @@ function readOptionalJsonFile(filePath, label) {
         const code = typeof error === "object" && error !== null && "code" in error
             ? error.code
             : undefined;
-        if (code === "ENOENT")
+        // ENOTDIR: a settings package entry may name a single extension file, so `<file>/package.json` is no manifest.
+        if (code === "ENOENT" || code === "ENOTDIR")
             return null;
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(`Failed to read ${label} '${filePath}': ${message}`, {

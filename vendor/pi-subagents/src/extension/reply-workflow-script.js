@@ -2,7 +2,10 @@ const WORKFLOW_FENCE = /^```(?:js|javascript) workflow[ \t]*$/;
 const PLAIN_JS_FENCE = /^```(?:js|javascript)[ \t]*$/;
 const OPEN_FENCE = /^(`{3,}|~{3,})/;
 const CLOSE_FENCE = /^(`{3,}|~{3,})[ \t]*$/;
-const FILE_FALLBACK = "Or write the script to a file and pass its path, such as workflow: \"./script.js\".";
+// Claude 5.x (Opus 5.5, Sonnet 5.5, Fable 5.1) text written after a tool call in the same turn reaches the session only as a
+// server summary, which drops fenced blocks (pi-claude-bridge#35); retrying the block fails again.
+const SUMMARY_NOTE = "On some models, text written after a tool call in the same turn reaches the session only as a summary without code blocks, so for the rest of this turn write the script to a file and pass its path, such as workflow: \"./script.js\".";
+const FILE_FALLBACK = `If the block is in your reply: ${SUMMARY_NOTE}`;
 /**
  * Pi persists the whole assistant message before running its tool calls, so the
  * message that issued this subagent call is on the branch and carries the script.
@@ -28,7 +31,7 @@ function scriptFromReply(content) {
     if (replyCalls > 1)
         return { error: `This reply has ${replyCalls} subagent calls with workflow: true; a reply can carry only one. Pass other scripts as workflow file paths.` };
     if (!content.some((block) => block.type === "text"))
-        return { error: "The assistant message that issued this call has no text in the session, so the reply's visible text, including any ```js workflow block, never reached it. Write the script to a file and pass its path, such as workflow: \"./script.js\"." };
+        return { error: `The assistant message that issued this call has no text in the session, so the reply's visible text, including any \`\`\`js workflow block, never reached it. ${SUMMARY_NOTE}` };
     const text = content.flatMap((block) => block.type === "text" && typeof block.text === "string" ? [block.text] : []).join("\n");
     const { tagged, plain, unclosed } = workflowBlocks(text);
     if (unclosed)

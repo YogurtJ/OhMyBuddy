@@ -8,6 +8,7 @@ const { descriptorPathSync } = require('./pi-file-descriptor');
 const { replaceFileSync } = require('./pi-win32-native');
 const privateFiles = require('./pi-private-files');
 const { readProfileBinding } = require('./pi-profile-state');
+const avatarPresets = require('../public/pi-avatar-presets');
 
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -27,6 +28,8 @@ function normalizedMemory(memory) {
     return limits;
 }
 function validAvatar(avatar) {
+    if (object(avatar) && avatar.kind === 'preset') return Object.keys(avatar).length === 2
+        && Object.keys(avatar).every(key => ['kind', 'id'].includes(key)) && avatarPresets.validId(avatar.id);
     return avatar === null || object(avatar) && Object.keys(avatar).every(key => ['kind', 'value', 'version'].includes(key))
         && (avatar.kind === 'emoji' && typeof avatar.value === 'string' && avatar.value.trim() === avatar.value
             && avatar.value.length > 0 && avatar.value.length <= 16 && Buffer.byteLength(avatar.value) <= 64 && !/[\x00-\x1f\x7f<>]/.test(avatar.value)
@@ -95,7 +98,8 @@ function validateProfile(input, previous) {
         || input.id !== undefined && (typeof input.id !== 'string' || !ID.test(input.id))) throw fail('Invalid profile');
     normalizedMemory(memory);
     const avatar = input.avatar === undefined ? previous?.avatar ?? null : input.avatar;
-    if (!validAvatar(avatar)) throw fail('Invalid avatar');
+    if (!validAvatar(avatar) || avatar?.kind === 'preset' && !avatarPresets.find(avatar.id)
+        && !(previous?.avatar?.kind === 'preset' && previous.avatar.id === avatar.id)) throw fail('Invalid avatar');
     return { name: input.name.trim(), description: input.description, soul: input.soul, enabled: input.enabled,
         ...(avatar !== null || input.avatar !== undefined || previous?.avatar !== undefined ? { avatar } : {}),
         memory: { ...previous?.memory, ...memory, enabled: memory.enabled ?? false, autoLearn: memory.autoLearn ?? false },
@@ -235,7 +239,15 @@ class PiProfileRegistry {
     }
 
     trash(id, input) {
-        return this.reserve(() => this.mutate(input?.expectedRevision, state => {
+        return this.reserve(() => this.trashReserved(id, input));
+    }
+
+    // Internal companion for coordinators that already hold this registry's reservation.
+    // The same transition backs both profile trash and Bot trash; no native history is removed.
+    trashReserved(id, input, beforeChange = null) {
+        if (!this.busy) throw fail('Profile reservation is required', 409);
+        return this.mutate(input?.expectedRevision, state => {
+            beforeChange?.(state);
             const profile = state.profiles.find(record => record.id === id);
             if (!profile) throw fail('Profile not found', 404);
             if (profile.trashedAt !== undefined) throw fail('Profile is already in trash', 409);
@@ -248,7 +260,7 @@ class PiProfileRegistry {
                 if (profileId === id) delete state.defaults[cwd];
             }
             return { ok: true, profile };
-        }));
+        });
     }
 
     restore(id, input) {
@@ -325,4 +337,4 @@ class PiProfileRegistry {
     }
 }
 
-module.exports = { PiProfileRegistry, readRegistry, profileRevision, normalizedMemory };
+module.exports = { PiProfileRegistry, readRegistry, profileRevision, normalizedMemory, validateProfile };

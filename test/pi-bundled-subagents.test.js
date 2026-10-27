@@ -389,3 +389,24 @@ test('recorded supervisor selection remains usable across eager reopen and reloa
         assert.deepEqual(fs.readFileSync(fixture.manager.getSessionFile()), original);
     } finally { await current.close(); fs.rmSync(modeConfiguration, { force: true }); }
 });
+
+test('notice markers affect only model context and coexist with prompt sections and Agent messages', async () => {
+    const manager = sdk.SessionManager.create(cwd, path.join(root, 'notice-markers'));
+    const current = await open(manager, { factories: [pi => {
+        pi.on('before_agent_start', event => { event.systemPromptOptions.sections.pivane_fixture = 'PIVANE_SECTION_SENTINEL'; });
+    }] });
+    try {
+        await current.session.sendCustomMessage({ customType: 'subagent-notify', content: 'ORIGINAL_NOTICE_SENTINEL', display: true, details: { runs: [] } }, { triggerTurn: false });
+        await current.session.sendCustomMessage({ customType: 'pivane-agent-message', content: 'AGENT_MESSAGE_SENTINEL', display: true }, { triggerTurn: false });
+        await current.session.prompt('Check source markers.');
+        const body = JSON.stringify(requests.at(-1));
+        assert.ok(body.includes('<pi_subagents_notice type=\\"subagent-notify\\"'));
+        assert.match(body, /PIVANE_SECTION_SENTINEL/);
+        assert.match(body, /AGENT_MESSAGE_SENTINEL/);
+        const saved = sdk.SessionManager.open(manager.getSessionFile()).getBranch();
+        const notice = saved.find(entry => entry.type === 'custom_message' && entry.customType === 'subagent-notify');
+        assert.equal(notice.content, 'ORIGINAL_NOTICE_SENTINEL', 'native transcript retains original notice bytes');
+        const agentMessage = saved.find(entry => entry.type === 'custom_message' && entry.customType === 'pivane-agent-message');
+        assert.equal(agentMessage.content, 'AGENT_MESSAGE_SENTINEL');
+    } finally { await current.close(); }
+});

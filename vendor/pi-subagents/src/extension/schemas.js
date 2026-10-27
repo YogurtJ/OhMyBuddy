@@ -205,7 +205,7 @@ const SubagentParamProperties = {
         description: "true: run the one ```js workflow block written in this same reply (false invalid). String with '/': script file read from request cwd. Other string: named workflow resource. Raw scripts (true or path) have no runs.host.",
     })),
     args: Type.Optional(Type.Unsafe({ type: "object", maxProperties: MAX_ARGS_FIELDS, additionalProperties: true, description: `Plain-JSON args for workflow; ${MAX_ARGS_FIELDS} fields/object, ${MAX_ARGS_ITEMS} items/array, depth ${MAX_ARGS_DEPTH}, ${MAX_ARGS_BYTES / 1024} KiB total; raw-script args are exposed deeply frozen and persisted, so do not include secrets.` })),
-    reuseFrom: Type.Optional(Type.String({ minLength: 1, description: "Exact id of a workflow run stopped by a session handoff or reload; this async workflow reuses its finished children and re-attaches to its running ones." })),
+    reuseFrom: Type.Optional(Type.String({ minLength: 1, description: "Exact id of a workflow run ended by a reload, handoff or Pi exit; this async workflow reuses its finished children and re-attaches to its running ones." })),
     globalConcurrencyLimit: Type.Optional(Type.Integer({ minimum: 1 })),
     maxSubagentSpawnsPerRun: Type.Optional(Type.Integer({ minimum: 1 })),
     preflight: Type.Optional(WorkflowPreflightOverride),
@@ -227,7 +227,7 @@ const SubagentParamProperties = {
     usageBudget: Type.Optional(UsageBudgetOverride),
     agentScope: Type.Optional(Type.String({ description: "user/project/both (default); project wins collisions." })),
     cwd: Type.Optional(Type.String({ description: "Execution/project-pane directory." })),
-    machine: Type.Optional(Type.String({ minLength: 1, maxLength: 128, description: "Herdr saved machine id or label; runs an external CLI agent there. cwd then means the directory on that machine." })),
+    machine: Type.Optional(Type.String({ minLength: 1, maxLength: 128, description: "Herdr saved machine id or label (runs an external CLI agent), a Rex host named in settings (runs a Pi child), or \"local\" (a Pi child in a Rex pane here). On another machine, cwd is a directory there." })),
     artifacts: Type.Optional(Type.Boolean({ description: "Debug artifacts; default true." })),
     includeProgress: Type.Optional(Type.Boolean({ description: "Full result progress; default false." })),
     share: Type.Optional(Type.Boolean({ description: "Upload session to GitHub Gist; default false." })),
@@ -306,6 +306,6 @@ const SubagentWaitParamsSchema = Type.Object({
     nonBlocking: Type.Optional(Type.Boolean({ description: "Subscribe to id's wake and return immediately; requires id, not with all." })),
     all: Type.Optional(Type.Boolean({ description: "Wait for all work active at call time." })),
     timeoutMs: Type.Optional(Type.Integer({ minimum: 1, description: "Max wait; default waitTool.defaultTimeoutMs, then 30 min." })),
-    stopOnAttention: Type.Optional(Type.Boolean({ description: "false: keep waiting through idle or long-thinking attention." })),
+    stopOnAttention: Type.Optional(Type.Boolean({ description: "false: keep waiting through all attention except supervisor requests." })),
 });
 export const SubagentWaitParams = keepTopLevelParameterDescriptions(SubagentWaitParamsSchema);

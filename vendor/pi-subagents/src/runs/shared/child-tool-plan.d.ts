@@ -65,6 +65,13 @@ export interface PiLaunchToolPlan {
  * runtime snapshot therefore cannot work and fails the launch.
  */
 export declare function formatRuntimeSnapshotMcpServersError(agentName: string | undefined, serverNames: readonly string[]): string;
+/**
+ * A child's `tools` list is a complete allowlist. Read as names, Pi's modifier
+ * entries would become required tools no child has, or mix with the names the
+ * plan adds into a list Pi rejects. The modifier rule is Pi's `isToolModifier`:
+ * a `+name` or `-name` entry edits Pi's default tool selection.
+ */
+export declare function assertNoToolModifierEntries(agentName: string | undefined, tools: readonly string[]): void;
 export declare function projectLaunchResolvedChildExtensions(toolPlan: Pick<PiLaunchToolPlan, "runtimeExtensions" | "configuredExtensions" | "requiredExtensions" | "extensionArgs" | "disableAmbientExtensions">): LaunchResolvedChildExtensions;
 /**
  * Resolve the permission-system extension entry point when installed.

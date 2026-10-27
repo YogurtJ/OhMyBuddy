@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { getAgentDir, getProjectConfigDir } from "../../shared/utils.js";
 import { CODE_OWNED_EXTERNAL_CLI_ADAPTER_IDS } from "./external-cli-contract.js";
+import { REX_LOCAL_MACHINE, resolveRexLocalPlacement } from "./rex-machine.js";
 export { shellQuoteRemote as shellQuote } from "./herdr-connection.js";
 /**
  * Herdr saved-machine placement for external CLI children.
@@ -149,17 +150,30 @@ function machineSettingsFrom(settings, keys, filePath) {
             throw new Error(`Subagent settings in '${filePath}' set 'machines.${key}.env'. Saved-machine runs use the remote Herdr/Pi environment; configure credentials and environment on '${key}' and remove the local env map.`);
         }
     }
+    if (record.rex !== undefined) {
+        const rex = record.rex, ssh = rex && typeof rex === "object" && !Array.isArray(rex) && Object.keys(rex).every((field) => field === "ssh") ? rex.ssh : undefined;
+        if (typeof ssh !== "string")
+            throw new Error(`Subagent settings in '${filePath}' have invalid 'machines.${key}.rex'; expected { "ssh": "<ssh target>" }.`);
+        entry.rex = { ssh: validateTarget(ssh, key) };
+    }
     return entry;
 }
-/** Project settings beat user settings, field by field; the entry may be keyed by label, id, or the typed selector. */
+/** Project settings beat user settings, field by field; the entry may be keyed by label, id, or the typed selector. Only user settings may name a Rex SSH host, so a cloned repo never chooses where a task runs. */
 function readMachineSettings(cwd, keys) {
     const userPath = path.join(getAgentDir(), "settings.json");
     const projectPath = path.join(getProjectConfigDir(findProjectRootForSettings(cwd)), "settings.json");
     const user = machineSettingsFrom(readJsonObject(userPath), keys, userPath);
     const project = projectPath === userPath ? undefined : machineSettingsFrom(readJsonObject(projectPath), keys, projectPath);
+    if (project?.rex)
+        throw new Error(`Project settings '${projectPath}' set a Rex SSH host in 'machines'. Move the rex entry to your user settings '${userPath}'; only user settings choose which host a task runs on.`);
     if (!user && !project)
         return undefined;
     return { ...user, ...project };
+}
+/** Whether user settings name `machine` as a Rex SSH host. */
+function userRexMachine(machine) {
+    const userPath = path.join(getAgentDir(), "settings.json");
+    return machineSettingsFrom(readJsonObject(userPath), [machine], userPath)?.rex !== undefined;
 }
 function findProjectRootForSettings(cwd) {
     let current = path.resolve(cwd);
@@ -171,6 +185,15 @@ function findProjectRootForSettings(cwd) {
             return path.resolve(cwd);
         current = parent;
     }
+}
+/** The child's cwd on a remote machine: an absolute launch cwd, or the launch cwd under the machine's configured root. */
+function remoteMachineCwd(stepCwd, root, name) {
+    const step = stepCwd?.trim();
+    if (step && isRemoteAbsolute(step))
+        return step;
+    if (!root)
+        throw new Error(`No root for ${name} in this repo. Set subagents.machines.${name}.cwd in .pi/settings.json or pass an absolute cwd on that machine.`);
+    return step ? path.posix.join(root, step) : root;
 }
 export function resolveHerdrMachinePlacement(input) {
     const requested = validateMachineName(input.machine);
@@ -184,14 +207,7 @@ export function resolveHerdrMachinePlacement(input) {
     if (settings?.env && Object.keys(settings.env).length > 0) {
         throw new Error(`Saved-machine environment for '${name}' must be configured remotely. Remove machines.${name}.env and configure the remote Herdr/Pi session instead.`);
     }
-    const stepCwd = input.stepCwd?.trim();
-    let cwd;
-    if (stepCwd && isRemoteAbsolute(stepCwd))
-        cwd = stepCwd;
-    else if (settings?.cwd)
-        cwd = stepCwd ? path.posix.join(settings.cwd, stepCwd) : settings.cwd;
-    else
-        throw new Error(`No root for ${name} in this repo. Set subagents.machines.${name}.cwd in .pi/settings.json or pass an absolute cwd on that machine.`);
+    const cwd = remoteMachineCwd(input.stepCwd, settings?.cwd, name);
     return {
         machine: {
             provider: "herdr",
@@ -204,9 +220,39 @@ export function resolveHerdrMachinePlacement(input) {
         ...(settings?.env ? { env: settings.env } : {}),
     };
 }
+/** `local` resolves to a Rex pane on this machine; a name with a `rex` entry in user settings to a Rex pane on that SSH host; any other value to a Herdr saved machine. */
+export function resolveMachinePlacement(input) {
+    const requested = validateMachineName(input.machine);
+    const settings = input.settings ?? readMachineSettings(input.cwd, [requested]);
+    if (requested === REX_LOCAL_MACHINE) {
+        if (settings?.rex)
+            throw new Error("Machine 'local' is reserved for a Rex pane on this machine; give the Rex SSH host in subagents.machines.local.rex another name.");
+        return { machine: resolveRexLocalPlacement({ cwd: input.cwd, stepCwd: input.stepCwd, env: input.env }) };
+    }
+    if (settings?.rex)
+        return { machine: { provider: "rex", id: requested, target: settings.rex.ssh, cwd: validateRemoteCwd(remoteMachineCwd(input.stepCwd, settings.cwd, requested), requested) } };
+    return resolveHerdrMachinePlacement(input);
+}
 export function formatHerdrMachineRunnerUnsupported(input) {
     if (input.machine === undefined)
         return undefined;
+    const name = input.machine.trim();
+    let rex;
+    try {
+        rex = name === REX_LOCAL_MACHINE || userRexMachine(name);
+    }
+    catch (error) {
+        return error instanceof Error ? error.message : String(error);
+    }
+    if (rex) {
+        if (input.runnerType !== undefined && input.runnerType !== "pi")
+            return `Agent '${input.agentName}' requested machine '${name}', but Rex supports native Pi children only. Remove the machine or use a native Pi agent.`;
+        if (input.worktree === true)
+            return `Agent '${input.agentName}' requested machine '${name}', but managed worktrees cannot be combined with machine placement.`;
+        if (process.platform === "win32")
+            return `Machine '${name}' runs the child in a Rex pane, which is not supported on Windows.`;
+        return undefined;
+    }
     if (input.runnerType !== undefined && input.runnerType !== "pi" && input.runnerType !== "external-cli") {
         return `Agent '${input.agentName}' requested machine '${input.machine}', but this runner cannot use pane-native Herdr placement. Use native Pi or a built-in Claude, Codex, or Cursor profile.`;
     }

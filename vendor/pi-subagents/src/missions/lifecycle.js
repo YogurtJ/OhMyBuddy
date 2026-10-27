@@ -253,7 +253,13 @@ export function readMissionBinding(asyncDir) {
     const bindingPath = path.join(asyncDir, MISSION_BINDING_FILE);
     if (!fs.existsSync(bindingPath))
         return undefined;
-    return parsePersistedBinding(JSON.parse(fs.readFileSync(bindingPath, "utf-8")), bindingPath);
+    const raw = fs.readFileSync(bindingPath, "utf-8");
+    try {
+        return parsePersistedBinding(JSON.parse(raw), bindingPath);
+    }
+    catch (error) {
+        throw new Error(`Invalid mission binding file '${bindingPath}': ${error instanceof Error ? error.message : String(error)}`, { cause: error });
+    }
 }
 export function syncMissionFromAsyncCompletion(value) {
     if (!value || typeof value !== "object" || Array.isArray(value))

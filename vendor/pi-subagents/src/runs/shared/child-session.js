@@ -76,6 +76,34 @@ function inheritParentProviders(modelRuntime, parentProviders, claimedProviderId
 }
 const CHILD_PROMPT_RUNTIME_EXTENSION_PATH = "<inline:pi-subagents:prompt-runtime>";
 const CHILD_PROMPT_BOUNDARY_EXTENSION_PATH = "<inline:pi-subagents:prompt-boundary>";
+/** Same class as UNICODE_SPACES in pi-coding-agent dist/utils/paths.js, which resolvePath(..., { normalizeUnicodeSpaces: true }) replaces with a space. */
+const PI_UNICODE_SPACES = new RegExp("[\\u00A0\\u2000-\\u200A\\u202F\\u205F\\u3000]", "g");
+function childExtensionFileIdentity(extensionPath) {
+    if (!path.isAbsolute(extensionPath))
+        return undefined;
+    try {
+        const stat = fs.statSync(extensionPath, { bigint: true });
+        return stat.isFile() ? `${stat.dev}:${stat.ino}` : undefined;
+    }
+    catch {
+        return undefined;
+    }
+}
+function createRequiredChildExtensionIdentity(requiredPaths) {
+    const aliases = new Map([...requiredPaths].map((extensionPath) => [extensionPath, childExtensionFileIdentity(extensionPath) ?? extensionPath]));
+    const identities = new Set(aliases.values());
+    return (extensionPath) => {
+        const known = aliases.get(extensionPath);
+        if (known !== undefined)
+            return known;
+        const identity = childExtensionFileIdentity(extensionPath);
+        if (identity === undefined || !identities.has(identity))
+            return undefined;
+        // Retain the alias even if the extension removes its file before reporting a failure.
+        aliases.set(extensionPath, identity);
+        return identity;
+    };
+}
 /** The prompt runtime filters parent-only context before ambient extensions inspect
  *  the child prompt, and the boundary hook appends the child boundary after every
  *  extension has added its prompt sections. Every other extension keeps its order. */
@@ -229,7 +257,7 @@ function missingBuiltinMcpTools(session, names) {
     const direct = new Set(session.getAllTools().filter((tool) => tool.exposure === "direct").map(({ name }) => name));
     return names.filter((name) => !active.has(name) || !direct.has(name));
 }
-function flushQueuedProviderRegistrations(loader, modelRuntime, onError, requiredPaths) {
+function flushQueuedProviderRegistrations(loader, modelRuntime, onError, isRequiredSource) {
     const claimedProviderIds = new Set();
     if (!("getExtensions" in loader) || typeof loader.getExtensions !== "function")
         return { claimedProviderIds, registered: false };
@@ -243,7 +271,7 @@ function flushQueuedProviderRegistrations(loader, modelRuntime, onError, require
         }
         catch (error) {
             onError?.({ extensionPath, event: "register_provider", error });
-            if (requiredPaths.has(extensionPath))
+            if (isRequiredSource(extensionPath))
                 throw new Error(`Required child extension provider registration failed for '${extensionPath}': ${error instanceof Error ? error.message : String(error)}`);
         }
     }
@@ -257,7 +285,7 @@ function flushQueuedProviderRegistrations(loader, modelRuntime, onError, require
         }
         catch (error) {
             onError?.({ extensionPath, event: "register_provider", error });
-            if (requiredPaths.has(extensionPath))
+            if (isRequiredSource(extensionPath))
                 throw new Error(`Required child extension provider registration failed for '${extensionPath}': ${error instanceof Error ? error.message : String(error)}`);
         }
     }
@@ -280,7 +308,7 @@ function flushQueuedProviderRegistrations(loader, modelRuntime, onError, require
         }
         catch (error) {
             onError?.({ extensionPath, event: "register_virtual_model", error });
-            if (requiredPaths.has(extensionPath))
+            if (isRequiredSource(extensionPath))
                 throw new Error(`Required child extension virtual model registration failed for '${extensionPath}': ${error instanceof Error ? error.message : String(error)}`);
         }
     }
@@ -394,6 +422,13 @@ export function createDefaultChildSessionFactory(options = {}) {
                             },
                         })) }]
                 : [];
+            const requiredPaths = new Set((launch.requiredExtensions ?? []).map(({ path }) => path));
+            const requiredExtensionIdentity = createRequiredChildExtensionIdentity(requiredPaths);
+            const resolvedExtensionPaths = new Map();
+            // Pi reports failures by source path, without resolvedPath. A source Pi never loaded is classified by the
+            // file it names, after Pi's Unicode-space normalization. A required extension that failed under an
+            // unmatched spelling is still rejected by the missing-identity check after loading.
+            const isRequiredSource = (extensionPath) => requiredPaths.size > 0 && requiredExtensionIdentity(resolvedExtensionPaths.get(extensionPath) ?? extensionPath.replace(PI_UNICODE_SPACES, " ")) !== undefined;
             const loader = new pi.DefaultResourceLoader({
                 cwd: launch.cwd,
                 agentDir,
@@ -435,16 +470,24 @@ export function createDefaultChildSessionFactory(options = {}) {
             };
             let inheritedProviders = new Set();
             const open = async () => {
-                const requiredPaths = new Set((launch.requiredExtensions ?? []).map(({ path }) => path));
                 applyProcessEnv(launch.processEnv);
                 if (!resetExtensionCacheOnReload(loader) && (launch.ambientExtensions || launch.extensionPaths.length))
                     launch.onExtensionError?.({ extensionPath: "<loader>", event: "load", error: new Error("pi's extension cache reset is unavailable; extensions loaded into this child share module state with other sessions in this process.") });
                 await loader.reload();
+                if (requiredPaths.size > 0)
+                    for (const extension of loader.getExtensions().extensions)
+                        resolvedExtensionPaths.set(extension.path, extension.resolvedPath);
                 const loadErrors = requiredPaths.size > 0
-                    ? loader.getExtensions().errors.filter(({ path }) => requiredPaths.has(path)) : [];
+                    ? loader.getExtensions().errors.filter(({ path }) => isRequiredSource(path)) : [];
                 if (loadErrors.length > 0)
                     throw new Error(`Required child extension failed to load: ${loadErrors.map(({ path, error }) => `${path}: ${error}`).join("; ")}`);
-                const queued = flushQueuedProviderRegistrations(loader, modelRuntime, launch.onExtensionError, requiredPaths);
+                const queued = flushQueuedProviderRegistrations(loader, modelRuntime, launch.onExtensionError, isRequiredSource);
+                if (requiredPaths.size > 0) {
+                    const loadedIdentities = new Set(loader.getExtensions().extensions.map(({ resolvedPath }) => requiredExtensionIdentity(resolvedPath)));
+                    const missing = [...requiredPaths].filter((extensionPath) => !loadedIdentities.has(requiredExtensionIdentity(extensionPath)));
+                    if (missing.length)
+                        throw new Error(`Required child extension failed to load: ${missing.join(", ")}`);
+                }
                 if (launch.parentProviderRegistry)
                     inheritedProviders = inheritParentProviders(modelRuntime, launch.parentProviderRegistry, queued.claimedProviderIds, launch.onExtensionError);
                 if (queued.registered || inheritedProviders.size > 0) {
@@ -496,7 +539,7 @@ export function createDefaultChildSessionFactory(options = {}) {
                     await session.bindExtensions({
                         mode: "print",
                         onError: (error) => {
-                            if (binding && requiredPaths.has(error.extensionPath))
+                            if (binding && isRequiredSource(error.extensionPath))
                                 requiredStartupErrors.push(`${error.extensionPath} (${error.event}): ${error.error}`);
                             launch.onExtensionError?.({ extensionPath: error.extensionPath, event: error.event, error: error.error });
                         },

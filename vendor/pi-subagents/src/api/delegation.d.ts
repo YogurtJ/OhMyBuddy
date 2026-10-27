@@ -53,7 +53,26 @@ export interface SubagentDelegationUpdateUsage {
     cacheWrite: number;
     turns: number;
 }
+/** Observed assistant-request errors and Pi retries, not provider-internal HTTP attempts. */
+export interface SubagentDelegationProviderDiagnostics {
+    errorCount: number;
+    lastError?: {
+        kind: "rate_limited" | "transient_other" | "unknown";
+        /** Fixed safe description; never the raw provider error/body. */
+        message: string;
+        at: number;
+    };
+    retry?: {
+        phase: "backoff" | "in_flight";
+        attempt: number;
+        maxAttempts: number;
+        delayMs: number;
+        /** Observation time of auto_retry_start; delayMs is Pi's planned delay. */
+        scheduledAt: number;
+    };
+}
 export interface SubagentDelegationUpdate extends SubagentDelegationStarted {
+    providerDiagnostics?: SubagentDelegationProviderDiagnostics;
     runId?: string;
     currentTool?: string;
     currentToolArgs?: string;
@@ -88,6 +107,7 @@ export interface SubagentDelegationUsage {
     durationMs: number;
 }
 export interface SubagentDelegationTerminalResponse extends SubagentDelegationStarted {
+    providerDiagnostics?: SubagentDelegationProviderDiagnostics;
     status: Exclude<SubagentDelegationStatus, "invalid_request">;
     error?: string;
     runId?: string;

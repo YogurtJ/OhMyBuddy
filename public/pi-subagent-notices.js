@@ -19,6 +19,8 @@
         'subagent-slash-result': ['子 Agent 命令结果', 'fa-solid fa-terminal', 'result'],
         'subagent-slash-text-result': ['子 Agent 命令结果', 'fa-solid fa-terminal', 'result'],
         'subagent-workflow-result-write-failed': ['工作流结果保存失败', 'fa-solid fa-circle-exclamation', 'error'],
+        'subagent-auto-resume': ['工作流自动续跑未启动', 'fa-solid fa-circle-exclamation', 'attention'],
+        'subagents-admin': ['子 Agent 管理', 'fa-solid fa-gear', 'progress'],
         'subagent-compaction-resume': ['子 Agent 压缩后继续', 'fa-solid fa-compress', 'progress']
     };
     function decorate(article, header, message) {

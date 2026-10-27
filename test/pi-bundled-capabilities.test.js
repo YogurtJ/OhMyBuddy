@@ -21,10 +21,10 @@ test('vendor inventory is byte-identical upstream and excludes dependency trees'
     const files = require('../scripts/vendor-files.cjs').vendorFiles(path.resolve(__dirname, '..'));
     const manifest = require('../vendor/manifest.json');
     assert.deepEqual(manifest.packages.map(entry => [entry.name, entry.version, entry.files.length]), [
-        ['pi-subagents', '0.80.0', 693], ['pi-hermes-memory', '0.9.10', 92],
+        ['pi-subagents', '0.82.1', 777], ['pi-hermes-memory', '0.9.10', 92],
     ]);
-    assert.equal(files.length, 786); // manifest plus the verified official package inventories
-    assert.equal(manifest.packages[0].files.some(file => file.path.endsWith('.map')), false, '0.80 official npm package omits source maps');
+    assert.equal(files.length, 870); // manifest plus the verified official package inventories
+    assert.equal(manifest.packages[0].files.some(file => file.path.endsWith('.map')), false, '0.82 official npm package omits source maps');
     for (const entry of catalog) assert.equal(entry.version, manifest.packages.find(pkg => pkg.name === entry.name).version);
     assert.equal(files.some(file => file.includes('/node_modules/')), false);
     for (const entry of catalog) assert.ok(files.includes(`${entry.directory}/LICENSE`));
@@ -56,16 +56,41 @@ test('managed inventory preserves legacy filters, respects trust, and saves port
     assert.equal(snapshot.resources.filter(r => r.type === 'skills' && r.enabled && r.source === packagePath(catalog[0])).length, 0);
     const extension = snapshot.resources.find(r => r.type === 'extensions' && r.source === packagePath(catalog[0]));
     assert.ok(extension.enabled);
+    assert.equal(path.basename(extension.path), 'index.js', 'the extension page keeps its portable basename');
+    assert.ok(extension.path.endsWith(path.join('bundle', 'index.js')));
+    const { managedLoaderOptions } = await import('../server/pi-bundled-loader.mjs');
+    const sdk = await import('@earendil-works/pi-coding-agent');
+    const settings = sdk.SettingsManager.create(cwd, agentDir);
+    const selectedPaths = (await managedLoaderOptions({ cwd, agentDir, settings, parsed: {} })).options.additionalExtensionPaths;
+    assert.ok(selectedPaths.includes(path.resolve(__dirname, '../server/pi-bundled-subagents.mjs')));
+    assert.equal(selectedPaths.some(file => file.includes('/vendor/pi-subagents/bundle/')), false);
+    for (const entry of ['index.js', 'bundle/index.js']) {
+        const explicitPaths = (await managedLoaderOptions({ cwd, agentDir, settings,
+            parsed: { noExtensions: true, extensions: [path.join(packagePath(catalog[0]), entry)] } })).options.additionalExtensionPaths;
+        assert.ok(explicitPaths.includes(path.resolve(__dirname, '../server/pi-bundled-subagents.mjs')), 'explicit bundled entry still uses the wrapper');
+    }
     await resources.toggle({ cwd, scope: 'global', expectedRevision: snapshot.revision, resourceId: extension.id, confirmed: true, state: 'off' });
     snapshot = await resources.snapshot(cwd);
     assert.equal(snapshot.resources.find(r => r.id === extension.id).enabled, false);
     const saved = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
     assert.deepEqual(saved.packages, legacy.packages); assert.equal(saved.sentinel, 9);
-    assert.deepEqual(saved.pivaneBuiltins.subagents.extensions, ['-index.js']);
+    assert.deepEqual(saved.pivaneBuiltins.subagents.extensions, ['-bundle/index.js']);
     for (const action of ['install', 'update', 'remove']) await assert.rejects(resources.packageAction({ cwd, scope: 'global', action,
         source: packagePath(catalog[0]), confirmed: true, expectedRevision: snapshot.revision }), /Pivane/);
     await resources.toggle({ cwd, scope: 'global', expectedRevision: snapshot.revision, resourceId: extension.id, confirmed: true, state: 'inherit' });
     assert.equal((await resources.snapshot(cwd)).resources.find(r => r.id === extension.id).enabled, true);
+    const inheritedSettings = fs.readFileSync(settingsFile, 'utf8');
+    for (const [filter, enabled] of [['-index.js', false], ['+index.js', true]]) {
+        const legacyFilter = JSON.parse(inheritedSettings);
+        legacyFilter.pivaneBuiltins = { subagents: { extensions: [filter] } };
+        const bytes = JSON.stringify(legacyFilter);
+        fs.writeFileSync(settingsFile, bytes);
+        assert.equal((await resources.snapshot(cwd)).resources.find(r => r.id === extension.id).enabled, enabled, 'legacy root-entry filters still control bundle/index.js');
+        assert.equal(fs.readFileSync(settingsFile, 'utf8'), bytes, 'resource projection preserves the saved configuration');
+        const filtered = await managedLoaderOptions({ cwd, agentDir, settings: sdk.SettingsManager.create(cwd, agentDir), parsed: {} });
+        assert.equal(filtered.options.additionalExtensionPaths.includes(path.resolve(__dirname, '../server/pi-bundled-subagents.mjs')), enabled, 'legacy filters also control actual wrapper loading');
+    }
+    fs.writeFileSync(settingsFile, inheritedSettings);
     await native.saveTrust({ cwd, expectedRevision: (await native.context(cwd)).revision, decision: true, confirmed: true });
     const toggle = async (scope, state) => {
         const current = await resources.snapshot(cwd);
@@ -138,6 +163,18 @@ test('bundled subagent runs against a synthetic provider, with native host contr
             });
         } });
     }`);
+    const traceFile = path.join(root, 'module-trace.jsonl'), traceLoader = path.join(root, 'module-trace.mjs');
+    fs.writeFileSync(traceLoader, `import { registerHooks } from 'node:module';
+import fs from 'node:fs';
+registerHooks({ resolve(specifier, context, next) {
+    const result = next(specifier, context);
+    if (result.url.includes('/vendor/pi-subagents/') || result.url.endsWith('/server/pi-bundled-subagents.mjs'))
+        fs.appendFileSync(${JSON.stringify(traceFile)}, JSON.stringify({ pid: process.pid, url: result.url, parent: context.parentURL }) + '\\n');
+    return result;
+} });`);
+    const priorNodeOptions = process.env.NODE_OPTIONS;
+    process.env.NODE_OPTIONS = [priorNodeOptions, '--import=' + require('node:url').pathToFileURL(traceLoader).href].filter(Boolean).join(' ');
+    t.after(() => { if (priorNodeOptions === undefined) delete process.env.NODE_OPTIONS; else process.env.NODE_OPTIONS = priorNodeOptions; });
     const { PiSessionStore } = require('../server/pi-session-store');
     const { PiAgentSupervisor } = require('../server/pi-agent-supervisor');
     const store = new PiSessionStore(), supervisor = new PiAgentSupervisor();
@@ -208,7 +245,7 @@ test('bundled subagent runs against a synthetic provider, with native host contr
     assert.ok(nativeIdle && worker.isIdle() && !worker.retainsBackgroundWork(), 'completion notifications settled before reload');
     // Native reload must recompute resource filters without restarting or losing
     // the current session. The old package factories remain blocked.
-    settings.pivaneBuiltins = { subagents: { extensions: [] } };
+    settings.pivaneBuiltins = { subagents: { extensions: ['-index.js'] } };
     fs.writeFileSync(settingsFile, JSON.stringify(settings));
     await worker.reloadResources();
     assert.equal((await worker.getNativeResources()).tools.some(item => item.name === 'subagent'), false);
@@ -217,4 +254,11 @@ test('bundled subagent runs against a synthetic provider, with native host contr
     await worker.reloadResources();
     assert.equal((await worker.getNativeResources()).tools.filter(item => item.name === 'subagent').length, 1);
     assert.equal(fs.existsSync(marker), false);
+    const trace = fs.readFileSync(traceFile, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+    const parentPid = worker.client.child.pid;
+    assert.ok(trace.some(item => item.pid === parentPid && item.url.endsWith('/server/pi-bundled-subagents.mjs')), 'managed parent actually loads the Pivane wrapper');
+    assert.deepEqual(trace.filter(item => item.url.includes('/vendor/pi-subagents/bundle/')), [], 'parent, foreground child and detached runner never resolve bundled modules');
+    const childFactoryLoads = trace.filter(item => item.url.endsWith('/src/runs/shared/child-session.js'));
+    assert.ok(childFactoryLoads.some(item => item.pid === parentPid), 'foreground child uses the parent unbundled factory');
+    assert.ok(childFactoryLoads.some(item => item.pid !== parentPid), 'detached runner uses the unbundled factory');
 });

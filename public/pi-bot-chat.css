@@ -1,0 +1,113 @@
+/* Bot conversation presentation. Pi Agent keeps its existing reading layout. */
+#chat-tab.pi-bot-mode > .pi-command-bar { display: none; }
+/* The identity floats over messages; only its controls accept clicks. */
+#chat-tab.pi-bot-mode .pi-transcript-viewport > #pi-bot-header {
+    position: absolute; inset: 3px 0 auto; z-index: 6; pointer-events: none;
+    display: grid; grid-template-columns: 44px minmax(0,1fr) 44px; align-items: start;
+    gap: 8px; padding: 0 18px; border: 0; background: transparent;
+}
+#chat-tab.pi-bot-mode.pi-bot-welcome .pi-transcript-viewport > #pi-bot-header { display: none; }
+/* The mask gradually releases the blur as older messages pass the top edge. */
+#chat-tab.pi-bot-mode:not(.pi-bot-welcome) .pi-transcript-viewport::after {
+    content: ''; position: absolute; inset: 0 0 auto; height: 64px; z-index: 3; pointer-events: none;
+    background: linear-gradient(var(--surface-transcript), transparent);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    -webkit-mask-image: linear-gradient(#000, transparent); mask-image: linear-gradient(#000, transparent);
+}
+.pi-bot-identity {
+    grid-column: 2; justify-self: center; display: grid; justify-items: center; gap: 0; min-width: 0;
+    width: max-content; max-width: min(320px,100%); padding: 0; border: 0; background: transparent;
+    color: var(--text-main); cursor: pointer; font: inherit; pointer-events: none;
+}
+.pi-bot-identity > .pi-bot-face.is-xl { width: 72px; height: 72px; border-radius: 28%; pointer-events: auto; }
+.pi-bot-identity .pi-bot-who {
+    display: flex; align-items: center; gap: 7px; max-width: 100%; min-height: 34px; margin-top: -3px; padding: 5px 12px;
+    border-radius: 999px; background: color-mix(in srgb,var(--surface-transcript) 94%,transparent);
+    box-shadow: 0 2px 12px color-mix(in srgb,var(--text-main) 10%,transparent);
+    -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); pointer-events: auto;
+}
+.pi-bot-identity .pi-bot-who strong { min-width: 0; font-size: .9rem; font-weight: 600; }
+.pi-bot-identity .pi-bot-status { flex: 0 1 auto; min-width: 0; max-width: 150px; font-size: .72rem; }
+.pi-bot-identity .pi-bot-status.is-quiet { flex: none; width: 7px; gap: 0; font-size: 0; }
+.pi-bot-identity .pi-bot-who-topic { flex: 0 1 auto; min-width: 0; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: .8rem; }
+.pi-bot-identity .pi-bot-who-topic::before { content: "·"; margin-right: 6px; }
+.pi-bot-identity:focus-visible { outline: 2px solid var(--primary,var(--green)); outline-offset: 4px; border-radius: 18px; }
+#chat-tab.pi-bot-mode .pi-bot-notes-button { grid-column: 3; grid-row: 1; margin: 7px 0 0; pointer-events: auto; background: color-mix(in srgb,var(--surface-transcript) 82%,transparent); }
+#chat-tab.pi-bot-mode .pi-bot-menu { grid-column: 1; grid-row: 1; margin-top: 7px; pointer-events: auto; background: color-mix(in srgb,var(--surface-transcript) 82%,transparent); }
+#chat-tab.pi-bot-mode .pi-bot-identity { grid-row: 1; }
+/* Initial clearance belongs to the scroller so it also covers older-chat controls.
+   It scrolls away with the messages, never taking a fixed header row. */
+#chat-tab.pi-bot-mode .pi-transcript-content { padding-top: 18px; }
+#chat-tab.pi-bot-mode .pi-transcript { padding-top: 104px; scroll-padding-top: 122px; }
+#chat-tab.pi-bot-mode .pi-message:is(.user,.assistant) { margin-top: 0; margin-bottom: 18px; max-width: 800px; }
+#chat-tab.pi-bot-mode .pi-message.assistant > header { display: none !important; }
+#chat-tab.pi-bot-mode .pi-message.user > header { position: relative; justify-content: flex-end; min-height: 0; margin: 0 0 5px; }
+#chat-tab.pi-bot-mode .pi-message.user > header > strong { display: none; }
+#chat-tab.pi-bot-mode .pi-message.user .pi-message-time { display: none; }
+#chat-tab.pi-bot-mode .pi-message.user.pi-bot-time-gap > header { padding-top: 27px; }
+#chat-tab.pi-bot-mode .pi-message.user.pi-bot-time-gap .pi-message-time { display: block; position: absolute; top: 0; left: 0; width: 100%; text-align: center; font-size: .72rem; }
+#chat-tab.pi-bot-mode .pi-message.user .pi-message-body {
+    width: fit-content; max-width: 78%; margin-left: auto; padding: 12px 17px;
+    border: 1px solid color-mix(in srgb,var(--primary,var(--green)) 14%,var(--line)); border-radius: 20px 20px 6px 20px;
+    background: color-mix(in srgb,var(--primary,var(--green)) 12%,var(--surface-transcript));
+}
+#chat-tab.pi-bot-mode .pi-message.assistant > .pi-message-body {
+    width: fit-content; max-width: 94%; padding: 14px 18px; border-radius: 20px 20px 20px 6px;
+    background: color-mix(in srgb,var(--text-muted) 9%,var(--surface-transcript)); color: var(--text-main);
+}
+#chat-tab.pi-bot-mode .pi-message.assistant > .pi-message-body:has(table,pre) { width: 100%; max-width: 100%; }
+#chat-tab.pi-bot-mode .pi-message-body > .pi-markdown > :last-child { margin-bottom: 0; }
+#chat-tab.pi-bot-mode .pi-message-actions { margin-top: 3px; min-height: 28px; }
+#chat-tab.pi-bot-mode .pi-reply-time { display: none; }
+#chat-tab.pi-bot-mode .pi-message-action { opacity: .65; }
+#chat-tab.pi-bot-mode .pi-message-action:hover, #chat-tab.pi-bot-mode .pi-message-action:focus-visible { opacity: 1; }
+#chat-tab.pi-bot-mode .pi-delivery-receipt, .pi-bot-schedule-card { border: 1px solid var(--line); border-radius: 18px; background: var(--surface-2); box-shadow: none; }
+.pi-bot-schedule-receipt { max-width: 560px; margin: 10px 0 20px; display: grid; gap: 10px; }
+.pi-bot-schedule-card { display: grid; gap: 10px; padding: 17px; color: var(--text-main); }
+.pi-bot-schedule-card > header { display: flex; align-items: center; gap: 13px; }
+.pi-bot-schedule-card > header > i { display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 13px; background: color-mix(in srgb,var(--primary,var(--green)) 12%,var(--surface-1)); font-size: 1.15rem; }
+.pi-bot-schedule-card > header > div { min-width: 0; display: grid; gap: 3px; }
+.pi-bot-schedule-card strong { overflow-wrap: anywhere; font-size: .97rem; }
+.pi-bot-schedule-card small { color: var(--text-muted); line-height: 1.5; }
+.pi-bot-schedule-card p { margin: 0; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .92rem; }
+.pi-bot-schedule-card footer { display: flex; gap: 8px; }
+.pi-bot-schedule-card .pi-bot-chip { flex: 1; justify-content: center; margin: 0; min-height: 40px; }
+.pi-bot-schedule-cancel { padding: 0 12px; background: transparent; border: 0; border-radius: 10px; color: var(--text-muted); cursor: pointer; font: inherit; font-size: .83rem; }
+.pi-bot-schedule-cancel[hidden] { display: none; }
+.pi-bot-schedule-cancel:focus-visible { outline: 2px solid var(--primary,var(--green)); }
+.pi-bot-setup-field.is-avatar .pi-avatar-presets { flex-basis: 100%; }
+.pi-bot-notes-about { flex-wrap: wrap; }
+@media (max-width: 900px) {
+    #chat-tab.pi-bot-mode .pi-transcript-viewport > #pi-bot-header { gap: 6px; padding-inline: 12px; }
+    #chat-tab.pi-bot-mode .pi-transcript-viewport::after { height: 52px; }
+    .pi-bot-identity > .pi-bot-face.is-xl { width: 64px; height: 64px; }
+    #chat-tab.pi-bot-mode .pi-transcript { padding-top: 94px; scroll-padding-top: 112px; }
+    #chat-tab.pi-bot-mode .pi-bot-menu { width: 44px; height: 44px; }
+    #chat-tab.pi-bot-mode .pi-message.assistant > .pi-message-body { padding: 12px 15px; max-width: 96%; }
+    #chat-tab.pi-bot-mode .pi-message.user .pi-message-body { max-width: 84%; padding: 11px 15px; }
+    #chat-tab.pi-bot-mode .pi-message-action { width: 32px; height: 32px; flex-basis: 32px; }
+    .pi-bot-schedule-card .pi-bot-chip, .pi-bot-schedule-cancel { min-height: 44px; }
+}
+/* A topic the Bot opened: a receipt with an explicit way in. */
+.pi-bot-topic-receipt {
+    max-width: 560px; margin: 10px 0 20px; display: grid; gap: 10px; padding: 17px; border: 1px solid var(--line); border-radius: 18px;
+    background: var(--surface-2); color: var(--text-main);
+}
+.pi-bot-topic-receipt > header { display: flex; align-items: center; gap: 13px; }
+.pi-bot-topic-mark {
+    display: grid; place-items: center; flex: none; width: 40px; height: 40px; border-radius: 13px;
+    background: color-mix(in srgb,var(--primary,var(--green)) 12%,var(--surface-1)); font-size: 1.2rem;
+}
+.pi-bot-topic-mark i { font-size: .95rem; color: var(--primary, var(--green)); }
+.pi-bot-topic-receipt > header > div { min-width: 0; display: grid; gap: 2px; }
+.pi-bot-topic-receipt small { color: var(--text-muted); line-height: 1.5; }
+.pi-bot-topic-receipt strong { overflow-wrap: anywhere; font-size: .97rem; }
+.pi-bot-topic-receipt p { margin: 0; line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; font-size: .92rem; }
+.pi-bot-topic-receipt footer { display: flex; align-items: center; gap: 10px; }
+.pi-bot-topic-receipt-state { flex: 1; min-width: 0; }
+.pi-bot-topic-open { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
+.pi-bot-topic-open > i { font-size: .8rem; }
+@media (max-width: 900px) {
+    .pi-bot-topic-open { min-height: 44px; }
+    .pi-bot-topic-receipt footer { flex-wrap: wrap; }
+}

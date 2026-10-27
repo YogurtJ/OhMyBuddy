@@ -50,6 +50,14 @@ pi-subagents 通过受管扩展报告后台活动，Supervisor 用它阻止过�
 
 档案知识的 HTTP、工具与学习写入共用唯一 `ProfileKnowledgeService`；后台学习引用已核实原生条目，派生 SQLite 索引可以重建。细节见[辅助工作实现](RUNTIME.md#辅助工作与扩展)、[档案设计](AGENT_PROFILES.md)、[记忆契约](../PROFILE_MEMORY.md)与[依赖适配](DEPENDENCIES.md)。
 
+## Bot 模式（未发布）
+
+Bot 是带 `bot` 段的助手档案；“窗口”（目前只有主聊天）是永久逻辑容器，指向一串原生会话“代”。窗口索引 `<agentDir>/pivane-bots/<profileId>/windows.json` 只是路由缓存，可从每代开头的原生标记 `pivane-bot-window {profileId,windowId,generation,predecessor{sessionId,lastEntryId}}` 重建；Pi 原生 JSONL 仍是唯一聊天事实。换代在 Supervisor 会话编辑预占内进行：日志预备 → 停止空闲 worker → 核对旧代并写新代（模型、思考、隐藏交接消息、标记最后写入）→ CAS 提交索引。恢复只采用标记代数、前任会话与前任最后条目都匹配的新代，否则放弃，不重放回合；恢复在档案预占和前任会话编辑预占内进行，并且在 `resolve()` 交出会话之前完成，因此普通打开路径不会先把前任交给新的回合；只有决定采用新代时才停止前任 worker（先广播 `gateway_reconnect`），放弃时前任 worker 与已连接页面保持不变。已受理的工作留在原代。
+
+Bot 身份在 worker 内作为独立提示词段 `pivane_bot` 注入（不用 `customPrompt`，以免丢掉原生工具与规则段），每轮刷新 SOUL 并按 Bot 设置对齐模型（定时运行结束或复核之前不对齐，保持准入计价所用模型）。窗口上下文只对核实过标记、档案、工作目录和当前代的会话生效。“稳妥”“每次都问”由同一扩展的 `tool_call` 钩子执行（`bot-guard.js` 判定）：需要确认时发一个标题固定的原生 `confirm`（消息首行为类型与令牌），Bot 页渲染为确认卡，其他页面落到通用对话框；未确认或定时运行中直接阻止。写入目标按与 Pi 1.4 `resolveToCwd` 一致的镜像实现解析（测试与已安装 Pi 比对），读不到预设时按“每次都问”。确认结束后 worker 经私有桥报告令牌，Supervisor 撤回仍挂起的同一请求；嵌套调用的确认随父工具结束而取消。Bot 工作目录基准为家目录或首个项目根，排除服务 cwd 与安装目录。浏览器的 `#/bot` 复用聊天面板：`pi-chat.js` 的 botMode 打开窗口当前代，`open_session` 带 `botWindow` 由服务端在启动 worker 前和订阅后核对当前代（`BOT_WINDOW_STALE`/`BOT_WINDOW_ROTATING`），断线重连和启动失败后的重试都先重新解析窗口，`pi-bot.js` 负责 Bot 栏、问候和较早代只读回看，`pi-bot-settings.js` 负责设置窗口。设计与取舍见维护工作区的 Bot 模式设计文档（不随发行包），用户行为见 [Bot 模式](../BOT_MODE.md)。
+
+Bot 窗口的长期上下文只用原生会话条目，不另建数据库。记事本（“我记着的事”）由 `bot-ledger.js` 沿当前分支重放得到：`window_note` 工具结果的 `details.pivaneLedger`、Bot 压缩条目的 `details.pivaneBot.ledger`、面板修改写入的 custom 条目 `pivane-bot-ledger`，以及每一代种子中的快照；删除留墓碑（种类、来源与正文哈希，最多保留 1000 条，最旧的先丢弃；未删除记录另有 1000 条上限，快照读写用同一规则，换代前核对快照可回读），编号跨代不复用，来源保存说话人与 ≤300 字引文；摘要不能依据删除前的原话重新记回已删除的条目。所有 Bot 窗口压缩经 `session_before_compact` 走 `bot-compaction.js`：用该 Bot 的模型与对话思考程度（与 Pi 自身摘要相同的 `streamSimple` 选项）每段请求产出 JSON（用户与助手原话不截断，过长的消息按条目与说话人分段），各部分齐全才接受，记事本变更必须引用被摘要条目的编号和原话并由程序逐字核对，摘要正文由程序拼装；任一步失败返回 undefined 回落 Pi 原生压缩，此后 `before_agent_start` 在记事本不可见时补发隐藏的记事本消息。维护规则在 `bot-maintenance.js` 为纯函数：S1 在 `agent_before_settle` 生成 `context_edit` 草稿，S2 是 `agent_settled` 后的 worker 内计时器（“值得整理”按 Pi 最近一次为当前模型准备压缩时的 keepRecentTokens 计算，之前按全局设置；本代到换代条件时也压缩，此时压缩连 Pi 原样保留的部分一起读入并对账），S3 为 Pi 原生阈值，S4 由服务端 `BotService.maintainWindow` 在压缩事件后检查，到期且原生分支证明最后一次压缩是读入保留部分的 Bot 摘要、其后无新消息（`freshRotationSummary`，在会话编辑预占内再核对）才调用与手动换代相同的 `rotate`，交接由 `bot-handoff.js` 从旧代已核实条目构建（记事本总是完整渲染；原话尾部另存于 `details.tail`，未经自动换代证明（`reconciled`）的种子由下一代第一次摘要按说话人读入核对）。面板读写经 `GET/POST …/notebook`：有 worker 时走私有命令 `bot-notebook`（需空闲、核对账本版本），否则服务端在会话编辑预占内追加。`window_recall`/`window_read` 在 worker 内按窗口注册表与原生标记核对各代文件后只读扫描，文件经 `pi-file-io`/`pi-file-descriptor` 以不跟随链接、不阻塞方式打开，读前读后核对内核路径与完整 BigInt 身份（字节按剩余总预算、条数与时间预算），不建索引。设计与评测记录在维护工作区（不随发行包）。
+
 ## 外部消息渠道
 
 渠道服务拥有账号连接、固定线程绑定、待发送意图和投递回执；原生会话保存正文与轮次事实。发送前重验允许用户、绑定和原生分支，网络不确定与运行中重启均不自动重放。定时、微信和普通线程结果分别沿用对应轮次的去重凭据；模型输出完成不代表微信已收到。
@@ -110,5 +118,6 @@ Pi Provider 身份与工作台身份独立，认证通过公开 ModelRuntime API
 - 原生 SessionManager、唯一 worker、严格 LF、描述符身份检查与私有票据保护实际数据与执行语义，不能为降低复杂度而减少检查。可重建的展示缓存不成为第二份聊天事实。
 - `public/pi-chat.js` 仍集中协调连接、项目列表、当前线程和草稿。修改这些领域时先明确状态所有者再逐个提取组件，并覆盖线程切换、重连和迟到结果；一次性拆散闭包只会扩大验证范围。
 - `server.js` 仍包含旧媒体执行器和历史管理。新媒体能力进入 lab/provider 服务；旧入口在明确兼容与停用策略后逐项收敛，不能因默认实验室未启用就删除仍可能被使用的适配器。
+- 助手对话页前端已移除（旧 `#/assistant` 链接由 `pi-chat.js` 转到对应线程、Bot 或 Pi Agent）；分类 API、注册表和会话标记继续保留，供已有线程和身份页的“在此项目对话”使用。
 - 任务线程查找使用分批元数据目录，缓存不能升级为独立任务历史，不完整扫描不能证明请求不存在；大项目下的扫描预算仍需持续验证。
 - 平台原生组件、第三方插件版本适配、持久批量媒体与跨平台会话迁移各有验证成本。合成测试不代表所有真实环境通过，相应限制记录在对应功能或版本说明中。

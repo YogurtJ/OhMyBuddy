@@ -2,6 +2,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import { matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { fleetContains, fleetLayout } from "./fleet-layout.js";
+import { FleetViewport } from "./fleet-viewport.js";
 import { snapshotExternalRuns } from "../api/external-runs.js";
 import { getArtifactPaths, getArtifactsDir } from "../shared/artifacts.js";
 import { formatDuration, formatModelThinking, formatTokens, formatTokenUsage, shortenPath } from "../shared/formatters.js";
@@ -14,7 +16,9 @@ import { steerAsyncRun } from "../runs/foreground/async-steering-action.js";
 import { stopAsyncRun } from "../runs/foreground/async-stop-action.js";
 import { resolveWorkflowForegroundSteeringTarget, steerWorkflowForegroundTarget } from "../runs/foreground/workflow-foreground-steering.js";
 import { contextModeBadge, contextModeLabel } from "../runs/shared/context-mode.js";
+import { foregroundChildStateLabel } from "../runs/foreground/foreground-history.js";
 import { FLEET_STATUS_WIDGET_KEY, reportFleetWarning } from "./fleet-status.js";
+import { stepTaskSummary } from "./render.js";
 import { readFleetTranscript, renderFleetTranscript } from "./fleet-transcript.js";
 import { runningTone } from "./running-tone.js";
 import { childThinkingLevel } from "../shared/model-info.js";
@@ -108,18 +112,22 @@ function asyncItems(run, description) {
     if (run.steps.length === 0 || run.mode === "workflow") {
         return [{ key: `async:${run.id}`, kind: "async", runId: run.id, agent: run.mode, state: run.state, updatedAt, run, ...(description ? { description } : {}) }];
     }
-    return run.steps.map((step) => ({
-        key: `async:${run.id}:${step.index}`,
-        kind: "async",
-        runId: run.id,
-        index: step.index,
-        agent: step.label ? `${step.label} (${step.agent})` : step.agent,
-        state: step.status,
-        updatedAt: step.lastActivityAt ?? updatedAt,
-        run,
-        step,
-        ...(description ? { description } : {}),
-    }));
+    return run.steps.map((step) => {
+        const task = stepTaskSummary(step, step.agent);
+        return {
+            key: `async:${run.id}:${step.index}`,
+            kind: "async",
+            runId: run.id,
+            index: step.index,
+            agent: step.label ? `${step.label} (${step.agent})` : step.agent,
+            state: step.status,
+            updatedAt: step.lastActivityAt ?? updatedAt,
+            run,
+            step,
+            ...(task ? { task } : {}),
+            ...(description ? { description } : {}),
+        };
+    });
 }
 function orderFleetAsyncRuns(runs, terminalLimit, trackedJobs) {
     const updatedAt = (run) => run.lastUpdate ?? run.endedAt ?? run.startedAt;
@@ -214,6 +222,7 @@ export function collectFleetSnapshot(state, options = {}) {
                 entryLimit: MAX_FLEET_HISTORY_CANDIDATES,
                 resultsDir: options.resultsDir ?? DIRS.results,
                 reconcile: false,
+                onCorruptStatus: (warning) => reportFleetWarning(state, warning),
             }).filter((run) => !trackedIds.has(run.id));
             runs = [...trackedRuns, ...history];
         }
@@ -443,7 +452,7 @@ function foregroundRecentDetail(item, state) {
     const lines = [
         `Run: ${item.runId}`,
         "Source: foreground",
-        `State: ${child.status}`,
+        `State: ${foregroundChildStateLabel(run, child)}`,
         `Mode: ${run.mode}`,
         `Child: ${child.index} (${child.agent})${contextModeLabel(child.context) ? ` ${contextModeLabel(child.context)}` : ""}`,
         modelThinking ? `Model: ${modelThinking}` : undefined,
@@ -746,11 +755,8 @@ export class SubagentFleetComponent {
     snapshot = { items: [] };
     selected = 0;
     selectedKey;
-    detailScroll = 0;
-    detailAutoFollow = true;
-    detailLineCount = 0;
-    detailViewportHeight = 8;
-    bodyHeight = 8;
+    viewport;
+    renderedLayout;
     expandedTools = false;
     promptAuditOpen = false;
     promptAuditView = "authored";
@@ -773,6 +779,7 @@ export class SubagentFleetComponent {
     keybindings;
     constructor(tui, theme, state, done, options = {}) {
         this.tui = tui;
+        this.viewport = new FleetViewport(() => this.tui.requestRender());
         this.theme = theme;
         this.markdownTheme = options.markdownTheme ?? getMarkdownTheme();
         this.state = state;
@@ -820,11 +827,14 @@ export class SubagentFleetComponent {
         this.selectedKey = this.snapshot.items[this.selected]?.key;
     }
     moveSelection(delta) {
-        if (this.snapshot.items.length === 0)
+        this.selectItem(Math.max(0, Math.min(this.snapshot.items.length - 1, this.selected + delta)));
+    }
+    selectItem(index) {
+        if (!this.snapshot.items[index])
             return;
-        this.selected = Math.max(0, Math.min(this.snapshot.items.length - 1, this.selected + delta));
+        this.selected = index;
         this.selectedKey = this.snapshot.items[this.selected]?.key;
-        this.detailAutoFollow = true;
+        this.viewport.follow();
         this.resetActionInput();
         this.tui.requestRender();
     }
@@ -862,8 +872,7 @@ export class SubagentFleetComponent {
             return;
         this.selected = this.snapshot.items.findIndex((item) => item.key === target.key);
         this.selectedKey = target.key;
-        this.detailScroll = 0;
-        this.detailAutoFollow = false;
+        this.viewport.resetTop();
         this.tui.requestRender();
     }
     resetActionInput() {
@@ -951,8 +960,7 @@ export class SubagentFleetComponent {
     setActionNotice(result) {
         this.actionNotice = result;
         this.resetActionInput();
-        this.detailAutoFollow = false;
-        this.detailScroll = 0;
+        this.viewport.resetTop();
         this.refresh();
         this.tui.requestRender();
     }
@@ -972,10 +980,35 @@ export class SubagentFleetComponent {
         });
     }
     scrollDetail(delta) {
-        const maxScroll = Math.max(0, this.detailLineCount - this.detailViewportHeight);
-        this.detailScroll = Math.max(0, Math.min(maxScroll, this.detailScroll + delta));
-        this.detailAutoFollow = this.detailScroll >= maxScroll;
-        this.tui.requestRender();
+        this.viewport.scroll.scrollBy(delta);
+    }
+    handleMouse(event) {
+        // Block pointer fallback as well as inspector actions while a text/confirmation modal owns input.
+        if (this.steerDraft !== undefined || this.redoGuidanceDraft !== undefined || this.stopConfirming || this.actionBusy) {
+            return { handled: true, render: false };
+        }
+        const layout = this.renderedLayout;
+        if (!layout || layout.width !== event.width || layout.rows !== (this.tui.terminal?.rows ?? 32)) {
+            // Never use hit regions from a different size; wheel must not escape to the transcript.
+            return event.type === "wheel" ? { handled: true, render: false } : undefined;
+        }
+        if (event.type === "wheel" && fleetContains(layout.output, event.x, event.y)) {
+            this.scrollDetail(event.wheelDelta ?? 0);
+            return { handled: true, render: false };
+        }
+        if (this.promptAuditOpen)
+            return { handled: true, render: false };
+        if (event.type === "click" && event.button === "left" && !event.shift && !event.alt && !event.ctrl
+            && fleetContains(layout.roster, event.x, event.y)) {
+            const key = layout.rosterKeys[event.y - layout.roster.y];
+            const index = key === undefined ? -1 : this.snapshot.items.findIndex((item) => item.key === key);
+            if (index < 0)
+                return undefined;
+            this.selectItem(index);
+            return { handled: true, render: false };
+        }
+        // Unowned wheel inside the overlay would otherwise scroll the transcript behind it.
+        return event.type === "wheel" ? { handled: true, render: false } : undefined;
     }
     handleInput(data) {
         if (this.promptAuditOpen && this.redoGuidanceDraft !== undefined) {
@@ -1012,7 +1045,7 @@ export class SubagentFleetComponent {
         if (this.promptAuditOpen) {
             if (matchesKey(data, "escape") || matchesKey(data, "ctrl+c")) {
                 this.promptAuditOpen = false;
-                this.detailAutoFollow = true;
+                this.viewport.follow();
                 this.tui.requestRender();
                 return;
             }
@@ -1022,7 +1055,7 @@ export class SubagentFleetComponent {
                 return this.movePromptSelection(-1);
             if (data === "1" || data === "2" || data === "3") {
                 this.promptAuditView = data === "1" ? "authored" : data === "2" ? "runtime" : "effective";
-                this.detailScroll = 0;
+                this.viewport.resetTop();
                 this.tui.requestRender();
                 return;
             }
@@ -1037,8 +1070,7 @@ export class SubagentFleetComponent {
                 else {
                     this.actionNotice = undefined;
                     this.redoGuidanceDraft = "";
-                    this.detailAutoFollow = false;
-                    this.detailScroll = 0;
+                    this.viewport.resetTop();
                     this.tui.requestRender();
                 }
                 return;
@@ -1061,9 +1093,9 @@ export class SubagentFleetComponent {
             if (matchesFleetAction(data, this.keybindings, "scrollDown"))
                 return this.scrollDetail(1);
             if (matchesFleetAction(data, this.keybindings, "pageUp"))
-                return this.scrollDetail(-this.detailViewportHeight);
+                return this.scrollDetail(-this.viewport.scroll.viewportHeight);
             if (matchesFleetAction(data, this.keybindings, "pageDown"))
-                return this.scrollDetail(this.detailViewportHeight);
+                return this.scrollDetail(this.viewport.scroll.viewportHeight);
             return;
         }
         if (this.steerDraft !== undefined) {
@@ -1137,9 +1169,9 @@ export class SubagentFleetComponent {
         if (matchesFleetAction(data, this.keybindings, "selectLast"))
             return this.moveSelection(this.snapshot.items.length);
         if (matchesFleetAction(data, this.keybindings, "pageUp"))
-            return this.scrollDetail(-this.detailViewportHeight);
+            return this.scrollDetail(-this.viewport.scroll.viewportHeight);
         if (matchesFleetAction(data, this.keybindings, "pageDown"))
-            return this.scrollDetail(this.detailViewportHeight);
+            return this.scrollDetail(this.viewport.scroll.viewportHeight);
         if (matchesFleetAction(data, this.keybindings, "refresh")) {
             this.transcriptCache = undefined;
             this.refresh();
@@ -1152,8 +1184,7 @@ export class SubagentFleetComponent {
             else {
                 this.promptAuditOpen = true;
                 this.promptAuditView = "authored";
-                this.detailScroll = 0;
-                this.detailAutoFollow = false;
+                this.viewport.resetTop();
                 this.actionNotice = undefined;
                 this.tui.requestRender();
             }
@@ -1166,8 +1197,7 @@ export class SubagentFleetComponent {
             else {
                 this.actionNotice = undefined;
                 this.steerDraft = "";
-                this.detailAutoFollow = false;
-                this.detailScroll = 0;
+                this.viewport.resetTop();
                 this.tui.requestRender();
             }
             return;
@@ -1179,8 +1209,7 @@ export class SubagentFleetComponent {
             else {
                 this.actionNotice = undefined;
                 this.stopConfirming = true;
-                this.detailAutoFollow = false;
-                this.detailScroll = 0;
+                this.viewport.resetTop();
                 this.tui.requestRender();
             }
             return;
@@ -1196,18 +1225,21 @@ export class SubagentFleetComponent {
             return;
         }
     }
-    rosterLines(width) {
+    rosterLines(layout) {
         if (this.snapshot.items.length === 0)
             return [this.theme.fg("dim", "No tracked children")];
-        const start = Math.max(0, Math.min(this.selected - this.bodyHeight + 1, Math.max(0, this.snapshot.items.length - this.bodyHeight)));
-        return this.snapshot.items.slice(start, start + this.bodyHeight).map((item, offset) => {
-            const index = start + offset;
+        return layout.rosterKeys.map((_key, offset) => {
+            const index = layout.rosterStart + offset;
+            const item = this.snapshot.items[index];
             const marker = index === this.selected ? this.theme.fg("accent", "›") : " ";
             const context = item.kind === "async" ? contextModeBadge(this.theme, item.step?.context ?? item.run.context) : item.kind === "foreground-recent" ? contextModeBadge(this.theme, item.child.context) : "";
-            const agent = index === this.selected ? this.theme.bold(item.agent) : item.agent;
-            const identity = item.runId.slice(0, 8);
+            // A child's task tells rows of one run apart; the run id stays in the detail header.
+            const task = item.kind === "async" ? item.task : undefined;
+            const name = task && item.kind === "async" && item.step ? item.step.agent : item.agent;
+            const agent = index === this.selected ? this.theme.bold(name) : name;
+            const identity = task ?? item.runId.slice(0, 8);
             const left = `${marker} ${statusGlyph(item, this.theme)} ${agent}${context} ${this.theme.fg("dim", `· ${identity}`)}`;
-            return rightAligned(left, this.theme.fg("dim", item.state), width);
+            return rightAligned(left, this.theme.fg("dim", item.state), layout.roster.width);
         });
     }
     renderedTranscript(target, width) {
@@ -1305,26 +1337,21 @@ export class SubagentFleetComponent {
         return { header: [], body: this.withActionLines(lines) };
     }
     render(width) {
-        if (width < 36)
+        const layout = fleetLayout(width, this.tui.terminal?.rows ?? 32, this.selected, this.snapshot.items);
+        this.renderedLayout = layout;
+        if (!layout)
             return [truncateToWidth("Subagent fleet needs at least 36 columns. Esc closes.", width)];
         const innerWidth = width - 2;
-        const rows = this.tui.terminal?.rows ?? 32;
-        this.bodyHeight = Math.max(2, Math.floor(rows * 0.85) - 6);
-        const rosterWidth = Math.max(22, Math.min(46, Math.floor((innerWidth - 1) * 0.38)));
-        const detailWidth = Math.max(1, innerWidth - rosterWidth - 1);
-        const roster = this.rosterLines(rosterWidth);
+        const { bodyHeight } = layout;
+        const rosterWidth = layout.roster.width;
+        const detailWidth = layout.output.width;
+        const roster = this.rosterLines(layout);
         const detail = this.wrappedDetail(detailWidth);
-        const detailHeader = detail.header.slice(0, Math.max(0, this.bodyHeight - 1));
-        this.detailViewportHeight = Math.max(1, this.bodyHeight - detailHeader.length);
-        this.detailLineCount = detail.body.length;
-        const maxDetailScroll = Math.max(0, detail.body.length - this.detailViewportHeight);
-        if (this.detailAutoFollow)
-            this.detailScroll = maxDetailScroll;
-        else if (this.detailScroll > maxDetailScroll)
-            this.detailScroll = maxDetailScroll;
+        const detailHeader = detail.header.slice(0, Math.max(0, bodyHeight - 1));
+        const outputBodyHeight = bodyHeight - detailHeader.length;
         const visibleDetails = [
             ...detailHeader,
-            ...detail.body.slice(this.detailScroll, this.detailScroll + this.detailViewportHeight),
+            ...this.viewport.render(detail.body, detailWidth, outputBodyHeight),
         ];
         const lines = [this.theme.fg("border", `╭${"─".repeat(innerWidth)}╮`)];
         const selected = this.snapshot.items[this.selected];
@@ -1336,7 +1363,7 @@ export class SubagentFleetComponent {
             : this.theme.fg("dim", "no children ");
         lines.push(this.theme.fg("border", "│") + rightAligned(title, selectedStatus, innerWidth) + this.theme.fg("border", "│"));
         lines.push(this.theme.fg("border", `├${"─".repeat(rosterWidth)}┬${"─".repeat(detailWidth)}┤`));
-        for (let index = 0; index < this.bodyHeight; index++) {
+        for (let index = 0; index < bodyHeight; index++) {
             lines.push(this.theme.fg("border", "│")
                 + fit(roster[index] ?? "", rosterWidth)
                 + this.theme.fg("border", "│")
@@ -1355,6 +1382,7 @@ export class SubagentFleetComponent {
         return lines.map((line) => truncateToWidth(line, width));
     }
     invalidate() {
+        this.renderedLayout = undefined;
         this.transcriptCache = undefined;
         this.refresh();
     }

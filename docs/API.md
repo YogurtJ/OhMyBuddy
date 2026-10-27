@@ -11,6 +11,7 @@
 | 项目、会话、移动、导入与历史 | [Pi REST](#2-pi-rest-api) · [会话工作流](#会话工作流-rest) |
 | 助手档案、记忆与后台学习 | [可选助手档案](#可选助手档案) · [记忆契约](PROFILE_MEMORY.md) |
 | 任务线程、定时任务与渠道 | [任务线程](#agent-任务线程) · [定时任务](#定时任务) · [消息渠道](#消息渠道messagechannels) |
+| Bot 列表、设置、窗口与换代 | [Bot 模式](#bot-模式) |
 | 附件、文件交付与成果 | [原件上传](#办公文档附件documentuploads) · [清理](#附件用量与清理documentstorage) · [成果中心](#成果中心artifacts) · [文件契约](FILE_VIEWER.md) |
 | WebSocket 连接、命令与事件 | [Pi WebSocket](#3-pi-websocket) |
 | 模型、音色与资源设置 | [Web 设置](#4-web-设置-api) |
@@ -132,7 +133,7 @@
 
 `fileViewer=true` 标记已挂载 `GET /files/content?cwd&path`：按当前项目范围读取普通 UTF-8 文件，最大 2MiB、4 并发，返回 cwd/path/absolutePath/content/size/modifiedAt/readAt/revision，响应 no-store/nosniff。复用 token/Origin/realpath/项目根校验，拒绝凭据、越界软链接、非普通文件、二进制与读取中变化；不启动 worker、不写文件或历史。write 记录全文来自原生消息，当前磁盘全文仅用户选择/刷新时请求。字段、错误码及展示契约见 [FILE_VIEWER.md](FILE_VIEWER.md)。
 
-`subagentRuntime=true` 标记 pi-subagents 运行适配：`webControls`/`gateway_controls` 增加 `subagents:{snapshot,background}`。`snapshot` 为 null 或 `{version:1,generatedAt,runs:[{id,kind,label,state,startedAt?,updatedAt?,endedAt?,activity?,children?}],omitted:{runs,children}}`，由插件的状态快照规范化而来，不再出现在通用扩展 widget 中；`background` 为 null 或 `{supported,active,sources}`，active 表示会话因后台子 Agent 或待送达完成通知而保持。主 WS `subagent_control` 接收 `{method,params}`：`status`（可选 `id`，查看记录需 `id`+`view:'transcript'`+`lines≤500`）、`cost`、`steer`（`id`,`message≤8000`,`mode:'steer'|'follow_up'`，可选 `index`）、`stop`（`id`）、`interrupt`（`id`,可选 `index`）、`resume`（`id`,`message`,可选 `index`）；不开放 spawn、manage、目录或任意参数。响应只含 `text/state/isError/snapshot` 或 `cost`（usage 不含子会话路径）。未收到确认的修改返回“结果不确定”，不自动重试。`/activity.runtimes[].backgroundWork` 与维护空闲检查同步。
+`subagentRuntime=true` 标记 pi-subagents 运行适配：`webControls`/`gateway_controls` 增加 `subagents:{snapshot,background}`。`snapshot` 为 null 或 `{version:1,generatedAt,runs:[{id,kind,label,state,startedAt?,updatedAt?,endedAt?,activity?,agent?,model?,thinking?,hostStep?,children?}],omitted:{runs,children}}`，由插件的状态快照规范化而来，不再出现在通用扩展 widget 中。`activity` 为 `{state?:'active_long_running'|'needs_attention',currentTool?,currentToolStartedAt?,lastActivityAt?,turnCount?,toolCount?}`；步骤节点的 `agent/model/thinking` 是插件报告的角色、模型与思考等级；`host-step` 节点的 `hostStep` 为 `{kind:'command'|'ci'|'gate',state?,verdict?,detail?,stale?}`，不含报告路径。未知取值丢弃。比较时忽略 `generatedAt`，内容不变不增加修订也不广播；原始 `subagent-async`/`subagent-inspect` widget 事件不转发给浏览器；`background` 为 null 或 `{supported,active,sources}`，active 表示会话因后台子 Agent 或待送达完成通知而保持。主 WS `subagent_control` 接收 `{method,params}`：`status`（可选 `id`，查看记录需 `id`+`view:'transcript'`+`lines≤500`）、`cost`、`steer`（`id`,`message≤8000`,`mode:'steer'|'follow_up'`，可选 `index`）、`stop`（`id`）、`interrupt`（`id`,可选 `index`）、`resume`（`id`,`message`,可选 `index`）；不开放 spawn、manage、目录或任意参数。响应只含 `text/state/isError/snapshot`、steer 的 `delivery:'delivered'|'queued'`（缺省表示插件未给出送达回执）、resume 的新运行 `runId`，或 `cost`（usage 不含子会话路径）。未收到确认的修改返回“结果不确定”，不自动重试。`/activity.runtimes[].backgroundWork` 与维护空闲检查同步。
 
 `runtimeControls=true` 标记主 WS 已支持 stop_and_recover/take_queue/ack_recovery、get_state.webControls 与 gateway_controls；`durableQueueRecovery=true` 表示支持持久主线程排队意图日志和 `get_recovery_payload {recoveryId,runtimeId,revision}`。恢复载荷只在显式读取时返回，元数据快照不附带完整 base64；新客户端 ack_recovery 也携带 runtimeId/revision。日志保留原稿与可验证的变换结果，不自动重发，临时／旧运行实例仍按文字内存恢复。明确删除成功后才清理对应日志，附带失败返回 queueRecoveryWarning。`extensionStatus=true` 标记扩展文字状态的内存快照。完整契约见 [NATIVE_CONTROLS.md](NATIVE_CONTROLS.md)。
 
@@ -143,9 +144,9 @@
 `GET /api/pi/status.messageChannels=true` 表示消息渠道接口可用，不表示微信组件已安装或账号已连接。以下接口沿用工作台身份、Origin/CSRF、维护准入与 no-store；worker 内部凭据不能管理渠道。
 
 - `GET /api/pi/channels`：返回配置 `revision`、组件 installed/version/availableVersion/sources、脱敏 accounts、bindings、已允许 peers、最近 60 条 jobs（含 `sentChunks`、`sentMedia`、`waiting`、`kind`、`blocksFollowing`、`retryCount`、`nextAttemptAt`、`deliveryError`、经过筛选的整数 `platformCode`、有界 `deliveryIssues:[{name,reason}]`）、当前登录的二维码布尔矩阵/status/expiresAt 和 capabilities（`text`、`images`、`files`、`slashCommands`、`typing`、`proactive`、`threadResults`）。没有账号 token、微信 context token、登录验证码或消息正文。
-- `POST /api/pi/channels/weixin/actions`：共同字段 `{action, confirmed:true, expectedRevision}`。操作在 await 前预占互斥；冲突 409，其他失败 400，结果不确定不自动重放。当前支持 `install`、`uninstall`、`login`、`cancel-login`、`verify-login`、`account`、`bind`、`unbind`、`stop`、`recover`、`acknowledge`。
+- `POST /api/pi/channels/weixin/actions`：共同字段 `{action, confirmed:true, expectedRevision}`。操作在 await 前预占互斥；冲突 409，其他失败 400，结果不确定不自动重放。当前支持 `install`、`uninstall`、`login`、`cancel-login`、`verify-login`、`account`、`bind`、`unbind`、`unbind-bot`、`stop`、`recover`、`acknowledge`。
 - `cancel-login` 需要 loginId；`verify-login` 需要 loginId/code（1–12 位数字）；登录最多五分钟，通过 GET 查询进度，不由浏览器重复提交登录请求。
-- `account` 需要 accountId/enabled/allowedUsers（最多 100 个 1–256 字符 ID）；启用必须有非空允许列表。`bind` 需要 accountId/peerId/cwd 和 sessionId，或显式 newSession=true；可带 `replyMode:'all'|'wechat'`（默认 all，旧绑定缺失同样为 all），分别接收全部线程最终结果或仅微信发起的回复。绑定保存生效时间与最近已完成轮次边界，接收尚未结束的任务，不补发历史。`unbind` 需要 accountId/peerId。最多 10 个账号、200 条绑定、500 个已允许聊天；临时及管理助手线程不接受绑定。
+- `account` 需要 accountId/enabled/allowedUsers（最多 100 个 1–256 字符 ID）；启用必须有非空允许列表。`bind` 需要 accountId/peerId/cwd 和 sessionId，或显式 newSession=true；可带 `replyMode:'all'|'wechat'`（默认 all，旧绑定缺失同样为 all），分别接收全部线程最终结果或仅微信发起的回复。绑定保存生效时间与最近已完成轮次边界，接收尚未结束的任务，不补发历史。`unbind` 需要 accountId/peerId。`bind` 改带 `botProfileId`（不带 cwd/sessionId）时把这个聊天连接到该 Bot 的主聊天（源码未发布）：绑定记录多出 `bot:{profileId,windowId,main}`（当前 Bot 窗口）和 `bots`（连接过的 Bot，最多 20 个，含当前）；cwd/sessionId 跟随窗口的当前代，换代时改指向新代，每次运行前再核对一次。`unbind-bot` 需要 accountId/peerId/botProfileId，断开一个 Bot；断开的是当前 Bot 时转到下一个仍可用的已连接 Bot，没有则删除绑定。连接 Bot 的聊天里 `/切换`（`/bot`）、`/话题`（`/topic`）切换 Bot 和话题，绑定 ID 不变；线程类指令（`/new`、`/resume`、`/model` 等）不可用。已连接 Bot 的定时结果和它主动发的消息（按 Bot 的安静时段与每日上限放行）也发到这个聊天，不是当前 Bot 窗口时前面带名字，渠道 jobs 的 `kind` 分别为 `cron`、`bot-push`。微信发起的 Bot 回合等待 Bot 确认时，渠道向发起的聊天发送短编号；该聊天回复「同意/拒绝 编号」生成 `kind:'approval'` 的 job，只回答那一个仍在等待的确认（一次性、仅内存保存、不经模型）。最多 10 个账号、200 条绑定、500 个已允许聊天；临时及管理助手线程不接受绑定。
 - `stop`、`recover`、`acknowledge` 需要 jobId。stop 仅请求中止所属微信运行；recover 仅在未开始微信发送且原生当前分支存在已完成结果时恢复发送；acknowledge 不重跑、不补发。
 
 `jobs.status=partial` 表示文字或部分文件已送达，但有附件因 `size`、`limit`、`unreadable`、`unavailable`、`pending` 或 `failed` 未发送；不会自动补发。`typing` 返回最多 100 个脱敏运行诊断 `{accountId,peerId,status,failures,reason}`，不包含票据或上游错误正文。修改指令在提交前持久化为 `dispatching`；重启或未知结果转 `uncertain`，Slash Command 不提供 `recover` 自动补运行入口。
@@ -205,6 +206,8 @@
 
 `GET /status.agentProfiles=true` 表示可选助手档案接口可用。`GET /profiles?cwd` 返回 `profiles`（不含回收站身份）、按移入时间从新到旧的 `trash:[{id,name,description,avatar,trashedAt}]`、注册表修订、`profileRevisions`（含回收站的所有档案ID到自身修订的映射）和所选项目默认身份；`PUT /profiles` 接受 `{expectedRevision,profile}` 创建或更新档案，回收站身份拒绝更新（409），须先恢复；`PUT /profiles/default` 接受 `{cwd,profileId,expectedRevision}`，`profileId:null` 清除项目默认身份，仅接受已启用且不在回收站的身份。现有 `POST /sessions` 的可选 `profileId` 省略时使用项目默认，显式 null 创建无档案线程。
 
+`profile.avatar` 是头像选择的唯一持久化字段，可省略（更新时保留原值）、为 null、`{kind:'emoji',value}`、`{kind:'image',version}` 或 `{kind:'preset',id}`。预设新选择只接受共享内置目录中的 `pivane-pebble`（小石）、`pivane-bean`（豆豆）、`pivane-tile`（方方）；预设对象只能含 `kind`、`id`，不接受路径、SVG 正文或混合字段。读取容忍符合 `^pivane-[a-z0-9]+(?:-[a-z0-9]+)*$` 且至多 80 字符的未知 ID，资源暂缺时仍保留引用；保存同一档案的未变未知引用或仅修改其他字段也保留，但不能新选未知 ID。图片仍只接受本档案已上传的当前 PNG 版本，不因预设支持扩大上传格式。列表、回收站、恢复和 Bot 使用同一字段，既有头像不自动替换。旧版服务不认识 preset 类型，不能把新配置直接交回旧服务；回退仍须使用对应版本的备份和现有恢复规程，不批量重写头像或历史数据。
+
 - `POST /profiles/:id/trash`：`{expectedRevision}`，原子保存 `trashedAt`（ISO）、`trashedEnabled`（原启用状态）和 `enabled:false`，同时清除所有指向该身份的项目默认值；返回 `{ok:true,profile,revision}`。
 - `POST /profiles/:id/restore`：`{expectedRevision}`，移除回收站元数据并恢复原启用状态，原本停用的身份仍停用，不重设项目默认值；返回 `{ok:true,profile,revision}`。
 
@@ -216,7 +219,7 @@
 
 `GET /status.profileLearning=true` 表示逐项知识管理与后台学习接口已装配（同一 `ProfileKnowledgeService` 实例供路由、后台学习和原生工具共用）。
 
-- `GET /profiles/:id/knowledge?kind=memory|skill&query=&offset=&sessionId=&state=present|deleted|draft|all&target=user|memory|project&category=fact|preference|correction|failure|procedure`：state 可选，省略与 all 均保留全部状态；present 排除已删除条目。状态、target 与 category 过滤均在分页前进行，不改变写入 revision。target/category 均需明确 `kind=memory`，非法值返回 400；project 按项目 scope 选择，user/memory 仅选 profile scope，memory 包含只读旧 failure 条目且不改变其 target。ready 快照增加 `counts:{memory:{total,user,memory,project,deleted},skill:{total,active,draft,disabled,deleted}}`，统计所有未镜像条目，不受 kind/query/offset/state/target/category 影响；total 与子组排除已删除项，deleted 单列，记忆分组与 target 过滤一致。每页最多 50 条（记忆预览 512 字符）、30 条近期回执、不透明 revision，以及 `capabilities`（`operations`、`memory`/`skill` 可写性、`projectWrites:false`、`skillNameMaxLength`、`skillDescriptionMaxLength`（1024，与 Pi 技能描述上限一致）、`maxContentLength`、`journal` 计数与上限）。记忆可用时另有 `usage:{memory:{chars,limit},user:{chars,limit},failure?:{chars,readOnly:true}}`，字数与写入时的上限判断一致。回执带 `origin`（`manual|agent|learning`，由服务端决定）、`learningReason`（仅 learning）、`preview`（记忆正文或技能名与描述，最多约 160 字符）、记忆的 `category`；同一条目之后又有回执时标 `superseded:true`。归档摘要不含 preview。`status` 为 `ready|pending|missing|disabled|unsupported|error`；pending 时 revision 为 null，禁止写入。
+- `GET /profiles/:id/knowledge?kind=memory|skill&query=&offset=&sessionId=&state=present|deleted|draft|all&target=user|memory|project&category=fact|preference|correction|failure|procedure`：state 可选，省略与 all 均保留全部状态；present 排除已删除条目。状态、target 与 category 过滤均在分页前进行，不改变写入 revision。target/category 均需明确 `kind=memory`，非法值返回 400；project 按项目 scope 选择，user/memory 仅选 profile scope，memory 包含只读旧 failure 条目且不改变其 target。ready 快照增加 `counts:{memory:{total,user,memory,project,deleted},skill:{total,active,draft,disabled,deleted}}`，统计所有未镜像条目，不受 kind/query/offset/state/target/category 影响；total 与子组排除已删除项，deleted 单列，记忆分组与 target 过滤一致。每页最多 50 条（记忆预览 512 字符）、30 条近期回执、不透明 revision，以及 `capabilities`（`operations`、`memory`/`skill` 可写性、`projectWrites:false`、`skillNameMaxLength`、`skillDescriptionMaxLength`（1024，与 Pi 技能描述上限一致）、`maxContentLength`、`journal` 计数与上限）。记忆可用时另有 `usage:{memory:{chars,limit},user:{chars,limit},failure?:{chars,readOnly:true}}`，字数与写入时的上限判断一致。回执带 `origin`（`manual|agent|learning`，由服务端决定）、`learningReason`（仅 learning）、`preview`（记忆正文或技能名与描述，最多约 160 字符）、记忆的 `category`；关于你／长期记忆的回执另带 `target:'user'|'memory'`，分别对应 `USER.md`／`MEMORY.md`，项目记忆回执不带此字段；同一条目之后又有回执时标 `superseded:true`。归档摘要不含 preview。`status` 为 `ready|pending|missing|disabled|unsupported|error`；pending 时 revision 为 null，禁止写入。
 - `GET /profiles/:id/knowledge/injection?sessionId=`：只读的下一轮注入预览，用与注入相同的上游格式渲染：`{status,block,truncated?,chars,entries,profile:{chars,entries},project,lastRead}`；带 sessionId 时核实会话归属并加入该目录的项目块，`lastRead` 取会话最近一次 `pivane-profile-memory-read`（含 `chars`/`entries`）。block 最多 64 KiB。
 - `GET /profiles/:id/knowledge/items/:itemId`：受限正文（最多 65,536 字符）、条目 revision、`readOnly`/`truncated` 与服务端来源 `{sessionId,entryId}`。
 - 未删除的记忆条目被 `memory_search` 实际返回过时，快照列表与单条读取另带 `recall:{hits,lastHitAt}`（次数与 `YYYY-MM-DD`）；从未被检索到、已删除、技能或数据库尚无计数列时省略。它是只读参考数据，不进入 revision，计数变化不会使编辑 409，读取失败时省略而不影响页面；条目内容改动后对应计数从 0 开始。
@@ -245,11 +248,97 @@
 
 现有 `/sessions?cwd` 仍列出全部原生线程，新增 `assistantProject:null|{id,name,cwd,available}`；不存在的已绑定组仍显示 ID 和 available=false，不能自动归入另一组。旧有档案绑定但无项目标记的线程仍按真实 cwd 保持未分类。项目标记 `pivane-assistant-project` 保存 `{version:1,sessionId,projectId,cwd}`：初始标记只能有一个且匹配当前原生 ID/cwd；后续分类变更通过 `pivane-assistant-project-change` 的 previousRevision（前一原生 entry ID／无标记时 null）、previousProjectId 与 projectId（UUID／null）构成严格 CAS 链，重复初始标记或断裂链失效。复制导入的旧 ID 不生效；网页分叉给新 ID 追加当前有效归属。保存分组指令不自动重载当前 worker；`get_runtime_configuration.assistantProject` 分别返回 saved、savedProjectRevision、loadedProjectId、loadedProjectRevision、loadedConfirmed 与 matchesSavedProject。只有当前原生会话的运行实例确认后才标记已加载，保存值不能冒充运行配置。注册表保存在原生 agentDir 的私有 `pivane-profiles/assistant-projects.json`，项目和档案保存共用设置/维护忙碌互斥；过期修订和占用返回 409，未授权或非法输入按现有访问控制返回错误。
 
+### Bot 模式
+
+`GET /status.bots=true` 表示 Bot 接口已装配，用户行为见 [Bot 模式](BOT_MODE.md)。Bot 是带 `bot` 段的助手档案；档案写入沿用注册表 CAS（`expectedRevision` 为 `GET /bots` 的 `revision`），窗口元数据写入使用该 Bot 的 `windowsRevision`，修订冲突返回 409，所有响应 `Cache-Control: no-store`，失败不自动重试。
+
+- `GET /bots` → `{version:1,revision,bots:[{id,name,description,avatar,enabled,profileRevision,bot,chosen,windowsRevision,windows}]}`，按 `bot.order` 排序，不含回收站档案。`chosen:{name,avatar}` 表示名字、头像是否已由用户定下：在设置卡或 Bot 设置中保存过即记下（服务端字段 `bot.chosen`，重新访谈后保留）；较早的记录和身份页修改按名字／头像各自的访谈步骤（或旧版合并的身份步骤）是否完成、是否与初始占位值不同推断。旧默认表情仍按 `✨` 判断；新建记录带 `onboarding.defaultAvatar:'pivane-pebble'`，只有这类记录的未确认默认“小石”不算已选，老记录中已使用的小石继续算已选。设置卡据此默认保留。`bot` 为 `{version,enabled,order,job,model:null|{provider,id,thinking?},permissions:{preset:'free'|'balanced'|'ask',rules:<数量>},notify,onboarding,createdAt}`；`onboarding` 为 `{version:1,phase:'greeting'|'interview'|'done'|'skipped',firstBot,steps,startedAt,completedAt,flowVersion?,firstTaskChoice?,defaultAvatar?}`，`steps` 值为 `done|skipped`，分别记录 `name`、`avatar`、`job`、`personality`、`work`（`workStyle`）、`about`（`aboutUser`）；头像不再是必问的访谈项，主动修改仍可记录。`known` 记录是否已处理其他 Bot 的“关于你”，兼容旧版 `identity:'done'` 同时完成名字和头像步骤。窗口为 `{id,kind:'main'|'topic',title,emoji,focus,instructions,createdAt,updatedAt,archivedAt,generation,sessionId,generations}`，不暴露文件路径；`instructions` 是话题指令，主聊天和较早没有该字段的记录为空字符串。
+- `GET /bots/readiness` → `{models:<可用聊天模型数>|null,error?}`；null 表示无法确定，不等于没有模型。
+- `POST /bots` `{expectedRevision,language?}` 创建 Bot、工作目录 `<默认项目>/PivaneBots/bot-<ID前8位>/` 与主聊天，返回 `{ok,revision,bot,window}`。新建头像为 `{kind:'preset',id:'pivane-pebble'}`，同时记录上述默认标记，不改已有 Bot。最多 50 个 Bot，且计入档案 50 个上限。
+- `GET /bots/:id/settings` → `{revision,bot:{id,name,avatar,soul,bot},models:null|{defaults,models:[{provider,id,name,thinkingLevels}]},modelsError?}`；模型目录按该 Bot 工作目录读取，失败时 `models:null`；这里的 `bot.bot.permissions.rules` 是完整规则数组，列表接口仍是规则数量。
+- `PATCH /bots/:id` `{expectedRevision,changes:{name?,description?,soul?,avatar?,bot?}}`；`avatar` 沿用上述 `profile.avatar` 契约；`bot` 只接受 `job`、`model`（null 为跟随默认）、`permissions:{preset?,rules?}`、`notify`、`order`。图片头像需先经头像接口上传。仅在访谈阶段为 `greeting|interview` 时，将实际改动的名字、头像、职责、性格和做事方式对应步骤记为 `done`（旧版 `identity:'done'` 已完成名字和头像）；上传图片后再通过 PATCH 保存该图片头像，即使版本未变，也计为已选头像，并在 `greeting|interview` 阶段完成头像步骤。
+- `POST /bots/from-profile` `{profileId,expectedRevision,language?}` 把已启用、不在回收站、还没有 `bot` 段的助手身份变成 Bot：同一档案加上 `bot` 段（新工作目录、默认设置、`chosen:{name:true,avatar:true}`、`onboarding:{phase:'greeting',flowVersion:2,converted:true,steps:{name,avatar,known:'done',personality?:'done'}}`，有 SOUL 时性格记为已定），再创建主聊天，返回同 `POST /bots`。名字、描述、SOUL、头像、记忆和技能不变；已有会话的身份标记不变，不移动。404 `PROFILE_NOT_FOUND`，409 `PROFILE_ALREADY_BOT`、`PROFILE_DISABLED`、修订冲突或 Bot 数量上限。主聊天创建失败时 Bot 已保存，可用 `POST /bots/:id/main-window` 补建。
+- `POST /bots/:id/trash` `{expectedRevision}` 将 Bot 可恢复地移入身份回收站，返回 `{ok,revision,trashed:true,bot:{id,name,trashedAt},stoppedSessions,recoverable:true,profile}`；历史、工作目录和记忆保留。共享档案预占与全部已知原生会话编辑预占，拒绝忙碌、排队、后台任务、未处理预约消息、学习及关联定时任务/已受理运行，核对修订并停止空闲 worker 后才写入档案；同步的最终依赖检查防止迟到工作。旧 `/profiles/:id/trash` 对 Bot 使用相同协调路径。失败保持未移走，不自动取消工作；可从身份恢复接口恢复。常见 409：`BOT_TRASH_STALE`、`BOT_WINDOW_STALE`、`BOT_WINDOW_ROTATING`、`SESSION_BUSY`、`SESSION_QUEUE_RECOVERY`、`BOT_HAS_SCHEDULES`、`BOT_HAS_DEFERRED`、`BOT_WORK_PENDING`。
+- `POST /bots/:id/windows` `{expectedRevision:<windowsRevision>,title?,focus?,emoji?,instructions?}` 创建新话题，返回 `{ok,window,windowsRevision}`；title 可省略（默认“新话题”，并在首轮问答自动生成标题与关注点后同步更新未手动改过的字段），传值时 1–80 字，focus 最多 500，emoji 最多 16，拒绝控制字符和未知字段。`instructions` 为话题指令（多行纯文本，省略为空，首尾空白去掉），最多 8192 UTF-8 字节，只允许换行（LF）和制表符两种控制字符；只存在窗口索引中，不写入原生标记的 metadata seed，索引从原生标记重建时不恢复。话题窗口的 worker 每次运行前重读索引，把非空指令放在 Bot 身份段的话题说明之后，修改从下一次运行生效，无需重开 worker。最多 100 个话题，包含归档；新话题是独立原生对话与记事本，共用 Bot 档案记忆，不复制主聊天。先 CAS 写 prepared 索引，再创建含 metadata seed 的原生标记，最后提交当前会话；中断时采用原标记，不重复创建。
+- `bot.notify` 为 `{version:2,proactive,quietHours:null|{start,end},dailyProactiveLimit:null|0..200,timeZone?}`，`start/end` 为 `HH:mm` 且不能相同，`dailyProactiveLimit:null` 表示不限，`timeZone` 为 IANA 时区。version 2 之前保存的上限读作默认 20。`PATCH` 的 `notify` 与已保存值合并。
+- `GET /bots/:id/follow-ups` → `{items:[{id,kind:'due'|'checkin',windowId,at,title,state:'pending',noteId?,due?}]}`，按时间排序；`DELETE /bots/:id/follow-ups/:itemId` → `{cancelled}`，已开始发送的 409，不存在的 404。关闭主动消息后排队未开始的运行记为 `skipped`（`proactive-off`）；话题归档、Bot 移到回收站时其未开始的运行记为 `cancelled`（`dropped`）。到期跟进取消后不会因同一条承诺再次加回。状态存于 `<agentDir>/pivane-bots/<profileId>/proactive.json`（私有文件）。
+- `PATCH /bots/:id/windows/:windowId` `{expectedRevision:<windowsRevision>,title?,focus?,emoji?,instructions?,archived?:boolean}` 修改话题或归档/恢复，返回同创建；只改所传字段，`instructions:''` 清除话题指令，校验同创建。主聊天不可修改；归档保留所有代，恢复沿用当前会话。归档拒绝忙碌/队列/待确认/草稿/后台/预约/侧聊/换代及关联定时工作，返回 409 `BOT_WINDOW_BUSY|BOT_WINDOW_ROTATING|BOT_TOPIC_SCHEDULED`。归档后新消息、原生会话入口和定时/延迟派发拒绝，409 `BOT_WINDOW_ARCHIVED`；只读历史仍可读取归档的当前代，不启动 worker。
+- `GET /bots/:id/topics/open-items` → `{v:1,topics:[{windowId,title,state:'ready'|'busy'|'unavailable'|'budget',items:[{title,kind,due?}],omitted?}],omittedTopics,windowsRevision}`；只读标题级未了事项，取 active open/commitment，按 Bot 隔离。最多 20 话题、40 项、每题 3 项、标题 120 字，每文件 2 MiB、总 8 MiB、150 ms 预算；失败表示未知，不表示空，无新 worker/模型请求。
+- `POST /bots/:id/main-window` 幂等补建或采用已有原生标记的主聊天。
+- `GET /bots/:id/windows/:windowId/session` 解析窗口当前一代并返回 `{window,session}`（会话行同 `/sessions`）；网页据此打开原生会话。窗口有中断的换代记录时先在档案预占和旧会话编辑预占内按原生证据完成恢复，再返回；只有采用新一代时才停止旧会话的运行实例，并先向已连接页面发送 `gateway_reconnect`；放弃时旧会话保持运行。暂时无法完成恢复（例如另一换代正在进行）时返回 409 `code:'BOT_WINDOW_ROTATING'`。
+- `GET /bots/:id/windows/:windowId/generations` → `{window,generations:[{generation,startedAt,endedAt,reason,current}]}`。
+- `GET /bots/:id/windows/:windowId/history?generation=N&view=index|turns&…` 只读分页较早一代，参数与返回同历史归档接口；服务端核对该代的原生窗口标记，不启动 worker。
+- `POST /bots/:id/windows/:windowId/rotate` `{expectedGeneration}` 维护入口：手动换代。`expectedGeneration` 必填（非负整数，缺失或无效返回 400），与当前代数不符返回 409，重复的旧请求不会再次换代。服务端在会话编辑预占内停止空闲 worker、写入新一代（初始条目：模型、思考程度、隐藏交接消息 `pivane-bot-handoff`（`details` 含 `sections`、原话 `tail:[{role,text,entryId,at?}]`（原条目与时间，删除核对按原时间），自动换代另有 `reconciled:true`）、窗口标记 `pivane-bot-window`），再提交窗口索引；代数不符 409。中断后按原生标记的 `predecessor{sessionId,lastEntryId}` 恢复或放弃。打开中的连接收到 `gateway_window_rotated {profileId,windowId,generation}` 后以 4007 关闭，网页重新解析窗口。
+- `GET /bots/:id/windows/:windowId/notebook` → `{generation,version,items:[{id,kind,text,status,due,by,supersedes,createdAt,updatedAt,source}]}`：窗口当前一代分支重放出的记事本（“我记着的事”），不含已删除条目。`kind` 为 `decision|commitment|open|preference|ref`，`status` 为 `active|done|cancelled|superseded`，`by` 为 `bot|summary|user`（最初由谁记下），`source` 为 `null` 或 `{role:'user'|'assistant'|'toolResult',text}`（保存的原话引文，或当前一代中来源消息的前 160 字）；`version` 是账本状态摘要，用于修改时核对。
+- `POST /bots/:id/windows/:windowId/notebook` `{expectedGeneration,expectedVersion,ops}` 修改记事本，返回同 GET。`ops` 1–20 条，只接受 `{op:'update',id,text?,due?}`（`due` 为 `YYYY-MM-DD`、ISO 时间 `YYYY-MM-DDTHH:MM[:SS]`（可带 `Z` 或时区偏移，网页总是带偏移）或 null）、`{op:'status',id,status:'active'|'done'|'cancelled'}`、`{op:'delete',id}`；一批全部成立才写入。窗口有运行实例时由它写入原生 custom 条目 `pivane-bot-ledger`，否则服务端预占会话文件后追加；只在会话空闲时接受。代数不符 409 `BOT_WINDOW_STALE`，正在换代 409 `BOT_WINDOW_ROTATING`，版本不符 409 `NOTEBOOK_CHANGED`，正在运行 409 `SESSION_BUSY`，无效修改 400 `LEDGER_INVALID`。修改会在下一次运行前以隐藏消息告诉模型：列出每条改过的记录现在的完整状态（种类、状态、截止日期或“无截止日期”、内容；删除的只说明已删除），超过 40 条时在这份列表前另附完整记事本。同一条隐藏消息另列 Bot 经 `window_note` 记下、但会话里没有对应 `window_note` 结果的记录（例如在 Codemode 脚本里调用，Pi 不保存嵌套结果），与用户修改分开说明，替换了其他记录的连同被替换的记录一起列出（`details.reason` 有用户修改时为 `user-edits`，否则为 `unseen-notes`）。记事本最多 1000 条未删除的记录；删除记录保留最近 1000 条（不含正文，只有种类、出处和正文摘要值），用于不让摘要把删除的事记回来，编号不重复使用。
+- `POST /bots/:id/onboarding` `{expectedRevision,action:'start'|'skip'|'restart'|'model-choice'|'first-task',model?,choice?}`；restart 清空访谈步骤并回到 `interview`，保留已选名字/头像，升级 `flowVersion:2`。新建、开始问候或本次确认结束的访谈使用本地收尾，已完成的旧 Bot 不自动重开。`model-choice` 必须提供 `model:null|{provider,id,thinking?}`，记录 `steps.model='done'`；新选择验证模型目录和思考等级，保留同一旧不可用选择或默认可不依赖目录。不可用返回409 `BOT_MODEL_UNAVAILABLE`。`first-task` 必须提供 `choice:study|plan|write|chat|own|later`，仅 flowVersion2 且 phase done；记录 `firstTaskChoice` 与 `steps['first-task']`（later为skipped，其余done），尚未回答model时记为skipped但不改变模型。这些接口不发送聊天或执行任务；状态不符返回409 `BOT_ONBOARDING_LEGACY|BOT_INTERVIEW_PENDING`。
+- `POST /bots/:id/setup` `{expectedRevision,windowId,toolCallId,changes?,picture?,later?,workStyleShown?}` 回答模型 `bot_setup_propose` 提出的设置卡：该调用必须仍在窗口当前一代中等待回答。`changes` 省略时采用提议，只能包含卡上提出的 `name|avatar|job|personality|workStyle|aboutUser|finish` 字段，可编辑值；null 或清空后的字段不保存，空白的“关于你”条目忽略。提议本身的空值也视为未提出。`workStyle:'free'|'balanced'|'ask'` 对应 `permissions.preset`，按此顺序越来越谨慎；卡片只能保持当前方式或变得更谨慎，更自由的值返回 409 `code:'BOT_WORK_STYLE_FREER'`，需在 Bot 设置中修改。
+
+  设置提议和确认的 `avatar` 可为旧版 emoji 字符串，或 `{kind:'preset',id}`（只接受上述三个已知 ID，拒绝额外字段）；确认时可在两种形式之间切换。emoji 字符串保存为 `profile.avatar:{kind:'emoji',value}`，预设对象直接保存为 `profile.avatar`。已选预设视为已定头像，重新访谈及仅修改名字／性格时保留。
+
+  `picture` 为刚经头像接口上传的图片版本（64 位小写十六进制，即头像接口返回的 `profile.avatar.version`），表示卡上的头像改用这张图片：卡上必须提出过头像；档案头像必须仍是这张图片，否则 409 `code:'BOT_PICTURE_CHANGED'`。保存名字或头像时分别记为已选。`later` 只接受 `true`，不能与 `changes` 或 `picture` 同传；不保存卡片提出的值，只将其中尚未处理的访谈步骤记为 `skipped`；已完成或跳过的步骤保持原状。正常保存时，提出且保存的字段对应步骤记为 `done`；未选中或清空的项，若尚未处理则记为 `skipped`。名字、表情／预设头像、职责、性格的提议值与当前值相同也记为 `done`（包括该字段未包含在编辑结果中时）；只要卡上提出了访谈字段，接受空的编辑结果 `changes:{}`。`finish:true` 可结束访谈。
+
+  未变的 `workStyle` 只在尚未回答的独立做事方式卡中确认（可同时带 `finish`），此时保持当前值也完成 `work` 步骤。夹带在其他设置项中的未变方式，以及步骤已完成或跳过后的相同提议，不保存，也不确认或跳过 `work`；空白、null 和空的“关于你”不算其他提议项。真实提出或明确编辑成不同的方式仍按上述谨慎程度校验，旧客户端在混合卡中明确选得更谨慎也仍可保存。
+
+  网页保存或稍后决定时携带严格布尔值 `workStyleShown`，表示这份卡片草稿实际是否展示了做事方式选择。false 时不保存该方式，也不推进或跳过 `work`；即使冲突刷新后当前方式已改变，也不把隐藏字段当成回答。true 必须对应提议中的 `workStyle`，并继续校验只能保持或变得更谨慎。旧客户端省略时按上一段推断。该字段不写入档案，不授予额外权限。
+
+  返回 `{ok,revision,bot,saved,later?,user?:{added,documentSaved,error?},progressReverted?}`，`saved` 是本次确认的字段，`saved.picture` 表示采用了图片；稍后决定的响应带 `later:true`。“关于你”条目经档案文档服务去重追加到 `USER.md`，是否保存以 `user.documentSaved` 为准。写入失败时，已保存的身份改动保留，服务端再做一次修订写入，将 `about` 步骤及本次结束访谈的转换恢复到提交前；若这次进度修正也失败，响应带 `progressReverted:false`。
+
+  模型工具回执与 HTTP 响应分开：确认后为 `{status:'saved'|'not_saved',saved,kept?,current,note?}`；`saved` 报告实际变化、新增的“关于你”和本次完成访谈的标记，`kept` 列出提出但值未变的字段，`current` 为 `{name,avatar,job,personality,workStyle,interview}`（`interview` 为 `greeting|interview|done|skipped`）。`current.avatar` 对 emoji 仍为字符串，对图片仍为 `(picture <版本前8位>)`，无头像为 null；预设返回 `{kind:'preset',id}`，按结构比较，未变的预设记入 `kept` 而不误报已改变。访谈中首次确认当前做事方式时，即使值未变，也以 `saved.workStyle` 报告。拒绝回执为 `{status:'declined',later?:[字段名]}`，`later` 仅列出本次新记为跳过的提议字段（如 `workStyle`、`aboutUser`，不是步骤键）；只有 `declined` 不代表进度已记为跳过。无回答、中止或没有界面时分别返回 `no_answer|aborted|unavailable`。
+- `GET /bots/:id/about-sources` → `{sources:[{profileId,name,avatar,entries}]}`，列出其他 Bot 的“关于你”条目。
+- `POST /bots/:id/about` `{expectedRevision,action:'copy'|'decline',fromProfileId?,entries?}`；copy 的条目必须仍存在于来源（否则 409），去重追加到本 Bot，记录 `onboarding.steps.known`。
+
+新增的长期规则为 `{v:1,id,tool:'bash'|'powershell'|'write'|'edit',value,cwd}`；id 为 1–64 个字母、数字、下划线或短横线（首字符字母或数字），最多 200 条、每条序列化最多 2048 字节。cwd 必须是存在的目录并规范为绝对真实路径；命令按完整字节匹配，文件按规范绝对路径匹配，不允许通配符或目录授权。只接受能理解的非危险操作，运行时仍先检查敏感路径和危险性。已有无法识别的规则对象按原值保留、不生效；新的无效或未知规则拒绝。PATCH 可以只改变 rules，未提供的 preset 和未知设置字段保持。
+
+Worker 工具 `bot_topic_propose {title,focus?,emoji?}` 在任何档位都需要原生 Boolean 确认。确认后私有 `POST /api/pi/bot-topics/create {toolCallId,title,focus?,emoji?}`（不接受 `instructions`，话题指令只由用户设置） 只接受存活、当前代 Bot worker 的导航 Bearer Token，身份从 `worker.loadedBot` 取；以 session/toolCallId 派生 UUID，同一调用不重复建话题，参数冲突拒绝。成功结果 `details.pivaneBotTopic={v:1,action:'created',profileId,window}`，不自动切换页面；无人值守、拒绝、中止和非 true 回答均不创建。私有 `POST /api/pi/bot-topics/open-items {}` 仅当前主聊天 worker 可用，返回相同标题索引；工作台 Cookie/管理 Token 不代替 worker Token，worker Token 也不能访问 owner 索引接口。
+
+WebSocket `open_session` 可带 `botWindow:{profileId,windowId}`（Bot 页面打开和重连时都带）：服务端在启动 worker 前和订阅后各核对一次，只接受该窗口当前一代；否则返回失败响应 `errorCode:'BOT_WINDOW_STALE'`（已换代）或 `'BOT_WINDOW_ROTATING'`（正在换代），网页重新解析窗口。不带 `botWindow` 时按普通原生会话打开（Pi Agent 页面），但归档话题仍拒绝创建可运行 worker，返回 `BOT_WINDOW_ARCHIVED`。另有 `gateway_bot_notice {notice:'model_unavailable',provider,id}`：Bot 指定的模型不可用，本轮继续使用当前模型。
+
+Bot 任意档位中需要确认的工具调用在执行前发出 `extension_ui_request` `method:'confirm'`，`title` 固定为 `允许这一步吗？ / Allow this step?`，`message` 为 `<kind> #<token>\n\n<detail>`，可记住的非危险操作为 `<kind> #<token>\nrule <JSON规则>\n\n<detail>`。`token` 为 16 位十六进制；`kind` 为 `command|delegate|outside|write|memory|action|schedule|topic`；detail 为命令、路径、记忆内容、定时任务标题时间、话题名字关注点或工具名，最多约 2000 字符。按普通确认回复 `{type:'extension_ui_response',id,confirmed:true|false}`，只有严格 true 允许；拒绝、取消、无界面、定时运行或 30 分钟无回答时不执行。需要长期允许时，owner 先核对最新设置并通过 CAS 保存精确规则，再仅对仍有效的原请求确认；失败或冲突不自动重试。受保护或无法可靠判断的操作没有 rule 候选，规则不能绕过始终拦截与危险检查。请求在 worker 内结束后，仍挂起的同一请求由服务端撤回并广播 `gateway_ui_resolved`。
+
+Bot 窗口的 worker 提供以下记事本和回看工具：`window_note`（记事本 add/update/done/cancel/reopen；`due` 和 `replaces` 为空字符串时视为未给，update 的 `due:"none"` 清除截止时间。工具在执行时立即追加原生 custom 条目 `pivane-bot-ledger` `{v:1,ops,toolCallId}`，所以经 Codemode 等包装调用的记录也会保存；结果 `details.pivaneNoteSaved:{v:1,ids}`。较早版本写在结果 `details.pivaneLedger` 中的记录仍会重放）、`window_recall` 与 `window_read`（只读检索和查看本窗口各代原文，带 `readOnlyHint`）。Bot 窗口的压缩由扩展写结构化摘要（`details.pivaneBot` 含 `sections`、记事本对账 `ledger:{ops,snapshot}`、被拒的变更，本代到期时另有 `includedKept:true`），回答缺少部分或失败时回落 Pi 原生摘要。服务端在压缩完成约 3 秒后检查换代条件（8 MiB、8000 条或 60 天）；到期且原生分支最后一次压缩是带 `includedKept` 的结构化摘要、其后没有新的消息时才换代（在会话编辑预占内再核对一次），否则等下一次压缩。规则见 [Bot 模式](BOT_MODE.md#长期聊天的维护)。
+
+Bot 窗口会话不能移动或绑定消息渠道。以 Bot 档案为目标的定时任务默认进入主聊天当前一代；目标带 `windowId` 时进入该 Bot 指定窗口的当前一代，运行期间使用任务准入和计价时选定的模型；`GET /cron` 的 `homes` 中 Bot 的主线程按主聊天当前一代派生（`bot:true`），`PUT /cron/homes/:profileId` 对 Bot 返回 409，不保存也不创建会话。
+
+Bot 窗口另有 `bot_schedule` 工具，动作是 `create/list/cancel`。内部 `POST /api/pi/bot-schedule/:action` **只接受存活 worker 的导航 Bearer Token**；工作台 Cookie／管理 Token 不能代替。worker 必须加载 Bot 身份，且仍是该窗口当前一代；`profileId/windowId` 仅从 worker 取，不接受请求体指定。查询与取消只涉及以本 Bot 为 profile 目标的任务（包含它的全部窗口）。
+
+- `create` 带 `proactive:true` 时是 Bot 自己约的“回来看看”，不是定时任务：只能 `once`、不能 `needsTools:true`、`message` 最多 2000 字；任何做事方式都不弹确认（受“主动找你”开关、安静时段和推送上限约束，可在设置里取消）。结果为 `{v:1,action:'created',proactive:true,profileId,followUp:{id,kind:'checkin',windowId,at,title,state,local}}`；关闭主动消息时 409 `BOT_PROACTIVE_OFF`，待发过多时 409 `BOT_CHECKIN_LIMIT`。`list` 在有待发跟进时另带 `followUps`；`cancel` 接受 24 位十六进制跟进 ID，返回 `{v:1,action:'cancelled',proactive:true,profileId,followUp}`；取消自己的回来看看不确认，取消到期提醒（`kind:'due'`）在“稳妥”“每次都问”中走确认卡，详情为 `Cancel reminder: <title>\n<本地时间>`。
+- `create`：`{toolCallId,title,message,once?,repeat?,timeZone?,needsTools?}`。`title` 最多 120 字，`message` 最多 40000 字；`once` 为本地墙上时间 `YYYY-MM-DD HH:mm`，与五段 cron `repeat` 必须二选一。`timeZone` 为 IANA 时区，默认服务端时区；拒绝过去时间、无效日期和夏令时缺失的本地时刻，重复时刻选首次。`needsTools:false`（默认）保存为文字模式，true 为工作模式；默认启用，其余执行限制和预算沿用调度器。主聊天使用 `{kind:'profile',profileId}`，话题使用 `{kind:'profile',profileId,windowId}`。以窗口当前会话 ID 和 `toolCallId` 派生稳定 UUID，同一调用重试不重复创建；已有同一调用不接受更改内容。定时运行未结束或仍待核对时拒绝创建。
+- `list`：`{timeZone?}`，返回本 Bot 未删除任务和该时区的当前本地时间 `now`（`YYYY-MM-DD HH:mm`）。查看不需要确认。
+- `cancel`：`{id,expectedRevision?}`，删除对应任务但保留历史；按调度器现有规则，正在运行或待核对的任务不能删除。`expectedRevision` 由 worker 审批流程内部保存和发送，不向模型暴露；修订已改变则返回 409，提示任务在批准后有变，请重新列出，不取消任何任务。“放手”无审批时取消当前修订。
+
+“稳妥”和“每次都问”的创建／取消走现有确认卡，`kind:'schedule'`。创建详情固定为 `Create: <title>\n<YYYY-MM-DD HH:mm 或规范化 cron> (<timeZone>)`；取消详情为 `Cancel: <title>\n<单次本地时间或 cron> (<timeZone>)`。创建时先固定时区与时间参数，确认和执行复用；取消先只读查询本 Bot 任务，确认时保留该任务修订。不存在或不属于本 Bot 的 ID 不发确认，执行返回 404。拒绝、取消或无人值守沿用原有阻止规则。
+
+HTTP 成功响应也是工具结果 `details.pivaneBotSchedule` 的值（工具 `content` 为同值的短 JSON）：
+
+```ts
+{
+  v: 1,
+  action: 'created' | 'cancelled' | 'listed',
+  job?: JobView,       // created/cancelled
+  jobs?: JobView[],    // listed
+  now?: string        // listed；请求时区的 YYYY-MM-DD HH:mm
+}
+// JobView
+{
+  id: string,
+  title: string,
+  message: string,    // 最多 500 字符的任务说明
+  schedule: { kind: 'once', at: number, timeZone: string }
+          | { kind: 'cron', expression: string, timeZone: string },
+  nextAt: number | null,  // 毫秒时间戳
+  enabled: boolean,
+  revision: number,
+  windowId: string | null, // null 表示 profile 的主聊天
+  local: string | null    // nextAt 在任务时区的 YYYY-MM-DD HH:mm；无下次时为 null
+}
+```
+
 ### Agent 任务线程
 
 `GET /status.agentThreads=true` 标记任务线程后端，`agentTaskResults=true` 标记来源线程结果回执。受管持久 Agent 的 `agent_thread` 工具通过私有 POST `/agent-threads/create|status|models|result` 创建任务、查询状态/模型或分页只读原生结果。身份绑定存活源 worker；工作台 Cookie/Token 不能代替。目录未完成时返回202及 `TASK_INDEXING`/coverage，不把未核实记录当作不存在。`/activity.agentThreadLaunches`、`agentTaskIndexing`、`agentTaskReturns` 分别报告创建、目录读取和交付工作，均进入维护空闲与停机等待。
 
-工作台身份使用 `GET /agent-threads/results?cwd=...&sourceSessionId=...` 读取来源线程的任务与最近100份结果，返回 `status`、`tasks`、`results`、`coverage`、`total`、`truncated`。结果含 deliveryId、requestId、sourceSessionId、session、status、resultId、entryId、completedAt、preview、truncated、delivered、read。`POST /agent-threads/read` 接受 cwd/sourceSessionId/deliveryId，仅由当前来源 worker 在空闲时保存已读；忙碌或归属错误返回409。
+工作台身份使用 `GET /agent-threads/results?cwd=...&sourceSessionId=...` 读取来源线程的任务与最近100份结果，返回 `status`、`tasks`、`results`、`coverage`、`total`、`truncated`。结果含 deliveryId、requestId、sourceSessionId、session、status、resultId、entryId、completedAt、preview、truncated、delivered、read。`POST /agent-threads/read` 接受 cwd/sourceSessionId/deliveryId，由当前已打开的来源 worker 保存已读（来源运行中仅保存已读标记，正文回执仍待空闲交付）；来源未打开、不满足写入条件或归属错误返回409。
 
 来源忙碌或关闭不丢结果，重开后从原生任务状态和回执恢复；回传不触发新的模型轮次。任务参数、预算、旧任务兼容和失败语义见[Agent 任务线程](AGENT_THREADS.md)。
 
@@ -261,7 +350,7 @@
 
 以下维护接口暂保留供既有集成兼容及受控恢复，**当前设置页不调用也不显示执行入口**。`GET /settings/updates/maintenance`返回启动器能力、generation、busy、版本指针和最近维护结果；`POST /settings/updates/review`只接受 `{action:"update"或"backup"或"restart"}`，返回绑定服务端目标版本和进程代次的 10 分钟票据。`POST /settings/updates/execute`只接受 `{ticket,confirmed:true,draftsSaved:true,externalWritersStopped:true}`，再次检查空闲并暂停预约，接受返回 202。票据一次有效，不接受命令、URL、路径或版本覆盖；忙碌/过期/重复为 409，格式错误 400，不支持或交接失败 503。交接不确定不自动解锁或重试。
 
-`maintenance.retention` 是只读摘要：`releases`、`backups` 为配置的保留数，`null` 表示对应类型关闭（包含已排队回收区）。`last` 初始为 `null`，随后含 `at` 和 `phase`：`running`、`disabled`、`skipped`、`succeeded`、`failed` 或 `cancelled`。成功含 `quarantinedReleases`、`quarantinedBackups`（移入隔离的数量）、`purged`（实际删除的槽位数）、`keptReleases`、`keptBackups`、`incomplete`；跳过含 `reason`，失败／取消含 `error:"cleanup-incomplete"`，不把部分删除计为成功。数值上限不覆盖恢复保护。自动删除仅支持 Linux 描述符边界，权限、原生完整性或能力不足时保留。`busy` 包含启动／清理的完整生命周期；维护任务的 `retaining` 是非终态，清理结束且已就绪子进程仍存在后才记主要任务成功。主要维护与随后保留清理各自记录结果，清理失败不自动回退已启动的服务。安全范围、预算和不确定删除保留规则见[版本与更新](UPDATES.md)。
+`maintenance.retention` 是只读摘要：`releases`、`backups` 为配置的保留数，`null` 表示对应类型关闭（包含已排队回收区）。`last` 初始为 `null`，随后含 `at` 和 `phase`：`running`、`disabled`、`skipped`、`succeeded`、`failed` 或 `cancelled`。成功含 `quarantinedReleases`、`quarantinedBackups`（移入隔离的数量）、`purged`（实际删除的槽位数）、`keptReleases`、`keptBackups`、`incomplete`、`unverified`（本轮预算内未核验、因此未动的较旧备份数）；跳过含 `reason`，失败／取消含 `error:"cleanup-incomplete"`，不把部分删除计为成功。数值上限不覆盖恢复保护。自动删除仅支持 Linux 描述符边界，权限、原生完整性或能力不足时保留。`busy` 包含启动／清理的完整生命周期；维护任务的 `retaining` 是非终态，清理结束且已就绪子进程仍存在后才记主要任务成功。主要维护与随后保留清理各自记录结果，清理失败不自动回退已启动的服务。安全范围、预算和不确定删除保留规则见[版本与更新](UPDATES.md)。
 
 所有接口复用身份/Origin、响应 no-store。`maintenance.job`增加脱敏 `output`、`outputTruncated`、`exitCode`、`fromVersion`与`installedVersion`；输出按行回传并保留有界尾部，只有实际退出后才返回退出码，成功后刷新版本卡片。普通`node server.js`与`npm start`自动支持，无需改服务启动命令；`--direct`为不含自动维护的开发入口。维护期间拒绝普通 API/WS 新工作；关闭页面不取消已接受操作。Pi 精确依赖在独立快照中安装并验证，然后停机备份和启动；Pivane 应用更新使用 `action:"application"`、可选 `channel` 复用 review/execute，票据绑定服务器选择的版本和 SHA256；能力以 `maintenance.appUpdateSupported` 为准。兼容字段 `installMode:"manual"`不表示受管维护不可用。字段、文件权限、预算、失败处理及恢复边界见[版本与更新](UPDATES.md)。
 
@@ -296,6 +385,8 @@
   "replyNotices": [{ "cwd": "/workspace/demo", "sessionId": "01...", "completionId": "uuid", "completedAt": "ISO timestamp" }]
 }
 ```
+
+`replyNotices` 项带 `quiet:true` 时是 Bot 主动发的消息在安静时段或超出推送上限时的回复：照常标为未读，但页面不弹提醒、不推送。
 
 `phase` 为 `running`、`tool`、`compacting`、`retrying`、`waiting`、`idle`、`error` 或 `stopped`。`busy` 包含压缩/重试/工具执行及等待确认。`agent_end` 不代表完整任务结束，必须等 `agent_settled`。失败/停止标记只在 worker 生命周期内保留，不是持久任务记录。临时 runtime 和外部终端运行实例不在摘要中；不存在某 ID 不代表外部终端空闲。
 
@@ -415,10 +506,10 @@ Body: `{ "cwd": "/workspace/demo" }`。先经过 token/Origin/realpath 根检查
 Body：
 
 ```json
-{ "cwd": "/workspace/demo", "name": "optional" }
+{ "cwd": "/workspace/demo", "name": "optional", "profileId": "optional identity ID or null" }
 ```
 
-创建立即可见的原生空 Pi session，返回单个 session object。HTTP 201。
+创建立即可见的原生空 Pi session，返回单个 session object。HTTP 201。`profileId` 为已启用身份（含 Bot）的 ID 时新会话使用该身份（普通线程，不是 Bot 窗口）；为 null 时无身份；省略时沿用项目默认身份（旧客户端兼容）。
 
 ### `PATCH /sessions/:id`
 

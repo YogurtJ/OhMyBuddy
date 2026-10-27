@@ -200,32 +200,29 @@ async function main() {
         assert.equal(savedUser.indexSynced, true);
         assert.equal(savedUser.usage.limit, 512);
 
-        await page.locator('#workspace-assistant-toggle').click();
-        await page.locator('#pi-assistant-profile').selectOption(profileId);
+        // M4-5c: the assistant chat page is retired with Bots. Categories that already exist stay usable from
+        // the identity page: "Chat in this project" opens a new Pi Agent thread with the identity and category.
+        assert.equal(await page.locator('#workspace-assistant-toggle').isVisible(), false, 'no assistant chat entry');
+        let categoryRevision = (await api('GET', '/assistant-projects')).revision;
         for (const name of ['Fixture Alpha', 'Fixture Beta']) {
-            await page.locator('#pi-assistant-add-project').click();
-            const dialog = page.locator('.pi-assistant-project-editor[open]');
-            await dialog.locator('[name=name]').fill(name);
-            await dialog.locator('[name=cwd]').fill(cwd);
-            await dialog.locator('[name=instructions]').fill(`Synthetic instructions for ${name}`);
-            await dialog.locator('[type=submit]').click();
-            await dialog.waitFor({ state: 'hidden' });
-            await page.locator('.pi-assistant-group').filter({ hasText: name }).waitFor();
+            categoryRevision = (await api('PUT', '/assistant-projects', { expectedRevision: categoryRevision, project: { name, cwd, description: '',
+                instructions: `Synthetic instructions for ${name}`, profileIds: [profileId], archived: false } })).revision;
         }
         const groups = (await api('GET', `/assistant-projects?profileId=${profileId}`)).projects;
         assert.equal(groups.length, 2);
         assert.equal(groups[0].cwd, groups[1].cwd);
         const groupSessions = [];
         for (const group of groups) {
-            await page.locator(`.pi-assistant-group[data-assistant-project-id="${group.id}"] [data-assistant-action=select]`).click();
-            await page.locator('#pi-new-session').click();
-            try { await page.waitForFunction(id => location.hash.includes('sessionId=')
-                && document.querySelector('#pi-session-profile')?.textContent.includes('Fixture Guide')
-                && document.querySelector(`.pi-assistant-group[data-assistant-project-id="${id}"] [data-session-id]`), group.id, { timeout: 10000 }); }
+            await page.locator('#workspace-profiles-toggle').click();
+            await page.locator(`[data-profile-id="${profileId}"]`).click();
+            await page.locator('[data-profile-section=overview]').click();
+            const row = page.locator('.pi-profile-project').filter({ hasText: group.name });
+            await row.locator('.pi-id-btn').filter({ hasText: 'Chat in this project' }).click();
+            try { await page.waitForFunction(() => location.hash.startsWith('#/chat') && location.hash.includes('sessionId=')
+                && document.querySelector('#pi-session-profile')?.textContent.includes('Fixture Guide'), null, { timeout: 10000 }); }
             catch (error) {
                 console.error(JSON.stringify({ stage: 'group-session', name: group.name, hash: await page.evaluate(() => location.hash),
                     badge: await page.locator('#pi-session-profile').innerText(), toast: await page.locator('#toast-region').allInnerTexts().catch(() => []),
-                    sessions: (await api('GET', `/assistant-projects/${group.id}/sessions?profileId=${profileId}`)).sessions.length,
                     pageerrors: desktop.errors }));
                 await screenshot(page, 'group-session-failure-1440-en-dark'); throw error;
             }
@@ -233,6 +230,7 @@ async function main() {
             assert.equal(sessions.length, 1);
             assert.equal(sessions[0].assistantProject.id, group.id);
             assert.equal(sessions[0].agentProfile.id, profileId);
+            assert.equal(new URLSearchParams(page.url().split('?')[1]).get('sessionId'), sessions[0].id);
             await page.locator('#pi-actual-identity img').waitFor();
             await page.locator('#pi-composer-identity img').waitFor();
             groupSessions.push(sessions[0]);
@@ -240,47 +238,18 @@ async function main() {
             await page.locator('#pi-new-session:not([disabled])').waitFor();
         }
         assert.notEqual(groupSessions[0].id, groupSessions[1].id);
-        const first = page.locator(`.pi-assistant-group[data-assistant-project-id="${groups[0].id}"] [data-session-id="${groupSessions[0].id}"]`);
-        await first.click();
+        // A draft and attachment survive leaving the thread and coming back through browser history.
         await page.locator('#pi-input').fill('Draft retained through navigation');
         await page.locator('#pi-file-input').setInputFiles({ name: 'fixture.txt', mimeType: 'text/plain', buffer: Buffer.from('Synthetic attachment') });
         await page.locator('#pi-attachments .pi-attachment-chip').waitFor();
-        // Hold one discovery response after the group rows render, then leave before it settles.
-        // Returning to the same identity/project must start a fresh read, including via browser history.
-        let projectResponseObserved = false, discoveryHeld = false, releaseDiscovery;
-        const discoveryGate = new Promise(resolve => { releaseDiscovery = resolve; });
-        const observeProjects = response => { if (response.url().startsWith(`${base()}/api/pi/assistant-projects?`)) projectResponseObserved = true; };
-        const holdDiscovery = async route => {
-            const shouldHold = projectResponseObserved && !discoveryHeld;
-            if (shouldHold) discoveryHeld = true;
-            const response = await route.fetch();
-            if (shouldHold) {
-                await page.evaluate(() => { window.__assistantDiscoveryHeld = true; });
-                await discoveryGate;
-            }
-            await route.fulfill({ response });
-        };
-        page.on('response', observeProjects);
-        await page.route(`${base()}/api/pi/sessions?cwd=*`, holdDiscovery);
-        try {
-            await page.locator('#pi-refresh-sessions').click();
-            await page.waitForFunction(() => window.__assistantDiscoveryHeld === true);
-            await page.locator('#workspace-profiles-toggle').click();
-            await page.goBack();
-            releaseDiscovery();
-            await page.waitForFunction(() => location.hash.startsWith('#/assistant'));
-            assert.equal(await page.locator('#pi-input').inputValue(), 'Draft retained through navigation');
-            assert.equal(await page.locator('#pi-attachments .pi-attachment-chip').count(), 1);
-            await page.goForward();
-            await page.goBack();
-            assert.equal(await page.locator('#pi-attachments .pi-attachment-chip').count(), 1);
-            await page.waitForFunction(() => document.querySelectorAll('.pi-assistant-group').length === 2
-                && !document.querySelector('#pi-assistant-profile-status')?.textContent.trim());
-        } finally {
-            releaseDiscovery();
-            await page.unroute(`${base()}/api/pi/sessions?cwd=*`, holdDiscovery);
-            page.off('response', observeProjects);
-        }
+        await page.locator('#workspace-profiles-toggle').click();
+        await page.goBack();
+        await page.waitForFunction(id => location.hash.startsWith('#/chat') && location.hash.includes(`sessionId=${id}`), groupSessions[1].id);
+        assert.equal(await page.locator('#pi-input').inputValue(), 'Draft retained through navigation');
+        assert.equal(await page.locator('#pi-attachments .pi-attachment-chip').count(), 1);
+        await page.locator('#pi-input').fill('');
+        await page.locator('#pi-attachments [data-remove-attachment]').click();
+        await page.locator('#pi-attachments .pi-attachment-chip').waitFor({ state: 'detached' });
         await screenshot(page, 'assistant-1440-en-dark');
 
         await page.locator('.nav-btn[data-tab=chat]').click();
@@ -343,18 +312,20 @@ async function main() {
         await desktop.context.close();
 
         for (const [width, locale, theme] of [[1280, 'zh-CN', 'mint'], [393, 'zh-CN', 'dark'], [320, 'en', 'mint']]) {
+            // An old assistant thread link opens that thread in Pi Agent, in its real folder.
             const view = await open(width, locale, theme, `#/assistant?profileId=${profileId}&projectId=${groups[0].id}&sessionId=${groupSessions[0].id}`);
             try {
-                await view.page.locator('#pi-assistant-profile').waitFor();
-                await view.page.waitForFunction(id => document.querySelector('#pi-assistant-profile')?.value === id, profileId);
+                const opened = ({ sessionId }) => location.hash.startsWith('#/chat') && location.hash.includes(`sessionId=${sessionId}`)
+                    && document.querySelector('#pi-session-profile')?.textContent.includes('Fixture Guide');
+                await view.page.waitForFunction(opened, { sessionId: groupSessions[0].id });
+                assert.equal(await view.page.locator('#pi-assistant-switcher').isVisible(), false);
                 if (width === 1280) {
                     await view.page.reload({ waitUntil: 'domcontentloaded' });
-                    await view.page.waitForFunction(({ id, sessionId }) => location.hash.includes(`sessionId=${sessionId}`)
-                        && document.querySelector('#pi-assistant-profile')?.value === id, { id: profileId, sessionId: groupSessions[0].id });
+                    await view.page.waitForFunction(opened, { sessionId: groupSessions[0].id });
                 }
                 if (width < 900) {
                     await view.page.locator('#pi-toggle-sessions').click();
-                    await view.page.locator('.pi-assistant-group').first().waitFor();
+                    await view.page.locator(`#pi-session-pane [data-session-id="${groupSessions[0].id}"]`).first().waitFor();
                     await view.page.waitForFunction(() => {
                         const pane = document.querySelector('#pi-session-pane');
                         return pane.classList.contains('open') && pane.getBoundingClientRect().left >= -1;

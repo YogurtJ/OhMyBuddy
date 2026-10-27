@@ -39,6 +39,12 @@ export interface AsyncLaneProjection {
 /** Project already-loaded async status facts into one bounded, render-only lane row. */
 export declare function projectAsyncLane(job: AsyncJobState, ...args: [selectedStep?: AsyncJobStep]): AsyncLaneProjection | undefined;
 export declare function widgetRenderKey(job: AsyncJobState, expanded?: boolean): string;
+/** A child's task in one line: its label and task, else its session name without the repeated agent name. */
+export declare function stepTaskSummary(step: {
+    description?: string;
+    label?: string;
+    sessionName?: string;
+}, agentName: string | undefined): string | undefined;
 /** Structural identity of the workflow rows that Fleet can cover. */
 export declare function inlineWorkflowRenderKey(job: AsyncJobState, children: AsyncJobState[]): string;
 /** Presentation-only coverage from the mounted inline Fleet roster, never configuration. */

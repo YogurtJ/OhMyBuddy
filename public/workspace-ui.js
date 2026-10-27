@@ -116,10 +116,12 @@
         if (app && managementPage) app.append(managementPage);
         const hostLabel = document.getElementById('workspace-host');
         if (hostLabel) { hostLabel.textContent = window.location.host; hostLabel.title = window.location.host; }
-        const routeTabs = new Set(['chat', 'assistant', 'cron', 'artifacts', 'media', 'profiles', 'extensions', 'settings']);
+        const routeTabs = new Set(['chat', 'assistant', 'bot', 'cron', 'artifacts', 'media', 'profiles', 'extensions', 'settings']);
         const settingsTabs = new Set(['providers', 'media', 'models', 'system-prompts', 'native', 'access', 'usage', 'updates']);
         const extensionTabs = new Set(['extensions', 'installed', 'mcp', 'channels']);
         const moreTabs = new Set(['cron', 'artifacts', 'media', 'profiles', 'extensions']);
+        const inMore = tab => moreTabs.has(tab);
+        const moreItems = () => [...(moreMenu?.querySelectorAll('[data-more-tab]') || [])].filter(item => item.getClientRects().length);
         document.querySelectorAll('[data-cron-nav]').forEach(label => { label.textContent = translateUi('定时任务'); });
         const moreToggle = document.getElementById('workspace-more-toggle');
         const moreMenu = document.getElementById('workspace-more-menu');
@@ -256,7 +258,7 @@
             if (restoreFocus && wasOpen) moreToggle?.focus({ preventScroll: true });
         }
         function parseRoute() {
-            const match = /^#\/(chat|assistant|cron|artifacts|media|profiles|extensions|settings)(?:\?(.*))?$/.exec(location.hash);
+            const match = /^#\/(chat|assistant|bot|cron|artifacts|media|profiles|extensions|settings)(?:\?(.*))?$/.exec(location.hash);
             if (!match) return { tab: 'chat', params: new URLSearchParams() };
             return { tab: match[1], params: new URLSearchParams(match[2] || '') };
         }
@@ -287,9 +289,9 @@
             const pending = group && !window.PiFeatures.ready(group);
             closeMoreMenu();
             if (featureError.open) featureError.close();
-            if (tab === 'chat' || tab === 'assistant') lastConversation = location.hash || '#/chat';
-            moreToggle?.classList.toggle('active', moreTabs.has(tab));
-            if (moreTabs.has(tab)) moreToggle?.setAttribute('aria-current', 'page'); else moreToggle?.removeAttribute('aria-current');
+            if (tab === 'chat' || tab === 'bot') lastConversation = location.hash || '#/chat';
+            moreToggle?.classList.toggle('active', inMore(tab));
+            if (inMore(tab)) moreToggle?.setAttribute('aria-current', 'page'); else moreToggle?.removeAttribute('aria-current');
             moreMenu?.querySelectorAll('[data-more-tab]').forEach(button => {
                 if (button.dataset.moreTab === tab) button.setAttribute('aria-current', 'page');
                 else button.removeAttribute('aria-current');
@@ -299,7 +301,7 @@
                 button.classList.toggle('active', active);
                 if (active) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
             });
-            document.querySelectorAll('.tab-content').forEach(panel => panel.classList.toggle('active', pending ? panel === featureState : panel.id === `${tab === 'assistant' ? 'chat' : tab}-tab`));
+            document.querySelectorAll('.tab-content').forEach(panel => panel.classList.toggle('active', pending ? panel === featureState : panel.id === `${tab === 'assistant' || tab === 'bot' ? 'chat' : tab}-tab`));
             document.getElementById('workspace-settings-dialog')?.classList.toggle('hidden', pending || !['profiles', 'extensions', 'settings'].includes(tab));
             const settingsTab = tab === 'profiles' ? 'profiles'
                 : tab === 'extensions' ? (extensionTabs.has(params.get('tab')) ? params.get('tab') : 'extensions')
@@ -337,9 +339,9 @@
             showRoute();
         }
         window.PiWorkspaceRoute = Object.freeze({ navigate, current: parseRoute, revision: () => routeRevision,
-            rememberConversation(tab, params) { if (tab === 'chat' || tab === 'assistant') lastConversation = routeHash(tab, params); },
+            rememberConversation(tab, params) { if (tab === 'chat' || tab === 'bot') lastConversation = routeHash(tab, params); },
             returnToConversation: () => {
-            const url = ['chat', 'assistant'].includes(parseRoute().tab) ? location.hash : lastConversation;
+            const url = ['chat', 'bot'].includes(parseRoute().tab) ? location.hash : lastConversation;
             history.pushState(null, '', url); showRoute();
         } });
         window.addEventListener('popstate', showRoute);
@@ -352,7 +354,7 @@
             closeThemeMenu();
             moreMenu.hidden = !opening;
             moreToggle.setAttribute('aria-expanded', String(opening));
-            if (opening) moreMenu.querySelector('button')?.focus({ preventScroll: true });
+            if (opening) moreItems()[0]?.focus({ preventScroll: true });
         });
         moreMenu?.addEventListener('click', event => {
             const button = event.target.closest('[data-more-tab]');
@@ -362,7 +364,7 @@
             }
         });
         moreMenu?.addEventListener('keydown', event => {
-            const items = [...moreMenu.querySelectorAll('[data-more-tab]')];
+            const items = moreItems();
             const index = items.indexOf(document.activeElement);
             const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
                 : event.key === 'ArrowDown' ? (index + 1) % items.length

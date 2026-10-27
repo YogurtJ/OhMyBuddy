@@ -41,3 +41,6 @@ dist/
 # Local native linker output; release binaries are explicitly listed.
 /native/*.lib
 media_references/
+
+# Bot workspaces are user data (older versions could create them in the service directory).
+/PivaneBots/

@@ -231,7 +231,7 @@
             document.querySelectorAll('#pi-transcript-content article.assistant').forEach(article => {
                 const actions = article.querySelector('.pi-message-actions');
                 if (!actions) return;
-                const canFork = this.usable() && this.matchReplies(article._piAssistantMessage).length === 1;
+                const canFork = this.forkable() && this.usable() && this.matchReplies(article._piAssistantMessage).length === 1;
                 this.updateMessageAction(actions, 'reply-fork', translateUi("从此回复后分叉"), 'fa-code-branch', canFork);
             });
         }
@@ -240,7 +240,13 @@
             return `<section class="pi-workflow-source"><div class="pi-workflow-source-label"><i class="fa-regular fa-file-lines" aria-hidden="true"></i>${escape(label)}</div><pre class="pi-workflow-preview" tabindex="0">${escape(text)}</pre></section>`;
         }
 
+        // A Bot chat is one continuous conversation: it is never forked or copied into an ordinary
+        // thread, whichever entry is used (reply action, history list, menu, slash command) (UAT-06).
+        forkable() { return !this.context().botMode; }
+        assertForkable() { if (!this.forkable()) throw new Error(translateUi("Bot 聊天不能分叉；以后可以为 Bot 另开话题")); }
+
         openReplyFork(reply, message, navigation) {
+            this.assertForkable();
             if (this.busy()) throw new Error(translateUi("请等待会话空闲后操作"));
             this.entryId = reply.entryId; this.expectedLeafId = this.snapshot.leafId;
             if (!this.show('reply-fork', translateUi("从此回复后分叉"), translateUi("创建分叉"), navigation)) return;
@@ -424,6 +430,7 @@
             if (job?.status === 'uncertain') this.content.insertAdjacentHTML('beforeend', `<label class="pi-workflow-check"><input id="pi-workflow-uncertain" type="checkbox" required>${translateUi("已检查会话，确认没有重复消息")}</label>`);
         }
         async openPrompt(entryId, mode, navigation) {
+            if (mode !== 'retry') this.assertForkable();
             if (this.busy()) throw new Error(translateUi("请等待会话空闲后操作"));
             if (!this.show(mode, mode === 'retry' ? translateUi("编辑并重试") : translateUi("从此处分叉"), mode === 'retry' ? translateUi("回退并发送") : translateUi("创建分叉"), navigation)) return;
             const payload = await this.loadPanel(() => this.get(`prompt/${encodeURIComponent(entryId)}`));
@@ -437,6 +444,7 @@
             }
         }
         async openClone() {
+            this.assertForkable();
             if (this.busy()) throw new Error(translateUi("请等待会话空闲后操作"));
             if (!this.show('clone', translateUi("复制为新线程"), translateUi("创建线程"))) return;
             if (!await this.loadPanel(async () => { await this.refresh(true); return this.snapshot; })) return;
@@ -457,7 +465,7 @@
             const scrollTop = this.content.scrollTop;
             this.content.innerHTML = items.length ? items.map(item => {
                 let tools;
-                if (this.mode === 'history') tools = icon('fork', 'fa-code-branch', translateUi("从此处分叉"), this.busy()) + (item.entryId === this.snapshot.lastUserId ? icon('retry', 'fa-pen', translateUi("编辑并重试"), this.busy()) : '');
+                if (this.mode === 'history') tools = (this.forkable() ? icon('fork', 'fa-code-branch', translateUi("从此处分叉"), this.busy()) : '') + (item.entryId === this.snapshot.lastUserId ? icon('retry', 'fa-pen', translateUi("编辑并重试"), this.busy()) : '');
                 else if (this.mode === 'versions') tools = icon('restore', 'fa-rotate-left', translateUi("恢复此版本"), this.busy());
                 else tools = terminal.has(item.status) || item.status === 'dispatching' ? '' : icon('edit', 'fa-pen', translateUi("修改消息和时间")) + icon('send', 'fa-paper-plane', translateUi("立即发送")) + (['scheduled', 'waiting'].includes(item.status) ? icon('pause', 'fa-pause', translateUi("暂停发送")) : '') + icon('cancel', 'fa-xmark', translateUi("取消发送"));
                 return `<div class="pi-workflow-row" data-item-id="${escape(item.id || item.entryId)}"><div><strong>${escape(this.mode === 'deferred' ? statusText[item.status] : date(item.timestamp))}</strong><p>${escape(item.preview || item.text || (item.imageCount ? translateUi("{0} 张图片", item.imageCount) : ''))}</p>${this.mode === 'deferred' ? `<small>${escape(date(item.dueAt))}${item.imageCount ? translateUi(" · {0} 张图片", item.imageCount) : ''}</small>${item.reason ? `<small>${escape(item.reason)}</small>` : ''}` : ''}</div><div class="pi-workflow-row-actions">${tools}</div></div>`;
@@ -517,6 +525,7 @@
             let completed = false;
             try {
                 this.assertTarget();
+                if (['clone', 'fork', 'reply-fork'].includes(mode)) this.assertForkable();
                 const confirmUncertain = $('pi-workflow-uncertain')?.checked;
                 if (['schedule', 'schedule-edit', 'retry'].includes(mode)) {
                     const message = this.editorMessage(), images = this.editor.images;

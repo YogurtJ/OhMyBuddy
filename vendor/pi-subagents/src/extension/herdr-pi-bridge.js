@@ -10,6 +10,7 @@ import { buildSkillInjection, resolveSkills } from "../agents/skills.js";
 import { buildAgentMemoryInjection } from "../agents/agent-memory.js";
 import { appendAgentRefinementOverlay } from "../agents/agent-refinements.js";
 import { rewriteSubagentPrompt } from "../runs/shared/subagent-prompt-runtime.js";
+import { assertNoToolModifierEntries } from "../runs/shared/child-tool-plan.js";
 import { resolveExistingReadPaths } from "../shared/settings.js";
 import { MODEL_ONLY_TOOL } from "../shared/extension-context.js";
 function gitEvidence(cwd) {
@@ -37,6 +38,7 @@ export function resolveRemoteHerdrResources(cwd, resources, remoteDefaultTools =
     const reads = resources.reads === undefined ? agent.defaultReads ?? false : resources.reads;
     const readPaths = Array.isArray(reads) ? resolveExistingReadPaths(reads, cwd) : [];
     const systemPrompt = appendAgentRefinementOverlay(`${agent.systemPrompt}${buildAgentMemoryInjection(agent, cwd)}${skillPrompt ? `\n\n${skillPrompt}` : ""}${readPaths.length ? `\n\n[Read from: ${readPaths.join(", ")}]` : ""}`, { cwd, agentName: agent.name });
+    assertNoToolModifierEntries(agent.name, agent.tools ?? []);
     const denied = new Set(agent.excludeTools ?? []);
     const tools = (agent.tools === undefined ? remoteDefaultTools : agent.tools).filter((tool) => !denied.has(tool) && (!resources.toolCeiling || resources.toolCeiling.includes(tool)));
     if (agent.tools === undefined && !tools.length)
@@ -91,7 +93,6 @@ export default function registerHerdrPiBridge(pi) {
         client.write(encodeHerdrPiFrame(record));
     };
     const sessionId = (ctx) => ctx.sessionManager?.getSessionId?.();
-    const activeTools = (ctx) => ctx.getActiveTools?.() ?? [];
     pi.registerTool({
         name: "contact_supervisor",
         ...MODEL_ONLY_TOOL,
@@ -104,11 +105,11 @@ export default function registerHerdrPiBridge(pi) {
             const id = `sup_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
             send({ type: "supervisor-request", requestId: id, reason: input.reason, message: input.message?.slice(0, 65_536) ?? "", ...(input.interview !== undefined ? { interview: input.interview } : {}), expectsReply: input.reason !== "progress_update", nativeSessionId });
             if (input.reason === "progress_update") {
-                await new Promise((resolve) => supervisor.set(id, { reason: input.reason, resolve }));
+                await new Promise((resolve, reject) => supervisor.set(id, { reason: input.reason, resolve, reject }));
                 return { content: [{ type: "text", text: "Supervisor progress update queued." }], details: { delivered: true, requestId: id, reason: input.reason } };
             }
             const reason = input.reason;
-            const answer = await new Promise((resolve) => supervisor.set(id, { reason, resolve }));
+            const answer = await new Promise((resolve, reject) => supervisor.set(id, { reason, resolve, reject }));
             const details = { requestId: id, reason };
             if (reason === "interview_request")
                 try {
@@ -145,7 +146,10 @@ export default function registerHerdrPiBridge(pi) {
             if (!entry)
                 throw new Error("Unknown supervisor request.");
             supervisor.delete(request.supervisorId);
-            entry.resolve(request.text ?? "");
+            if (request.error !== undefined)
+                entry.reject(new Error(request.error));
+            else
+                entry.resolve(request.text ?? "");
         }
         send({ type: "control-ack", requestId, operation: request.operation, nativeSessionId });
     };
@@ -165,7 +169,7 @@ export default function registerHerdrPiBridge(pi) {
         if (!nativeSessionId)
             throw new Error("Pane-native Pi bridge requires a persisted native session identity.");
         fs.writeFileSync(manifestPath, JSON.stringify({ protocol: HERDR_PI_PROTOCOL, packageVersion: packageJson.version, runId, socketPath, nativeSessionId, pid: process.pid }), { mode: 0o600, flag: "wx" });
-        send({ type: "ready", packageVersion: packageJson.version, nativeSessionId, sessionFile: ctx.sessionManager?.getSessionFile?.(), cwd: process.cwd(), tools: activeTools(ctx), model: ctx.model?.provider && ctx.model.id ? `${ctx.model.provider}/${ctx.model.id}` : undefined, configured, activeRequestId, evidenceCursor, evidenceFloor: journal[0]?.cursor ?? evidenceCursor + 1, initialGit: gitEvidence(process.cwd()) });
+        send({ type: "ready", packageVersion: packageJson.version, nativeSessionId, sessionFile: ctx.sessionManager?.getSessionFile?.(), cwd: process.cwd(), tools: pi.getActiveTools(), model: ctx.model?.provider && ctx.model.id ? `${ctx.model.provider}/${ctx.model.id}` : undefined, configured, activeRequestId, evidenceCursor, evidenceFloor: journal[0]?.cursor ?? evidenceCursor + 1, initialGit: gitEvidence(process.cwd()) });
     });
     on("message_end", (event) => {
         const message = event.message;
@@ -215,11 +219,11 @@ export default function registerHerdrPiBridge(pi) {
                         const invalidReads = resources.reads !== undefined && resources.reads !== false && (!Array.isArray(resources.reads) || resources.reads.some((name) => typeof name !== "string"));
                         if (typeof resources.agent !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u.test(resources.agent) || invalidSkills || invalidReads)
                             throw new Error("Remote logical resource names are invalid.");
-                        const resolved = resolveRemoteHerdrResources(process.cwd(), { agent: resources.agent, ...(resources.skills ? { skills: resources.skills } : {}), ...(resources.toolCeiling ? { toolCeiling: resources.toolCeiling } : {}), ...(resources.reads !== undefined ? { reads: resources.reads } : {}) }, context ? activeTools(context) : []);
+                        const resolved = resolveRemoteHerdrResources(process.cwd(), { agent: resources.agent, ...(resources.skills ? { skills: resources.skills } : {}), ...(resources.toolCeiling ? { toolCeiling: resources.toolCeiling } : {}), ...(resources.reads !== undefined ? { reads: resources.reads } : {}) }, context ? pi.getActiveTools() : []);
                         resolvedSystemPrompt = resolved.systemPrompt;
                         resolvedContextPolicy = resolved;
-                        pi.setActiveTools?.(resolved.tools);
-                        const acknowledged = context ? activeTools(context) : [];
+                        pi.setActiveTools(resolved.tools);
+                        const acknowledged = context ? pi.getActiveTools() : [];
                         if (acknowledged.some((tool) => !resolved.tools.includes(tool)) || resolved.tools.some((tool) => !acknowledged.includes(tool)))
                             throw new Error("Remote Pi did not apply the resolved active-tool set exactly.");
                         configured = true;
@@ -234,7 +238,10 @@ export default function registerHerdrPiBridge(pi) {
                     const text = frame.text;
                     if (text !== undefined && (typeof text !== "string" || Buffer.byteLength(text) > 256 * 1024))
                         throw new Error("Bridge request text is invalid or too large.");
-                    pending.set(frame.requestId, { operation: operation, ...(text !== undefined ? { text } : {}), ...(typeof frame.supervisorId === "string" ? { supervisorId: frame.supervisorId } : {}) });
+                    const error = frame.error;
+                    if (error !== undefined && (operation !== "supervisor-reply" || typeof error !== "string" || Buffer.byteLength(error) > 256 * 1024))
+                        throw new Error("Bridge supervisor error is invalid or too large.");
+                    pending.set(frame.requestId, { operation: operation, ...(text !== undefined ? { text } : {}), ...(typeof frame.supervisorId === "string" ? { supervisorId: frame.supervisorId } : {}), ...(error !== undefined ? { error } : {}) });
                     send({ type: "prepared", requestId: frame.requestId, nativeSessionId });
                 }
             }
@@ -245,7 +252,7 @@ export default function registerHerdrPiBridge(pi) {
         socket.on("close", () => { if (client === socket)
             client = undefined; });
         if (context && nativeSessionId)
-            send({ type: "ready", packageVersion: packageJson.version, nativeSessionId, sessionFile: context.sessionManager?.getSessionFile?.(), cwd: process.cwd(), tools: activeTools(context), model: context.model?.provider && context.model.id ? `${context.model.provider}/${context.model.id}` : undefined, configured, activeRequestId, evidenceCursor, evidenceFloor: journal[0]?.cursor ?? evidenceCursor + 1, initialGit: gitEvidence(process.cwd()) });
+            send({ type: "ready", packageVersion: packageJson.version, nativeSessionId, sessionFile: context.sessionManager?.getSessionFile?.(), cwd: process.cwd(), tools: pi.getActiveTools(), model: context.model?.provider && context.model.id ? `${context.model.provider}/${context.model.id}` : undefined, configured, activeRequestId, evidenceCursor, evidenceFloor: journal[0]?.cursor ?? evidenceCursor + 1, initialGit: gitEvidence(process.cwd()) });
     });
     server.listen(socketPath, () => { fs.chmodSync(socketPath, 0o600); });
 }

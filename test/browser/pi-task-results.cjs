@@ -98,7 +98,7 @@ async function check(browser, base, width, language) {
     assert.ok(await page.locator('#pi-attachments').isVisible());
     const overflow = await page.locator('.pi-task-results, .pi-task-results-list, .pi-task-result, .pi-task-result-row, .pi-results-body').evaluateAll(nodes => nodes.filter(n => n.scrollWidth > n.clientWidth + 2 || n.getBoundingClientRect().right > innerWidth + 1).map(n => n.className));
     assert.deepEqual(overflow, []);
-    // A row jumps to the delivered transcript card, opens its body and marks the result read.
+    // A row jumps to the delivered transcript card, opens its body, marks the result read and hides the chip when nothing remains unread or active.
     await page.locator('#pi-transcript').evaluate(node => { node.scrollTop = 0; node.dispatchEvent(new WheelEvent('wheel', { deltaY: -1, bubbles: true })); });
     // The composer chip remains the only task-results surface; opening a row closes the popover.
     assert.equal(await page.locator('#pi-tool-tasks').count(), 0, 'no duplicate task inspector');
@@ -110,23 +110,28 @@ async function check(browser, base, width, language) {
         const a = card.getBoundingClientRect(), b = view.getBoundingClientRect();
         return a.top >= b.top - 2 && a.top < b.bottom - 20;
     });
-    await page.waitForFunction(() => document.querySelector('#pi-task-results > summary').textContent.match(/All read|全部已读/));
-    await page.reload(); await page.waitForFunction(() => document.querySelectorAll('.pi-task-result').length === 1);
+    await page.waitForFunction(() => document.querySelector('#pi-task-results').hidden);
+    await page.reload();
     assert.equal(await transcriptResult.count(), 1, 'native history reload keeps exactly one delivered receipt');
-    assert.ok((await page.locator('#pi-task-results > summary').textContent()).includes(language === 'en' ? 'All read' : '全部已读'));
+    assert.ok(await page.locator('#pi-task-results').isHidden(), 'chip stays hidden when all results are read and no tasks are active');
+    read = false; busy = true;
+    await page.reload(); await page.waitForFunction(() => document.querySelectorAll('.pi-task-result').length === 1);
+    await page.locator('#pi-task-results > summary').click();
+    const markReadBtn = page.getByRole('button', { name: language === 'en' ? 'Mark read' : '标为已读', exact: true });
+    const markAllBtn = page.getByRole('button', { name: language === 'en' ? 'Mark all read' : '全部标为已读', exact: true });
+    assert.equal(await markReadBtn.isDisabled(), false, 'mark read stays available while the thread is streaming');
+    assert.equal(await markAllBtn.isDisabled(), false, 'mark all read stays available while the thread is streaming');
+    await page.screenshot({ path: `/tmp/pivane-task-results-${width}-${language}.png` });
+    await markReadBtn.click();
+    await page.waitForFunction(() => document.querySelector('#pi-task-results').hidden);
+    read = false; busy = false;
+    await page.reload(); await page.waitForFunction(() => document.querySelectorAll('.pi-task-result').length === 1);
     await page.locator('#pi-task-results > summary').click();
     await page.locator('#pi-task-results').getByRole('button', { name: language === 'en' ? 'Open complete result' : '查看完整结果', exact: true }).click();
     await page.waitForFunction(cwd => localStorage.getItem(`pi.web.session:${cwd}`) === 'child', cwd);
     await page.waitForFunction(() => document.querySelector('#pi-task-results').hidden);
     assert.equal(active.id, 'child');
-    read = false; busy = true;
-    await page.evaluate(({ cwd }) => localStorage.setItem(`pi.web.session:${cwd}`, 'parent'), { cwd });
-    await page.reload(); await page.waitForFunction(() => document.querySelectorAll('.pi-task-result').length === 1);
-    await page.locator('#pi-task-results > summary').click();
-    assert.ok(await page.getByRole('button', { name: language === 'en' ? 'Mark read' : '标为已读', exact: true }).isDisabled());
-    assert.ok(await page.getByRole('button', { name: language === 'en' ? 'Mark all read' : '全部标为已读', exact: true }).isDisabled());
-    await page.screenshot({ path: `/tmp/pivane-task-results-${width}-${language}.png` });
-    assert.deepEqual(writes, ['/api/pi/agent-threads/read']); assert.deepEqual(errors, []);
+    assert.deepEqual(writes, ['/api/pi/agent-threads/read', '/api/pi/agent-threads/read']); assert.deepEqual(errors, []);
     await context.close();
 }
 // Results whose card is not in the loaded transcript expand in place; "mark all" reads each unread result once.

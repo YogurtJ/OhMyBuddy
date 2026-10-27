@@ -17,6 +17,7 @@ function limits(value, defaults = { maxRunsPerDay: 8, maxTokensPerDay: 200000, m
         || result.maxCostPerDay !== null && (!Number.isFinite(result.maxCostPerDay) || result.maxCostPerDay <= 0 || result.maxCostPerDay > 10000)) fail('Invalid daily budget');
     return result;
 }
+const PROACTIVE_RUNS_PER_DAY = 50;
 function validateJob(input, now) {
     if (!input || typeof input.name !== 'string' || !input.name.trim() || input.name.length > 120
         || typeof input.prompt !== 'string' || !input.prompt.trim() || input.prompt.length > 40000
@@ -25,8 +26,8 @@ function validateJob(input, now) {
     if (input.weixinNotification !== undefined && !['inherit', 'on', 'off'].includes(input.weixinNotification)) fail('Invalid WeChat notification mode');
     if (!input.target || !['thread', 'profile'].includes(input.target.kind)) fail('Choose a target thread or profile');
     const target = input.target.kind === 'thread' ? { kind: 'thread', cwd: input.target.cwd, sessionId: input.target.sessionId }
-        : { kind: 'profile', profileId: input.target.profileId };
-    if (target.kind === 'profile' ? !uuid(target.profileId) : typeof target.cwd !== 'string' || !uuid(target.sessionId)) fail('Invalid task target');
+        : { kind: 'profile', profileId: input.target.profileId, ...(input.target.windowId !== undefined ? { windowId: input.target.windowId } : {}) };
+    if (target.kind === 'profile' ? !uuid(target.profileId) || target.windowId !== undefined && !uuid(target.windowId) : typeof target.cwd !== 'string' || !uuid(target.sessionId)) fail('Invalid task target');
     const schedule = { kind: input.schedule?.kind, timeZone: input.schedule?.timeZone,
         ...(input.schedule?.kind === 'once' ? { at: input.schedule.at } : { expression: parseCron(input.schedule?.expression).expression }) };
     if (schedule.kind === 'once' && (!Number.isFinite(schedule.at) || schedule.at > now + 8 * 366 * 86400000)) fail('Choose an execution time within eight years');
@@ -54,8 +55,8 @@ function validateJob(input, now) {
         misfire: { policy: misfire.policy, graceMinutes: misfire.graceMinutes }, execution, budget: limits(input.budget) };
 }
 class CronService {
-    constructor({ store, supervisor, profiles, catalog, isSuspended = () => false, now = Date.now, filename, captureChannelNotify, onChannelNotify }) {
-        Object.assign(this, { store, supervisor, profiles, catalog, isSuspended, now, filename, captureChannelNotify, onChannelNotify });
+    constructor({ store, supervisor, profiles, catalog, bots = null, reloadBotWorker = null, isSuspended = () => false, now = Date.now, filename, captureChannelNotify, onChannelNotify }) {
+        Object.assign(this, { store, supervisor, profiles, catalog, bots, reloadBotWorker, isSuspended, now, filename, captureChannelNotify, onChannelNotify });
         this.stopping = false; this.running = null; this.mutating = null; this.notifying = null; this.db = null; this.error = null;
         this.ready = this.initialize();
         this.timer = setInterval(() => { void this.tick(); }, 1000); this.timer.unref?.();
@@ -91,18 +92,39 @@ class CronService {
         await this.ready; this.healthy();
         const now = this.now(), day = new Date(now).toISOString().slice(0, 10);
         return { schedulerError: this.lastError || null, jobs: this.db.jobs().filter(job => !job.deleted).map(job => ({ ...job, today: this.db.usage(day, job.id),
-            lastRun: this.db.runs(job.id)[0] || null })), homes: this.db.homes(), limits: this.db.limits(), today: this.db.usage(day),
+            lastRun: this.db.runs(job.id)[0] || null })), homes: await this.homesView(), limits: this.db.limits(), today: this.db.usage(day),
             channelNotifications: this.db.channelNotificationSummary(),
             capabilities: { maxJobs: 100, maxRuns: 10000, budgetDay: 'UTC', cost: 'estimated', maxConcurrent: 2 }, serverTime: now };
     }
-    async target(target) {
-        let ref = target;
-        if (target.kind === 'profile') {
-            const profile = await this.profiles.getProfile(target.profileId);
-            if (!profile?.enabled) fail('Target profile is unavailable');
-            ref = this.db.home(target.profileId);
-            if (!ref?.sessionId || ref.status !== 'ready') fail('Choose or create the profile main thread first');
+    // Saved homes, with each Bot's home shown as its main chat (derived, never stored).
+    async homesView() {
+        const homes = this.db.homes();
+        if (!this.bots) return homes;
+        const { readBot } = require('./bot/bot-settings');
+        const bots = (await this.profiles.state()).state.profiles.filter(profile => readBot(profile) && profile.trashedAt === undefined);
+        const ids = new Set(bots.map(profile => profile.id)), derived = [];
+        for (const profile of bots) {
+            const ref = await this.bots.mainWindowRef(profile.id).catch(() => null);
+            if (ref) derived.push({ profileId: profile.id, status: 'ready', cwd: ref.cwd, sessionId: ref.sessionId, name: profile.name, revision: 0, bot: true });
         }
+        return [...homes.filter(home => !ids.has(home.profileId)), ...derived];
+    }
+    // A profile's main thread, or an explicitly targeted Bot window. Resolve the current
+    // native generation every time (it changes when the window rotates).
+    async homeRef(profileId, windowId) {
+        const profile = await this.profiles.getProfile(profileId);
+        if (!profile?.enabled) fail('Target profile is unavailable');
+        if (this.bots && require('./bot/bot-settings').readBot(profile)) {
+            const resolved = windowId === undefined ? await this.bots.mainSession(profileId) : (await this.bots.resolve(profileId, windowId)).session;
+            return { cwd: resolved.cwd, sessionId: resolved.id, status: 'ready', bot: true };
+        }
+        if (windowId !== undefined) fail('Window targets require a Bot profile');
+        const ref = this.db.home(profileId);
+        if (!ref?.sessionId || ref.status !== 'ready') fail('Choose or create the profile main thread first');
+        return ref;
+    }
+    async target(target) {
+        const ref = target.kind === 'profile' ? await this.homeRef(target.profileId, target.windowId) : target;
         const session = await this.store.getSession(ref.cwd, ref.sessionId);
         if (session.assistant || session.profileAuthoring) fail('Management threads cannot receive scheduled tasks');
         if (session.agentProfile && !session.agentProfile.available) fail('Target profile is disabled or unavailable');
@@ -113,7 +135,12 @@ class CronService {
         return this.reserve(async () => {
             if (!uuid(input.id)) fail('A stable task ID is required');
             const previous = this.db.job(input.id);
-            const job = validateJob(input, this.now());
+            // Older task editors only echo kind/profileId. A same-profile edit must keep
+            // its window destination; an explicit windowId can still select another window.
+            const target = previous?.target.windowId !== undefined && input.target?.kind === 'profile'
+                && input.target.profileId === previous.target.profileId && !Object.hasOwn(input.target, 'windowId')
+                ? { ...input.target, windowId: previous.target.windowId } : input.target;
+            const job = validateJob({ ...input, target }, this.now());
             if (previous?.deleted) fail('This task was deleted; use a new ID', 409);
             if (previous && previous.revision !== input.revision) {
                 if (previous.fingerprint === hash(job)) return previous;
@@ -121,7 +148,7 @@ class CronService {
             }
             if (!previous && this.db.jobs().length >= 100) fail('Task capacity reached');
             if (this.db.activeRuns(input.id).length) fail('Finish or review the active run before editing', 409);
-            if (job.enabled || job.target.kind === 'thread') await this.target(job.target);
+            if (job.enabled || job.target.kind === 'thread' || job.target.windowId !== undefined) await this.target(job.target);
             if (job.model) {
                 const session = await this.target(job.target), catalog = await this.catalog(session.cwd);
                 if (!catalog.models.some(model => model.provider === job.model.provider && model.modelId === job.model.modelId
@@ -137,6 +164,7 @@ class CronService {
         return this.reserve(() => this.profiles.reserve(async () => {
             const profile = await this.profiles.getProfile(profileId);
             if (!profile?.enabled) fail('Profile is unavailable');
+            if (this.bots && require('./bot/bot-settings').readBot(profile)) fail('Bot 的主线程就是它的主聊天，不能在这里更改', 409);
             const previous = this.db.home(profileId);
             const requestHash = hash([input.cwd, input.sessionId ?? null, input.create === true]);
             if ((previous?.revision || 0) !== input.revision) {
@@ -196,22 +224,7 @@ class CronService {
             }
             const run = this.db.run(input.runId);
             if (!run || run.jobId !== id) fail('Run not found');
-            if (input.action === 'acknowledge' && run.status === 'uncertain') {
-                if (run.target) {
-                    let session;
-                    try { session = await this.store.getSession(run.target.cwd, run.target.sessionId); }
-                    catch (error) {
-                        if ([...this.supervisor.workers.values()].some(worker => worker.sessionId === run.target.sessionId && !worker.disposed)) throw error;
-                    }
-                    if (session) {
-                        const worker = await this.supervisor.getWorker({ cwd: session.cwd, sessionId: session.id, sessionPath: session.path });
-                        await worker.cron({ action: 'acknowledge', runId: run.id });
-                    }
-                }
-                if (this.db.run(run.id)?.status === 'uncertain')
-                    this.db.saveRun({ ...this.db.run(run.id), status: 'stopped', reason: 'reviewed-uncertain', completedAt: this.now() });
-                return this.db.run(run.id);
-            }
+            if (input.action === 'acknowledge' && run.status === 'uncertain') return this.acknowledgeRun(run);
             if (input.action === 'stop') {
                 if (run.status === 'waiting') this.db.saveRun({ ...run, status: 'cancelled', completedAt: this.now() });
                 else if (run.target) {
@@ -223,6 +236,24 @@ class CronService {
                 return this.db.run(run.id);
             }
             fail('Unsupported task action');
+        });
+    }
+    // A message a Bot starts by itself (bot/bot-proactive.js): one run with its task inline, never a
+    // saved task. runId is stable per follow-up, so asking again returns the same run. Text only, the
+    // Bot's own model, a short time limit, and counted per Bot instead of in the user's budget.
+    enqueueProactive({ runId, profileId, windowId, at, name, prompt, note, kind, timeZone }) {
+        return this.reserve(async () => {
+            if (!/^[a-f0-9]{64}$/.test(runId) || !uuid(profileId) || windowId !== undefined && !uuid(windowId) || !Number.isSafeInteger(at)
+                || typeof name !== 'string' || !name || name.length > 120 || typeof prompt !== 'string' || !prompt || prompt.length > 4000
+                || typeof note !== 'string' || note.length > 200 || !['due', 'checkin'].includes(kind)) fail('Invalid Bot follow-up');
+            const previous = this.db.run(runId); if (previous) return previous;
+            if (this.db.runCount() >= 10000) fail('Execution history capacity reached; scheduling is paused');
+            const job = { id: `bot:${runId.slice(0, 32)}`, revision: 1, name, prompt, enabled: true, mode: 'text', origin: 'bot', kind, note,
+                target: { kind: 'profile', profileId, ...(windowId ? { windowId } : {}) }, schedule: { kind: 'once', at, timeZone },
+                model: null, condition: null, misfire: { policy: 'latest', graceMinutes: 120 },
+                execution: { maxCalls: 3, maxTokens: 32000, maxDurationSeconds: 180 }, budget: limits() };
+            const run = { id: runId, jobId: job.id, scheduledAt: at, status: 'waiting', manual: false, job, origin: 'bot', profileId, createdAt: this.now() };
+            this.db.saveRun(run); return run;
         });
     }
     enqueue(job, at, id = hash([job.id, job.revision, at]), manual = false) {
@@ -263,13 +294,26 @@ class CronService {
             const job = run.job, now = this.now();
             const grace = job.misfire.policy === 'skip' ? 60000 : job.misfire.graceMinutes * 60000;
             if (now - run.scheduledAt > grace) { this.db.saveRun({ ...run, status: 'skipped', reason: 'expired', completedAt: now }); return; }
+            if (job.origin === 'bot') {
+                // Switched off after it was queued: not sent.
+                const owner = await this.profiles.getProfile(job.target.profileId);
+                if (require('./bot/bot-settings').readBot(owner)?.notify?.proactive === false) {
+                    this.db.saveRun({ ...run, status: 'skipped', reason: 'proactive-off', completedAt: now }); return;
+                }
+            }
             const session = await this.target(job.target);
             if (!this.supervisor.isSessionIdle(session.path)) return;
-            const worker = await this.supervisor.getWorker({ cwd: session.cwd, sessionId: session.id, sessionPath: session.path });
+            let worker = await this.supervisor.getWorker({ cwd: session.cwd, sessionId: session.id, sessionPath: session.path });
             if (session.agentProfile) {
                 const profile = await this.profiles.getProfile(session.agentProfile.id);
-                if (!worker.loadedAgentProfileConfirmed || worker.loadedAgentProfileId !== profile?.id
-                    || worker.loadedAgentProfileRevision !== require('./pi-profile-registry').profileRevision(profile)) fail('Reopen the idle target thread to load its saved profile');
+                const current = () => worker.loadedAgentProfileConfirmed && worker.loadedAgentProfileId === profile?.id
+                    && worker.loadedAgentProfileRevision === require('./pi-profile-registry').profileRevision(profile);
+                // A Bot is edited from its own chat, so its idle window reopens with the saved profile
+                // instead of waiting for someone to reopen it by hand.
+                // reloadBotWorker is the guarded explicit-restart path: open pages reconnect.
+                if (!current() && worker.loadedBot && this.reloadBotWorker && this.supervisor.isSessionIdle(session.path))
+                    worker = await this.reloadBotWorker(worker);
+                if (!current()) fail('Reopen the idle target thread to load its saved profile');
             }
             await worker.exclusive(async (_rpc, runtime) => {
                 if (this.stopping || this.isSuspended() || this.mutating || this.db.run(run.id)?.status !== 'waiting') return;
@@ -282,18 +326,24 @@ class CronService {
                 const rates = ['input', 'output', 'cacheRead', 'cacheWrite'].map(key => pricing?.[key]);
                 const reservedCost = rates.every(rate => Number.isFinite(rate) && rate >= 0) && Math.max(...rates) > 0
                     ? Math.max(...rates) * job.execution.maxTokens / 1000000 : null;
-                for (const [limit, usage] of [[this.db.limits(), this.db.usage(day)], [job.budget, this.db.usage(day, job.id)]]) {
+                if (job.origin === 'bot') {
+                    // A safety bound on runs a Bot starts by itself; pushes have their own limit (bot-proactive.js).
+                    if (this.db.proactiveRuns(day, job.target.profileId) >= PROACTIVE_RUNS_PER_DAY) fail('Daily limit of Bot follow-ups reached');
+                } else for (const [limit, usage] of [[this.db.limits(), this.db.usage(day)], [job.budget, this.db.usage(day, job.id)]]) {
                     if (usage.runs >= limit.maxRunsPerDay || usage.tokens + job.execution.maxTokens > limit.maxTokensPerDay)
                         fail('Daily execution or token budget exhausted');
                     if (limit.maxCostPerDay !== null && (reservedCost === null || usage.unknownCost || usage.cost + reservedCost > limit.maxCostPerDay))
                         fail('Daily money budget exhausted or model pricing is unknown');
                 }
                 if (this.stopping || this.isSuspended() || this.mutating || this.db.run(run.id)?.status !== 'waiting') return;
+                let botWindow = null;
                 if (job.target.kind === 'profile') {
-                    const home = this.db.home(job.target.profileId);
+                    const home = await this.homeRef(job.target.profileId, job.target.windowId).catch(() => null);
                     if (home?.status !== 'ready' || home.sessionId !== session.id || home.cwd !== session.cwd) return;
+                    // Which Bot window ran it: WeChat chats connected to the Bot get the result (channels/bot-channel.js).
+                    if (home.bot) botWindow = { profileId: job.target.profileId, windowId: job.target.windowId ?? null };
                 }
-                run = { ...run, status: 'dispatching', target: { cwd: session.cwd, sessionId: session.id, name: session.name },
+                run = { ...run, status: 'dispatching', target: { cwd: session.cwd, sessionId: session.id, name: session.name, ...(botWindow ? { bot: botWindow } : {}) },
                     budgetDay: day, reservedTokens: job.execution.maxTokens, reservedCost, startedAt: now };
                 this.db.saveRun(run); handedOff = true;
             });
@@ -301,7 +351,8 @@ class CronService {
             const result = await worker.cron({ action: 'start', runId: run.id, jobId: job.id, sessionId: session.id,
                 name: job.name, prompt: job.prompt, scheduledAt: run.scheduledAt, timeZone: job.schedule.timeZone,
                 profile: session.agentProfile ? { id: worker.loadedAgentProfileId, revision: worker.loadedAgentProfileRevision } : null,
-                mode: job.mode, condition: job.condition, model: job.model, ...job.execution });
+                mode: job.mode, condition: job.condition, model: job.model, ...job.execution,
+                ...(job.origin === 'bot' ? { origin: 'bot', note: job.note || '' } : {}) });
             this.applyResult(run, result);
         } catch (error) {
             if (error.code === 'SESSION_BUSY' && !handedOff) return;
@@ -337,7 +388,8 @@ class CronService {
             const complete = ['completed', 'silent', 'skipped', 'stopped', 'error'].includes(status);
             completed = complete && status !== 'silent' && status !== 'skipped';
             const job = run.job || this.db.job(run.jobId);
-            const channelNotify = completed && job && weixinNotification(job) !== 'off' ? this.captureNotification({
+            // Bot-started messages reach channels only through the Bot's push rules (M4-4), never here.
+            const channelNotify = completed && job && job.origin !== 'bot' && weixinNotification(job) !== 'off' ? this.captureNotification({
                 runId: run.id, jobId: job.id, name: job.name, status, target: run.target, notificationMode: weixinNotification(job),
                 replyEntryId: result.replyEntryId || null, scheduledAt: run.scheduledAt
             }) : null;
@@ -346,7 +398,24 @@ class CronService {
                 ...(channelNotify ? { channelNotify } : {}) });
         });
         if (completed) this.supervisor.emit('completion', { cwd: run.target.cwd, sessionId: run.target.sessionId,
-            completionId: run.id, completedAt: new Date(this.now()).toISOString() });
+            completionId: run.id, completedAt: new Date(this.now()).toISOString(),
+            ...(run.origin === 'bot' ? { proactive: { profileId: run.profileId } } : {}) });
+    }
+    // A message a Bot started itself that bot-proactive.js cleared for pushing (outside quiet hours,
+    // within the daily limit): WeChat chats connected to the Bot get it through the same durable,
+    // retried admission as scheduled results. The thread's WeChat reply mode applies.
+    notifyProactive(runId) {
+        let queued = false;
+        this.db.transaction(() => {
+            const run = this.db.run(runId);
+            if (!run || run.origin !== 'bot' || run.channelNotify || run.status !== 'completed' || !run.target?.bot) return;
+            const job = run.job || this.db.job(run.jobId);
+            const channelNotify = this.captureNotification({ runId: run.id, jobId: run.jobId, name: job?.name || '', status: run.status,
+                target: run.target, notificationMode: 'inherit', replyEntryId: run.replyEntryId || null, scheduledAt: run.scheduledAt, proactive: true });
+            this.db.saveRun({ ...run, channelNotify }); queued = channelNotify.status === 'pending';
+        });
+        if (queued) void this.reconcileChannelNotifications()?.catch?.(() => {});
+        return queued;
     }
     reconcileChannelNotifications() {
         if (this.notifying || this.stopping || this.isSuspended() || this.mutating) return this.notifying;
@@ -355,7 +424,8 @@ class CronService {
             for (const run of this.db.pendingChannelNotifications()) {
                 if (this.stopping || this.isSuspended() || this.mutating) break;
                 const notification = run.channelNotify, job = this.db.job(run.jobId);
-                if (!job || job.deleted || weixinNotification(job) === 'off') {
+                // A Bot-started message has no saved task (its job is inline in the run).
+                if (!notification.event?.proactive && (!job || job.deleted || weixinNotification(job) === 'off')) {
                     this.db.updateChannelNotification(run.id, notification.attempts, { ...notification,
                         status: 'skipped', reason: 'configuration-revoked', resolvedAt: this.now() });
                     continue;
@@ -395,9 +465,53 @@ class CronService {
                 const result = await worker.cron({ action: 'finish', runId: run.id });
                 if (result && !(run.status === 'uncertain' && ['running', 'prepared'].includes(result.status))) this.applyResult(run, result);
             } catch (error) {
-                if (error.code !== 'SESSION_BUSY' && run.status !== 'uncertain') this.db.saveRun({ ...run, status: 'uncertain', reason: error.message });
+                // Busy, or its file was being written while it was read: the next pass looks again.
+                const transient = error.code === 'SESSION_BUSY' || error.message === 'Session file changed';
+                if (!transient && run.status !== 'uncertain') this.db.saveRun({ ...run, status: 'uncertain', reason: error.message });
             }
         }
+        // A Bot-started message has no task page where someone could review an uncertain run. It is
+        // text only, so closing it as stopped (after the worker records that) changes nothing else.
+        this.botReviewed ??= new Map();
+        for (const run of this.db.activeRuns().filter(item => item.origin === 'bot' && item.status === 'uncertain')) {
+            // Only after it stayed uncertain for two minutes, and then at most every two minutes: this may start the chat's worker.
+            if (!this.botReviewed.has(run.id)) { this.botReviewed.set(run.id, this.now()); continue; }
+            if (this.now() - this.botReviewed.get(run.id) < 120000) continue;
+            this.botReviewed.set(run.id, this.now());
+            if (this.botReviewed.size > 200) this.botReviewed.delete(this.botReviewed.keys().next().value);
+            // The same path as the task page's "acknowledge": the worker itself refuses while its chat
+            // is running or has queued messages, and a live worker with an unreadable session keeps it uncertain.
+            try { await this.acknowledgeRun(run); } catch { /* Retried on a later pass. */ }
+        }
+    }
+    // Closes an uncertain run as stopped: the chat's worker records that first (restoring its model
+    // and tools). A session that cannot be read while a worker for it is live stays uncertain.
+    async acknowledgeRun(run) {
+        if (run.target) {
+            let session;
+            try { session = await this.store.getSession(run.target.cwd, run.target.sessionId); }
+            catch (error) {
+                if ([...this.supervisor.workers.values()].some(worker => worker.sessionId === run.target.sessionId && !worker.disposed)) throw error;
+            }
+            if (session) {
+                const worker = await this.supervisor.getWorker({ cwd: session.cwd, sessionId: session.id, sessionPath: session.path });
+                await worker.cron({ action: 'acknowledge', runId: run.id });
+            }
+        }
+        if (this.db.run(run.id)?.status === 'uncertain')
+            this.db.saveRun({ ...this.db.run(run.id), status: 'stopped', reason: 'reviewed-uncertain', completedAt: this.now() });
+        return this.db.run(run.id);
+    }
+    // A Bot's own follow-ups that have not started are dropped with an archived topic or a trashed Bot.
+    dropBotRuns({ profileId, windowId }) {
+        if (!this.db) return 0;
+        let dropped = 0;
+        for (const run of this.db.activeRuns()) {
+            const target = run.job?.target;
+            if (run.origin !== 'bot' || run.status !== 'waiting' || target?.profileId !== profileId || windowId !== undefined && target.windowId !== windowId) continue;
+            this.db.saveRun({ ...run, status: 'cancelled', reason: 'dropped', completedAt: this.now() }); dropped++;
+        }
+        return dropped;
     }
     async removing(session) {
         await this.ready; this.healthy();

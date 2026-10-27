@@ -84,7 +84,7 @@
     async function ingest(data, generation) {
         if (generation !== epoch) return;
         const phases = new Map((data.runtimes || []).map(r => [JSON.stringify([r.cwd, r.sessionId]), r.phase]));
-        const notices = (data.replyNotices || []).filter(n => !n.manual);
+        const notices = (data.replyNotices || []).filter(n => !n.manual && !n.quiet);
         if (previous === null) {
             previous = phases;
             notices.forEach(n => seen.add(n.completionId));
@@ -142,7 +142,7 @@
     window.addEventListener('workspace:access-ready', () => { reset(); void poll(); });
     window.PiPageNotifications = {
         observeCompletion(notice) {
-            if (!notice || notice.manual || seen.has(notice.completionId) || !(Date.parse(notice.completedAt) >= enabledAt)
+            if (!notice || notice.manual || notice.quiet || seen.has(notice.completionId) || !(Date.parse(notice.completedAt) >= enabledAt)
                 || !(prefs.desktop || prefs.sound)) return;
             seen.add(notice.completionId);
             while (seen.size > 512) seen.delete(seen.values().next().value);

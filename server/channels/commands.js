@@ -13,6 +13,8 @@ async function handleSlash(job, slash, run) {
     control.check();
     const binding = this.bindingFor(job);
     if (!binding) return null;
+    // A chat connected to Bots has its own commands; /stop works as everywhere.
+    if (binding.bot && slash.command !== '/stop') return require('./bot-commands').handleBotSlash(this, job, slash, run, binding, control);
     const busyWithOther = () => [...this.runs.entries()].some(([key, r]) => key !== job.id && same(r.target, job.target));
     const bindToSession = targetSession => this.withBindingTarget(targetSession.cwd, targetSession.id, (session, boundary) => {
         control.submit();

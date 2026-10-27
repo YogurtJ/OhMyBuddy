@@ -43,7 +43,14 @@
         else if (name === 'ask_user_question') {
             const count = Array.isArray(args.questions) ? args.questions.length : 0;
             title = count > 1 ? t('向你提问 · {0} 个问题', count) : t('向你提问');
-        } else if (name === 'deliver_files') title = text(args.title, 160) ? t('交付文件 · {0}', args.title) : t('交付文件');
+        } else if (name === 'bot_setup_propose') title = args.finish === true ? t('完成互相认识') : t('请你确认设置')
+        else if (name === 'window_note') {
+            const what = text(args.text, 500) || text(args.id, 12);
+            title = ({ add: t('记到“我记着的事” · {0}', what), update: t('改了记下的事 · {0}', what), done: t('标为完成 · {0}', what),
+                cancel: t('标为不需要了 · {0}', what), reopen: t('重新打开 · {0}', what) })[args.action] || t('记事本');
+        } else if (name === 'window_recall') title = text(args.query, 200) ? t('翻找之前的聊天 · {0}', args.query) : t('翻找之前的聊天');
+        else if (name === 'window_read') title = t('查看之前的聊天');
+        else if (name === 'deliver_files') title = text(args.title, 160) ? t('交付文件 · {0}', args.title) : t('交付文件');
         else if (name === 'agent_message') {
             const peer = text(result?.details?.to?.name, 160) || (text(args.to, 160) ? `${args.to.slice(0, 8)}…` : '');
             title = args.action === 'threads' ? t('查看可联系的线程') : args.action === 'status' ? t('查看消息投递状态')
