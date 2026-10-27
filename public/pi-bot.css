@@ -198,6 +198,8 @@
 .pi-bot-setup[hidden] { display: none; }
 /* With too little room the panel keeps its title and actions and is drawn above the identity. */
 #chat-tab.pi-bot-mode .pi-composer-wrap > .pi-bot-setup { position: relative; z-index: 7; }
+/* Only an open Bot panel may lift its composer above a keyboard that leaves layout height intact. */
+#chat-tab.pi-bot-mode .pi-composer-wrap.is-bot-dock-lifted { position: relative; z-index: 7; transform: translateY(calc(-1 * var(--pi-bot-dock-lift))); }
 .pi-bot-setup > .pi-bot-setup-head, .pi-bot-setup > .pi-bot-setup-foot { flex: none; }
 .pi-bot-setup-head { display: flex; align-items: center; gap: 10px; font-size: .95rem; }
 .pi-bot-setup-head > strong { min-width: 0; overflow-wrap: anywhere; }

@@ -39,6 +39,9 @@ const DEDICATED = { name: '', job: ' ', aboutUser: [''], workStyle: 'free' };
             });
             Object.defineProperty(world, 'revision', { get: () => revision });
             const api = async ({ pathname, method, body }) => {
+                if (pathname === '/api/pi/status') return { json: { ok: true, bots: true, agentProfiles: true, deliverables: true, sessionWorkflows: true,
+                    composerTools: true, projectRoots: ['/fixture'], defaultProject: '/fixture/project' } };
+                if (pathname === '/api/pi/composer/catalog') return { json: { cwd: '/fixture/PivaneBots/bot-11111111', builtins: [], templates: [], warnings: [] } };
                 if (pathname === `/api/pi/bots/${BOT}/settings`) return { json: { revision, bot: { id: BOT, name: '新伙伴', avatar: { kind: 'preset', id: 'pivane-pebble' },
                     soul: PERSONALITY, bot: world.bots()[0].bot }, models: { defaults: null, models: [] } } };
                 if (pathname !== `/api/pi/bots/${BOT}/setup` || method !== 'POST') return undefined;
@@ -52,6 +55,21 @@ const DEDICATED = { name: '', job: ' ', aboutUser: [''], workStyle: 'free' };
             const label = `${width}x${height}`;
             const shot = async name => { if (evidence) { await page.waitForTimeout(200); await page.screenshot({ path: path.join(evidence, `${name}-${label}.png`) }); } };
             const frames = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(resolve)))));
+            // A soft keyboard may change only visual bounds. Layout height stays fixed; opaque
+            // overlays make hit tests distinguish visible controls from ones behind the keyboard.
+            const visualBounds = (top, height, event = 'resize') => page.evaluate(({ top, height, event }) => {
+                for (const id of ['bot-test-visual-top', 'bot-test-keyboard']) document.getElementById(id)?.remove();
+                if (height == null) { delete visualViewport.height; delete visualViewport.offsetTop; }
+                else {
+                    Object.defineProperties(visualViewport, { height: { configurable: true, get: () => height }, offsetTop: { configurable: true, get: () => top } });
+                    for (const [id, start, end] of [['bot-test-visual-top', 0, top], ['bot-test-keyboard', top + height, innerHeight]]) {
+                        const cover = document.createElement('div'); cover.id = id;
+                        Object.assign(cover.style, { position: 'fixed', left: '0', right: '0', top: `${start}px`, height: `${Math.max(0, end - start)}px`, zIndex: '999999', background: '#dedede' });
+                        document.body.append(cover);
+                    }
+                }
+                visualViewport.dispatchEvent(new Event(event));
+            }, { top, height, event });
             const propose = (call, ui, args) => {
                 world.socket.send(JSON.stringify({ type: 'tool_execution_start', toolCallId: call, toolName: 'bot_setup_propose', args }));
                 world.socket.send(JSON.stringify({ type: 'extension_ui_request', id: ui, ...SELECT }));
@@ -173,6 +191,37 @@ const DEDICATED = { name: '', job: ' ', aboutUser: [''], workStyle: 'free' };
                     await usable('.pi-bot-setup:not(.pi-bot-approval):not(.pi-bot-closure)', 'setup card with a keyboard-like shrink');
                     await shot('bot-setup-keyboard');
                     await page.setViewportSize({ width, height });
+                    await card.locator('[data-setup-field="personality"]').focus();
+                    await card.locator('[data-setup-field="personality"]').evaluate(node => node.setSelectionRange(3, 5));
+                    for (const [top, event] of [[0, 'resize'], [80, 'scroll']]) {
+                        await visualBounds(top, 470, event);
+                        await frames();
+                        const visible = await facts('.pi-bot-setup:not(.pi-bot-approval):not(.pi-bot-closure)');
+                        assert.equal(visible.height, height, 'visual-only resizing leaves layout height unchanged');
+                        assert.ok(visible.titleHit && visible.title.top >= top && visible.title.bottom <= top + 470, 'title stays inside the visible area');
+                        assert.ok(visible.buttons.every(button => button.hit && button.top >= top && button.bottom <= top + 470), 'all actions stay above the keyboard and inside the visible area');
+                        assert.deepEqual(await page.evaluate(() => [document.activeElement?.dataset.setupField, document.activeElement?.selectionStart, document.activeElement?.selectionEnd]), ['personality', 3, 5]);
+                        assert.equal(await card.locator('[data-setup-field="job"]').inputValue(), '整理文稿\n\n和海报 \t 以及配图');
+                    }
+                    await shot('bot-setup-visual-keyboard');
+                    // The separately fixed shared menu also fits the Bot's lifted composer.
+                    await page.locator('#pi-composer-add-button').click();
+                    const menu = page.locator('#pi-composer-add-menu');
+                    await menu.waitFor({ state: 'visible' });
+                    await page.keyboard.press('End');
+                    assert.ok(await menu.evaluate(node => {
+                        const box = node.getBoundingClientRect(), last = [...node.querySelectorAll('button')].filter(button => button.offsetParent).at(-1);
+                        const item = last.getBoundingClientRect();
+                        return box.top >= visualViewport.offsetTop && box.bottom <= visualViewport.offsetTop + visualViewport.height
+                            && item.top >= box.top && item.bottom <= box.bottom
+                            && last.contains(document.elementFromPoint((item.left + item.right) / 2, (item.top + item.bottom) / 2));
+                    }), 'the lifted Bot composer keeps the shared menu and its last action visible');
+                    await page.keyboard.press('Escape');
+                    assert.equal(await menu.isVisible(), false);
+                    assert.equal(await page.locator('#pi-composer-add-button').evaluate(node => node === document.activeElement), true);
+                    await visualBounds(0, null);
+                    await frames();
+                    assert.equal(await page.locator('.pi-composer-wrap').evaluate(node => node.style.getPropertyValue('--pi-bot-dock-lift')), '', 'keyboard dismissal clears the lift');
                     await page.evaluate(() => { document.documentElement.style.fontSize = '125%'; });
                     await usable('.pi-bot-setup:not(.pi-bot-approval):not(.pi-bot-closure)', 'setup card with large text');
                     await shot('bot-setup-large-text');
@@ -250,9 +299,19 @@ const DEDICATED = { name: '', job: ' ', aboutUser: [''], workStyle: 'free' };
                 await sheet.locator('.pi-bot-sheet-close').click();
                 await page.locator('.pi-bot-sheet').waitFor({ state: 'detached' });
 
-                // 8. Pi Agent keeps the row under its composer.
+                // 8. Pi Agent keeps the row and receives no Bot keyboard-positioning state.
+                if (width === 393) {
+                    propose('call-route', 'ui-route', { job: 'Check route reset' });
+                    await card.waitFor();
+                    await visualBounds(0, 470);
+                    await frames();
+                    assert.ok(await page.locator('.pi-composer-wrap').evaluate(node => node.classList.contains('is-bot-dock-lifted')));
+                }
                 await page.evaluate(() => window.PiWorkspaceRoute.navigate('chat'));
                 await page.waitForFunction(() => !document.querySelector('#chat-tab').classList.contains('pi-bot-mode'));
+                await frames();
+                assert.deepEqual(await page.locator('.pi-composer-wrap').evaluate(node => [node.classList.contains('is-bot-dock-lifted'), node.style.getPropertyValue('--pi-bot-dock-lift'), getComputedStyle(node).transform]), [false, '', 'none']);
+                await visualBounds(0, null);
                 assert.notEqual(await page.locator('.pi-composer-meta').evaluate(node => getComputedStyle(node).display), 'none', 'Pi Agent keeps its status row');
 
                 assert.deepEqual(errors, [], `page errors at ${label}`);
