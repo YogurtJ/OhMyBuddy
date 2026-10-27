@@ -10736,7 +10736,21 @@
         ["比如：先给结论再展开；改代码前先说明思路和影响。", "For example: give the conclusion first, then the details; explain the approach and its impact before changing code."],
         ["在这个话题里它要一直遵守的做法，比如回答格式、资料来源。最多 {0} KB（约 {1} 个汉字），可以以后再改。", "What it should always do in this topic, such as the answer format or which sources to use. Up to {0} KB (about {1} Chinese characters, or three times as many English letters). You can change it later."],
         ["话题指令太长了，最多 {0} KB（约 {1} 个汉字）。", "The topic instructions are too long: up to {0} KB (about {1} Chinese characters, or three times as many English letters)."],
-        ["内容没有通过检查：话题名不能为空，最多 {0} 字；“专注什么”最多 {1} 字；话题指令最多 {2} KB；表情最多 {3} 个字符。", "This could not be saved: the topic name cannot be empty and can have at most {0} characters; the focus at most {1}; the topic instructions at most {2} KB; the emoji at most {3}."]
+        ["内容没有通过检查：话题名不能为空，最多 {0} 字；“专注什么”最多 {1} 字；话题指令最多 {2} KB；表情最多 {3} 个字符。", "This could not be saved: the topic name cannot be empty and can have at most {0} characters; the focus at most {1}; the topic instructions at most {2} KB; the emoji at most {3}."],
+        ["自己学习", "Learning on its own"],
+        ["让它从聊天里学习", "Let it learn from chats"],
+        ["聊完以后，它会把你的纠正、偏好和能重复用的做法记到记忆或技能草稿里；技能草稿要你看过才会启用。", "After chats, it saves your corrections, preferences and reusable steps into its memory or skill drafts; skill drafts need your review before they are used."],
+        ["会额外调用模型（每天最多 {0} 次）。", "Uses extra model calls (up to {0} times a day)."],
+        ["还没有配置学习用的辅助模型。", "Auxiliary models for learning aren't configured yet."],
+        ["配置辅助模型", "Configure auxiliary models"],
+        ["今天的学习次数或额度已经用完，明天会自动恢复。", "Today's learning limit is used up; it resets automatically tomorrow."],
+        ["最近几次学习没成功，可以打开更多学习设置看看。", "Recent learning runs failed; open More learning settings to check."],
+        ["暂时不能用学习功能。可以先打开“记忆和关于你”开启长期记忆。", "Learning isn't available right now. Open “Memory and about you” to turn on long-term memory first."],
+        ["更多学习设置", "More learning settings"],
+        ["已开启学习", "Learning turned on"],
+        ["已关闭学习", "Learning turned off"],
+        ["学习设置刚刚在别处改过，已刷新。", "Learning settings were just changed elsewhere and have been refreshed."],
+        ["刚刚那次操作结果还没确认，已保留记录。请重新打开设置核对，不要直接重试。", "That last action's result wasn't confirmed. Please reopen settings to check instead of retrying right away."]
     );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

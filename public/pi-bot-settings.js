@@ -49,7 +49,7 @@
         return node;
     }
 
-    // open({ api, toast, profileId, face, onSaved, onMemory, onRestart, onTrashed })
+    // open({ api, toast, profileId, face, onSaved, onMemory, onLearning, onRestart, onTrashed })
     async function open(options) {
         dialog?.close();
         dialog = el('dialog', 'pi-bot-sheet');
@@ -143,6 +143,7 @@
             const pending = changes();
             save.disabled = saving || decoding || !pending || !Object.keys(pending).length;
             for (const control of body.querySelectorAll('input,textarea,select,button')) control.disabled = saving;
+            controls.syncLearning?.();
             const model = controls.model.value ? data.models?.models.find(item => modelKey(item) === controls.model.value) : null;
             const levels = model?.thinkingLevels || [];
             controls.thinkingWrap.hidden = !levels.length;
@@ -477,6 +478,94 @@
             };
             showWechat();
 
+            // Background learning (server/profile-memory/learning-service.js): turning it on or off
+            // applies at once through PUT /profiles/:id/learning, like WeChat or follow-up actions,
+            // and never counts as a sheet edit.
+            const learning = el('div', 'pi-bot-sheet-learning');
+            let learningBusy = false, learningUncertain = false;
+            const validLearning = snap => snap?.version === 1 && Number.isSafeInteger(snap.revision) && snap.settings && typeof snap.settings === 'object';
+            const toggleLearning = async enabled => {
+                if (saving || learningBusy || learningUncertain || !validLearning(data.learning)) return;
+                learningBusy = true; showLearning();
+                status.textContent = translateUi("正在处理…"); delete status.dataset.tone;
+                try {
+                    const next = await options.api(`/api/pi/profiles/${encodeURIComponent(options.profileId)}/learning`, {
+                        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ expectedRevision: data.learning.revision, changes: { enabled } })
+                    });
+                    if (!sheet.open) return;
+                    if (!validLearning(next)) throw new Error(translateUi("保存失败"));
+                    data.learning = next;
+                    status.textContent = ''; delete status.dataset.tone;
+                    options.toast?.(enabled ? translateUi("已开启学习") : translateUi("已关闭学习"), 'success');
+                } catch (error) {
+                    if (!sheet.open) return;
+                    if (error.status === 409) {
+                        await loadLearning();
+                        if (!sheet.open) return;
+                        status.dataset.tone = 'warn';
+                        status.textContent = translateUi("学习设置刚刚在别处改过，已刷新。");
+                    } else if (error.status >= 400 && error.status < 500) {
+                        status.dataset.tone = 'error';
+                        status.textContent = translateUi("没有完成：{0}", error.message || translateUi("保存失败"));
+                    } else {
+                        learningUncertain = true;
+                        status.dataset.tone = 'error';
+                        status.textContent = translateUi("刚刚那次操作结果还没确认，已保留记录。请重新打开设置核对，不要直接重试。");
+                    }
+                } finally {
+                    learningBusy = false;
+                    if (sheet.open) showLearning();
+                }
+            };
+            const learningNodes = () => {
+                const snap = data.learning;
+                const more = button('pi-bot-sheet-link'); more.dataset.learningMore = '';
+                more.append(icon('fa-seedling'), el('span', null, translateUi("更多学习设置")), icon('fa-chevron-right'));
+                more.addEventListener('click', () => leave('learning', () => options.onLearning ? options.onLearning() : options.onMemory?.('learning')));
+                const maxRuns = Number.isSafeInteger(snap?.settings?.maxRunsPerDay) ? snap.settings.maxRunsPerDay : 20;
+                const note = el('p', 'pi-bot-sheet-note', `${translateUi("聊完以后，它会把你的纠正、偏好和能重复用的做法记到记忆或技能草稿里；技能草稿要你看过才会启用。")} ${translateUi("会额外调用模型（每天最多 {0} 次）。", maxRuns)}`);
+                if (!validLearning(snap) || snap.status !== 'ready' || snap.capabilities?.installed === false || snap.capabilities?.settingsWrite === false) {
+                    return [el('p', 'pi-bot-sheet-note', translateUi("暂时不能用学习功能。可以先打开“记忆和关于你”开启长期记忆。")), note, more];
+                }
+                const check = el('input'); check.type = 'checkbox'; check.checked = snap.settings.enabled === true;
+                check.dataset.learningSwitch = '';
+                check.disabled = saving || learningBusy || learningUncertain;
+                check.addEventListener('click', event => event.stopPropagation());
+                check.addEventListener('change', event => {
+                    event.stopPropagation();
+                    void toggleLearning(check.checked);
+                });
+                const row = el('label', 'pi-bot-sheet-check');
+                row.append(check, el('span', null, translateUi("让它从聊天里学习")));
+                const nodes = [row, note];
+                const state = snap.health?.state;
+                if (state === 'needs-model') {
+                    const hint = el('p', 'pi-bot-sheet-note', translateUi("还没有配置学习用的辅助模型。"));
+                    hint.dataset.learningHealth = 'needs-model';
+                    const configModels = button('pi-bot-chip', translateUi("配置辅助模型"));
+                    configModels.dataset.learningModels = '';
+                    configModels.addEventListener('click', () => leave('learning-models', () => window.dispatchEvent(new CustomEvent('workspace:open-settings', { detail: { tab: 'models' } }))));
+                    nodes.push(hint, configModels);
+                } else if (state === 'quota-exhausted') {
+                    const hint = el('p', 'pi-bot-sheet-note', translateUi("今天的学习次数或额度已经用完，明天会自动恢复。"));
+                    hint.dataset.learningHealth = 'quota-exhausted';
+                    nodes.push(hint);
+                } else if (state === 'failing') {
+                    const hint = el('p', 'pi-bot-sheet-note', translateUi("最近几次学习没成功，可以打开更多学习设置看看。"));
+                    hint.dataset.learningHealth = 'failing';
+                    nodes.push(hint);
+                }
+                nodes.push(more);
+                return nodes;
+            };
+            const showLearning = () => learning.replaceChildren(...learningNodes());
+            const syncLearning = () => {
+                const check = learning.querySelector('[data-learning-switch]');
+                if (check) check.disabled = saving || learningBusy || learningUncertain;
+            };
+            showLearning();
+
             const memory = button('pi-bot-sheet-link'); memory.append(icon('fa-book-open'), el('span', null, translateUi("记忆和关于你")), icon('fa-chevron-right'));
             memory.addEventListener('click', () => leave('memory', () => options.onMemory?.()));
             const restart = button('pi-bot-sheet-link'); restart.append(icon('fa-rotate-left'), el('span', null, translateUi("重新互相认识")), icon('fa-chevron-right'));
@@ -493,7 +582,7 @@
             trash.append(icon('fa-trash-can'), el('span', null, translateUi("移到回收站")), icon('fa-chevron-right'));
             trash.addEventListener('click', () => void moveToTrash());
 
-            controls = { name, job, soul, model, thinking, thinkingWrap, presets, showFace, showRules, proactive, quietOn, quietStart, quietEnd, limit, showNotify };
+            controls = { name, job, soul, model, thinking, thinkingWrap, presets, showFace, showRules, proactive, quietOn, quietStart, quietEnd, limit, showNotify, syncLearning };
             showFace();
             body.replaceChildren(
                 section(translateUi("名字和样子"), identity),
@@ -503,6 +592,7 @@
                 section(translateUi("做事方式"), presetList, honesty, rulesBox),
                 section(translateUi("主动找你"), notifyBox),
                 section(translateUi("微信"), wechat),
+                section(translateUi("自己学习"), learning),
                 section(translateUi("更多"), memory, restart, trash));
             const levels = data.models?.models.find(item => modelKey(item) === model.value)?.thinkingLevels || [];
             thinkingWrap.hidden = !levels.length;
@@ -520,9 +610,13 @@
             try { data.channels = await options.api('/api/pi/channels'); }
             catch { data.channels = null; }
         }
+        async function loadLearning() {
+            try { data.learning = await options.api(`/api/pi/profiles/${encodeURIComponent(options.profileId)}/learning`); }
+            catch { data.learning = null; }
+        }
         async function load() {
             data = await options.api(`/api/pi/bots/${encodeURIComponent(options.profileId)}/settings`);
-            await Promise.all([loadFollowUps(), loadChannels()]);
+            await Promise.all([loadFollowUps(), loadChannels(), loadLearning()]);
         }
 
         // The edits made in this sheet, to put back after rereading (only fields the user touched).

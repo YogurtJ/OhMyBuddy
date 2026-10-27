@@ -626,6 +626,7 @@
                 },
                 // Memory, about-you notes and learning keep living on the identity page.
                 onMemory: () => window.PiWorkspaceRoute?.navigate('profiles', { profileId, section: 'user' }),
+                onLearning: () => window.PiWorkspaceRoute?.navigate('profiles', { profileId, section: 'learning' }),
                 // Getting acquainted again happens in the main chat; the Bot starts once asked.
                 onRestart: async () => {
                     const main = this.bot()?.windows.find(item => item.kind === 'main');
