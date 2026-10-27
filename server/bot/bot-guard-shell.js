@@ -270,11 +270,17 @@ function classifySingleCommand({ toolName, command, cwd, agentDir }) {
             du: /^-(?:[shckmLxd]+|d\d+|--max-depth=\d+)$/, df: /^-[hTkiP]+$/, which: /^-a$/, whereis: /^-[bmsu]+$/,
             uname: /^-[asnrvmpio]+$/, basename: /^-a$/, dirname: /^$/, sort: /^-[rnuVfbk]+$/, uniq: /^-[cdiu]+$/,
             cut: /^-(?:[dfc]|d.|f[0-9,-]+|c[0-9,-]+)$/, tr: /^-[cds]+$/, nl: /^-[ba]+$/ };
+        // uniq INPUT OUTPUT writes its second operand.
+        if (name === 'uniq' && args.filter(arg => !arg.startsWith('-')).length > 1) return { status: 'unknown' };
         if (args.every(arg => !arg.startsWith('-') || arg === '--' || options[name]?.test(arg))) return { status: 'safe' };
     }
     if (SEARCH_COMMANDS.has(name)) {
         // Disallow find/rg/fd flags that execute external commands or delete files.
         const unsafeFlag = /^(?:-(?:exec|execdir|ok|okdir|delete|fls|fprint|fprint0|fprintf)|--(?:pre|pre-glob|exec|exec-batch))$/i;
+        // Short-option clusters too: fd -x/-X run commands, tree -o writes a file, rg -z runs decompressors.
+        const cluster = { fd: /^-[a-zA-Z]*[xX]/, tree: /^-[a-zA-Z]*o/, rg: /^-[a-zA-Z]*z/ }[name];
+        const longUnsafe = { rg: /^--search-zip$/, tree: /^--output$/ }[name];
+        if (args.some(arg => !arg.startsWith('--') && cluster?.test(arg) || longUnsafe?.test(arg.split('=')[0]))) return { status: 'unknown' };
         if (args.every(arg => !unsafeFlag.test(arg.split('=')[0]))) return { status: 'safe' };
     }
     if (name === 'git') {
@@ -288,6 +294,10 @@ function classifySingleCommand({ toolName, command, cwd, agentDir }) {
             }
             const unsafeGitOpt = /^(?:--help|-h|--output(?:=|$)|--ext-diff|--textconv|-c|--config-env|--exec-path|--git-dir|--work-tree)/;
             if (options.some(arg => unsafeGitOpt.test(arg))) return { status: 'unknown' };
+            // Diff output may run configured external diff or textconv programs unless both are disabled.
+            const showsPatch = operation === 'diff' || operation === 'show' && !options.some(arg => ['-s', '--no-patch'].includes(arg))
+                || operation === 'log' && options.some(arg => ['-p', '--patch'].includes(arg));
+            if (showsPatch && !(options.includes('--no-ext-diff') && options.includes('--no-textconv'))) return { status: 'unknown' };
             const flags = {
                 status: /^(?:--short|-s|--branch|-b|--porcelain(?:=v[12])?|--untracked-files(?:=(?:no|normal|all))?|--ignored|--ignore-submodules)$/,
                 diff: /^(?:--no-ext-diff|--no-textconv|--stat|--numstat|--shortstat|--name-only|--name-status|--cached|--staged|--check|--color(?:=(?:never|always|auto))?|--unified=\d+|-U\d+|-w|-b|--ignore-all-space|--ignore-space-change)$/,
