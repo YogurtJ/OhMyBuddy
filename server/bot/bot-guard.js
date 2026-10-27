@@ -2,7 +2,7 @@
 // Bounded tool-layer policy. It recognizes literal paths and a small command subset;
 // it does not sandbox shell execution, inspect program contents or replace OS isolation.
 const { randomBytes } = require('node:crypto');
-const { insideWorkspace, resolvePiPath, protectedPath, privateName, fileOperation } = require('./bot-guard-paths');
+const { insideWorkspace, resolvePiPath, pathAccess, credentialName, privateStateName, protectedPath, privateName, fileOperation } = require('./bot-guard-paths');
 const { classifyCommand, freeModeAsks, shellWords } = require('./bot-guard-shell');
 const { parseRule, normalizeRule, ruleFor, matchesRule } = require('./bot-guard-rules');
 const { scheduleDetail } = require('./bot-schedule');
@@ -35,6 +35,7 @@ function detailFor(kind, toolName, input) {
     if (kind === 'outside' || kind === 'write') return text(input?.path, 500);
     if (kind === 'memory') return text(input?.content ?? input?.old_text ?? '', 500);
     if (kind === 'delegate') return text(input?.task ?? input?.message ?? input?.title ?? '', 500) || toolName;
+    if (kind === 'action' && typeof input?.path === 'string' && input.path.trim()) return text(`${toolName} ${input.path}`, 500);
     return toolName;
 }
 
@@ -43,26 +44,34 @@ function detailFor(kind, toolName, input) {
 function approvalFor({ permissions, preset = permissions?.preset, toolName, input, cwd, agentDir, annotations }) {
     if (!PRESETS.includes(preset)) { preset = 'ask'; permissions = undefined; }
     if (typeof toolName !== 'string') return { block: true, reason: BLOCKED.protected };
-    // Reading tools still pass the path deny checks, including an annotated reader.
-    const fileRead = ['read', 'grep', 'find', 'ls'].includes(toolName);
-    if ((fileRead || typeof input?.path === 'string') && protectedPath(input?.path ?? (toolName === 'read' ? null : cwd), cwd, agentDir))
-        return { block: true, reason: BLOCKED.protected };
-    if (fileRead && [input?.glob, input?.pattern].some(value => typeof value === 'string' && privateName(value)))
-        return { block: true, reason: BLOCKED.protected };
-    if (SELF_ASKING.has(toolName)) return null;
     const ask = (kind, remember = false) => {
         const rule = remember ? ruleFor({ toolName, input, cwd, agentDir }) : null;
-        if (matchesRule(permissions?.rules, rule)) return null;
+        if (matchesRule(permissions?.rules, rule, agentDir)) return null;
         return { kind, detail: detailFor(kind, toolName, input), ...(rule ? { rule } : {}) };
     };
+    // Reading tools check path access: credentials ask once in Hands-off and are refused in careful
+    // modes; Pivane/Pi state paths run in Hands-off and ask once in careful modes.
+    const fileRead = ['read', 'grep', 'find', 'ls'].includes(toolName);
+    if (!WRITES.has(toolName) && (fileRead || typeof input?.path === 'string')) {
+        const access = pathAccess(input?.path ?? (toolName === 'read' ? null : cwd), cwd, agentDir);
+        const selectors = fileRead ? [input?.glob, input?.pattern].filter(value => typeof value === 'string') : [];
+        if (access === 'invalid') return { block: true, reason: BLOCKED.protected };
+        if (access === 'credential' || selectors.some(credentialName))
+            return preset === 'free' ? ask('action') : { block: true, reason: BLOCKED.protected };
+        if ((access === 'state' || selectors.some(privateStateName)) && preset !== 'free')
+            return ask('action');
+    }
+    if (SELF_ASKING.has(toolName)) return null;
     // A check-in the Bot sets for itself is one message, governed by the user's proactive settings
     // (on/off, quiet hours, daily limit) and cancellable in settings, so it does not ask each time.
     if (toolName === 'bot_schedule') return preset === 'free' || input?.action === 'list' || input?.action === 'create' && input?.proactive === true ? null : ask('schedule');
     if (COMMANDS.has(toolName)) {
         const command = classifyCommand({ toolName, input, cwd, agentDir });
         if (command.status === 'blocked') return { block: true, reason: BLOCKED.protected };
-        // Hands-off is full access: everything runs except a short list of clearly dangerous commands.
+        if (command.status === 'credential') return preset === 'free' ? ask('command') : { block: true, reason: BLOCKED.protected };
+        // Hands-off is full access: everything runs except credentials and the short list of dangerous commands.
         if (preset === 'free') return freeModeAsks({ toolName, input }) || annotations?.destructiveHint === true ? ask('command') : null;
+        if (command.status === 'state') return ask('command');
         return ask('command', command.status === 'safe' && annotations?.destructiveHint !== true);
     }
     if (DELEGATES.has(toolName)) return preset === 'free' ? null : ask('delegate');
@@ -70,9 +79,11 @@ function approvalFor({ permissions, preset = permissions?.preset, toolName, inpu
         const operation = fileOperation({ input, cwd, agentDir });
         if (operation.status === 'blocked') return { block: true, reason: BLOCKED.protected };
         const outside = !insideWorkspace(cwd, input?.path);
-        // Hands-off asks only for Pivane's own runtime, autostart/scheduler locations and directories.
-        if (preset === 'free') return operation.critical || annotations?.destructiveHint === true ? ask(outside ? 'outside' : 'write') : null;
-        if (operation.status === 'risk' || annotations?.destructiveHint === true) return ask(outside ? 'outside' : 'write');
+        const kind = outside ? 'outside' : 'write';
+        if (operation.status === 'credential') return preset === 'free' ? ask(kind) : { block: true, reason: BLOCKED.protected };
+        // Hands-off asks only for credentials, Pivane's own runtime, autostart/scheduler locations and directories.
+        if (preset === 'free') return operation.critical || annotations?.destructiveHint === true ? ask(kind) : null;
+        if (operation.status === 'state' || operation.status === 'risk' || annotations?.destructiveHint === true) return ask(kind);
         return outside ? ask('outside', true) : preset === 'ask' ? ask('write', true) : null;
     }
     if (annotations?.destructiveHint === true) return ask('action');

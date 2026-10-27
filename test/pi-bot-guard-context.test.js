@@ -55,21 +55,31 @@ test('managed Bot gate rereads rules on every call, refuses protected steps befo
     assert.deepEqual(await call('bash', { command: 'pwd' }), { block: true, reason: BLOCKED.not_approved }, 'only native Boolean true authorizes execution');
     answer = true;
     const beforeProtected = asked.length;
-    for (const preset of ['free', 'balanced', 'ask']) {
+    for (const preset of ['balanced', 'ask']) {
         await update({ preset });
-        for (const [tool, input] of [['read', { path: '.env' }], ['write', { path: path.join(agentDir, 'settings.json') }],
-            ['bash', { command: 'cat auth.json' }], ['powershell', { command: 'Get-Content .env' }]])
+        for (const [tool, input] of [['read', { path: '.env' }], ['bash', { command: 'cat auth.json' }], ['powershell', { command: 'Get-Content .env' }]])
             assert.deepEqual(await call(tool, input), { block: true, reason: BLOCKED.protected });
         assert.equal(await call('bot_topic_propose', { title: 'A topic' }), undefined);
     }
-    assert.equal(asked.length, beforeProtected, 'protected paths never reach confirmation UI');
+    assert.equal(asked.length, beforeProtected, 'credential paths in careful modes never reach confirmation UI');
+    await update({ preset: 'balanced' });
+    assert.equal(await call('write', { path: path.join(agentDir, 'settings.json') }), undefined);
+    assert.equal(asked.length, beforeProtected + 1, 'state paths ask once in careful modes');
+    assert.equal(asked.at(-1).rule, undefined);
+    await update({ preset: 'free' });
+    assert.equal(await call('write', { path: path.join(agentDir, 'settings.json') }), undefined);
+    assert.equal(asked.length, beforeProtected + 1, 'state paths run without asking in free mode');
+    assert.equal(await call('read', { path: '.env' }), undefined);
+    assert.equal(asked.length, beforeProtected + 2, 'credentials ask once in free mode');
+    assert.equal(asked.at(-1).rule, undefined);
+    const afterAsked = asked.length;
     await update({ preset: 'free' });
     ctx.hasUI = false;
     assert.deepEqual(await call('bash', { command: 'rm -rf notes' }), { block: true, reason: BLOCKED.unattended });
     ctx.hasUI = true;
     manager.appendCustomEntry('pivane-cron-run', { sessionId: session.id, runId: 'synthetic', status: 'running' });
     assert.deepEqual(await call('bash', { command: 'systemctl restart example' }), { block: true, reason: BLOCKED.unattended });
-    assert.equal(asked.length, beforeProtected);
+    assert.equal(asked.length, afterAsked);
     manager.appendCustomEntry('pivane-cron-run', { sessionId: session.id, runId: 'synthetic', status: 'completed' });
     const broken = path.join(root, 'broken'); fs.mkdirSync(path.join(broken, 'pivane-profiles', 'profiles.json'), { recursive: true });
     assert.deepEqual(await botPermissions(context, manager, session.cwd, broken, async () => {}), { preset: 'ask', rules: [] });
@@ -78,6 +88,6 @@ test('managed Bot gate rereads rules on every call, refuses protected steps befo
     agentRoot = broken;
     answer = false;
     assert.deepEqual(await call('bash', { command: 'pwd' }), { block: true, reason: BLOCKED.not_approved });
-    assert.equal(asked.length, beforeProtected + 1, 'read failure does not reuse a cached grant');
+    assert.equal(asked.length, afterAsked + 1, 'read failure does not reuse a cached grant');
     assert.ok(retired.every(item => item.pivaneBot?.event === 'approval-done'));
 });

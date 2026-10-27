@@ -25,12 +25,22 @@
 .pi-profile-receipt { border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
 .pi-profile-project-path { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The shared dialog lives outside the identity root. Use the same workspace tokens. */
-.pi-profile-confirm { position: fixed; inset: 0; margin: auto; box-sizing: border-box; width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 24px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface-1); color: var(--text-main); box-shadow: var(--shadow-float); }
+.pi-profile-confirm { position: fixed; inset: 0; margin: auto; box-sizing: border-box; width: min(460px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 24px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface-1); color: var(--text-main); box-shadow: var(--shadow-float); overflow-y: auto; }
 .pi-profile-confirm::backdrop { background: color-mix(in srgb, var(--text-main) 40%, transparent); }
-.pi-profile-confirm h2 { margin: 0 0 12px; }
+.pi-profile-confirm h2 { margin: 0 0 14px; font-size: 1.15rem; }
 .pi-profile-confirm p { margin: 0; line-height: 1.7; color: var(--text-soft); white-space: pre-line; }
-.pi-profile-confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.pi-profile-confirm-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
+.pi-profile-confirm-item { display: flex; align-items: flex-start; gap: 12px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.pi-profile-confirm-item.is-highlight { border-color: color-mix(in srgb, var(--primary, var(--green)) 45%, var(--line)); background: color-mix(in srgb, var(--primary, var(--green)) 8%, var(--surface-2)); }
+.pi-profile-confirm-item.is-warn { border-color: color-mix(in srgb, var(--warning, #d97706) 40%, var(--line)); background: color-mix(in srgb, var(--warning, #d97706) 7%, var(--surface-2)); }
+.pi-profile-confirm-icon { flex: none; width: 18px; margin-top: 3px; text-align: center; font-size: .92rem; color: var(--primary, var(--green)); }
+.pi-profile-confirm-item.is-warn .pi-profile-confirm-icon { color: var(--warning, #d97706); }
+.pi-profile-confirm-copy { display: grid; gap: 3px; min-width: 0; }
+.pi-profile-confirm-copy strong { font-size: .88rem; font-weight: 650; color: var(--text-main); line-height: 1.4; }
+.pi-profile-confirm-copy span { font-size: .84rem; line-height: 1.55; color: var(--text-soft); overflow-wrap: anywhere; }
+.pi-profile-confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 .pi-profile-confirm .pi-profile-confirm-discard { background: var(--danger); border-color: var(--danger); color: var(--primary-contrast); }
+.pi-profile-confirm .pi-profile-confirm-primary { background: var(--primary, var(--green)); border-color: var(--primary, var(--green)); color: var(--primary-contrast); }
 .pi-profile-confirm button { min-height: 42px; }
 .pi-profile-confirm button:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
 .pi-session-profile { flex: 0 1 auto; min-width: 0; max-width: 170px; font-size: .76rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-soft); border-left: 1px solid var(--line); padding-left: 8px; }

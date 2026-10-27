@@ -59,30 +59,52 @@ function insideWorkspace(cwd, raw, resolve = resolvePiPath) {
     } catch { return false; }
 }
 
-// Deliberately names only recognizable credential stores and Pivane/Pi private state.
-// This is tool-layer policy, not a filesystem sandbox or a scan of file contents.
-function privateName(value) {
-    const parts = value.replaceAll('\\', '/').toLowerCase().split(/[/:]/);
-    return /^\/(?:proc|dev\/fd)(?:\/|$)/.test(value.replaceAll('\\', '/')) || parts.some((part, index) => /^\.env(?:[.*?\[].*)?$/.test(part)
-        || /^(?:auth\.json|shadow|gshadow|master\.passwd|credentials(?:\..*)?|secrets?(?:\..*)?|\.netrc|_netrc|\.npmrc|\.pypirc|\.git-credentials)$/.test(part)
-        || /^(?:\.ssh|\.aws|\.azure|\.kube|\.gnupg|\.pivane|pivane-profiles|pivane-bots)$/.test(part)
-        || /^(?:id_(?:rsa|dsa|ecdsa|ed25519)(?:\..*)?|.*\.(?:pem|key|p12|pfx))$/.test(part)
-        || part === '.pi' && ['agent', 'settings.json', 'trust.json', 'auth.json'].includes(parts[index + 1])
-        || part === '.docker' && parts[index + 1] === 'config.json'
-        || part === '.config' && ['gcloud', 'pivane'].includes(parts[index + 1]));
+// Deliberately separates recognizable credential stores/private keys from Pivane/Pi
+// private application state. This is tool-layer policy, not a filesystem sandbox.
+function forbiddenName(value) {
+    return /^\/(?:proc|dev\/fd)(?:\/|$)/.test(value.replaceAll('\\', '/').toLowerCase());
 }
-function protectedPath(raw, cwd, agentDir, resolve = resolvePiPath) {
-    if (typeof raw !== 'string' || !raw || /[\x00-\x1f\x7f]/.test(raw)) return true;
-    if (privateName(raw)) return true;
+function credentialName(value) {
+    const parts = value.replaceAll('\\', '/').toLowerCase().split(/[/:]/);
+    return forbiddenName(value) || parts.some((part, index) => /^\.env(?:[.*?\[].*)?$/.test(part)
+        || /^(?:auth\.json|shadow|gshadow|master\.passwd|credentials(?:\..*)?|secrets?(?:\..*)?|\.netrc|_netrc|\.npmrc|\.pypirc|\.git-credentials|(?:pivane|pi5)-access\.json)$/.test(part)
+        || /^(?:\.ssh|\.aws|\.azure|\.kube|\.gnupg|(?:pivane|pi5)-channels)$/.test(part)
+        || /^(?:id_(?:rsa|dsa|ecdsa|ed25519)(?:\..*)?|.*\.(?:pem|key|p12|pfx))$/.test(part)
+        || part === '.docker' && parts[index + 1] === 'config.json'
+        || part === '.config' && parts[index + 1] === 'gcloud');
+}
+function privateStateName(value) {
+    const parts = value.replaceAll('\\', '/').toLowerCase().split(/[/:]/);
+    return parts.some((part, index) => /^(?:\.pivane|pivane-profiles|pivane-bots)$/.test(part)
+        || part === '.pi' && ['agent', 'settings.json', 'trust.json'].includes(parts[index + 1])
+        || part === '.config' && parts[index + 1] === 'pivane');
+}
+function privateName(value) { return credentialName(value) || privateStateName(value); }
+function pathAccess(raw, cwd, agentDir, resolve = resolvePiPath) {
+    if (typeof raw !== 'string' || !raw || /[\x00-\x1f\x7f]/.test(raw) || forbiddenName(raw)) return 'invalid';
+    const cred = credentialName(raw);
+    const state = privateStateName(raw);
     try {
         const lexical = resolve(raw, cwd), target = canonicalTarget(lexical);
-        if (!target || privateName(lexical) || privateName(target)) return true;
+        if (!target || forbiddenName(lexical) || forbiddenName(target)) return 'invalid';
+        if (cred || credentialName(lexical) || credentialName(target)) return 'credential';
+        if (state || privateStateName(lexical) || privateStateName(target)) return 'state';
         if (agentDir) {
             const root = path.resolve(agentDir), real = canonicalTarget(root);
-            if (within(root, lexical) || real && within(real, target)) return true;
+            if (within(root, lexical) || real && within(real, target)) return 'state';
         }
-        return false;
-    } catch { return true; }
+        return 'ok';
+    } catch { return 'invalid'; }
+}
+function credentialPath(raw, cwd, agentDir, resolve = resolvePiPath) {
+    const access = pathAccess(raw, cwd, agentDir, resolve);
+    return access === 'invalid' || access === 'credential';
+}
+function privateStatePath(raw, cwd, agentDir, resolve = resolvePiPath) {
+    return pathAccess(raw, cwd, agentDir, resolve) === 'state';
+}
+function protectedPath(raw, cwd, agentDir, resolve = resolvePiPath) {
+    return pathAccess(raw, cwd, agentDir, resolve) !== 'ok';
 }
 // Shell arguments do not use Pi's @ prefix or Unicode-space normalization. Quoted
 // paths must be checked exactly as the shell will use them. Unquoted ~ remains opaque.
@@ -105,10 +127,13 @@ function systemPath(target) {
 }
 function fileOperation({ input, cwd, agentDir }) {
     const raw = input?.path;
-    if (protectedPath(raw, cwd, agentDir)) return { status: 'blocked' };
+    const access = pathAccess(raw, cwd, agentDir);
+    if (access === 'invalid') return { status: 'blocked' };
     const value = canonicalTarget(resolvePiPath(raw, cwd));
     let directory = false;
     try { directory = fs.statSync(value).isDirectory(); } catch { /* New files are allowed. */ }
+    if (access === 'credential') return { status: 'credential', critical: true, value };
+    if (access === 'state') return { status: 'state', critical: directory || criticalPath(value), value };
     return { status: systemPath(value) || directory ? 'risk' : 'safe', critical: directory || criticalPath(value), value };
 }
-module.exports = { resolvePiPath, resolveShellPath, resolvePowerShellPath, canonicalTarget, insideWorkspace, privateName, protectedPath, systemPath, criticalPath, fileOperation, within };
+module.exports = { resolvePiPath, resolveShellPath, resolvePowerShellPath, canonicalTarget, insideWorkspace, credentialName, privateStateName, privateName, pathAccess, credentialPath, privateStatePath, protectedPath, systemPath, criticalPath, fileOperation, within };

@@ -1,6 +1,6 @@
 'use strict';
 const path = require('node:path');
-const { privateName, protectedPath, insideWorkspace, systemPath, canonicalTarget, resolveShellPath, resolvePowerShellPath } = require('./bot-guard-paths');
+const { credentialName, privateStateName, pathAccess, insideWorkspace, systemPath, canonicalTarget, resolveShellPath, resolvePowerShellPath } = require('./bot-guard-paths');
 
 // A small literal-command recognizer, not a shell interpreter. Shell expansion, control
 // syntax, wrappers and executable scripts require one-time approval and cannot be saved.
@@ -193,29 +193,45 @@ function freeModeAsks({ toolName, input }) {
     return RUNTIME_TEXT.test(command) || visitCommands(command, toolName === 'powershell' ? 'powershell' : 'bash', dangerous);
 }
 
-function obviousPrivate(command, words, cwd, agentDir, resolve, tool = 'bash') {
+// Returns 'blocked' (full environment dump or unresolvable/hardlink alias), 'credential'
+// (recognizable credential/private key), 'state' (Pivane/Pi private state), or 'ok'.
+function commandPrivacy(command, words, cwd, agentDir, resolve, tool = 'bash') {
+    if (visitCommands(command, tool, dumpsEnvironment)
+        || /(?:^|[\s'"`=;,:|<>(){}])(?:\/proc\/[^\s'"`=;,:|<>(){}]*\/environ|(?:^|[/:])(?:environ|self\/fd)(?:\/|$))/i.test(command)
+        || /\bget-childitem\s+env:/i.test(command)) return 'blocked';
+    const cwdAccess = pathAccess(cwd, cwd, agentDir, resolve);
+    if (cwdAccess === 'invalid') return 'blocked';
+    let hasCredential = cwdAccess === 'credential', hasState = cwdAccess === 'state';
+    const checkCandidate = candidate => {
+        const access = pathAccess(candidate, cwd, agentDir, resolve);
+        if (access === 'invalid') return 'blocked';
+        if (access === 'credential') hasCredential = true;
+        else if (access === 'state') hasState = true;
+        return 'ok';
+    };
     // Inspect literals even in opaque programs before deciding whether to ask. Splitting
     // quoted program text catches obvious interpreter/eval attempts without evaluating it.
     const fragments = [command, ...words].flatMap(value => value.split(/[\s'"`=;,:|<>(){}]+/));
     for (const fragment of fragments) {
         if (!fragment) continue;
-        if (privateName(fragment) || /(?:^|[/:])(?:environ|self\/fd)(?:\/|$)/i.test(fragment)) return true;
-        if (!fragment.startsWith('-') && protectedPath(fragment, cwd, agentDir, resolve)) return true;
-        if (agentDir && fragment.toLowerCase().includes(agentDir.replaceAll('\\', '/').toLowerCase())) return true;
+        if (credentialName(fragment)) { hasCredential = true; continue; }
+        if (privateStateName(fragment)) { hasState = true; continue; }
+        if (!fragment.startsWith('-') && checkCandidate(fragment) === 'blocked') return 'blocked';
+        if (agentDir && fragment.toLowerCase().includes(agentDir.replaceAll('\\', '/').toLowerCase())) hasState = true;
     }
     if (/\$(?:\{)?(?:[a-z0-9_]*(?:token|secret|password|api_key|private_key|credential)[a-z0-9_]*)(?:\})?\b/i.test(command)
-        || /\$env\s*:/i.test(command) || /\b(?:env|variable):\s*[^\s]*/i.test(command)) return true;
-    if (visitCommands(command, tool, dumpsEnvironment)) return true;
+        || /\$env\s*:/i.test(command) || /\b(?:env|variable):\s*[^\s]*/i.test(command)) hasCredential = true;
     for (const word of words) {
         const name = commandName(word);
-        if (CREDENTIAL_COMMANDS.has(name) || name === 'security' || name === 'credential') return true;
+        if (name === 'printenv' || name === 'get-childitem-env') return 'blocked';
+        if (CREDENTIAL_COMMANDS.has(name) || name === 'security' || name === 'credential') hasCredential = true;
         // Option values can name a file too. A plain word is checked for symlinks and
         // hard links as well; this intentionally prefers refusal to a private alias.
         for (const candidate of word.startsWith('-') && word.includes('=') ? [word.slice(word.indexOf('=') + 1)] : [word]) {
-            if (candidate && !candidate.startsWith('-') && protectedPath(candidate, cwd, agentDir, resolve)) return true;
+            if (candidate && !candidate.startsWith('-') && checkCandidate(candidate) === 'blocked') return 'blocked';
         }
     }
-    return false;
+    return hasCredential ? 'credential' : hasState ? 'state' : 'ok';
 }
 function isSafeDateArgs(args) {
     for (let i = 0; i < args.length; i++) {
@@ -234,9 +250,7 @@ function isSafeDateArgs(args) {
 function classifySingleCommand({ toolName, command, cwd, agentDir }) {
     const { words, opaque } = shellWords(command, toolName);
     const resolve = toolName === 'powershell' ? resolvePowerShellPath : resolveShellPath;
-    if (obviousPrivate(command, words, cwd, agentDir, resolve, toolName === 'powershell' ? 'powershell' : 'bash') || protectedPath(cwd, cwd, agentDir, resolve)) return { status: 'blocked' };
-    if (!words.length) return { status: 'unknown' };
-    const names = words.map(commandName), name = toolName === 'powershell' ? names[0] : path.posix.basename(words[0]), args = words.slice(1);
+    const names = words.map(commandName), name = words.length ? (toolName === 'powershell' ? names[0] : path.posix.basename(words[0])) : '', args = words.slice(1);
     // PowerShell expands -Path wildcards in quoted strings too. Without a strictly
     // literal operand, even '*' can select credentials or a private alias. Refuse
     // unsupported selectors rather than asking or offering a persistent grant.
@@ -245,6 +259,11 @@ function classifySingleCommand({ toolName, command, cwd, agentDir }) {
             && !args[1].startsWith('-') && !args[1].includes(':');
         if (!literalPath) return { status: 'blocked' };
     }
+    const privacy = commandPrivacy(command, words, cwd, agentDir, resolve, toolName === 'powershell' ? 'powershell' : 'bash');
+    if (privacy === 'blocked') return { status: 'blocked' };
+    if (privacy === 'credential') return { status: 'credential' };
+    if (privacy === 'state') return { status: 'state' };
+    if (!words.length) return { status: 'unknown' };
     if (names.some(value => DANGEROUS.has(value)) || /\b(?:push|publish|deploy|upload|delete|destroy|reset|clean|format-volume)\b/i.test(words.join(' '))) return { status: 'risk' };
     if (opaque) return { status: 'unknown' };
     // A relative executable, an alternate absolute binary or a command wrapper is opaque.
@@ -328,13 +347,15 @@ function classifyCommand({ toolName, input, cwd, agentDir }) {
     if (single.status !== 'unknown' || toolName !== 'bash') return single;
     const segments = splitSimpleSegments(command);
     if (!segments || segments.length <= 1 || segments.length > 8) return single;
-    let currentCwd = cwd;
+    let currentCwd = cwd, sawState = false;
     for (const segment of segments) {
         const result = classifySingleCommand({ toolName, command: segment, cwd: currentCwd, agentDir });
-        if (result.status !== 'safe') return result;
+        if (result.status === 'blocked' || result.status === 'credential') return result;
+        if (result.status === 'state') sawState = true;
+        else if (result.status !== 'safe') return sawState ? { status: 'state' } : result;
         const { words } = shellWords(segment, toolName);
         if (words[0] === 'cd' && words[1]) currentCwd = resolveShellPath(words[1], currentCwd);
     }
-    return { status: 'safe' };
+    return sawState ? { status: 'state' } : { status: 'safe' };
 }
 module.exports = { shellWords, classifyCommand, freeModeAsks };

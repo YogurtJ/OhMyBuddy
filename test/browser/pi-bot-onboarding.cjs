@@ -106,10 +106,10 @@ const CLOSING = '好，我们算是认识了。';
                 assert.match(facts, /运行 Pivane 的这台电脑上/);
                 assert.match(facts, /“稳妥”/);
                 assert.match(facts, /不是系统沙箱/);
-                await closure.locator('[data-closure-model]').waitFor();
-                assert.equal(await closure.locator('[data-closure-model] option').first().textContent(), '跟随默认（Small）');
+                await closure.locator('[data-closure-model-trigger]').waitFor();
+                assert.equal(await closure.locator('[data-closure-model-trigger] .pi-model-trigger-label').textContent(), '跟随默认（Small）');
                 assert.deepEqual(world.prompts, [], 'nothing reaches the model by itself');
-                if (phone) assert.equal(await closure.locator('[data-closure-model]').evaluate(node => getComputedStyle(node).fontSize), '16px');
+                if (phone) assert.equal(await closure.locator('[data-closure-model-trigger]').evaluate(node => getComputedStyle(node).fontSize), '16px');
                 const box = await closure.boundingBox();
                 assert.ok(box.x >= 0 && box.x + box.width <= width + 1, 'the panel fits the composer column');
                 assert.equal((await layout(page)).overflow, false);
@@ -138,12 +138,16 @@ const CLOSING = '好，我们算是认识了。';
 
                 // 3. Model: a failure, a conflict and an unavailable model keep the choice and never
                 // claim it was saved; the messages are the user's language.
-                await closure.locator('[data-closure-model]').selectOption({ label: 'Large' });
+                await closure.locator('[data-closure-model-trigger]').click();
+                const modelDialog = page.locator('#pi-bot-closure-model-dialog[open]');
+                await modelDialog.waitFor();
+                await modelDialog.locator('.pi-model-all').click();
+                await modelDialog.locator('.pi-model-option').filter({ hasText: 'Large' }).click();
                 await closure.locator('[data-closure-thinking]').selectOption({ label: '高' });
                 await closure.locator('[data-closure-action="model"]').click();
                 await closure.locator('.pi-bot-setup-note.is-error').filter({ hasText: '模型没有保存：Disk full' }).waitFor();
                 assert.equal(await closure.locator('.pi-bot-closure-saved').count(), 0);
-                assert.equal(await closure.locator('[data-closure-model]').evaluate(node => node.selectedOptions[0].textContent), 'Large');
+                assert.equal(await closure.locator('[data-closure-model-trigger] .pi-model-trigger-label').textContent(), 'Large');
                 assert.equal(await closure.locator('[data-closure-thinking]').inputValue(), 'high');
                 await closure.locator('[data-closure-action="model"]').click();
                 await closure.locator('.pi-bot-setup-note.is-error').filter({ hasText: '你的选择还在' }).waitFor();

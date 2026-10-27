@@ -79,6 +79,8 @@ async function main() {
                 const confirm = page.locator('.pi-profile-confirm[open]');
                 await confirm.waitFor();
                 assert.equal(await confirm.locator('h2').textContent(), '把“数学老师”变成 Bot？');
+                assert.equal(await confirm.locator('.pi-profile-confirm-item').count(), 3, 'structured confirmation highlights');
+                assert.equal(await confirm.locator('.pi-profile-confirm-primary').count(), 1, 'primary action tone');
                 const text = await confirm.innerText();
                 assert.match(text, /保留名字、头像、性格、记忆和技能/); assert.match(text, /Pi Agent 的线程列表/);
                 assert.match(text, /以它为目标的 1 个定时任务以后会发到 Bot 的主聊天/, 'only live tasks aimed at this identity are counted');

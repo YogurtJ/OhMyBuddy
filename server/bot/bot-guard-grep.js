@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { readVerifiedFile } = require('../pi-file-bytes');
-const { protectedPath, resolvePiPath, resolveShellPath, within } = require('./bot-guard-paths');
+const { pathAccess, resolvePiPath, resolveShellPath, within } = require('./bot-guard-paths');
 
 const GREP_LIMITS = Object.freeze({ entries: 4096, files: 512, fileBytes: 1024 * 1024, totalBytes: 8 * 1024 * 1024,
     discoveryBytes: 1024 * 1024, positionsBytes: 256 * 1024, outputBytes: 50 * 1024, lineChars: 500, milliseconds: 5000 });
@@ -48,12 +48,15 @@ async function botGrep(input, { cwd, agentDir, signal }) {
     validateInput(input);
     const deadline = Date.now() + GREP_LIMITS.milliseconds;
     const requested = resolvePiPath(input.path || '.', cwd);
-    if (protectedPath(requested, cwd, agentDir, resolveShellPath)) throw denied();
+    const rootAccess = pathAccess(requested, cwd, agentDir, resolveShellPath);
+    if (rootAccess === 'invalid' || rootAccess === 'credential') throw denied();
+    const allowState = rootAccess === 'state';
     const root = await fs.promises.realpath(requested), stat = await fs.promises.stat(root);
     if (!stat.isDirectory() && !stat.isFile()) throw denied();
     const directory = stat.isDirectory();
     const check = actual => {
-        if (!(directory ? within(root, actual) : actual === root) || protectedPath(actual, cwd, agentDir, resolveShellPath)) throw denied();
+        const access = pathAccess(actual, cwd, agentDir, resolveShellPath);
+        if (!(directory ? within(root, actual) : actual === root) || access === 'invalid' || access === 'credential' || (!allowState && access === 'state')) throw denied();
     };
     const localRg = path.join(agentDir, 'bin', process.platform === 'win32' ? 'rg.exe' : 'rg');
     const executable = fs.existsSync(localRg) ? localRg : 'rg';

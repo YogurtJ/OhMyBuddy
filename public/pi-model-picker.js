@@ -34,7 +34,7 @@
         } catch { return []; }
     }
     class PiModelPicker {
-        constructor({ button, onSelect, api, id = 'pi-model-dialog' }) {
+        constructor({ button, select, onSelect, api, id = 'pi-model-dialog', defaultLabel = '' }) {
             this.events = new AbortController();
             this.api = api || favoritesApi;
             this.revision = -1;
@@ -43,7 +43,9 @@
             this.migrationConfirmed = false;
             this.syncMessage = '';
             this.button = button;
+            this.select = select || null;
             this.onSelect = onSelect;
+            this.defaultLabel = defaultLabel;
             this.models = [];
             this.current = null;
             this.favorites = readKeys(FAVORITES, 5000);
@@ -88,10 +90,31 @@
             document.body.append(this.dialog);
             button.addEventListener('click', () => this.open());
             this.search.addEventListener('input', () => { this.limit = 60; this.render(); });
+            if (this.select) {
+                this.select.hidden = true;
+                this.select.addEventListener('change', () => {
+                    const value = this.select.value;
+                    if (!value) {
+                        this.current = null;
+                        this.renderTrigger();
+                        if (this.dialog.open) this.render();
+                        this.onSelect?.(null);
+                        return;
+                    }
+                    const sep = value.indexOf('\u0000');
+                    const picked = this.models.find(item => `${item.provider}\u0000${item.id}` === value)
+                        || (sep > 0 ? { provider: value.slice(0, sep), id: value.slice(sep + 1) } : null);
+                    this.current = picked;
+                    this.renderTrigger();
+                    if (this.dialog.open) this.render();
+                    if (picked) this.onSelect?.(picked);
+                }, { signal: this.events.signal });
+            }
             this.dialog.addEventListener('close', () => {
                 button.setAttribute('aria-expanded', 'false');
                 clearInterval(this.syncTimer);
                 if (innerWidth <= 680 && !button.getClientRects().length && id === 'pi-model-dialog') document.getElementById('pi-mobile-context-trigger')?.focus({ preventScroll: true });
+                else if (button.isConnected && button.getClientRects().length) button.focus({ preventScroll: true });
             });
             this.dialog.addEventListener('click', event => {
                 if (event.target !== this.dialog) return;
@@ -190,10 +213,11 @@
             this.recent = [key, ...this.recent.filter(value => value !== key)].slice(0, 5);
             this.save(RECENT, this.recent);
         }
-        update(models, current, disabled, placeholder) {
+        update(models, current, disabled, placeholder, defaultLabel = this.defaultLabel) {
             const previous = this.current && keyOf(this.current);
             this.models = models;
             this.current = current;
+            this.defaultLabel = defaultLabel;
             if (current && keyOf(current) !== previous) this.remember(current);
             this.placeholder = placeholder;
             this.renderTrigger();
@@ -203,9 +227,12 @@
         }
         setPending(selection) { this.pendingSelection = selection; this.renderTrigger(); }
         renderTrigger() {
-            const model = this.pendingSelection || this.models.find(item => this.current && keyOf(item) === keyOf(this.current)) || this.current;
-            const name = model?.name || model?.id;
-            this.label.textContent = this.pendingSelection ? t('切换至 {0}…', name) : name || this.placeholder || t(this.models.length ? '请选择已接入的模型' : '尚无可用模型');
+            const listed = this.models.find(item => this.current && keyOf(item) === keyOf(this.current));
+            const model = this.pendingSelection || listed || this.current;
+            const unavailable = Boolean(this.current && !listed && !this.pendingSelection && this.models.length);
+            const rawName = model?.name || model?.id;
+            const name = unavailable && rawName ? t('{0}（现在不可用）', rawName) : rawName;
+            this.label.textContent = this.pendingSelection ? t('切换至 {0}…', name) : name || this.defaultLabel || this.placeholder || t(this.models.length ? '请选择已接入的模型' : '尚无可用模型');
             this.progress.hidden = !this.pendingSelection;
             this.button.setAttribute('aria-busy', String(Boolean(this.pendingSelection)));
             this.button.title = this.pendingSelection ? this.label.textContent : model ? `${name}\n${model.provider} / ${model.id}` : this.label.textContent;
@@ -213,6 +240,7 @@
         }
         setDisabled(disabled) {
             this.button.disabled = disabled;
+            if (this.select) this.select.disabled = disabled;
             if (disabled) this.close();
         }
         position() {
@@ -262,6 +290,11 @@
                 this.results.append(section);
             };
             const query = this.search.value.trim().toLocaleLowerCase();
+            if (this.defaultLabel && (!query || this.defaultLabel.toLocaleLowerCase().includes(query))) {
+                const section = node('section', 'pi-model-group pi-model-default-group');
+                section.append(this.defaultRow());
+                this.results.append(section);
+            }
             if (query || this.all) {
                 const words = query.split(/\s+/).filter(Boolean);
                 const matches = this.models.filter(model => words.every(word => `${model.name || ''} ${model.id} ${model.provider}`.toLocaleLowerCase().includes(word)));
@@ -284,7 +317,8 @@
                 }
             } else {
                 addGroup(t('常用模型'), this.favorites.map(key => byKey.get(key)));
-                addGroup(t('当前模型'), this.current ? [byKey.get(keyOf(this.current))] : []);
+                const cur = this.current ? (byKey.get(keyOf(this.current)) || { ...this.current, name: t('{0}（现在不可用）', this.current.name || this.current.id) }) : null;
+                addGroup(t('当前模型'), cur ? [cur] : []);
                 addGroup(t('最近使用'), this.recent.map(key => byKey.get(key)));
                 if (!seen.size) this.results.append(node('p', 'pi-model-empty', t('搜索或查看全部模型，点击星标加入常用。')));
             }
@@ -317,6 +351,10 @@
             choose.addEventListener('click', () => {
                 if (this.button.disabled) return;
                 this.close();
+                if (this.select) {
+                    const val = `${model.provider}\u0000${model.id}`;
+                    if ([...this.select.options].some(opt => opt.value === val)) this.select.value = val;
+                }
                 // The coordinator rechecks busy state and owns RPC/generation checks.
                 this.onSelect(model);
             });
@@ -331,6 +369,27 @@
             row.append(choose, star);
             return row;
         }
+        defaultRow() {
+            const row = node('div', 'pi-model-row pi-model-default-row');
+            const selected = !this.current;
+            row.dataset.current = String(selected);
+            const choose = node('button', 'pi-model-option');
+            choose.type = 'button'; choose.dataset.key = '__default__';
+            if (selected) choose.setAttribute('aria-current', 'true');
+            const copy = node('div', 'pi-model-copy');
+            copy.append(node('strong', '', this.defaultLabel), node('small', '', t('使用工作台默认模型')));
+            const mark = node('b', 'pi-model-check', selected ? '✓' : '');
+            mark.setAttribute('aria-hidden', 'true');
+            choose.append(mark, copy);
+            choose.addEventListener('click', () => {
+                if (this.button.disabled) return;
+                this.close();
+                if (this.select) this.select.value = '';
+                this.onSelect(null);
+            });
+            row.append(choose);
+            return row;
+        }
     }
     window.PiModelPicker = PiModelPicker;
 })();
@@ -339,13 +398,14 @@
 (() => {
     const t = globalThis.PiI18n?.t || ((text, ...values) => text.replace(/\{(\d+)\}/g, (_, i) => values[i] ?? ''));
     class PiThinkingPicker {
-        constructor(select, { beforeOpen = () => {} } = {}) {
+        constructor(select, { beforeOpen = () => {}, id = select.id ? select.id + '-dialog' : 'pi-thinking-dialog' } = {}) {
+            this.events = new AbortController();
             this.select = select; this.beforeOpen = beforeOpen;
             this.button = document.createElement('button'); this.button.type = 'button'; this.button.className = 'pi-thinking-trigger';
-            this.button.id = select.id + '-trigger';
+            if (select.id) this.button.id = select.id + '-trigger';
             this.button.setAttribute('aria-haspopup', 'listbox'); this.button.setAttribute('aria-expanded', 'false');
             select.hidden = true; select.after(this.button); select.closest('.pi-thinking-field, .pi-mobile-thinking-choice')?.classList.add('has-thinking-picker');
-            this.dialog = document.createElement('dialog'); this.dialog.className = 'pi-thinking-dialog'; this.dialog.id = select.id + '-dialog';
+            this.dialog = document.createElement('dialog'); this.dialog.className = 'pi-thinking-dialog'; this.dialog.id = id;
             this.dialog.setAttribute('aria-label', t('思考等级')); this.button.setAttribute('aria-controls', this.dialog.id);
             const header = document.createElement('div'); header.className = 'pi-thinking-heading';
             const title = document.createElement('strong'); title.textContent = t('思考等级');
@@ -372,8 +432,13 @@
                 const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
                 items[next]?.focus();
             });
-            window.addEventListener('resize', () => this.close());
+            window.addEventListener('resize', () => this.close(), { signal: this.events.signal });
             this.sync();
+        }
+        dispose() {
+            this.close();
+            this.events.abort();
+            this.dialog.remove();
         }
         sync(pending = false) {
             this.button.disabled = this.select.disabled;

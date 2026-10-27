@@ -17,6 +17,7 @@ process.env.PI_TELEMETRY = '0';
 const protectedMarker = `SYNTHETIC_PRIVATE_${randomBytes(16).toString('hex')}`;
 for (const name of ['auth.json', '.env', 'nested/auth.json']) fs.writeFileSync(path.join(cwd, name), protectedMarker);
 fs.writeFileSync(path.join(agentDir, 'private.json'), protectedMarker);
+fs.writeFileSync(path.join(agentDir, 'linked.json'), protectedMarker);
 fs.writeFileSync(path.join(cwd, 'safe.json'), 'before\nSafe needle value\nafter\n');
 fs.writeFileSync(path.join(cwd, 'nested', 'safe.json'), 'safe NEEDLE second\n');
 fs.writeFileSync(path.join(cwd, 'safe[1].txt'), 'literal [x] needle\n');
@@ -26,7 +27,7 @@ fs.writeFileSync(path.join(cwd, 'skip.ignored'), 'ignored needle\n');
 fs.symlinkSync(path.join(agentDir, 'private.json'), path.join(cwd, 'alias.json'));
 fs.symlinkSync(agentDir, path.join(cwd, 'private-dir'));
 fs.symlinkSync(path.join(cwd, 'safe.json'), path.join(cwd, 'safe-link.json'));
-fs.linkSync(path.join(agentDir, 'private.json'), path.join(cwd, 'hard.json'));
+fs.linkSync(path.join(agentDir, 'linked.json'), path.join(cwd, 'hard.json'));
 fs.symlinkSync(path.join(root, 'missing'), path.join(cwd, 'dangling.json'));
 fs.symlinkSync(path.join(cwd, 'loop-b'), path.join(cwd, 'loop-a'));
 fs.symlinkSync(path.join(cwd, 'loop-a'), path.join(cwd, 'loop-b'));
@@ -71,8 +72,10 @@ test('managed grep keeps regex, literal, case, glob, context, line numbers and m
     assert.ok(text(anchored).includes('one.anchor:1: needle') && text(anchored).includes('two.anchor:1: needle'), 'each original file keeps its own regex boundaries');
     const alias = await run({ path: 'safe-link.json', pattern: 'needle' });
     assertFiltered(alias); assert.ok(text(alias).includes('Safe needle value'), 'a safe direct file alias remains supported');
-    for (const name of ['auth.json', '.env', 'alias.json', 'hard.json', 'private-dir', 'dangling.json', 'loop-a'])
+    for (const name of ['auth.json', '.env', 'hard.json', 'dangling.json', 'loop-a'])
         await assert.rejects(run({ path: name, pattern: '.' }), /Managed Bot grep/);
+    const stateResult = await run({ path: 'private-dir', pattern: 'SYNTHETIC_PRIVATE' });
+    assert.ok(text(stateResult).includes('private.json:1:'), 'direct state search works when allowed by the tool gate');
 });
 
 test('managed grep uses kernel descriptor identity and rejects a substituted descriptor before reading it', async t => {
