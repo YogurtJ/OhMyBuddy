@@ -119,7 +119,7 @@ function planRetention(directory, state, limits = DEFAULT_RETENTION, { completed
     if (missingBackups.length) { plan.skipped = 'missing-current-or-previous-restore-backup'; plan.removeBackups = []; plan.removeReleases = []; }
     let context;
     try {
-        context = { directory, stateHash: storage.stateProof(directory), roots: Object.fromEntries([root, directory, ...['releases', 'backups'].map(k => path.join(directory, k))].filter(p => fs.existsSync(p)).map(p => [p, storage.directoryIdentity(p, p !== root)])), items, limits: { ...limits }, completedJobId };
+        context = { directory, stateHash: storage.stateProof(directory), roots: Object.fromEntries([root, directory, ...['releases', 'backups'].map(k => path.join(directory, k))].filter(p => fs.existsSync(p)).map(p => [p, storage.directoryIdentity(p, p !== root)])), items, limits: { ...limits }, completedJobId, budgets };
     } catch (error) { plan.skipped = error.message; }
     plans.set(plan, context); return plan;
 }
@@ -137,7 +137,7 @@ function moveToTrash(directory, plan, expectedState) {
         if (state.active !== expectedState.active || state.previous !== expectedState.previous) throw new Error('Maintenance state changed before retention');
         // Repeat bounded native proof verification before moving anything; a
         // protected restore point changed since planning must stop all pruning.
-        const fresh = planRetention(directory, state, context.limits, { completedJobId: context.completedJobId });
+        const fresh = planRetention(directory, state, context.limits, { completedJobId: context.completedJobId, budgets: context.budgets });
         if (fresh.skipped || !storage.equal(fresh, plan)) throw new Error('Retention proofs changed');
         const trashPath = path.join(directory, TRASH);
         if (!fs.existsSync(trashPath)) fs.mkdirSync(handles.find(h => h.directory === directory).at(TRASH), { mode: 0o700 });
@@ -169,7 +169,7 @@ function moveToTrash(directory, plan, expectedState) {
         return moved;
     } finally { for (const handle of handles.reverse()) handle.close(); }
 }
-async function purgeTrash(directory, limits = DEFAULT_RETENTION, { signal, completedJobId } = {}) {
+async function purgeTrash(directory, limits = DEFAULT_RETENTION, { signal, completedJobId, budgets } = {}) {
     if (limits.releases === null && limits.backups === null) return 0;
     storage.supported();
     const trashPath = path.join(directory, TRASH);
@@ -182,7 +182,7 @@ async function purgeTrash(directory, limits = DEFAULT_RETENTION, { signal, compl
         const stateHash = storage.stateProof(directory), state = JSON.parse(readSafe(path.join(directory, 'state.json')));
         if (state.version !== 1 || state.needsRecovery) throw new Error('Retention requires settled state');
         // Verify actual protected native backups again before touching old trash.
-        const protection = planRetention(directory, state, limits, { completedJobId });
+        const protection = planRetention(directory, state, limits, { completedJobId, ...(budgets ? { budgets } : {}) });
         if (protection.skipped) throw new Error('Retention protected backups are unavailable');
         const guard = () => { if (signal?.aborted) throw new Error('Retention cancelled'); for (const h of handles) storage.check(h); if (storage.stateProof(directory) !== stateHash) throw new Error('Retention state changed during purge'); };
         let count = 0;
