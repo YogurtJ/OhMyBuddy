@@ -393,36 +393,66 @@ test('close observes concurrent failed work and a shared failed child stop while
     await assert.rejects(stopping, /shutdown did not complete cleanly/);
 });
 
+const unskipped = process.platform === 'linux' ? undefined : 'Retention deletion requires Linux directory descriptors';
+// Budgets with room for exactly `proofs` backup proofs in one round (measured on a fixture backup).
+function budgetsFor(f, id, proofs) {
+    const probe = { bytes: 1024 ** 3, entries: 1000 };
+    require('../server/pi-maintenance-backup').inspectBackupContents(path.join(f.runtime, 'backups', id), probe);
+    const cost = 1000 - probe.entries, each = 20 * cost;
+    return { backup: { bytes: 1024 ** 3, entries: each }, round: { bytes: 100 * 1024 ** 3, entries: each + (proofs - 1) * cost } };
+}
+// Three old backups of the active release, the previous release's restore point, then three newer ones.
+function deferredFixture(t) {
+    const f = fixture(t), previous = f.release(), active = f.release();
+    const old = [f.backup(active), f.backup(active), f.backup(active)];
+    const previousBackup = f.backup(previous);
+    const newer = [f.backup(active), f.backup(active), f.backup(active)];
+    return { f, previous, active, old, previousBackup, newer, state: f.state(active, previous) };
+}
+
 test('backups are verified newest first, each within its own budget; a spent round budget defers older ones instead of skipping', t => {
-    const f = fixture(t), active = f.release();
-    const ids = Array.from({ length: 8 }, () => f.backup(active)); // oldest first
-    const state = f.state(active, null);
+    const { f, old, previousBackup, newer, state } = deferredFixture(t), smallBudgets = budgetsFor(f, newer[0], 4);
     const measure = retention.planRetention(f.runtime, state, { releases: 2, backups: 2 });
     assert.equal(measure.unverifiedBackups.length, 0, 'the default round budget covers ordinary backups');
-    // One backup's proof costs a few entries; this round has room for three proofs.
-    const budgets = { backup: { bytes: 1024 ** 3, entries: 20 }, round: { bytes: 100 * 1024 ** 3, entries: 30 } };
-    const plan = retention.planRetention(f.runtime, state, { releases: 2, backups: 2 }, { budgets });
-    assert.notEqual(plan.skipped, 'verification-budget-exceeded');
-    assert.ok(plan.unverifiedBackups.length > 0 && plan.unverifiedBackups.length < 8);
-    const verified = ids.slice(ids.length - (8 - plan.unverifiedBackups.length));
-    assert.deepEqual(new Set(plan.unverifiedBackups), new Set(ids.slice(0, 8 - verified.length)), 'the oldest wait for a later round');
-    assert.deepEqual(plan.keepBackups, verified.slice(-2).reverse());
-    for (const id of plan.unverifiedBackups) assert.ok(!plan.removeBackups.includes(id) && !plan.keepBackups.includes(id));
-    // A backup larger than its own budget is incomplete (kept on disk), without stopping the round.
-    const tight = retention.planRetention(f.runtime, state, { releases: 2, backups: 2 }, { budgets: { backup: { bytes: 1024 ** 3, entries: 1 }, round: budgets.round } });
+    // One backup's proof costs a few entries; this round has room for four proofs.
+    const plan = retention.planRetention(f.runtime, state, { releases: 2, backups: 2 }, { budgets: smallBudgets });
+    assert.equal(plan.skipped, unskipped);
+    assert.deepEqual(new Set(plan.unverifiedBackups), new Set(old), 'the oldest wait for a later round');
+    assert.deepEqual(new Set(plan.keepBackups), new Set([newer[2], newer[1], previousBackup]));
+    assert.deepEqual(plan.removeBackups, [newer[0]]);
+    for (const id of old) assert.ok(!plan.removeBackups.includes(id) && !plan.keepBackups.includes(id));
+    // A backup larger than its own budget is incomplete (kept on disk); without restore points nothing is removed.
+    const tight = retention.planRetention(f.runtime, state, { releases: 2, backups: 2 }, { budgets: { backup: { bytes: 1024 ** 3, entries: 1 }, round: smallBudgets.round } });
     assert.equal(tight.skipped, 'missing-current-or-previous-restore-backup');
     assert.deepEqual(tight.removeBackups, []);
 });
 
 test('releases an unverified older backup may need stay while too few newer backups verified', t => {
-    const f = fixture(t), old = f.release(), active = f.release();
-    f.backup(old); f.backup(old); const newest = f.backup(active);
+    const f = fixture(t), previous = f.release(), old = f.release(), active = f.release();
+    f.backup(old); f.backup(old); const previousBackup = f.backup(previous); const newest = f.backup(active);
     for (let i = 0; i < 3; i++) f.release();
-    const state = f.state(active, null);
-    const budgets = { backup: { bytes: 1024 ** 3, entries: 20 }, round: { bytes: 100 * 1024 ** 3, entries: 20 } };
+    const state = f.state(active, previous);
+    const budgets = budgetsFor(f, newest, 2);
     const plan = retention.planRetention(f.runtime, state, { releases: 2, backups: 3 }, { budgets });
-    assert.deepEqual(plan.keepBackups, [newest]);
+    assert.equal(plan.skipped, unskipped);
+    assert.deepEqual(new Set(plan.keepBackups), new Set([newest, previousBackup]));
     assert.equal(plan.unverifiedBackups.length, 2);
     assert.deepEqual(plan.removeReleases, [], 'no release is removed while an older backup may still be kept');
     assert.ok(plan.keepReleases.includes(old));
+    // With enough verified backups the older ones are past the limit anyway: old releases go.
+    const enough = retention.planRetention(f.runtime, state, { releases: 2, backups: 1 }, { budgets });
+    assert.ok(enough.removeReleases.length > 0);
+});
+
+linuxTest('deferred older backups survive moving and purging the verified excess', async t => {
+    const { f, old, newer, state } = deferredFixture(t), limits = { releases: 2, backups: 1 }, smallBudgets = budgetsFor(f, newer[0], 4);
+    const plan = retention.planRetention(f.runtime, state, limits, { budgets: smallBudgets });
+    assert.equal(plan.skipped, undefined);
+    assert.deepEqual(plan.removeBackups.slice().sort(), [newer[0], newer[1]].sort());
+    const moved = retention.moveToTrash(f.runtime, plan, state);
+    assert.deepEqual(moved.backups.sort(), plan.removeBackups.slice().sort());
+    assert.equal(await retention.purgeTrash(f.runtime, limits, { budgets: smallBudgets }), 2);
+    const left = fs.readdirSync(path.join(f.runtime, 'backups')).sort();
+    assert.deepEqual(left, [...plan.keepBackups, ...plan.unverifiedBackups].sort(), 'only verified excess was removed');
+    for (const id of old) assert.ok(left.includes(id), 'never-verified backups are still there');
 });
