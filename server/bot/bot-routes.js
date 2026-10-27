@@ -10,6 +10,8 @@ function mountBotRoutes(router, { bots }) {
     router.get('/bots', route(() => bots.list()));
     router.get('/bots/readiness', route(() => bots.readiness()));
     router.post('/bots', route(req => bots.create(req.body)));
+    // An existing assistant identity becomes a Bot (M4-5b).
+    router.post('/bots/from-profile', route(req => bots.fromProfile(req.body)));
     router.get('/bots/:id/settings', route(req => bots.settings(req.params.id)));
     router.patch('/bots/:id', route(req => bots.update(req.params.id, req.body)));
     router.post('/bots/:id/trash', route(req => bots.trash(req.params.id, req.body)));
