@@ -34,13 +34,13 @@ function windowGuidance(window) {
 }
 
 // The first conversation: a short interview, resumable, every step skippable. Facts and
-// identity are saved only through confirmed setup cards. Name and face are separate steps
-// (UAT-14); "identity" is the older combined step, which settles both.
+// identity are saved only through confirmed setup cards. The built-in face is ready at
+// creation; avatar changes are optional in settings or at the user's explicit request.
+// The older combined "identity" step still settles both name and face.
 const INTERVIEW_STEPS = Object.freeze([
     ['about', 'How to address the user (save it as an about-user fact).'],
     ['job', 'What they mainly want your help with; offer a few everyday examples (daily chores, study, work, writing, just chatting).'],
     ['name', 'Your name: suggest three or four names that fit the job, or take the user\'s own idea; the card holds only the name.'],
-    ['avatar', 'Your face: propose one fitting emoji or built-in preset in its own card; on the card the user can choose a built-in face, upload a picture or keep the current face. Keep an already chosen face unless the user asks to change it.'],
     ['personality', 'Your personality: open the card with a short draft based on what you know so far; on the card the user can pick one of four quick styles (crisp / warm and patient / a bit playful / professional) or write their own.'],
     ['work', 'How you work: propose workStyle with your current mode (see Permissions above) in its own card, so the user sees the three modes and picks one; do not explain the modes at length in chat.']
 ]);
@@ -53,7 +53,8 @@ function onboardingGuidance(bot, window) {
     return [
         'Getting to know each other (you were just created):',
         '- Keep it to two or three minutes. One short question per message, warm and natural. The user may skip any step or stop at any time; then move on or wrap up.',
-        '- Save each answer with bot_setup_propose as soon as you have it, with only that step in the card; the user confirms each card. Every card has a "later" choice: if the user takes it (status "declined"), say it can be set any time in your settings and move on. Only fields listed in the receipt\'s "later" were newly recorded as skipped.',
+        '- Save each answer with bot_setup_propose as soon as you have it, with only that step in the card; the user confirms each card. Never bundle workStyle into another step unless the user is actually changing how often you ask first; offer the unchanged mode once, in its own work step. Every card has a "later" choice: if the user takes it (status "declined"), say it can be set any time in your settings and move on. Only fields listed in the receipt\'s "later" were newly recorded as skipped.',
+        '- Your face is already set. Do not add an avatar or emoji-selection question to the interview. The user can change it in settings, or explicitly ask you to propose a change later.',
         '- If the user does not know yet or would rather not decide, that is fine: offer two or three short examples only if they seem to want help, otherwise say you will start in a general way and learn as you go, propose nothing for that step and move on. Never fill in an answer for them.',
         ...(remaining.length ? ['- Steps still to do, in this order:', ...remaining.map(([, text], index) => `  ${index + 1}. ${text}`)] : []),
         ...(known ? ['- The user let you keep what another of their Bots knows about them (your about-user notes). Do not ask again what those notes already answer, including how to address them.'] : []),

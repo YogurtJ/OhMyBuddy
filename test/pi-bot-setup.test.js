@@ -186,7 +186,7 @@ test('the setup tool reports only what the Bot page actually saved', { timeout: 
 
     answer = setup.SAVE;
     const initial = (await profiles.getProfile(botId));
-    const now = { name: initial.name, avatar: initial.avatar.value, job: '', personality: initial.soul, workStyle: 'free', interview: 'greeting' };
+    const now = { name: initial.name, avatar: initial.avatar, job: '', personality: initial.soul, workStyle: 'free', interview: 'greeting' };
     assert.deepEqual(await run({ name: '阿狸', avatar: '', job: ' ' }), { status: 'not_saved', saved: {}, kept: ['name'], current: now,
         note: 'Nothing was changed; "current" is how things stand.' }, 'answering Save elsewhere saves nothing; empty fields are not proposed');
     await assert.rejects(tool.execute('call', { name: '', avatar: '' }, undefined, undefined, ctx), /at least one change/);
