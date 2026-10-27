@@ -465,7 +465,9 @@ class CronService {
                 const result = await worker.cron({ action: 'finish', runId: run.id });
                 if (result && !(run.status === 'uncertain' && ['running', 'prepared'].includes(result.status))) this.applyResult(run, result);
             } catch (error) {
-                if (error.code !== 'SESSION_BUSY' && run.status !== 'uncertain') this.db.saveRun({ ...run, status: 'uncertain', reason: error.message });
+                // Busy, or its file was being written while it was read: the next pass looks again.
+                const transient = error.code === 'SESSION_BUSY' || error.message === 'Session file changed';
+                if (!transient && run.status !== 'uncertain') this.db.saveRun({ ...run, status: 'uncertain', reason: error.message });
             }
         }
         // A Bot-started message has no task page where someone could review an uncertain run. It is
