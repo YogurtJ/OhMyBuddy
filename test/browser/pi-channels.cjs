@@ -32,6 +32,7 @@ const server = http.createServer((req, res) => {
                         return structuredClone(data);
                     }
                     if (url === '/api/pi/projects') return { projects: [{ cwd: '/fixture', name: 'Fixture' }, { cwd: '/other', name: 'Other' }, { cwd: '/removed', name: 'Removed', sessionCount: 0 }], hiddenProjects: ['/removed'] };
+                    if (url === '/api/pi/bots') return { bots: window.botsList || [] };
                     if (url.startsWith('/api/pi/sessions')) return { sessions: [{ id: 'thread-one', name: 'Thread one' }, { id: 'thread-two', name: 'Thread two' }] };
                     if (window.delayedRead) return new Promise(resolve => { window.resolveRead = resolve; });
                     return structuredClone(data);
@@ -41,7 +42,7 @@ const server = http.createServer((req, res) => {
             await page.getByRole('button', { name: 'Install WeChat connector', exact: true }).waitFor();
             assert.equal(await page.evaluate(() => writes.length), 0);
             assert.equal(await page.locator('select[aria-label="Thread"]').inputValue(), 'thread-two');
-            assert.deepEqual(await page.locator('select[aria-label="Project"] option').evaluateAll(options => options.map(o => o.value)), ['/fixture', '/other'], 'removed projects stay out of channel binding selectors');
+            assert.deepEqual(await page.locator('select[aria-label="Project or Bot"] option').evaluateAll(options => options.map(o => o.value)), ['/fixture', '/other'], 'removed projects stay out of channel binding selectors');
             const headingOverlap = () => page.evaluate(() => {
                 const a = document.querySelector('.channel-header .channel-icon-button').getBoundingClientRect();
                 return [...document.querySelectorAll('.channel-feedback, .channel-card, .channel-overview')].filter(n => n.getClientRects().length)
@@ -165,6 +166,36 @@ const server = http.createServer((req, res) => {
             assert.equal(await page.locator('[onerror]').count(), 0, 'diagnostic file names use safe text');
             const diagnosticOverflow = await page.evaluate(() => [...document.querySelectorAll('.channel-job,.channel-inline-alert')].some(n => n.getBoundingClientRect().right > innerWidth + 1));
             assert.equal(diagnosticOverflow, false);
+            // Bot chats (M4-4): Bots are targets in the project select; a Bot binding names the Bot and offers per-Bot disconnects.
+            const fox = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', other = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+            await page.evaluate(({ fox, other }) => {
+                window.botsList = [{ id: fox, name: 'Fox', enabled: true }, { id: other, name: 'Owl', enabled: true }];
+                data.bindings = [{ id: 'bb', accountId: data.accounts[0].id, peerId: data.accounts[0].allowedUsers[0], cwd: '/w', sessionId: 's', name: 'Fox', replyMode: 'all',
+                    bot: { profileId: fox, windowId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', main: true }, bots: [other, fox] }];
+                panel.close(); panel.open();
+            }, { fox, other });
+            const botRow = page.locator(`[data-bot-binding="${fox}"]`);
+            await botRow.waitFor();
+            assert.match(await botRow.innerText(), /Fox/); assert.match(await botRow.innerText(), /also connected: Owl/);
+            assert.equal(await botRow.getByRole('button', { name: 'Open Bot' }).isVisible(), true);
+            const targets = await page.locator('select[aria-label="Project or Bot"] option').evaluateAll(options => options.map(o => o.value));
+            assert.deepEqual(targets.slice(0, 2), [`bot:${fox}`, `bot:${other}`]);
+            await page.locator('select[aria-label="Project or Bot"]').selectOption(`bot:${other}`);
+            assert.equal(await page.locator('select[aria-label="Thread"]').isVisible(), false, 'a Bot has no thread to choose');
+            await page.getByRole('button', { name: 'Connect Bot', exact: true }).click();
+            await page.waitForFunction(() => writes.at(-1)?.action === 'bind');
+            assert.equal(await page.evaluate(() => writes.at(-1).botProfileId), other);
+            assert.equal(await page.evaluate(() => 'cwd' in writes.at(-1) || 'sessionId' in writes.at(-1)), false);
+            await page.evaluate(({ fox, other }) => { data.bindings = [{ id: 'bb', accountId: data.accounts[0].id, peerId: data.accounts[0].allowedUsers[0], cwd: '/w', sessionId: 's', name: 'Fox', replyMode: 'all',
+                bot: { profileId: fox, windowId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', main: true }, bots: [other, fox] }]; }, { fox, other });
+            await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
+            await botRow.waitFor();
+            await botRow.locator('.channel-menu summary').click();
+            await botRow.getByRole('button', { name: 'Disconnect Owl' }).click();
+            await page.waitForFunction(() => writes.at(-1)?.action === 'unbind-bot');
+            assert.deepEqual(await page.evaluate(() => [writes.at(-1).botProfileId, 'botName' in writes.at(-1)]), [other, false]);
+            const botOverflow = await page.evaluate(() => [...document.querySelectorAll('.channel-binding')].some(n => n.getBoundingClientRect().right > innerWidth + 1));
+            assert.equal(botOverflow, false);
             await page.evaluate(() => { delayedRead = true; });
             await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
             await page.waitForFunction(() => typeof resolveRead === 'function');

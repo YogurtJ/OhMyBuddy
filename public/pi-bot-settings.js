@@ -400,6 +400,83 @@
             const notifyBox = el('div', 'pi-bot-sheet-notify');
             notifyBox.append(proactiveRow, proactiveNote, quietRow, quietTimes, quietNote, limitField, followUps);
 
+            // WeChat (M4-4): chats connected to this Bot. Connecting and disconnecting act at once,
+            // like cancelling a follow-up; they are not part of the sheet's Save.
+            const wechat = el('div', 'pi-bot-sheet-wechat');
+            const showWechat = () => wechat.replaceChildren(...wechatNodes());
+            const wechatAction = async (body, done) => {
+                if (saving) return;
+                status.textContent = translateUi("正在处理…"); delete status.dataset.tone;
+                try {
+                    data.channels = await options.api('/api/pi/channels/weixin/actions', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ...body, confirmed: true, expectedRevision: data.channels.revision }) });
+                    if (!sheet.open) return;
+                    status.textContent = ''; options.toast?.(done, 'success');
+                } catch (error) {
+                    if (!sheet.open) return;
+                    await loadChannels();
+                    status.dataset.tone = 'error'; status.textContent = translateUi("没有完成：{0}", error.message || translateUi("保存失败"));
+                }
+                if (sheet.open) showWechat();
+            };
+            const wechatNodes = () => {
+                const channels = data.channels, name = data.bot.name;
+                const openChannels = button('pi-bot-chip', translateUi("打开消息渠道设置"));
+                openChannels.addEventListener('click', () => leave('channels', () => window.dispatchEvent(new CustomEvent('workspace:open-settings', { detail: { tab: 'channels' } }))));
+                if (!channels) return [el('p', 'pi-bot-sheet-note', translateUi("暂时读不到微信连接。")), openChannels];
+                const chats = (channels.bindings || []).filter(b => b.bots?.includes(options.profileId));
+                const users = (channels.accounts || []).filter(a => a.enabled).flatMap(a => a.allowedUsers.map(peerId => ({ accountId: a.id, peerId })));
+                const nodes = [];
+                if (chats.length) {
+                    const list = el('ul', 'pi-bot-sheet-rule-list');
+                    for (const chat of chats) {
+                        const item = el('li', 'pi-bot-sheet-rule'); item.dataset.wechatChat = `${chat.accountId}/${chat.peerId}`;
+                        const copy = el('div', 'pi-bot-sheet-rule-copy');
+                        copy.append(el('strong', null, chat.peerId), el('small', null, chat.bot?.profileId === options.profileId
+                            ? translateUi("正在和 {0} 聊", name) : translateUi("正在和别的 Bot 聊；{0} 的提醒和消息也会发到这里", name)));
+                        const drop = button('pi-bot-chip', translateUi("断开")); drop.dataset.wechatDisconnect = '';
+                        drop.setAttribute('aria-label', translateUi("断开微信：{0}", chat.peerId));
+                        drop.addEventListener('click', async () => {
+                            const accepted = await window.PiProfileDialog?.confirm({ title: translateUi("断开这个微信聊天？"),
+                                message: translateUi("{0} 不会再收到 {1} 的消息和提醒。聊天记录都保留，之后可以再连接。", chat.peerId, name),
+                                accept: translateUi("断开"), cancelLabel: translateUi("保留"), current: () => sheet.open });
+                            if (!accepted || !sheet.open) return;
+                            await wechatAction({ action: 'unbind-bot', accountId: chat.accountId, peerId: chat.peerId, botProfileId: options.profileId }, translateUi("已断开"));
+                        });
+                        item.append(copy, drop); list.append(item);
+                    }
+                    nodes.push(list);
+                } else nodes.push(el('p', 'pi-bot-sheet-note', translateUi("还没有连接微信。连上后可以在微信里直接和 {0} 聊，它的提醒也会发到微信。", name)));
+                const free = users.filter(user => !chats.some(chat => chat.accountId === user.accountId && chat.peerId === user.peerId));
+                if (!users.length) {
+                    nodes.push(el('p', 'pi-bot-sheet-note', translateUi("先在消息渠道设置里扫码连接微信，并加入允许的微信用户。")), openChannels);
+                    return nodes;
+                }
+                if (free.length) {
+                    const pick = el('select'); pick.dataset.wechatPick = '';
+                    pick.setAttribute('aria-label', translateUi("选择微信用户"));
+                    for (const user of free) pick.append(new Option(user.peerId, `${user.accountId}\u0000${user.peerId}`));
+                    const connect = button('pi-bot-chip', translateUi("连接")); connect.dataset.wechatConnect = '';
+                    connect.addEventListener('click', async () => {
+                        const [accountId, peerId] = pick.value.split('\u0000');
+                        const current = (channels.bindings || []).find(b => b.accountId === accountId && b.peerId === peerId);
+                        if (current) {
+                            const accepted = await window.PiProfileDialog?.confirm({ title: translateUi("让这个微信聊天改和 {0} 聊？", name),
+                                message: current.bot ? translateUi("它现在在和“{0}”聊。连接后改和 {1} 聊，原来的 Bot 仍然连着，在微信里发 /切换 可以换回去。", current.name || '', name)
+                                    : translateUi("它现在绑定在线程“{0}”。连接后改为和 {1} 聊，线程和记录都保留。", current.name || current.sessionId, name),
+                                accept: translateUi("连接"), cancelLabel: translateUi("取消"), current: () => sheet.open });
+                            if (!accepted || !sheet.open) return;
+                        }
+                        await wechatAction({ action: 'bind', accountId, peerId, botProfileId: options.profileId }, translateUi("已连接微信"));
+                    });
+                    const row = el('div', 'pi-bot-sheet-wechat-connect'); row.append(pick, connect);
+                    nodes.push(row);
+                }
+                nodes.push(el('p', 'pi-bot-sheet-note', translateUi("在微信里发 /切换 换一个 Bot，发 /话题 换话题，发 /help 看全部。")));
+                return nodes;
+            };
+            showWechat();
+
             const memory = button('pi-bot-sheet-link'); memory.append(icon('fa-book-open'), el('span', null, translateUi("记忆和关于你")), icon('fa-chevron-right'));
             memory.addEventListener('click', () => leave('memory', () => options.onMemory?.()));
             const restart = button('pi-bot-sheet-link'); restart.append(icon('fa-rotate-left'), el('span', null, translateUi("重新互相认识")), icon('fa-chevron-right'));
@@ -425,6 +502,7 @@
                 section(translateUi("用哪个模型"), field(null, model, modelHint), thinkingWrap),
                 section(translateUi("做事方式"), presetList, honesty, rulesBox),
                 section(translateUi("主动找你"), notifyBox),
+                section(translateUi("微信"), wechat),
                 section(translateUi("更多"), memory, restart, trash));
             const levels = data.models?.models.find(item => modelKey(item) === model.value)?.thinkingLevels || [];
             thinkingWrap.hidden = !levels.length;
@@ -438,9 +516,13 @@
             try { data.followUps = (await options.api(`/api/pi/bots/${encodeURIComponent(options.profileId)}/follow-ups`)).items; }
             catch { data.followUps = null; }
         }
+        async function loadChannels() {
+            try { data.channels = await options.api('/api/pi/channels'); }
+            catch { data.channels = null; }
+        }
         async function load() {
             data = await options.api(`/api/pi/bots/${encodeURIComponent(options.profileId)}/settings`);
-            await loadFollowUps();
+            await Promise.all([loadFollowUps(), loadChannels()]);
         }
 
         // The edits made in this sheet, to put back after rereading (only fields the user touched).
