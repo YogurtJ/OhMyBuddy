@@ -798,3 +798,9 @@
     .pi-bot-sheet-wechat-connect select, .pi-bot-sheet-wechat-connect .pi-bot-chip, .pi-bot-sheet-wechat > .pi-bot-chip { min-height: 44px; }
 }
 .pi-bot-sheet-wechat .pi-bot-sheet-rule-copy strong { overflow-wrap: anywhere; }
+/* ---- background learning in Bot settings ----------------------------------------------- */
+.pi-bot-sheet-learning { display: grid; gap: 10px; justify-items: start; }
+.pi-bot-sheet-learning > .pi-bot-sheet-check, .pi-bot-sheet-learning > .pi-bot-sheet-note, .pi-bot-sheet-learning > .pi-bot-sheet-link { justify-self: stretch; }
+.pi-bot-sheet-learning > .pi-bot-chip { flex: none; margin: 0; min-height: 40px; padding: 0 14px; }
+@media (max-width: 900px) { .pi-bot-sheet-learning > .pi-bot-chip { min-height: 44px; } }
+
