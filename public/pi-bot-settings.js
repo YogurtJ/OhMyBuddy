@@ -511,7 +511,7 @@
                     } else {
                         learningUncertain = true;
                         status.dataset.tone = 'error';
-                        status.textContent = translateUi("刚刚那次操作结果还没确认，已保留记录。请重新打开设置核对，不要直接重试。");
+                        status.textContent = translateUi("没能确认刚才是否已改好。请重新打开设置看看，不要直接再试。");
                     }
                 } finally {
                     learningBusy = false;
@@ -524,7 +524,7 @@
                 more.append(icon('fa-seedling'), el('span', null, translateUi("更多学习设置")), icon('fa-chevron-right'));
                 more.addEventListener('click', () => leave('learning', () => options.onLearning ? options.onLearning() : options.onMemory?.('learning')));
                 const maxRuns = Number.isSafeInteger(snap?.settings?.maxRunsPerDay) ? snap.settings.maxRunsPerDay : 20;
-                const note = el('p', 'pi-bot-sheet-note', `${translateUi("聊完以后，它会把你的纠正、偏好和能重复用的做法记到记忆或技能草稿里；技能草稿要你看过才会启用。")} ${translateUi("会额外调用模型（每天最多 {0} 次）。", maxRuns)}`);
+                const note = el('p', 'pi-bot-sheet-note', `${translateUi("聊完以后，它会用辅助模型把你的纠正和偏好记到记忆里；复盘和技能草稿可在“更多学习设置”里打开，技能草稿要你看过才会启用。")}${globalThis.PiI18n?.locale?.startsWith('zh') === false ? ' ' : ''}${translateUi("会额外调用模型（每天最多 {0} 次）。", maxRuns)}`);
                 if (!validLearning(snap) || snap.status !== 'ready' || snap.capabilities?.installed === false || snap.capabilities?.settingsWrite === false) {
                     return [el('p', 'pi-bot-sheet-note', translateUi("暂时不能用学习功能。可以先打开“记忆和关于你”开启长期记忆。")), note, more];
                 }

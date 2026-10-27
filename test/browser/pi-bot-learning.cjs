@@ -81,7 +81,7 @@ const { BOT, serve, botRecord, botPage, newWorld, layout } = require('./pi-bot-f
                 assert.equal(await toggle.isChecked(), false);
                 const noteText = await box.innerText();
                 assert.match(noteText, /让它从聊天里学习/);
-                assert.match(noteText, /纠正、偏好.*记忆或技能草稿.*看过才会启用/);
+                assert.match(noteText, /纠正和偏好.*记忆.*技能草稿.*看过才会启用/);
                 assert.match(noteText, /每天最多 20 次/);
                 assert.equal(await box.locator('[data-learning-health]').count(), 0);
                 assert.equal(await sheet.locator('.pi-bot-sheet-save').isDisabled(), true);

@@ -321,8 +321,8 @@
                 return;
             }
             if (group === 'settings') window.PiFeatures.applySettingsIntent(revision);
-            if (!completion || group === 'settings') settingsRoute();
             window.dispatchEvent(new CustomEvent('workspace:tabchanged', { detail: { tab, params } }));
+            if (!completion || group === 'settings') settingsRoute();
         }
         function routeHash(tab, params = {}) {
             if (!routeTabs.has(tab)) throw new Error('Unknown workspace route');
