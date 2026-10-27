@@ -2133,6 +2133,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // M4-5c: the assistant chat page is retired. Its links open the Bot's chat,
     // or the thread in the Pi Agent list (identity and category kept), or else Pi Agent.
     async function leaveAssistantPage(params) {
+        // Let the same route's settings handler run first: leaving the identity page with unsaved
+        // edits keeps its dialog open until the user decides, and only then may this redirect.
+        await null;
         if (!document.getElementById('workspace-settings-dialog')?.classList.contains('hidden')) {
             await new Promise(resolve => window.addEventListener('workspace:settings-closed', resolve, { once: true }));
             if (window.PiWorkspaceRoute?.current().tab !== 'assistant') return;
