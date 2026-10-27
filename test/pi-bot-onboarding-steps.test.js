@@ -104,6 +104,29 @@ test('unchanged workStyle on other cards never answers or skips the work step', 
     assert.deepEqual(duplicate.bot.bot.onboarding.steps, work.bot.bot.onboarding.steps);
 });
 
+test('a hidden work selector stays untouched after the retained card meets a changed current mode', { timeout: 60000 }, async t => {
+    const f = await fixture(t);
+    const call = f.propose({ name: 'Cedar', workStyle: 'free' });
+    await f.patchRecord(profile => { profile.bot.permissions.preset = 'ask'; });
+    const saved = await f.confirm(call, { changes: { name: 'Cedar' }, workStyleShown: false });
+    assert.deepEqual(saved.saved, { name: 'Cedar' });
+    assert.deepEqual(saved.bot.bot.onboarding.steps, { name: 'done' });
+    assert.equal((await f.record()).bot.permissions.preset, 'ask');
+    const later = await f.confirm(f.propose({ job: 'Organize tasks', workStyle: 'free' }), { later: true, workStyleShown: false });
+    assert.deepEqual(later.bot.bot.onboarding.steps, { name: 'done', job: 'skipped' }, 'hidden work is not skipped after refresh either');
+    assert.equal((await f.record()).bot.permissions.preset, 'ask');
+    await assert.rejects(f.confirm(f.propose({ workStyle: 'free' }), { workStyleShown: true }),
+        { status: 409, code: 'BOT_WORK_STYLE_FREER' }, 'showing a selector never authorizes more freedom');
+});
+
+test('work selector presence is a strict Boolean and cannot invent an unproposed field', { timeout: 60000 }, async t => {
+    const f = await fixture(t);
+    const call = f.propose({ name: 'Cedar' }), before = await f.record();
+    for (const workStyleShown of [true, null, 'false', 0, 1, {}, []])
+        await assert.rejects(f.confirm(call, { workStyleShown }), { status: 400 });
+    assert.deepEqual(await f.record(), before);
+});
+
 test('actual workStyle changes remain effective on mixed cards and retain permission ordering', { timeout: 60000 }, async t => {
     const f = await fixture(t);
     // Older clients may still show the selector on a mixed card; an explicit stricter choice is valid.
