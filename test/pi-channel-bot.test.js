@@ -291,3 +291,20 @@ test('a WeChat turn waiting for approval is answered from WeChat while it waits'
     assert.ok(sends.includes('✅ 已同意 A1，继续进行。'));
     assert.equal(s.approvals.pending.size, 0);
 });
+
+test('review fixes: an approval answer works after the chat moved on, and answers are bounded per chat', async t => {
+    const { s, db, cwd, sends } = fixture(t, { text: null });
+    const worker = { pendingUi: new Map([['ui-9', {}]]), sent: [], send(record) { this.sent.push(record); return this.pendingUi.delete(record.id); } };
+    s.approvals = new ChannelApprovals();
+    s.approvals.offer({ event: approvalEvent('ui-9'), worker, job: { id: 'turn', accountId: 'acct', peerId: 'owner' } });
+    // The chat switched to another Bot while the turn waits; the answer still reaches the waiting step.
+    db.change(v => { Object.assign(v.bindings[0], { sessionId: 'b-main-0', bot: { profileId: B, windowId: MAIN_B, main: true }, bots: [A, B] }); });
+    db.change(v => v.jobs.push({ id: 'answer', accountId: 'acct', peerId: 'owner', bindingId: 'binding', target: { cwd, sessionId: 'a-main-0' }, status: 'queued', text: '拒绝 A1' }));
+    await until(() => { s.pump(); return s.job('answer').status === 'delivered'; });
+    assert.deepEqual(worker.sent, [{ type: 'extension_ui_response', id: 'ui-9', confirmed: false }]);
+    assert.deepEqual(sends, ['已拒绝 A1，这一步不会做。']);
+    // A flood of answers is cut off after three waiting ones.
+    s.adapter.message = raw => raw;
+    s.receive('acct', { msgs: [1, 2, 3, 4, 5].map(n => ({ peerId: 'owner', messageId: `m${n}`, text: `同意 A${n}`, contextToken: 'fixture' })) });
+    assert.deepEqual(db.value.jobs.slice(-5).map(j => [j.status, j.reason]), [['queued', null], ['queued', null], ['queued', null], ['ignored', 'queue-full'], ['ignored', 'queue-full']]);
+});
