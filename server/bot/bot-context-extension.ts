@@ -1,6 +1,6 @@
 // Bot Mode runtime inside a managed worker. Active only when the Supervisor supplied a
 // PIVANE_BOT_CONTEXT whose native window marker, session file and cwd all match this
-// worker. Identity, job, permissions preset and window title/focus are re-read before
+// worker. Identity, job, permissions preset and window title/focus/instructions are re-read before
 // every run, so edits take effect on the next message without restarting the worker.
 import fs from 'node:fs';
 import path from 'node:path';

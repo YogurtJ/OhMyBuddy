@@ -34,6 +34,13 @@ function windowGuidance(window) {
         + ' Stay on this topic. If the user brings up something unrelated and substantial, help briefly and mention that the main chat or a new topic suits it better.';
 }
 
+// Multi-line text the user saved on this topic (validated by bot-topic.js), read again before every
+// run like the title and focus. It ends the section so nothing of ours reads as part of it.
+function topicInstructions(window) {
+    const text = window?.kind === 'topic' && typeof window.instructions === 'string' ? window.instructions.trim() : '';
+    return text ? ['', 'Instructions the user set for this topic (follow them here unless they conflict with the safety rules or permissions above):', text] : [];
+}
+
 // The first conversation: a short interview, resumable, every step skippable. Facts and
 // identity are saved only through confirmed setup cards. The built-in face is ready at
 // creation; avatar changes are optional in settings or at the user's explicit request.
@@ -117,7 +124,8 @@ function botPreamble({ name, bot, cwd, window }) {
             + 'When you ask, say plainly what you will do and why, in one or two lines. ' + ALWAYS,
         '',
         windowGuidance(window),
-        'For substantial focused work, use bot_topic_propose to offer a separate topic. The user confirms it; it starts fresh, with its own notebook and your shared about-user memory. Do not copy this conversation or claim the user has switched chats.'
+        'For substantial focused work, use bot_topic_propose to offer a separate topic. The user confirms it; it starts fresh, with its own notebook and your shared about-user memory. Do not copy this conversation or claim the user has switched chats.',
+        ...topicInstructions(window)
     ];
     const interview = onboardingGuidance(bot, window);
     if (interview) lines.push('', interview);

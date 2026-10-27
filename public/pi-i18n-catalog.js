@@ -10709,7 +10709,12 @@
         ["去身份页", "Go to Identities"],
         ["还没有可用的身份。可以在“身份”页新建，或先建一个 Bot。", "No identity is available yet. Create one on the Identities page, or create a Bot first."],
         ["读取身份失败：{0}", "Couldn't read identities: {0}"],
-        ["我是{0}，现在有了自己的主聊天和工作目录，记得的事都还在。花一两分钟说说想让我主要帮你做什么？随时可以说“先跳过”。", "I'm {0}. I now have my own main chat and workspace, and I still remember what I knew. Take a minute or two to tell me what you mainly want my help with? You can say “skip for now” any time."]
+        ["我是{0}，现在有了自己的主聊天和工作目录，记得的事都还在。花一两分钟说说想让我主要帮你做什么？随时可以说“先跳过”。", "I'm {0}. I now have my own main chat and workspace, and I still remember what I knew. Take a minute or two to tell me what you mainly want my help with? You can say “skip for now” any time."],
+        ["话题指令（可不填）", "Topic instructions (optional)"],
+        ["比如：先给结论再展开；改代码前先说明思路和影响。", "For example: give the conclusion first, then the details; explain the approach and its impact before changing code."],
+        ["在这个话题里它要一直遵守的做法，比如回答格式、资料来源。最多 {0} KB（约 {1} 个汉字），可以以后再改。", "What it should always do in this topic, such as the answer format or which sources to use. Up to {0} KB (about {1} Chinese characters, or three times as many English letters). You can change it later."],
+        ["话题指令太长了，最多 {0} KB（约 {1} 个汉字）。", "The topic instructions are too long: up to {0} KB (about {1} Chinese characters, or three times as many English letters)."],
+        ["内容没有通过检查：话题名不能为空，最多 {0} 字；“专注什么”最多 {1} 字；话题指令最多 {2} KB；表情最多 {3} 个字符。", "This could not be saved: the topic name cannot be empty and can have at most {0} characters; the focus at most {1}; the topic instructions at most {2} KB; the emoji at most {3}."]
     );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

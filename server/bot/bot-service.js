@@ -74,8 +74,8 @@ function notebookView(state, branch, current) {
 }
 
 function publicWindow(window) {
-    const { id, kind, title, emoji, focus, createdAt, updatedAt, archivedAt, current, generations } = window;
-    return { id, kind, title, emoji, focus, createdAt, updatedAt, archivedAt,
+    const { id, kind, title, emoji, focus, instructions = '', createdAt, updatedAt, archivedAt, current, generations } = window;
+    return { id, kind, title, emoji, focus, instructions, createdAt, updatedAt, archivedAt,
         generation: current?.generation ?? null, sessionId: current?.sessionId ?? null, generations: generations.length };
 }
 
@@ -234,7 +234,7 @@ class BotService extends EventEmitter {
     }
 
     createTopic(profileId, input) {
-        const fields = topicFields(input, { revision: true });
+        const fields = topicFields(input, { revision: true, withInstructions: true });
         return this.profiles.reserve(async () => {
             const { windowsRevision, ...window } = await this.createWindowLocked(profileId, 'topic', { ...fields, expectedRevision: input.expectedRevision });
             return { ok: true, window, windowsRevision };
@@ -270,13 +270,15 @@ class BotService extends EventEmitter {
 
     // Reserve the window CAS before native creation. A prepared row survives interruptions;
     // its last native marker proves creation completed and carries the original metadata.
-    async createWindowLocked(profileId, kind, { title = '', emoji = '', focus = '', expectedRevision, id = randomUUID() } = {}) {
+    // Topic instructions live in this index only: the marker is immutable creation-time
+    // evidence that older readers reject with unknown seed fields, and instructions are edited later.
+    async createWindowLocked(profileId, kind, { title = '', emoji = '', focus = '', instructions = '', expectedRevision, id = randomUUID() } = {}) {
         const { bot } = await this.bot(profileId);
         const { revision } = await this.windows.read(profileId);
         const now = new Date().toISOString(), topicSeed = { title, focus, emoji };
-        if (kind === 'topic') topicFields(topicSeed);
+        if (kind === 'topic') topicFields({ ...topicSeed, instructions }, { withInstructions: true });
         const record = { id, kind, title, emoji, focus, cwd: bot.workspace, createdAt: now, updatedAt: now, archivedAt: null,
-            current: null, generations: [], rotation: null, ...(kind === 'topic' ? { topicSeed } : {}) };
+            current: null, generations: [], rotation: null, ...(kind === 'topic' ? { instructions, topicSeed } : {}) };
         await this.windows.mutate(profileId, expectedRevision ?? revision, state => {
             if (kind === 'main' && state.windows.some(window => window.kind === 'main')) fail('Bot already has a main chat', 409);
             if (state.windows.length >= MAX_WINDOWS || kind === 'topic' && state.windows.filter(window => window.kind === 'topic').length >= MAX_TOPICS)
@@ -314,7 +316,7 @@ class BotService extends EventEmitter {
     }
 
     updateWindow(profileId, windowId, input) {
-        const fields = topicFields(input, { patch: true, revision: true });
+        const fields = topicFields(input, { patch: true, revision: true, withInstructions: true });
         return this.profiles.reserve(() => {
             const update = async () => {
                 const window = await this.windowRecord(profileId, windowId);
@@ -326,7 +328,7 @@ class BotService extends EventEmitter {
                     const saved = await this.windows.mutate(profileId, input.expectedRevision, state => {
                         const item = state.windows.find(entry => entry.id === windowId);
                         if (fields.archived && !window.archivedAt) this.assertWindowQuiescent?.(window);
-                        for (const key of ['title', 'focus', 'emoji']) if (Object.hasOwn(fields, key)) item[key] = fields[key];
+                        for (const key of ['title', 'focus', 'emoji', 'instructions']) if (Object.hasOwn(fields, key)) item[key] = fields[key];
                         if (Object.hasOwn(fields, 'archived')) item.archivedAt = fields.archived ? item.archivedAt ?? new Date().toISOString() : null;
                         item.updatedAt = new Date().toISOString(); return {};
                     });

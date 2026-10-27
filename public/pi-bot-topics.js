@@ -1,5 +1,5 @@
 (() => {
-    // Topics: separate chats of one Bot, each with a title, an optional focus and face. The
+    // Topics: separate chats of one Bot, each with a title, an optional focus, instructions and face. The
     // sheet creates and edits them against the Bot's windows revision; archiving keeps every
     // generation's history and can be undone. The main chat is never renamed or archived here.
     // Receipt cards show a topic the Bot opened through its tool, with an explicit way in.
@@ -16,6 +16,13 @@
     // The server takes single-line values only: line breaks, tabs and other control characters
     // (typed or pasted into the focus box) become one space, so a multi-line focus still saves.
     const clean = value => String(value ?? '').replace(/ *[\x00-\x1f\x7f][\x00-\x1f\x7f ]*/g, ' ').trim();
+    // Topic instructions keep their lines and tabs; other control characters become a space. The
+    // server limit is in UTF-8 bytes (about 2700 Chinese characters).
+    const INSTRUCTION_BYTES = 8192;
+    const cleanLines = value => String(value ?? '').replace(/\r\n?/g, '\n').replace(/[\x00-\x08\x0b-\x1f\x7f]/g, ' ').trim();
+    const tidy = (key, value) => key === 'instructions' ? cleanLines(value) : clean(value);
+    const bytes = value => new TextEncoder().encode(value).length;
+    const fitTextarea = area => window.PiBot?.fitTextarea?.(area);
 
     // What the server refused, in plain words; archiving a busy topic or one that scheduled
     // tasks still post to is refused, never forced.
@@ -31,7 +38,8 @@
     // What the server refused when creating or editing a topic, in plain words.
     function problem(error) {
         if (error?.code === 'BOT_TOPIC_LIMIT') return translateUi("话题已经到上限了（已归档的也算在内），可以先接着用已有的话题。");
-        if (error?.status === 400) return translateUi("内容没有通过检查：话题名不能为空，最多 {0} 字；“专注什么”最多 {1} 字；表情最多 {2} 个字符。", LIMITS.title, LIMITS.focus, LIMITS.emoji);
+        if (error?.status === 400) return translateUi("内容没有通过检查：话题名不能为空，最多 {0} 字；“专注什么”最多 {1} 字；话题指令最多 {2} KB；表情最多 {3} 个字符。",
+            LIMITS.title, LIMITS.focus, INSTRUCTION_BYTES / 1024, LIMITS.emoji);
         if (error?.status === 404) return translateUi("找不到这个话题了，可能已经在别处移走。");
         return refusal(error);
     }
@@ -64,7 +72,8 @@
 
         // An older topic's saved emoji keeps its own field; a new topic, or one without, has none.
         const emoji = !creating && options.window.emoji ? el('input') : null;
-        const own = topic => ({ title: topic?.title || '', focus: topic?.focus || '', ...(emoji ? { emoji: topic?.emoji || '' } : {}) });
+        const own = topic => ({ title: topic?.title || '', focus: topic?.focus || '', instructions: topic?.instructions || '',
+            ...(emoji ? { emoji: topic?.emoji || '' } : {}) });
         let revision = options.bot.windowsRevision, base = own(creating ? null : options.window);
         let busy = false, warned = null, archiveArmed = false, gone = false;
 
@@ -72,7 +81,14 @@
         name.placeholder = translateUi("比如：功能开发");
         const focus = el('textarea'); focus.rows = 3; focus.maxLength = LIMITS.focus; focus.dataset.topicField = 'focus';
         focus.placeholder = translateUi("围绕这项功能讨论需求、实现思路和待解决的问题。");
-        const fill = values => { name.value = values.title; focus.value = values.focus; if (emoji) emoji.value = values.emoji; };
+        // Grows with its text (fitTextarea) up to its CSS max-height, then scrolls; the byte limit is checked on input.
+        const instructions = el('textarea', 'pi-bot-sheet-long is-instructions'); instructions.rows = 3; instructions.maxLength = INSTRUCTION_BYTES;
+        instructions.dataset.topicField = 'instructions';
+        instructions.placeholder = translateUi("比如：先给结论再展开；改代码前先说明思路和影响。");
+        const fill = values => {
+            name.value = values.title; focus.value = values.focus; instructions.value = values.instructions; if (emoji) emoji.value = values.emoji;
+            fitTextarea(instructions);
+        };
         let identity = field(translateUi("话题名"), name);
         if (emoji) {
             emoji.type = 'text'; emoji.maxLength = LIMITS.emoji; emoji.autocomplete = 'off'; emoji.className = 'pi-bot-sheet-emoji';
@@ -85,7 +101,9 @@
         const body = el('div', 'pi-bot-sheet-body');
         body.append(el('p', 'pi-bot-sheet-note pi-bot-topic-intro',
             translateUi("话题是单独的聊天：{0} 在里面只专心聊这件事，“我记着的事”也分开记。主聊天不受影响。", options.name || 'Bot')),
-        identity, field(translateUi("专注什么"), focus, translateUi("最多 {0} 字，可以以后再改。", LIMITS.focus)));
+        identity, field(translateUi("专注什么"), focus, translateUi("最多 {0} 字，可以以后再改。", LIMITS.focus)),
+        field(translateUi("话题指令（可不填）"), instructions,
+            translateUi("在这个话题里它要一直遵守的做法，比如回答格式、资料来源。最多 {0} KB（约 {1} 个汉字），可以以后再改。", INSTRUCTION_BYTES / 1024, 2700)));
 
         let archive = null;
         if (!creating) {
@@ -106,15 +124,17 @@
         sheet.append(form);
         document.body.append(sheet);
 
-        const values = () => ({ title: name.value, focus: focus.value, ...(emoji ? { emoji: emoji.value } : {}) });
+        const values = () => ({ title: name.value, focus: focus.value, instructions: instructions.value, ...(emoji ? { emoji: emoji.value } : {}) });
         const edited = () => Object.entries(values()).some(([key, value]) => value !== base[key]);
         const say = (text, tone) => { status.textContent = text; if (tone) status.dataset.tone = tone; else delete status.dataset.tone; };
-        // Fields the user changed, as single trimmed lines; null when something is not valid yet.
+        const tooLong = () => bytes(cleanLines(instructions.value)) > INSTRUCTION_BYTES;
+        // Fields the user changed, trimmed (single lines, except the instructions); null when something is not valid yet.
         function changes() {
-            const next = Object.fromEntries(Object.entries(values()).map(([key, value]) => [key, clean(value)]));
-            if (!next.title || next.title.length > LIMITS.title || next.focus.length > LIMITS.focus || (next.emoji ?? '').length > LIMITS.emoji) return null;
+            const next = Object.fromEntries(Object.entries(values()).map(([key, value]) => [key, tidy(key, value)]));
+            if (!next.title || next.title.length > LIMITS.title || next.focus.length > LIMITS.focus || (next.emoji ?? '').length > LIMITS.emoji
+                || tooLong()) return null;
             if (creating) return next;
-            return Object.fromEntries(Object.entries(next).filter(([key, value]) => value !== clean(base[key])));
+            return Object.fromEntries(Object.entries(next).filter(([key, value]) => value !== tidy(key, base[key])));
         }
         function refresh() {
             mark.textContent = emoji?.value.trim() || '';
@@ -135,7 +155,16 @@
         cancel.addEventListener('click', () => leave('close'));
         sheet.addEventListener('cancel', event => { event.preventDefault(); leave('close'); });
         sheet.addEventListener('close', () => { sheet.remove(); if (dialog === sheet) dialog = null; });
-        form.addEventListener('input', () => { warned = null; archiveArmed = false; if (archive) archive.querySelector('span').textContent = translateUi("归档这个话题"); say(''); refresh(); });
+        form.addEventListener('input', event => {
+            warned = null; archiveArmed = false; if (archive) archive.querySelector('span').textContent = translateUi("归档这个话题");
+            // Over the byte limit the field says so here; saving stays off until it fits.
+            const over = tooLong();
+            instructions.setAttribute('aria-invalid', String(over));
+            if (over) say(translateUi("话题指令太长了，最多 {0} KB（约 {1} 个汉字）。", INSTRUCTION_BYTES / 1024, 2700), 'error');
+            else say('');
+            if (event.target === instructions) fitTextarea(instructions);
+            refresh();
+        });
 
         // After a conflict: the latest revision, and for an edit the latest values of the
         // fields the user did not touch. The user's own edits stay.
@@ -148,7 +177,7 @@
             if (!now || now.archivedAt) { gone = true; say(translateUi("这个话题已经被归档或移走了。"), 'error'); refresh(); return false; }
             // A field counts as the user's own edit only when its saved form differs from before.
             const mine = values(), next = own(now);
-            fill(Object.fromEntries(Object.keys(next).map(key => [key, clean(mine[key]) !== clean(base[key]) ? mine[key] : next[key]])));
+            fill(Object.fromEntries(Object.keys(next).map(key => [key, tidy(key, mine[key]) !== tidy(key, base[key]) ? mine[key] : next[key]])));
             base = next;
             return true;
         }
@@ -202,6 +231,7 @@
 
         refresh();
         sheet.showModal();
+        fitTextarea(instructions);
         name.focus();
         return sheet;
     }

@@ -339,10 +339,11 @@
     background: var(--surface-1, var(--surface)); color: var(--text-main); font: inherit; font-size: .92rem; line-height: 1.5;
 }
 .pi-bot-sheet textarea { resize: vertical; min-height: 64px; }
-/* Job and personality grow with their text (pi-bot.js fitTextarea) up to a bound, then scroll. */
+/* Job, personality and topic instructions grow with their text (pi-bot.js fitTextarea) up to a bound, then scroll. */
 .pi-bot-sheet textarea.pi-bot-sheet-long { resize: none; overflow-y: auto; }
 .pi-bot-sheet textarea.pi-bot-sheet-long.is-job { max-height: calc(8 * 1.5em + 18px); }
 .pi-bot-sheet textarea.pi-bot-sheet-long.is-soul { max-height: calc(16 * 1.5em + 18px); }
+.pi-bot-sheet textarea.pi-bot-sheet-long.is-instructions { max-height: calc(10 * 1.5em + 18px); }
 .pi-bot-sheet input.pi-bot-sheet-emoji[type="text"] { text-align: center; font-size: 1.45rem; padding: 2px 4px; line-height: 1.2; }
 .pi-bot-sheet input:focus-visible, .pi-bot-sheet textarea:focus-visible, .pi-bot-sheet select:focus-visible,
 .pi-bot-sheet-link:focus-visible, .pi-bot-sheet-close:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
