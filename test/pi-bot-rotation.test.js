@@ -124,6 +124,7 @@ test('windows rotate to new native generations with continuity, journal recovery
     assert.deepEqual(await profiles.reserve(() => bots.recoverRotationLocked(botId, windowId)), { recovered: true, committed: false });
     assert.equal((await bots.windows.read(botId)).state.windows[0].rotation, null);
     assert.equal((await bots.resolve(botId, windowId)).session.id, window.current.sessionId);
+    assert.equal(bots.sessionMoved(window.current.sessionId), false, 'an abandoned recovery leaves the conversation admissible');
 
     // Interrupted after the successor was fully written: recovery adopts it.
     const currentPath = (await bots.resolve(botId, windowId)).session.path;
@@ -151,7 +152,14 @@ test('windows rotate to new native generations with continuity, journal recovery
     // Nothing but the ordinary open path: it settles the journal before handing out a session.
     const reopened = new BotService({ store, profiles, supervisor });
     reopened.on('windowRotated', event => events.push(event));
+    let movingDuringRecovery = null;
+    const edit = supervisor.withSessionEdit;
+    supervisor.withSessionEdit = async (file, callback) => { movingDuringRecovery = reopened.sessionMoved(window.current.sessionId);
+        return edit ? edit.call(supervisor, file, callback) : callback(null); };
     assert.equal((await reopened.resolve(botId, windowId)).session.id, successor.id);
+    if (edit) supervisor.withSessionEdit = edit; else delete supervisor.withSessionEdit;
+    assert.equal(movingDuringRecovery, true, 'channel admission sees the predecessor as moving while recovery decides');
+    assert.equal(reopened.sessionMoved(window.current.sessionId), true);
     assert.equal((await bots.windows.read(botId)).state.windows[0].rotation, null);
     assert.equal(events.length, 1); assert.equal(events[0].to.generation, 12);
 

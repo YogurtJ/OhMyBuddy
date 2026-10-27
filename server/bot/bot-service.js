@@ -559,9 +559,7 @@ class BotService extends EventEmitter {
             });
         } catch (error) {
             await this.recoverRotationLocked(profileId, windowId).catch(() => {});
-            // Still current when the move did not happen (recovery keeps the predecessor).
-            const after = (await this.windows.read(profileId).catch(() => null))?.state.windows.find(item => item.id === windowId);
-            if (after?.current?.sessionId === from.sessionId && !after.rotation) this.movedSessions.delete(from.sessionId);
+            await this.unmarkIfCurrent(profileId, windowId, from.sessionId);
             throw error;
         }
         const committed = await this.commitRotationLocked(profileId, windowId, requestId, from, { sessionId: session.id, sessionPath: session.path });
@@ -686,6 +684,27 @@ class BotService extends EventEmitter {
         const { state } = await this.windows.read(profileId);
         const window = state.windows.find(item => item.id === windowId);
         if (!window?.rotation) return { recovered: false };
+        // Channel admission treats the predecessor as moving until the outcome is known.
+        const from = window.current?.sessionId;
+        if (!from) return this.recoverRotationSettled(profileId, windowId, window);
+        this.markMoved(from);
+        try {
+            const result = await this.recoverRotationSettled(profileId, windowId, window);
+            if (!result?.committed) await this.unmarkIfCurrent(profileId, windowId, from);
+            return result;
+        } catch (error) {
+            await this.unmarkIfCurrent(profileId, windowId, from);
+            throw error;
+        }
+    }
+
+    // Still the window's conversation (the move did not happen): no longer treated as moving.
+    async unmarkIfCurrent(profileId, windowId, sessionId) {
+        const after = (await this.windows.read(profileId).catch(() => null))?.state.windows.find(item => item.id === windowId);
+        if (after?.current?.sessionId === sessionId && !after.rotation) this.movedSessions.delete(sessionId);
+    }
+
+    async recoverRotationSettled(profileId, windowId, window) {
         if (!window.current?.sessionPath || !this.supervisor) return this.settleRotationLocked(profileId, windowId, window);
         const path = window.current.sessionPath;
         try {

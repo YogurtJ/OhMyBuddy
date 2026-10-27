@@ -14,6 +14,9 @@ test.after(() => fs.rmSync(root, { recursive: true, force: true }));
 const until = async fn => { for (let i = 0; i < 200; i++) { if (fn()) return; await delay(5); } throw Error('Fixture timed out'); };
 
 const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+// Native ownership: the profile marker and exactly one window marker, bound to the session.
+const markers = (sessionId, profileId, windowId) => [{ type: 'custom', customType: 'pivane-agent-profile', data: { version: 1, sessionId, profileId } },
+    { type: 'custom', customType: 'pivane-bot-window', data: { version: 1, sessionId, profileId, windowId, kind: 'main', generation: 0, predecessor: null } }];
 const MAIN_A = 'a0000000-0000-4000-8000-000000000001', TOPIC_A = 'a0000000-0000-4000-8000-000000000002', MAIN_B = 'b0000000-0000-4000-8000-000000000001';
 
 function fixture(t, { text = 'hello', binding: bindingOverride } = {}) {
@@ -26,8 +29,7 @@ function fixture(t, { text = 'hello', binding: bindingOverride } = {}) {
         [B]: { name: '阿木', enabled: true, windows: [{ id: MAIN_B, kind: 'main', title: '', emoji: '', current: 'b-main-0', archived: false }] }
     };
     const sessions = new Map();
-    const addSession = (id, profileId, windowId) => sessions.set(id, { id, cwd, path: path.join(cwd, id + '.jsonl'), name: id,
-        entries: [{ type: 'custom', customType: 'pivane-bot-window', data: { sessionId: id, profileId, windowId } }] });
+    const addSession = (id, profileId, windowId) => sessions.set(id, { id, cwd, path: path.join(cwd, id + '.jsonl'), name: id, entries: markers(id, profileId, windowId) });
     addSession('a-main-0', A, MAIN_A); addSession('a-topic-0', A, TOPIC_A); addSession('b-main-0', B, MAIN_B);
     sessions.set('plain', { id: 'plain', cwd, path: path.join(cwd, 'plain.jsonl'), name: 'plain', entries: [] });
     const windowOf = (profileId, windowId) => windows[profileId]?.windows.find(w => w.id === windowId);
@@ -70,7 +72,7 @@ function fixture(t, { text = 'hello', binding: bindingOverride } = {}) {
         adapter: { send: async (_a, _p, body) => { sends.push(body); return {}; } },
         store: {
             getSession: async (_cwd, id) => { if (!sessions.has(id)) throw Error('missing'); return sessions.get(id); },
-            withSessionRead: async (_dir, id, fn) => fn(await s.store.getSession(_dir, id), { manager: () => ({ getEntries: () => sessions.get(id).entries, getBranch: () => sessions.get(id).entries }), validate() {} })
+            withSessionRead: async (_dir, id, fn) => fn(await s.store.getSession(_dir, id), { manager: () => ({ getSessionId: () => id, getEntries: () => sessions.get(id).entries, getBranch: () => sessions.get(id).entries }), validate() {} })
         },
         supervisor: { getActiveWorker: () => null, getWorker: async ({ sessionId }) => { worker.sessionId = sessionId; return worker; } },
         collectDeliverables: async () => [], collectMediaAssets: async () => [],
@@ -162,7 +164,7 @@ test('pushes reach every chat connected to the Bot, with the speaker named when 
     event.recipients = s.captureScheduledRecipients(event);
     assert.equal(event.recipients.length, 1); assert.deepEqual(event.recipients[0].bot, { profileId: A, windowId: null });
     s.canNotifyScheduled = () => false; // a Bot-started message has no saved task
-    const branch = [{ type: 'custom', customType: 'pivane-bot-window', data: { sessionId: 'a-main-0', profileId: A, windowId: MAIN_A } },
+    const branch = [...markers('a-main-0', A, MAIN_A),
         { type: 'custom', customType: 'pivane-cron-run', data: { runId: 'run', sessionId: 'a-main-0', status: 'prepared' } },
         { type: 'custom', customType: 'pivane-cron-run', data: { runId: 'run', sessionId: 'a-main-0', status: 'running' } },
         { type: 'custom_message', customType: 'pivane-cron-message', details: { runId: 'run' } },
@@ -201,4 +203,34 @@ test('connecting and disconnecting Bots from the web keeps the chat on an availa
     assert.deepEqual([db.value.bindings[0].bot.profileId, db.value.bindings[0].sessionId, db.value.bindings[0].bots], [A, 'a-main-0', [A]]);
     await botChannel.unbindBot(s, { accountId: 'acct', peerId: 'owner', botProfileId: A, expectedRevision: db.value.revision });
     assert.equal(db.value.bindings.length, 0);
+});
+
+test('review fixes: a queued message never runs in another window, and switches carry waiting messages along', async t => {
+    const { s, db, cwd, turns, sends } = fixture(t, { text: '/切换 阿木' });
+    // A message ensureCurrent already stamped for Bot A, still waiting behind the switch.
+    db.change(v => v.jobs.push({ id: 'later', accountId: 'acct', peerId: 'owner', bindingId: 'binding', target: { cwd, sessionId: 'a-main-0' },
+        bot: { profileId: A, windowId: MAIN_A }, status: 'queued', text: 'after the switch' }));
+    await until(() => { s.pump(); return s.job('job').status === 'delivered' && s.job('later').status === 'delivered'; });
+    assert.deepEqual(turns.map(turn => turn.sessionId), ['b-main-0'], 'the waiting message followed the switch');
+    assert.match(sends[0], /现在和 阿木 聊/);
+    // A queued message whose target no longer matches the chat is not admitted there.
+    db.change(v => v.jobs.push({ id: 'stale', accountId: 'acct', peerId: 'owner', bindingId: 'binding', target: { cwd, sessionId: 'a-main-0' },
+        bot: { profileId: A, windowId: MAIN_A }, status: 'queued', text: 'stale' }));
+    assert.equal(s.canAdmit(s.job('stale')), false);
+});
+
+test('review fixes: a removed binding during the archived-topic fallback still explains instead of failing', async t => {
+    const { s, db, windows } = fixture(t, { binding: { sessionId: 'a-topic-0', bot: { profileId: A, windowId: TOPIC_A, main: false } } });
+    windows[A].windows[1].archived = true;
+    const read = s.withBindingTarget.bind(s);
+    s.withBindingTarget = async (...args) => { db.change(v => { v.bindings = []; }); return read(...args); };
+    await botChannel.ensureCurrent(s, 'job');
+    assert.equal(s.job('job').kind, 'notice'); assert.equal(s.job('job').target.sessionId, 'a-topic-0');
+});
+
+test('review fixes: stored job origins are validated', () => {
+    const directory = path.join(root, 'invalid-job'); fs.mkdirSync(directory);
+    fs.writeFileSync(path.join(directory, 'state.json'), JSON.stringify({ version: 1, revision: 'r', accounts: [], peers: [], bindings: [],
+        jobs: [{ id: 'j', status: 'ready', bot: { profileId: 'not-a-uuid', windowId: null } }] }), { mode: 0o600 });
+    assert.throws(() => new ChannelStore(directory), /无效/);
 });

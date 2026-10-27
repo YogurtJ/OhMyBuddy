@@ -45,9 +45,11 @@ async function switchTo(service, job, run, binding, control, target) {
             Object.assign(current, next, { name: target.name, bot, bots: bots.slice(-MAX_BOTS), ...boundary });
             const index = v.jobs.findIndex(j => j.id === job.id);
             for (const [i, item] of v.jobs.entries()) {
-                if (item.id === job.id || i > index && item.status === 'queued' && item.kind !== 'cron' && !item.bot
+                if (item.id === job.id) item.target = next;
+                // Messages sent after the switch follow it; ensureCurrent checks them again before they run.
+                else if (i > index && item.status === 'queued' && !['cron', 'bot-push', 'thread'].includes(item.kind)
                     && item.accountId === job.accountId && item.peerId === job.peerId && item.bindingId === binding.id && !service.runs.has(item.id)) {
-                    item.target = next;
+                    item.target = next; delete item.bot;
                 }
             }
         }, { config: true });

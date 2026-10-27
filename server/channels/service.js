@@ -9,6 +9,7 @@ const { bindingBoundary, threadOutcome } = require('./thread-results');
 const { DeliverableStore } = require('../pi-deliverables');
 const { customTypeIs } = require('../pivane-compat');
 const botChannel = require('./bot-channel');
+const { readWindowBinding } = require('../bot/bot-window-state');
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const same = (a, b) => a?.cwd === b?.cwd && a?.sessionId === b?.sessionId;
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
@@ -165,9 +166,11 @@ class ChannelsService {
             }
             // A thread binding names one session file; a Bot chat moves to new files over time, so it
             // is only reachable through a Bot binding that names its window (bot-channel.js).
-            const marker = read.manager().getEntries().findLast(e => e.type === 'custom' && e.customType === 'pivane-bot-window');
-            if (marker && !bot) throw fail('Bot 聊天请在 Bot 设置或渠道设置里按 Bot 连接微信');
-            if (bot && (marker?.data?.profileId !== bot.profileId || marker.data.windowId !== bot.windowId || marker.data.sessionId !== session.id))
+            const marked = read.manager().getEntries().some(e => e.type === 'custom' && e.customType === 'pivane-bot-window');
+            if (marked && !bot) throw fail('Bot 聊天请在 Bot 设置或渠道设置里按 Bot 连接微信');
+            // The same native ownership proof the Bot service uses (one marker, bound to this session and its profile).
+            const owner = bot ? readWindowBinding(read.manager()) : null;
+            if (bot && (owner?.profileId !== bot.profileId || owner.windowId !== bot.windowId || owner.sessionId !== session.id))
                 throw fail('Bot 聊天与微信绑定不一致，请刷新核对', 409);
             read.validate();
             // The caller's synchronous commit shares this validated file snapshot.
@@ -332,12 +335,12 @@ class ChannelsService {
             result = await this.store.withSessionRead(event.target.cwd, event.target.sessionId, (_s, read) => {
                 const value = require('./turn-results').scheduledOutcome(read.manager(), event);
                 // A Bot window's own marker names the window the push came from.
-                if (value && event.target.bot) value.window = read.manager().getEntries().findLast(e => e.type === 'custom' && e.customType === 'pivane-bot-window')?.data || null;
+                if (value && event.target.bot) value.window = readWindowBinding(read.manager());
                 read.validate(); return value;
             });
         } catch { return { status: 'retry', reason: 'native-result-unavailable' }; }
         if (!result) return { status: 'retry', reason: 'native-result-unproven' };
-        if (event.target.bot && (result.window?.profileId !== event.target.bot.profileId || typeof result.window.windowId !== 'string'))
+        if (event.target.bot && (result.window?.profileId !== event.target.bot.profileId || result.window.sessionId !== event.target.sessionId))
             return { status: 'skipped', reason: 'bot-window-unproven' };
         if (this.stopping || this.isSuspended()) return { status: 'retry', reason: 'channel-unavailable' };
         const header = '⏰ 定时任务「' + event.name + '」';
@@ -372,7 +375,7 @@ class ChannelsService {
     trimJobs(value) {
         while (value.jobs.length > 4500) {
             const index = value.jobs.findIndex(j => !pending(j)
-                && !(j.kind === 'cron' && this.scheduledAdmissionPending?.(j.cronRunId)));
+                && !(['cron', 'bot-push'].includes(j.kind) && this.scheduledAdmissionPending?.(j.cronRunId)));
             if (index < 0) throw fail('渠道消息记录已满');
             value.jobs.splice(index, 1);
         }
@@ -405,8 +408,10 @@ class ChannelsService {
     bindingFor(job) {
         // A Bot's reply or push stays deliverable after the chat switched to another of its connected
         // Bot windows, or the window moved to a new generation (job.bot names where it came from).
+        // Never for admitting a message or command: those run only where the chat currently is.
+        const produced = !['queued', 'dispatching'].includes(job.status);
         const binding = this.db.value.bindings.find(b => b.id === job.bindingId && b.accountId === job.accountId && b.peerId === job.peerId
-            && (same(b, job.target) || Boolean(job.bot && b.bot && b.bots?.includes(job.bot.profileId))));
+            && (same(b, job.target) || Boolean(produced && job.bot && b.bot && b.bots?.includes(job.bot.profileId))));
         return binding && (!(job.kind === 'thread' || job.followsThread) || binding.replyMode !== 'wechat') ? binding : null;
     }
     canAdmit(job) {
@@ -439,7 +444,7 @@ class ChannelsService {
             // A Bot chat runs in its window's current generation (bot-channel.js).
             if (job.status === 'queued' && this.bindingFor(job)?.bot) {
                 if (await botChannel.ensureCurrent(this, id) === 'retry') return;
-                job = this.job(id);
+                job = this.job(id); run.target = job.target;
             }
             const current = this.bindingFor(job);
             const botWindow = job.status === 'queued' ? current?.bot : null;
