@@ -24,7 +24,8 @@ class ChannelStore {
                 || typeof b.cwd !== 'string' || !path.isAbsolute(b.cwd) || b.cwd.length > 4096
                 || b.replyMode !== undefined && !['all', 'wechat'].includes(b.replyMode)
                 || b.boundAt !== undefined && (!Number.isFinite(b.boundAt) || b.boundAt < 0)
-                || b.excludedTurnId != null && !/^[a-f0-9]{64}$/.test(b.excludedTurnId))
+                || b.excludedTurnId != null && !/^[a-f0-9]{64}$/.test(b.excludedTurnId)
+                || !require('./bot-channel').validBotBinding(b))
             || value.jobs.some(j => !j || typeof j.id !== 'string' || typeof j.status !== 'string'
                 || j.commandSubmitted !== undefined && typeof j.commandSubmitted !== 'boolean'
                 || j.deliveryIssues !== undefined && (!Array.isArray(j.deliveryIssues) || j.deliveryIssues.length > 20

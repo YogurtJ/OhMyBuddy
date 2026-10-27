@@ -336,11 +336,14 @@ class CronService {
                         fail('Daily money budget exhausted or model pricing is unknown');
                 }
                 if (this.stopping || this.isSuspended() || this.mutating || this.db.run(run.id)?.status !== 'waiting') return;
+                let botWindow = null;
                 if (job.target.kind === 'profile') {
                     const home = await this.homeRef(job.target.profileId, job.target.windowId).catch(() => null);
                     if (home?.status !== 'ready' || home.sessionId !== session.id || home.cwd !== session.cwd) return;
+                    // Which Bot window ran it: WeChat chats connected to the Bot get the result (channels/bot-channel.js).
+                    if (home.bot) botWindow = { profileId: job.target.profileId, windowId: job.target.windowId ?? null };
                 }
-                run = { ...run, status: 'dispatching', target: { cwd: session.cwd, sessionId: session.id, name: session.name },
+                run = { ...run, status: 'dispatching', target: { cwd: session.cwd, sessionId: session.id, name: session.name, ...(botWindow ? { bot: botWindow } : {}) },
                     budgetDay: day, reservedTokens: job.execution.maxTokens, reservedCost, startedAt: now };
                 this.db.saveRun(run); handedOff = true;
             });
@@ -398,6 +401,22 @@ class CronService {
             completionId: run.id, completedAt: new Date(this.now()).toISOString(),
             ...(run.origin === 'bot' ? { proactive: { profileId: run.profileId } } : {}) });
     }
+    // A message a Bot started itself that bot-proactive.js cleared for pushing (outside quiet hours,
+    // within the daily limit): WeChat chats connected to the Bot get it through the same durable,
+    // retried admission as scheduled results. The thread's WeChat reply mode applies.
+    notifyProactive(runId) {
+        let queued = false;
+        this.db.transaction(() => {
+            const run = this.db.run(runId);
+            if (!run || run.origin !== 'bot' || run.channelNotify || run.status !== 'completed' || !run.target?.bot) return;
+            const job = run.job || this.db.job(run.jobId);
+            const channelNotify = this.captureNotification({ runId: run.id, jobId: run.jobId, name: job?.name || '', status: run.status,
+                target: run.target, notificationMode: 'inherit', replyEntryId: run.replyEntryId || null, scheduledAt: run.scheduledAt, proactive: true });
+            this.db.saveRun({ ...run, channelNotify }); queued = channelNotify.status === 'pending';
+        });
+        if (queued) void this.reconcileChannelNotifications()?.catch?.(() => {});
+        return queued;
+    }
     reconcileChannelNotifications() {
         if (this.notifying || this.stopping || this.isSuspended() || this.mutating) return this.notifying;
         const pending = Promise.resolve().then(async () => {
@@ -405,7 +424,8 @@ class CronService {
             for (const run of this.db.pendingChannelNotifications()) {
                 if (this.stopping || this.isSuspended() || this.mutating) break;
                 const notification = run.channelNotify, job = this.db.job(run.jobId);
-                if (!job || job.deleted || weixinNotification(job) === 'off') {
+                // A Bot-started message has no saved task (its job is inline in the run).
+                if (!notification.event?.proactive && (!job || job.deleted || weixinNotification(job) === 'off')) {
                     this.db.updateChannelNotification(run.id, notification.attempts, { ...notification,
                         status: 'skipped', reason: 'configuration-revoked', resolvedAt: this.now() });
                     continue;

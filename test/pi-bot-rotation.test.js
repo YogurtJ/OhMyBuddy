@@ -57,8 +57,15 @@ test('windows rotate to new native generations with continuity, journal recovery
     const leafAfterModel = manager0.getLeafId();
     assert.notEqual(leaf, leafAfterModel);
 
+    assert.equal(bots.sessionMoved(resolved.session.id), false);
     const rotated = await bots.rotate(botId, windowId, { expectedGeneration: 0 });
     assert.equal(rotated.window.generation, 1);
+    // WeChat admission (M4-4) sees the move synchronously; the window's chat target follows it.
+    assert.equal(bots.sessionMoved(resolved.session.id), true);
+    assert.equal(bots.sessionMoved(rotated.session.id), false);
+    const target = await bots.channelTarget(botId, null);
+    assert.deepEqual([target.window.id, target.session.id], [windowId, rotated.session.id]);
+    assert.equal((await bots.channelWindows(botId)).windows[0].kind, 'main');
     assert.equal(rotated.window.generations, 2);
     assert.notEqual(rotated.session.id, resolved.session.id);
     const next = SessionManager.open(rotated.session.path);

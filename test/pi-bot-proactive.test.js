@@ -30,7 +30,8 @@ function world({ notify = {}, now = at('2026-10-28T10:00:00') } = {}) {
     const notes = new Map([[main, []], [topic, []]]);
     const enqueued = [], pushed = [], replyNotices = [];
     const clock = { value: now };
-    const cron = { fail: null, hook: null, async enqueueProactive(input) { await cron.hook?.(); if (cron.fail) throw cron.fail; enqueued.push(input); return { id: input.runId }; } };
+    const cron = { fail: null, hook: null, wechat: [], async enqueueProactive(input) { await cron.hook?.(); if (cron.fail) throw cron.fail; enqueued.push(input); return { id: input.runId }; },
+        notifyProactive(runId) { cron.wechat.push(runId); return true; } };
     const notifications = { busy: false, async broadcast(payload) { if (notifications.busy) return false; pushed.push(payload); return true; } };
     const preferences = { getReplyNotices: () => replyNotices.slice(),
         recordReplyNotice: notice => { const i = replyNotices.findIndex(n => n.cwd === notice.cwd && n.sessionId === notice.sessionId); if (i >= 0) replyNotices.splice(i, 1); replyNotices.push(notice); } };
@@ -155,6 +156,7 @@ test('pushes: held in quiet hours and combined once they end; the daily limit on
     await w.proactive.tickBot(w.id);
     assert.equal(w.pushed.length, 1, 'one combined push, on a new day');
     assert.match(w.pushed[0].body, /2 条/);
+    assert.deepEqual(w.cron.wechat, ['run-4', 'run-5'], 'WeChat chats connected to the Bot get the held messages themselves');
     await w.proactive.tickBot(w.id);
     assert.equal(w.pushed.length, 1, 'held messages are pushed once');
     assert.equal(await w.proactive.decide(notice(6)), 'push', 'the combined push counted as one');

@@ -90,6 +90,38 @@ class BotService extends EventEmitter {
         this.catalog = catalog;
         this.getAgentDir = getAgentDir || (async () => fs.realpathSync.native((await getSdk()).getAgentDir()));
         this.windows = new BotWindowRegistry({ getAgentDir: this.getAgentDir });
+        // Sessions that are moving, or have moved, to a newer generation (bounded). Channel
+        // admission checks this synchronously right before a turn is handed to a worker.
+        this.movedSessions = new Set();
+        this.on('windowRotated', event => { if (event?.from?.sessionId) this.markMoved(event.from.sessionId); });
+    }
+
+    sessionMoved(sessionId) { return this.movedSessions.has(sessionId); }
+    markMoved(sessionId) {
+        this.movedSessions.add(sessionId);
+        while (this.movedSessions.size > 2000) this.movedSessions.delete(this.movedSessions.values().next().value);
+    }
+
+    // A WeChat chat's Bot target (M4-4): the window (main when windowId is null) at its current
+    // generation, with the Bot's name. A turned-off Bot is refused.
+    async channelTarget(profileId, windowId = null) {
+        const { profile } = await this.bot(profileId);
+        if (!settings.isBot(profile)) fail('This Bot is turned off', 409, 'BOT_DISABLED');
+        let id = windowId;
+        if (id === null) {
+            const main = (await this.windows.read(profileId)).state.windows.find(item => item.kind === 'main');
+            id = main?.id ?? (await this.ensureMainWindow(profileId)).id;
+        }
+        const resolved = await this.resolve(profileId, id);
+        return { name: profile.name, ...resolved };
+    }
+
+    // Active windows of a Bot for the WeChat /topic list: main chat first, then topics by recency.
+    async channelWindows(profileId) {
+        const { profile } = await this.bot(profileId);
+        const windows = (await this.windows.read(profileId)).state.windows.filter(item => !item.archivedAt).map(publicWindow);
+        windows.sort((a, b) => (a.kind === 'main' ? -1 : b.kind === 'main' ? 1 : 0) || Date.parse(b.updatedAt || 0) - Date.parse(a.updatedAt || 0));
+        return { name: profile.name, enabled: settings.isBot(profile), windows };
     }
 
     // Bots in display order, with their windows. Profiles without a valid section are not Bots.
@@ -495,6 +527,7 @@ class BotService extends EventEmitter {
             return {};
         });
         let session;
+        this.markMoved(from.sessionId);
         try {
             session = await this.supervisor.withSessionEdit(from.sessionPath, async worker => {
                 if (worker) await this.supervisor.stopSession(from.sessionPath);
@@ -526,6 +559,9 @@ class BotService extends EventEmitter {
             });
         } catch (error) {
             await this.recoverRotationLocked(profileId, windowId).catch(() => {});
+            // Still current when the move did not happen (recovery keeps the predecessor).
+            const after = (await this.windows.read(profileId).catch(() => null))?.state.windows.find(item => item.id === windowId);
+            if (after?.current?.sessionId === from.sessionId && !after.rotation) this.movedSessions.delete(from.sessionId);
             throw error;
         }
         const committed = await this.commitRotationLocked(profileId, windowId, requestId, from, { sessionId: session.id, sessionPath: session.path });

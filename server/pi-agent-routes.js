@@ -144,6 +144,8 @@ function createPiAgentGateway(options = {}) {
         // limit (held ones are combined into one push when quiet hours end); it always stays in the chat.
         const record = (value = 'push') => {
             if (value === 'push') void notifications.notify(notice);
+            // WeChat chats connected to the Bot get the pushed message too (M4-4).
+            if (value === 'push' && notice.proactive) { try { cron.notifyProactive(notice.completionId); } catch { /* best effort; stays in the chat */ } }
             try { preferences.recordReplyNotice(value === 'push' ? notice : { ...notice, quiet: true }); }
             catch { console.error('Pi reply notice could not be persisted'); }
         };
@@ -306,6 +308,9 @@ function createPiAgentGateway(options = {}) {
         return Boolean(job && !job.deleted && require('./pi-cron-service').weixinNotification(job) !== 'off');
     };
     channels.scheduledAdmissionPending = id => cron.db?.run(id)?.channelNotify?.status === 'pending';
+    // WeChat chats connected to a Bot follow its windows to new generations (M4-4).
+    channels.bots = bots;
+    bots.on('windowRotated', event => { try { require('./channels/bot-channel').windowRotated(channels, event); } catch { /* reconciled before the next turn */ } });
     require('./channels/service').mountChannels(router, channels);
 
     router.get('/status', async (req, res) => {

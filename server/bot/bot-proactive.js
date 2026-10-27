@@ -373,6 +373,8 @@ class BotProactive {
                 body: count === 1 ? `${found.profile.name} 在安静时段给你留了 1 条消息。` : `${found.profile.name} 在安静时段给你留了 ${count} 条消息。` });
             if (accepted === false) return;
             this.reveal(held);
+            // WeChat chats connected to the Bot get the held messages themselves.
+            for (const entry of held) { try { this.cron?.notifyProactive?.(entry.completionId); } catch { /* best effort */ } }
         }
         const ids = new Set(held.map(entry => entry.completionId));
         await this.mutate(profileId, next => {
