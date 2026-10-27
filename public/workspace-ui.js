@@ -120,8 +120,7 @@
         const settingsTabs = new Set(['providers', 'media', 'models', 'system-prompts', 'native', 'access', 'usage', 'updates']);
         const extensionTabs = new Set(['extensions', 'installed', 'mcp', 'channels']);
         const moreTabs = new Set(['cron', 'artifacts', 'media', 'profiles', 'extensions']);
-        // With Bots available, the phone bar leaves assistant conversations to the More menu.
-        const inMore = tab => moreTabs.has(tab) || tab === 'assistant' && document.body.classList.contains('pv-bots-on');
+        const inMore = tab => moreTabs.has(tab);
         const moreItems = () => [...(moreMenu?.querySelectorAll('[data-more-tab]') || [])].filter(item => item.getClientRects().length);
         document.querySelectorAll('[data-cron-nav]').forEach(label => { label.textContent = translateUi('定时任务'); });
         const moreToggle = document.getElementById('workspace-more-toggle');
@@ -290,7 +289,7 @@
             const pending = group && !window.PiFeatures.ready(group);
             closeMoreMenu();
             if (featureError.open) featureError.close();
-            if (tab === 'chat' || tab === 'assistant' || tab === 'bot') lastConversation = location.hash || '#/chat';
+            if (tab === 'chat' || tab === 'bot') lastConversation = location.hash || '#/chat';
             moreToggle?.classList.toggle('active', inMore(tab));
             if (inMore(tab)) moreToggle?.setAttribute('aria-current', 'page'); else moreToggle?.removeAttribute('aria-current');
             moreMenu?.querySelectorAll('[data-more-tab]').forEach(button => {
@@ -322,8 +321,8 @@
                 return;
             }
             if (group === 'settings') window.PiFeatures.applySettingsIntent(revision);
-            window.dispatchEvent(new CustomEvent('workspace:tabchanged', { detail: { tab, params } }));
             if (!completion || group === 'settings') settingsRoute();
+            window.dispatchEvent(new CustomEvent('workspace:tabchanged', { detail: { tab, params } }));
         }
         function routeHash(tab, params = {}) {
             if (!routeTabs.has(tab)) throw new Error('Unknown workspace route');
@@ -340,9 +339,9 @@
             showRoute();
         }
         window.PiWorkspaceRoute = Object.freeze({ navigate, current: parseRoute, revision: () => routeRevision,
-            rememberConversation(tab, params) { if (tab === 'chat' || tab === 'assistant' || tab === 'bot') lastConversation = routeHash(tab, params); },
+            rememberConversation(tab, params) { if (tab === 'chat' || tab === 'bot') lastConversation = routeHash(tab, params); },
             returnToConversation: () => {
-            const url = ['chat', 'assistant', 'bot'].includes(parseRoute().tab) ? location.hash : lastConversation;
+            const url = ['chat', 'bot'].includes(parseRoute().tab) ? location.hash : lastConversation;
             history.pushState(null, '', url); showRoute();
         } });
         window.addEventListener('popstate', showRoute);

@@ -86,7 +86,7 @@ async function main() {
             for (const mode of ['chat', 'assistant']) {
                 const f = await fixture(browser, width, `#/${mode}`), { page } = f;
                 await f.go();
-                await page.waitForFunction(mode => mode === 'assistant' ? document.querySelector('#pi-assistant-profile')?.options.length > 0 : document.querySelector('#pi-input')?.disabled === false, mode);
+                await page.waitForFunction(() => location.hash.startsWith('#/chat') && document.querySelector('#pi-input')?.disabled === false);
                 assert.deepEqual(f.requests.filter(url => deferredScripts.some(file => url.endsWith('/' + file))), [], 'initial chat requests no page scripts');
                 if (mode === 'chat') {
                     assert.equal(await page.locator('#pi-meta-profile').textContent().then(text => text.includes('Fixture identity')), true, 'identity details work before profile editor loads');

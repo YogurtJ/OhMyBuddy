@@ -196,14 +196,12 @@
             draft = null; selected = ''; ++editorVersion; ++overviewEpoch; ++proposalEpoch; ++openEpoch;
             reconcile = null; proposal = null; call(knowledge, 'close'); call(learning, 'close'); renderPersona(); showSection(); renderHeader(); renderList();
         }
-        // With Bots available the assistant chat page is retired (M4-5c): a Bot opens its own chat; another
-        // identity gets a new Pi Agent thread in the current project, or in a related category's folder
-        // (keeping that category's instructions).
+        // The assistant chat page is retired (M4-5c): a Bot opens its own chat; another identity gets
+        // a new Pi Agent thread in the current project, or in a related category's folder (keeping
+        // that category's instructions).
         async function chat(project) {
             const id = selected, profile = savedProfile();
             if (!profile?.enabled || !await guard() || id !== selected) return;
-            const retired = document.body.classList.contains('pv-bots-on');
-            if (!retired) return void window.PiWorkspaceRoute?.navigate('assistant', { profileId: id, ...(project ? { projectId: project.id } : {}) });
             if (profile.bot) return void window.PiWorkspaceRoute?.navigate('bot', { profileId: id });
             const target = project?.cwd || cwd();
             if (!target) { ui.toast(t('请先在 Pi Agent 选择一个项目'), { tone: 'warning' }); return; }
@@ -377,7 +375,7 @@
             }
             const changes = card({ title: t('最近变化'), icon: 'clock-rotate-left', actions: receipts.length > 6 && receiptLimit === 6 ? [button({ label: t('显示更多'), size: 'sm', variant: 'ghost', onClick: () => { receiptLimit = 30; renderOverview(); } })] : [] }, [!knowledgeData ? notice(t('{0}读取失败：{1}', t('记忆'), overviewData.knowledge.reason?.message || ''), [button({ label: t('重试'), size: 'sm', onClick: () => void loadOverview() })]) : receipts.length ? timeline : empty({ icon: 'clock', title: t('还没有变化记录'), compact: true })]);
             const projectsCard = card({ title: t('关联项目'), icon: 'folder-open', subtitle: t('这些项目中的新对话会使用此身份。') }, [
-                projectsData ? projectRows.length ? el('div', { class: 'pi-id-entries' }, projectRows.map(project => el('div', { class: 'pi-id-entry pi-profile-project' }, [el('div', { class: 'pi-id-entry-main' }, [el('span', { class: 'pi-id-entry-title' }, [icon('folder'), ' ', project.name]), el('span', { class: 'pi-id-entry-meta pi-profile-project-path', title: project.cwd, text: project.cwd }), el('span', { class: 'pi-id-entry-text', text: project.description || '' })]), button({ label: t('在此项目对话'), icon: 'arrow-right', variant: 'quiet', size: 'sm', onClick: () => void chat(project) })]))) : empty({ icon: 'folder-open', title: t('没有关联项目'), text: document.body.classList.contains('pv-bots-on') ? t('在 Pi Agent 项目菜单中选“以身份新建…”，就能在那个项目里用此身份。') : t('在“助手对话”中新建项目并选择此身份。'), compact: true })
+                projectsData ? projectRows.length ? el('div', { class: 'pi-id-entries' }, projectRows.map(project => el('div', { class: 'pi-id-entry pi-profile-project' }, [el('div', { class: 'pi-id-entry-main' }, [el('span', { class: 'pi-id-entry-title' }, [icon('folder'), ' ', project.name]), el('span', { class: 'pi-id-entry-meta pi-profile-project-path', title: project.cwd, text: project.cwd }), el('span', { class: 'pi-id-entry-text', text: project.description || '' })]), button({ label: t('在此项目对话'), icon: 'arrow-right', variant: 'quiet', size: 'sm', onClick: () => void chat(project) })]))) : empty({ icon: 'folder-open', title: t('没有关联项目'), text: t('在 Pi Agent 项目菜单中选“以身份新建…”，就能在那个项目里用此身份。'), compact: true })
                     : notice(t('关联项目读取失败：{0}', overviewData.projects.reason?.message || ''), [button({ label: t('重试'), size: 'sm', onClick: () => void loadOverview() })])]);
             projectsCard.dataset.projectsCard = '';
             overviewRoot.replaceChildren(stats, el('div', { class: 'pi-id-grid-2' }, [card({ title: t('需要处理'), icon: 'list-check' }, [attention]), changes]), projectsCard,
