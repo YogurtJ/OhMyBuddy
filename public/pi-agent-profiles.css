@@ -28,7 +28,7 @@
 .pi-profile-confirm { position: fixed; inset: 0; margin: auto; box-sizing: border-box; width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 24px; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface-1); color: var(--text-main); box-shadow: var(--shadow-float); }
 .pi-profile-confirm::backdrop { background: color-mix(in srgb, var(--text-main) 40%, transparent); }
 .pi-profile-confirm h2 { margin: 0 0 12px; }
-.pi-profile-confirm p { margin: 0; line-height: 1.7; color: var(--text-soft); }
+.pi-profile-confirm p { margin: 0; line-height: 1.7; color: var(--text-soft); white-space: pre-line; }
 .pi-profile-confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 24px; }
 .pi-profile-confirm .pi-profile-confirm-discard { background: var(--danger); border-color: var(--danger); color: var(--primary-contrast); }
 .pi-profile-confirm button { min-height: 42px; }
@@ -67,3 +67,24 @@
     .pi-id-tabs { padding-inline: 14px; }
     .pi-id-tab { padding-inline: 8px; gap: 4px; }
 }
+
+/* "以身份新建线程" (M4-6, pi-identity-thread.js): pick an identity for a new Pi Agent thread. */
+.pi-identity-thread { position: fixed; inset: 0; margin: auto; box-sizing: border-box; width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 0; border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface-1); color: var(--text-main); box-shadow: var(--shadow-float); }
+.pi-identity-thread::backdrop { background: color-mix(in srgb, var(--text-main) 40%, transparent); }
+.pi-identity-thread form { display: flex; flex-direction: column; max-height: calc(100dvh - 34px); padding: 22px 22px 18px; box-sizing: border-box; }
+.pi-identity-thread h2 { margin: 0 0 8px; font-size: 1.1rem; }
+.pi-identity-thread-note { margin: 0 0 14px; font-size: .86rem; line-height: 1.6; color: var(--text-soft); }
+.pi-identity-thread-list { display: grid; gap: 6px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.pi-identity-thread-row { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+.pi-identity-thread-row:has(input:checked) { border-color: var(--primary); background: var(--surface-2); }
+.pi-identity-thread-row input { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--primary); }
+.pi-identity-thread-copy { display: grid; gap: 2px; min-width: 0; }
+.pi-identity-thread-copy strong { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: .92rem; font-weight: 600; overflow-wrap: anywhere; }
+.pi-identity-thread-copy small { overflow: hidden; color: var(--text-soft); font-size: .78rem; white-space: nowrap; text-overflow: ellipsis; }
+.pi-identity-thread-tag { flex: none; padding: 1px 6px; border-radius: 999px; background: var(--green-soft, var(--surface-3)); color: var(--accent, var(--primary)); font-size: .7rem; font-weight: 650; }
+.pi-identity-thread-state { display: grid; justify-items: start; gap: 10px; padding: 8px 2px; color: var(--text-soft); font-size: .86rem; }
+.pi-identity-thread-state p { margin: 0; }
+.pi-identity-thread-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.pi-identity-thread button { min-height: 42px; }
+.pi-identity-thread button:focus-visible, .pi-identity-thread-row:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 2px; }
+@media (max-width: 680px) { .pi-identity-thread button { min-height: 44px; } }

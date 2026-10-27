@@ -10703,6 +10703,12 @@
         ["它已经是 Bot 了。", "It is already a Bot."],
         ["找不到这个身份了，请刷新核对。", "This identity can't be found anymore. Refresh to check."],
         ["没有变成 Bot：{0}", "Not made a Bot: {0}"],
+        ["以身份新建…", "New thread as an identity…"],
+        ["以身份新建线程", "New thread as an identity"],
+        ["在“{0}”里新开一个普通 Pi 线程，用所选身份的性格、记忆和技能。工具和权限与 Pi Agent 相同，不受 Bot 的做事方式限制；它不会出现在 Bot 的聊天里。", "Start an ordinary Pi thread in “{0}” that uses the chosen identity's personality, memory and skills. Tools and permissions are the same as Pi Agent's, not limited by a Bot's way of working, and it doesn't appear in the Bot's chats."],
+        ["去身份页", "Go to Identities"],
+        ["还没有可用的身份。可以在“身份”页新建，或先建一个 Bot。", "No identity is available yet. Create one on the Identities page, or create a Bot first."],
+        ["读取身份失败：{0}", "Couldn't read identities: {0}"],
         ["我是{0}，现在有了自己的主聊天和工作目录，记得的事都还在。花一两分钟说说想让我主要帮你做什么？随时可以说“先跳过”。", "I'm {0}. I now have my own main chat and workspace, and I still remember what I knew. Take a minute or two to tell me what you mainly want my help with? You can say “skip for now” any time."]
     );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
