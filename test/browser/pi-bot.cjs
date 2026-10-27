@@ -539,15 +539,17 @@ const NEW_FACE = { kind: 'preset', id: 'pivane-pebble' };
                 if (width < 700) {
                     const cells = await page.evaluate(() => [...document.querySelectorAll('#workspace-sidebar .nav-btn, #workspace-sidebar .sidebar-tool-button')]
                         .filter(node => node.offsetParent).map(node => Math.round(node.getBoundingClientRect().width)));
-                    // Assistant conversations live in More once Bots are available (D-024).
+                    // With Bots available the assistant chat page is retired (D-024, M4-5c): not in the bar, not in More.
                     assert.equal(cells.length, 5, JSON.stringify(cells));
                     assert.equal(await page.locator('.nav-menu [data-tab="assistant"]').isVisible(), false);
                     await page.locator('#workspace-more-toggle').click();
-                    assert.equal(await page.evaluate(() => document.activeElement?.dataset.moreTab), 'assistant');
+                    assert.equal(await page.locator('[data-more-tab="assistant"]').isVisible(), false);
+                    assert.equal(await page.evaluate(() => document.activeElement?.dataset.moreTab), 'cron');
                     await page.locator('#workspace-more-toggle').click();
                     assert.ok(cells.every(cell => Math.abs(cell - cells[0]) <= 1), `equal bottom-bar cells ${JSON.stringify(cells)}`);
                 }
-                // 7. An assistant-conversation link to a Bot opens the Bot; a disabled Bot stays unavailable there.
+                if (width >= 700) assert.equal(await page.locator('.nav-btn[data-tab="assistant"]').isVisible(), false, 'no assistant chat entry on desktop either');
+                // 7. An old assistant-conversation link to a Bot opens the Bot; anything else lands in Pi Agent.
                 profileList = [bot()];
                 await page.evaluate(id => window.PiWorkspaceRoute.navigate('assistant', { profileId: id }), BOT);
                 await page.waitForFunction(() => location.hash.startsWith('#/bot') && document.querySelector('#chat-tab').classList.contains('pi-bot-mode'), null, { timeout: 8000 });
@@ -555,10 +557,9 @@ const NEW_FACE = { kind: 'preset', id: 'pivane-pebble' };
                 await page.waitForFunction(() => !document.querySelector('#chat-tab').classList.contains('pi-bot-mode'));
                 profileList = [{ ...bot(), enabled: false }];
                 await page.evaluate(id => window.PiWorkspaceRoute.navigate('assistant', { profileId: id }), BOT);
-                await page.waitForFunction(() => /当前身份不可用/.test(document.querySelector('#pi-assistant-profile-status')?.textContent || ''), null, { timeout: 8000 });
-                assert.ok((await page.evaluate(() => location.hash)).startsWith('#/assistant'), 'no redirect to another Bot');
-                assert.equal(await page.locator('#pi-assistant-profile option[value]:not([value=""])').count(), 0, 'Bots are not listed as assistant identities');
-                await page.evaluate(() => window.PiWorkspaceRoute.navigate('chat'));
+                await page.waitForFunction(() => location.hash.startsWith('#/chat'), null, { timeout: 8000 });
+                assert.equal(await page.locator('#chat-tab').evaluate(node => node.classList.contains('pi-bot-mode')), false, 'a disabled Bot is not opened');
+                assert.equal(await page.locator('#pi-assistant-switcher').isVisible(), false, 'the retired assistant page never shows');
 
                 assert.deepEqual(errors, []);
                 assert.equal(await page.evaluate(() => document.body.scrollWidth <= innerWidth), true, 'no horizontal overflow');

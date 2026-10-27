@@ -686,3 +686,7 @@
     .sidebar-tool-button,
     .sidebar-tool-button .pv-icon { transition: none; }
 }
+
+/* With Bots available the assistant chat page is retired (D-024 step 4, M4-5c): Bots, topics and
+   "以身份新建…" in Pi Agent replace it, and links to it open the Bot or the Pi Agent thread. */
+body.pv-bots-on .nav-btn[data-tab="assistant"], body.pv-bots-on [data-more-tab="assistant"] { display: none !important; }

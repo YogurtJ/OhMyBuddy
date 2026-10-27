@@ -1053,6 +1053,17 @@ document.addEventListener('DOMContentLoaded', () => {
             sideChat.setEnabled(status.sideChat === true, status.sideChatContext === true, status.sideChatRetention === true, status.sideChatTools === true, status.sideChatModels === true, status.sideChatLifecycle === true);
             window.PiReplyTts.setEnabled(status.replyTts === true);
             elements.tokenDialog.classList.add('hidden');
+            $('workspace-bot-toggle').hidden = status.bots !== true;
+            document.body.classList.toggle('pv-bots-on', status.bots === true);
+            if (state.assistantMode && assistantRetired()) {
+                // Opened at an old assistant link: leave the retired page before anything loads there.
+                state.assistantMode = false; state.assistantEpoch++;
+                $('pi-assistant-switcher').hidden = true;
+                elements.sessionFilters.hidden = false; elements.projectButton.hidden = false;
+                elements.sessionHeadingTitle.textContent = translateUi('项目与线程');
+                syncActualIdentity(); syncMobileHeader();
+                await leaveAssistantPage(window.PiWorkspaceRoute?.current().params);
+            }
             // Assistant projects do not depend on scanning every native project.
             const initialParams = window.PiWorkspaceRoute?.current().params;
             const initialAssistant = state.assistantMode ? refreshAssistant({ profileId: initialParams?.get('profileId'),
@@ -1066,8 +1077,6 @@ document.addEventListener('DOMContentLoaded', () => {
             void discovery.catch(() => {}); // The fallback below still observes failures.
             let restored = false;
             const savedProject = localStorage.getItem('pi.web.cwd');
-            $('workspace-bot-toggle').hidden = status.bots !== true;
-            document.body.classList.toggle('pv-bots-on', status.bots === true);
             if (!state.assistantMode && !state.botMode && transfer.movesEnabled && initialParams?.get('cwd') && initialParams?.get('sessionId')) {
                 const result = await apiFetch('/api/pi/sessions/' + encodeURIComponent(initialParams.get('sessionId')) + '/resolve?cwd=' + encodeURIComponent(initialParams.get('cwd')));
                 if (selectionEpoch === state.projectSelectionEpoch && !state.assistantMode && !state.botMode) {
@@ -2371,6 +2380,27 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             toast(error.message, 'error');
         }
+    }
+
+    // M4-5c: with Bots available the assistant chat page is retired. Its links open the Bot's chat,
+    // or the thread in the Pi Agent list (identity and category kept), or else Pi Agent.
+    const assistantRetired = () => document.body.classList.contains('pv-bots-on');
+    async function leaveAssistantPage(params) {
+        const profileId = params?.get('profileId'), projectId = params?.get('projectId'), sessionId = params?.get('sessionId');
+        let tab = 'chat', target = {};
+        try {
+            if (sessionId && projectId) {
+                const data = await apiFetch(`/api/pi/assistant-projects${profileId ? `?profileId=${encodeURIComponent(profileId)}` : ''}`);
+                const project = data?.projects?.find(item => item.id === projectId);
+                if (project?.cwd) target = { cwd: project.cwd, sessionId };
+            } else if (profileId) {
+                const data = await apiFetch('/api/pi/profiles');
+                const profile = data?.profiles?.find(item => item.id === profileId);
+                if (profile?.bot && profile.enabled && profile.bot.enabled !== false) { tab = 'bot'; target = { profileId }; }
+            }
+        } catch { /* Pi Agent is always a safe place to land. */ }
+        if (window.PiWorkspaceRoute?.current().tab !== 'assistant') return;
+        window.PiWorkspaceRoute.navigate(tab, target, true);
     }
 
     async function createSessionInProject(cwd) {
@@ -5394,6 +5424,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const previousTab = /^#\/([^?]+)/.exec(state.routeKey || '')?.[1];
         if (routeKey !== state.routeKey) { state.routeKey = routeKey; state.navigationEpoch++; }
         if (tab !== 'chat' && tab !== 'assistant' && tab !== 'bot') { state.assistantEpoch++; return; }
+        if (tab === 'assistant' && assistantRetired()) { void leaveAssistantPage(params); return; }
         const wasAssistant = state.assistantMode, wasBot = state.botMode;
         const previousMode = wasBot ? 'bot' : wasAssistant ? 'assistant' : 'chat';
         if (previousMode !== tab) clearConversationForWorkspaceSwitch();
