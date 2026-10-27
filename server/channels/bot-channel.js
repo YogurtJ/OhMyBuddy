@@ -104,7 +104,7 @@ async function ensureCurrent(service, jobId) {
                 reply = '⚠️ 这个话题已经归档，刚才这条消息没有发出。已回到主聊天，请重新发送。';
             } catch (inner) { if (transient(inner)) return 'retry'; }
         }
-        const current = service.db.value.bindings.find(b => b.id === binding.id);
+        const current = service.db.value.bindings.find(b => b.id === binding.id) || binding;
         service.updateJob(jobId, { status: 'ready', kind: 'notice', reason: 'binding-changed', text: undefined, images: undefined,
             target: { cwd: current.cwd, sessionId: current.sessionId }, directReply: reply });
         return 'notice';
