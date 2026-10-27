@@ -58,8 +58,13 @@
         // Bots whose user wrote their own message instead of choosing: the panel stays away on this
         // page (nothing is saved; it comes back after a reload while the step is still open).
         const dismissed = new Set();
+        let modelPicker = null;
 
-        function hide() { if (panel.hidden) return; panel.hidden = true; panel.replaceChildren(); shown = ''; changed?.(); }
+        function hide() {
+            modelPicker?.dispose?.(); modelPicker = null;
+            if (panel.hidden) return;
+            panel.hidden = true; panel.replaceChildren(); shown = ''; changed?.();
+        }
 
         async function models(profileId) {
             state.models = 'loading';
@@ -157,6 +162,24 @@
             if (![...select.options].some(option => option.value === state.pick.key)) state.pick = { key: '', thinking: '' };
             select.value = state.pick.key;
             row.append(select);
+            if (window.PiModelPicker) {
+                const trigger = button('pi-bot-model-trigger');
+                trigger.dataset.closureModelTrigger = '';
+                row.append(trigger);
+                const defaultLabel = modelName(null, data);
+                const sep = select.value.indexOf('\u0000');
+                const picked = select.value ? (data.models.find(item => modelKey(item) === select.value)
+                    || (sep > 0 ? { provider: select.value.slice(0, sep), id: select.value.slice(sep + 1) } : null)) : null;
+                modelPicker = new window.PiModelPicker({
+                    button: trigger, select, id: 'pi-bot-closure-model-dialog', defaultLabel,
+                    onSelect: chosen => {
+                        state.pick = { key: chosen ? modelKey(chosen) : '', thinking: '' };
+                        state.error = ''; render();
+                        panel.querySelector('[data-closure-model-trigger],[data-closure-model]')?.focus();
+                    }
+                });
+                modelPicker.update(data.models, picked, Boolean(state.saving), defaultLabel, defaultLabel);
+            }
             const levels = data.models.find(item => modelKey(item) === select.value)?.thinkingLevels || [];
             if (levels.length) {
                 const thinking = el('select'); thinking.dataset.closureThinking = '';
@@ -167,7 +190,7 @@
                 thinking.addEventListener('change', () => { state.pick.thinking = thinking.value; });
                 row.append(thinking);
             }
-            select.addEventListener('change', () => { state.pick = { key: select.value, thinking: '' }; state.error = ''; render(); panel.querySelector('[data-closure-model]')?.focus(); });
+            if (!window.PiModelPicker) select.addEventListener('change', () => { state.pick = { key: select.value, thinking: '' }; state.error = ''; render(); panel.querySelector('[data-closure-model]')?.focus(); });
             const use = button('pi-bot-chip pi-bot-closure-use', state.saving === 'model' ? translateUi("正在保存…") : translateUi("就用这个"));
             use.dataset.closureAction = 'model';
             use.addEventListener('click', () => void chooseModel(bot));
@@ -233,6 +256,7 @@
         }
 
         function render() {
+            modelPicker?.dispose?.(); modelPicker = null;
             const now = target();
             if (!now || !state || state.botId !== now.bot?.id) { hide(); return; }
             const bot = now.bot, onboarding = bot.bot.onboarding;
@@ -276,17 +300,20 @@
             note.classList.toggle('is-error', Boolean(state.error));
             foot.append(note);
             const focused = panel.contains(document.activeElement) ? document.activeElement : null;
-            const focusKey = focused?.dataset.closureTask || focused?.dataset.closureAction || (focused?.hasAttribute('data-closure-model') ? 'model-select'
+            const focusKey = focused?.dataset.closureTask || focused?.dataset.closureAction || (focused?.hasAttribute('data-closure-model') || focused?.hasAttribute('data-closure-model-trigger') ? 'model-select'
                 : focused?.matches('.pi-bot-closure-about > summary') ? 'about' : '');
             // A redraw (a pick, a save) keeps the reading position of the scrolling part.
             const scrolled = panel.hidden ? 0 : panel.querySelector('.pi-bot-closure-body')?.scrollTop || 0;
             panel.replaceChildren(head, body, tasks, foot);
-            if (state.saving) for (const control of panel.querySelectorAll('button,select')) control.disabled = true;
+            if (state.saving) {
+                for (const control of panel.querySelectorAll('button,select')) control.disabled = true;
+                modelPicker?.setDisabled(true);
+            }
             const wasHidden = panel.hidden;
             panel.hidden = false;
             if (scrolled) body.scrollTop = scrolled;
             // Keep keyboard focus on the same control across a redraw.
-            if (focusKey) panel.querySelector(focusKey === 'model-select' ? '[data-closure-model]' : focusKey === 'about' ? '.pi-bot-closure-about > summary'
+            if (focusKey) panel.querySelector(focusKey === 'model-select' ? '[data-closure-model-trigger],[data-closure-model]' : focusKey === 'about' ? '.pi-bot-closure-about > summary'
                 : `[data-closure-task="${focusKey}"],[data-closure-action="${focusKey}"]`)?.focus({ preventScroll: true });
             if (wasHidden) changed?.();
         }

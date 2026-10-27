@@ -9,12 +9,14 @@ const { approvalFor, ruleFor, normalizeRule, parseRule, approvalMessage, parseAp
 const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-bot-guard-policy-')));
 const cwd = path.join(root, 'workspace'), agentDir = path.join(root, 'agent'), outside = path.join(root, 'outside');
 for (const dir of [cwd, agentDir, outside]) fs.mkdirSync(dir);
+process.env.PI_CODING_AGENT_DIR = agentDir;
 fs.writeFileSync(path.join(cwd, 'notes.txt'), 'synthetic note');
 fs.writeFileSync(path.join(agentDir, 'private.txt'), 'synthetic private state');
 fs.writeFileSync(path.join(cwd, '.env'), 'synthetic credential');
 fs.symlinkSync(agentDir, path.join(cwd, 'private-alias'));
+fs.writeFileSync(path.join(agentDir, 'linked.txt'), 'synthetic hardlinked state');
 fs.symlinkSync(path.join(agentDir, 'private.txt'), path.join(cwd, 'innocent.txt'));
-fs.linkSync(path.join(agentDir, 'private.txt'), path.join(cwd, 'hard.txt'));
+fs.linkSync(path.join(agentDir, 'linked.txt'), path.join(cwd, 'hard.txt'));
 fs.symlinkSync(outside, path.join(cwd, 'escape'));
 fs.symlinkSync(outside, path.join(cwd, '@where'));
 fs.symlinkSync(agentDir, path.join(cwd, '@private'));
@@ -77,26 +79,70 @@ test('balanced classification still recognises understood commands and asks befo
     }
 });
 
-test('all presets refuse obvious credentials, private state and aliases before an approval', () => {
-    const targets = ['.env', '.env.local', '.env*', '/proc/self/environ', '/etc/shadow', '.ssh/id_ed25519', '.aws/credentials', '.config/gcloud/token.json', '.docker/config.json',
-        'auth.json', '.netrc', 'key.pem', 'private.key', 'pivane-profiles/profiles.json', 'private-alias/new.txt', 'innocent.txt', 'hard.txt', 'dangling',
-        path.join(agentDir, 'new/deep/state.json'), pathToFileURL(path.join(agentDir, 'private.txt')).href];
+test('credentials, private state paths and unverified aliases follow preset policy without persistent grants', () => {
+    const credentials = ['.env', '.env.local', '.env*', '/etc/shadow', '.ssh/id_ed25519', '.aws/credentials', '.config/gcloud/token.json', '.docker/config.json',
+        'auth.json', '.netrc', 'key.pem', 'private.key', 'pivane-access.json', 'pi5-access.json', 'pivane-channels/state.json'];
+    const states = ['pivane-profiles/profiles.json', 'pivane-bots/bot-1/windows.json', '.pivane/state.json', '.pi/agent/pivane-profiles/data/other/MEMORY.md',
+        'private-alias/new.txt', 'innocent.txt', path.join(agentDir, 'new/deep/state.json'), pathToFileURL(path.join(agentDir, 'private.txt')).href];
+    const invalidTargets = ['/proc/self/environ', 'hard.txt', 'dangling'];
     for (const preset of ['free', 'balanced', 'ask', 'unknown', undefined]) {
-        for (const target of targets) {
+        for (const target of invalidTargets) {
             for (const toolName of ['read', 'write', 'edit', 'grep', 'find', 'ls', 'custom_reader']) {
                 const decision = check(preset, toolName, { path: target }, [{ v: 9, allow: '*' }], { readOnlyHint: true });
                 assert.deepEqual(decision, { block: true, reason: BLOCKED.protected }, `${preset} ${toolName} ${target}`);
                 assert.ok(!decision.reason.includes(target), 'refusal does not echo a private path');
             }
         }
-        for (const command of ['cat .env', 'cat .env*', 'cat /etc/shadow', 'cat ".e"\'nv\'', 'cat .e\\nv', 'cat .e\\\nnv', 'echo ok; cat auth.json',
-            'cat "$HOME/.ssh/id_rsa"', 'cat ${HOME}/.env', 'cat private-alias/private.txt', "cat '@private/private.txt'", "cat 'private\u00a0alias/private.txt'", 'cat innocent.txt', 'cat hard.txt',
-            'cat < .env', 'cat $(echo .env)', "python -c 'open(\".env\").read()'", "python -c 'open(\"innocent.txt\").read()'", "eval 'cat .env'", 'printenv', 'env', 'echo "$API_TOKEN"',
-            'cat /proc/self/environ', 'git show --no-ext-diff --no-textconv HEAD:.env', `cat '${agentDir}/private.txt'`,
-            `cat ${pathToFileURL(path.join(agentDir, 'private.txt')).href}`])
+        for (const target of credentials) {
+            for (const toolName of ['read', 'write', 'edit', 'grep', 'find', 'ls', 'custom_reader']) {
+                const decision = check(preset, toolName, { path: target }, [{ v: 9, allow: '*' }], { readOnlyHint: true });
+                if (preset === 'free') {
+                    assert.ok(decision?.kind, `free asks once for credential ${toolName} ${target}`);
+                    assert.equal(decision.rule, undefined, `credential ${target} cannot become a persistent grant`);
+                } else {
+                    assert.deepEqual(decision, { block: true, reason: BLOCKED.protected }, `${preset} ${toolName} ${target}`);
+                    assert.ok(!decision.reason.includes(target), 'refusal does not echo a private path');
+                }
+            }
+        }
+        for (const target of states) {
+            for (const toolName of ['read', 'write', 'edit', 'grep', 'find', 'ls', 'custom_reader']) {
+                const decision = check(preset, toolName, { path: target }, [{ v: 9, allow: '*' }], { readOnlyHint: true });
+                if (preset === 'free') {
+                    assert.equal(decision, null, `free allows state path ${toolName} ${target}`);
+                } else {
+                    assert.ok(decision?.kind, `${preset} asks once for state path ${toolName} ${target}`);
+                    assert.equal(decision.rule, undefined, `state path ${target} cannot become a persistent grant`);
+                }
+            }
+        }
+        for (const command of ['printenv', 'env', 'cat /proc/self/environ', 'cat hard.txt'])
             assert.equal(check(preset, 'bash', { command }).block, true, `${preset} ${command}`);
-        for (const command of ['Get-Content .env', 'Get-Content private-alias/private.txt', 'Get-ChildItem Env:', 'Write-Output $env:API_TOKEN', 'Get-Content Variable:API_TOKEN', 'Get-Content private-alias\\private.txt', "Get-Content 'pri''vate/private.txt'"])
-            assert.equal(check(preset, 'powershell', { command }).block, true, command);
+        assert.equal(check(preset, 'powershell', { command: 'Get-ChildItem Env:' }).block, true, `${preset} Get-ChildItem Env:`);
+        for (const command of ['cat .env', 'cat .env*', 'cat /etc/shadow', 'cat ".e"\'nv\'', 'cat .e\\nv', 'cat .e\\\nnv', 'echo ok; cat auth.json',
+            'cat "$HOME/.ssh/id_rsa"', 'cat ${HOME}/.env', 'cat < .env', 'cat $(echo .env)', "python -c 'open(\".env\").read()'", "eval 'cat .env'",
+            'echo "$API_TOKEN"', 'git show --no-ext-diff --no-textconv HEAD:.env']) {
+            const decision = check(preset, 'bash', { command });
+            if (preset === 'free') { assert.equal(decision?.kind, 'command', `free asks for ${command}`); assert.equal(decision.rule, undefined); }
+            else assert.equal(decision.block, true, `${preset} ${command}`);
+        }
+        for (const command of ['Get-Content .env', 'Write-Output $env:API_TOKEN', 'Get-Content Variable:API_TOKEN']) {
+            const decision = check(preset, 'powershell', { command });
+            if (preset === 'free') { assert.equal(decision?.kind, 'command', `free asks for ${command}`); assert.equal(decision.rule, undefined); }
+            else assert.equal(decision.block, true, `${preset} ${command}`);
+        }
+        assert.equal(check(preset, 'powershell', { command: 'Get-Content hard.txt' }).block, true, `${preset} hardlink`);
+        for (const command of ['cat private-alias/private.txt', "cat '@private/private.txt'", "cat 'private\u00a0alias/private.txt'", 'cat innocent.txt',
+            "python -c 'open(\"innocent.txt\").read()'", `cat '${agentDir}/private.txt'`, `cat ${pathToFileURL(path.join(agentDir, 'private.txt')).href}`]) {
+            const decision = check(preset, 'bash', { command });
+            if (preset === 'free') assert.equal(decision, null, `free allows state command ${command}`);
+            else { assert.equal(decision?.kind, 'command', `${preset} asks for state command ${command}`); assert.equal(decision.rule, undefined); }
+        }
+        for (const command of ['Get-Content private-alias/private.txt', 'Get-Content private-alias\\private.txt', "Get-Content 'pri''vate/private.txt'"]) {
+            const decision = check(preset, 'powershell', { command });
+            if (preset === 'free') assert.equal(decision, null, `free allows state command ${command}`);
+            else { assert.equal(decision?.kind, 'command', `${preset} asks for state command ${command}`); assert.equal(decision.rule, undefined); }
+        }
     }
 });
 
@@ -115,7 +161,11 @@ test('file grants are canonical, exact and bound to tool and working directory',
     assert.equal(check('ask', 'write', input, []).kind, 'outside', 'revocation takes effect');
     const ordinary = ruleFor({ toolName: 'write', input: { path: 'notes.txt' }, cwd, agentDir });
     fs.unlinkSync(path.join(cwd, 'notes.txt')); fs.symlinkSync(path.join(agentDir, 'private.txt'), path.join(cwd, 'notes.txt'));
-    assert.equal(check('ask', 'write', { path: 'notes.txt' }, [ordinary]).block, true, 'retargeted paths cannot reuse a grant');
+    const retargeted = check('ask', 'write', { path: 'notes.txt' }, [ordinary]);
+    assert.equal(retargeted.kind, 'outside', 'retargeted state paths cannot reuse an ordinary grant');
+    assert.equal(retargeted.rule, undefined);
+    fs.unlinkSync(path.join(cwd, 'notes.txt')); fs.symlinkSync(path.join(cwd, '.env'), path.join(cwd, 'notes.txt'));
+    assert.equal(check('ask', 'write', { path: 'notes.txt' }, [ordinary]).block, true, 'retargeted credential paths are blocked');
     fs.unlinkSync(path.join(cwd, 'notes.txt')); fs.writeFileSync(path.join(cwd, 'notes.txt'), 'synthetic note');
     for (const target of ['/etc/example.conf', '.git/config', '.bashrc', '.config/systemd/test.service']) {
         const decision = check('balanced', 'write', { path: target });

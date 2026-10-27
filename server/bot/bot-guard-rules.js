@@ -1,10 +1,12 @@
 'use strict';
+const os = require('node:os');
 const fs = require('node:fs');
 const path = require('node:path');
 const { randomBytes } = require('node:crypto');
 const { isDeepStrictEqual } = require('node:util');
 const { fileOperation } = require('./bot-guard-paths');
 const { classifyCommand } = require('./bot-guard-shell');
+const defaultAgentDir = () => process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.pi', 'agent');
 const RULE_TOOLS = Object.freeze(['bash', 'powershell', 'write', 'edit']);
 const RULE_KEYS = ['v', 'id', 'tool', 'value', 'cwd'];
 const MAX_RULE_BYTES = 2048;
@@ -25,16 +27,16 @@ function parseRule(rule) {
 
 // New owner-written grants must describe one understood, non-dangerous operation.
 // Runtime checks also receive agentDir, so a saved grant never overrides private state.
-function normalizeRule(rule) {
+function normalizeRule(rule, agentDir = defaultAgentDir()) {
     const parsed = parseRule(rule);
     if (!parsed) return invalid();
     let cwd;
     try { cwd = fs.realpathSync.native(parsed.cwd); if (!fs.statSync(cwd).isDirectory()) return invalid(); } catch { return invalid(); }
     if (['bash', 'powershell'].includes(parsed.tool)) {
-        if (classifyCommand({ toolName: parsed.tool, input: { command: parsed.value }, cwd }).status !== 'safe') return invalid();
+        if (classifyCommand({ toolName: parsed.tool, input: { command: parsed.value }, cwd, agentDir }).status !== 'safe') return invalid();
         return { ...parsed, cwd };
     }
-    const operation = fileOperation({ input: { path: parsed.value }, cwd });
+    const operation = fileOperation({ input: { path: parsed.value }, cwd, agentDir });
     if (operation.status !== 'safe') return invalid();
     return { ...parsed, cwd, value: operation.value };
 }
@@ -50,14 +52,14 @@ function ruleFor({ toolName, input, cwd, agentDir }) {
         return parseRule(rule);
     } catch { return null; }
 }
-function matchesRule(rules, candidate) {
+function matchesRule(rules, candidate, agentDir = defaultAgentDir()) {
     if (!candidate || !Array.isArray(rules)) return false;
     return rules.some(rule => {
         try {
             // Only a matching structural rule needs filesystem validation. Never
             // reinterpret a stored symlink or a malformed/future rule as a grant.
             if (!parseRule(rule) || rule.tool !== candidate.tool || rule.value !== candidate.value || rule.cwd !== candidate.cwd) return false;
-            return isDeepStrictEqual(rule, normalizeRule(rule));
+            return isDeepStrictEqual(rule, normalizeRule(rule, agentDir));
         } catch { return false; }
     });
 }

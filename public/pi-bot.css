@@ -618,13 +618,15 @@
 .pi-bot-closure-saved { display: flex; align-items: center; gap: 8px; margin: 0; font-size: .88rem; }
 .pi-bot-closure-saved > i { color: var(--green); }
 .pi-bot-closure-model-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.pi-bot-closure-model-row select {
+.pi-bot-closure-model-row select,
+.pi-bot-closure-model-row .pi-bot-model-trigger {
     flex: 1 1 140px; max-width: 360px; min-width: 0; min-height: 40px; padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: 10px;
     background: var(--surface-1, var(--surface)); color: var(--text-main); font: inherit; font-size: .9rem;
 }
 .pi-bot-closure-model-row select[data-closure-thinking] { flex: 0 1 112px; }
 .pi-bot-closure-model-row .pi-bot-chip { flex: none; }
-.pi-bot-closure-model-row select:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
+.pi-bot-closure-model-row select:focus-visible,
+.pi-bot-closure-model-row .pi-bot-model-trigger:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
 .pi-bot-closure-model-row .pi-bot-chip, .pi-bot-closure-chips .pi-bot-chip { margin: 0; min-height: 40px; padding: 0 14px; font-size: .88rem; }
 .pi-bot-closure-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .pi-bot-closure-chips [data-closure-task="own"] { border-style: dashed; }
@@ -635,7 +637,8 @@
     /* Phones: a bounded panel leaves the Bot's last reply readable above it; the six choices sit
        in two rows of three that never scroll away. */
     .pi-bot-closure { gap: 10px; padding: 12px 12px 10px; max-height: min(42vh, 400px, var(--pi-bot-card-room, 42vh)); max-height: min(42dvh, 400px, var(--pi-bot-card-room, 42dvh)); }
-    .pi-bot-closure-model-row select { font-size: 16px; min-height: 44px; }
+    .pi-bot-closure-model-row select,
+    .pi-bot-closure-model-row .pi-bot-model-trigger { font-size: 16px; min-height: 44px; }
     .pi-bot-closure-model-row .pi-bot-chip, .pi-bot-closure-chips .pi-bot-chip, .pi-bot-closure .pi-bot-setup-later { min-height: 44px; }
     .pi-bot-closure-about > summary { min-height: 44px; }
     .pi-bot-closure-body { gap: 8px; }

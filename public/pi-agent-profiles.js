@@ -446,10 +446,13 @@
                 const cron = await apiFetch('/api/pi/cron');
                 schedules = (cron.jobs || []).filter(job => !job.deleted && job.target?.kind === 'profile' && job.target.profileId === id).length;
             } catch { schedules = 0; }
-            const message = [t('{0} 会保留名字、头像、性格、记忆和技能，并有自己的主聊天和工作目录，出现在 Bot 页面。以前用它进行的对话保留在 Pi Agent 的线程列表里。', profile.name),
-                schedules ? t('以它为目标的 {0} 个定时任务以后会发到 Bot 的主聊天。', schedules) : '',
-                t('第一次打开时它会问问想让它主要帮你做什么、怎么做事。变成 Bot 后不能再变回普通身份，可以像其他 Bot 一样移到回收站。')].filter(Boolean).join('\n\n');
-            const accepted = await ui.confirm({ title: t('把“{0}”变成 Bot？', profile.name), message, accept: t('变成 Bot') });
+            const items = [
+                { icon: 'fa-sparkles', title: t('保留原有设定与对话'), text: t('{0} 会保留名字、头像、性格、记忆和技能，并有自己的主聊天和工作目录，出现在 Bot 页面。以前用它进行的对话保留在 Pi Agent 的线程列表里。', profile.name) },
+                schedules ? { icon: 'fa-clock', tone: 'highlight', title: t('定时任务自动承接'), text: t('以它为目标的 {0} 个定时任务以后会发到 Bot 的主聊天。', schedules) } : null,
+                { icon: 'fa-circle-info', tone: 'warn', title: t('首次引导与不可逆说明'), text: t('第一次打开时它会问问想让它主要帮你做什么、怎么做事。变成 Bot 后不能再变回普通身份，可以像其他 Bot 一样移到回收站。') }
+            ].filter(Boolean);
+            const message = items.map(item => item.text).join('\n\n');
+            const accepted = await ui.confirm({ title: t('把“{0}”变成 Bot？', profile.name), message, items, tone: 'primary', accept: t('变成 Bot') });
             if (!accepted || !active() || busy() || selected !== id || snapshot?.revision !== revision) return;
             mutation = { kind: 'bot' }; renderList(); renderHeader(); syncSave();
             let done = false;

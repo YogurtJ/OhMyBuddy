@@ -10729,6 +10729,10 @@
     rows.push(
         ["变成 Bot", "Make it a Bot"],
         ["把“{0}”变成 Bot？", "Make “{0}” a Bot?"],
+        ["保留原有设定与对话", "Keep existing settings and chats"],
+        ["定时任务自动承接", "Scheduled tasks move to Bot"],
+        ["首次引导与不可逆说明", "First chat & one-way conversion"],
+        ["使用工作台默认模型", "Use workbench default model"],
         ["{0} 会保留名字、头像、性格、记忆和技能，并有自己的主聊天和工作目录，出现在 Bot 页面。以前用它进行的对话保留在 Pi Agent 的线程列表里。", "{0} keeps its name, avatar, personality, memory and skills, and gets its own main chat and workspace folder on the Bot page. Earlier conversations with it stay in the Pi Agent thread list."],
         ["以它为目标的 {0} 个定时任务以后会发到 Bot 的主聊天。", "{0} scheduled tasks aimed at it will go to the Bot's main chat from now on.", "{0} scheduled task aimed at it will go to the Bot's main chat from now on."],
         ["第一次打开时它会问问想让它主要帮你做什么、怎么做事。变成 Bot 后不能再变回普通身份，可以像其他 Bot 一样移到回收站。", "The first time you open it, it asks what you mainly want help with and how it should work. A Bot can't become a plain identity again; like other Bots, it can be moved to the trash."],

@@ -90,7 +90,10 @@
                 const draft = JSON.parse(values.faceDraft); faceChoice = draft.avatar; picture = draft.picture;
             }
             controls.showFace();
-            if (values.model !== undefined && [...controls.model.options].some(option => option.value === values.model)) controls.model.value = values.model;
+            if (values.model !== undefined && [...controls.model.options].some(option => option.value === values.model)) {
+                controls.model.value = values.model;
+                controls.syncModelPicker?.();
+            }
             const levels = data.models?.models.find(item => modelKey(item) === controls.model.value)?.thinkingLevels || [];
             controls.thinkingWrap.hidden = !levels.length;
             if (levels.length) fillThinking(levels, values.thinking ?? controls.thinking.value);
@@ -133,7 +136,7 @@
         close.addEventListener('click', tryClose);
         cancel.addEventListener('click', tryClose);
         sheet.addEventListener('cancel', event => { event.preventDefault(); tryClose(); });
-        sheet.addEventListener('close', () => { sheet.remove(); if (dialog === sheet) dialog = null; });
+        sheet.addEventListener('close', () => { controls?.modelPicker?.dispose?.(); sheet.remove(); if (dialog === sheet) dialog = null; });
         sheet.addEventListener('input', () => { warned = null; status.textContent = ''; delete status.dataset.tone; refreshState(); });
         sheet.addEventListener('change', () => refreshState());
         sheet.showModal();
@@ -143,6 +146,7 @@
             const pending = changes();
             save.disabled = saving || decoding || !pending || !Object.keys(pending).length;
             for (const control of body.querySelectorAll('input,textarea,select,button')) control.disabled = saving;
+            controls.modelPicker?.setDisabled(saving);
             controls.syncLearning?.();
             const model = controls.model.value ? data.models?.models.find(item => modelKey(item) === controls.model.value) : null;
             const levels = model?.thinkingLevels || [];
@@ -205,6 +209,7 @@
         }
 
         function render() {
+            controls?.modelPicker?.dispose?.();
             const bot = data.bot, current = bot.bot;
             title.textContent = translateUi("{0} 的设置", bot.name);
             const headFace = options.face(bot, 'md'); headFace.classList.add('pi-bot-sheet-face');
@@ -264,7 +269,8 @@
 
             const model = el('select');
             const defaults = data.models?.defaults, defaultModel = defaults && data.models.models.find(item => item.provider === defaults.provider && item.id === defaults.modelId);
-            model.append(new Option(defaultModel ? translateUi("跟随默认（{0}）", defaultModel.name || defaultModel.id) : translateUi("跟随默认"), ''));
+            const defaultLabel = defaultModel ? translateUi("跟随默认（{0}）", defaultModel.name || defaultModel.id) : translateUi("跟随默认");
+            model.append(new Option(defaultLabel, ''));
             const groups = new Map();
             for (const item of data.models?.models || []) {
                 if (!groups.has(item.provider)) { const group = el('optgroup'); group.label = item.provider; groups.set(item.provider, group); model.append(group); }
@@ -274,6 +280,32 @@
                 model.append(new Option(translateUi("{0}（现在不可用）", current.model.id), modelKey(current.model)));
             model.value = modelKey(current.model);
             model.setAttribute('aria-label', translateUi("用哪个模型"));
+            const modelBox = el('div', 'pi-model-picker-row pi-bot-model-picker-row');
+            modelBox.append(model);
+            let modelPicker = null;
+            const syncModelPicker = () => {
+                if (!modelPicker) return;
+                const val = model.value;
+                const sep = val.indexOf('\u0000');
+                const picked = val ? ((data.models?.models || []).find(item => modelKey(item) === val)
+                    || (sep > 0 ? { provider: val.slice(0, sep), id: val.slice(sep + 1) } : null)) : null;
+                modelPicker.update(data.models?.models || [], picked, saving, defaultLabel, defaultLabel);
+            };
+            if (window.PiModelPicker) {
+                const trigger = button('pi-bot-model-trigger');
+                trigger.dataset.sheetModelTrigger = '';
+                modelBox.append(trigger);
+                modelPicker = new window.PiModelPicker({
+                    button: trigger, select: model, api: options.api, id: 'pi-bot-sheet-model-dialog', defaultLabel,
+                    onSelect: chosen => {
+                        const next = chosen ? modelKey(chosen) : '';
+                        if (model.value !== next) model.value = next;
+                        syncModelPicker();
+                        warned = null; status.textContent = ''; delete status.dataset.tone; refreshState();
+                    }
+                });
+                syncModelPicker();
+            }
             const thinking = el('select');
             const thinkingWrap = field(translateUi("思考程度"), thinking);
             const modelHint = data.models ? translateUi("只影响 {0}，不改其他 Bot 和 Pi Agent。", bot.name)
@@ -582,13 +614,13 @@
             trash.append(icon('fa-trash-can'), el('span', null, translateUi("移到回收站")), icon('fa-chevron-right'));
             trash.addEventListener('click', () => void moveToTrash());
 
-            controls = { name, job, soul, model, thinking, thinkingWrap, presets, showFace, showRules, proactive, quietOn, quietStart, quietEnd, limit, showNotify, syncLearning };
+            controls = { name, job, soul, model, modelPicker, syncModelPicker, thinking, thinkingWrap, presets, showFace, showRules, proactive, quietOn, quietStart, quietEnd, limit, showNotify, syncLearning };
             showFace();
             body.replaceChildren(
                 section(translateUi("名字和样子"), identity),
                 section(translateUi("主要帮你做什么"), job),
                 section(translateUi("性格"), soul),
-                section(translateUi("用哪个模型"), field(null, model, modelHint), thinkingWrap),
+                section(translateUi("用哪个模型"), field(null, modelBox, modelHint), thinkingWrap),
                 section(translateUi("做事方式"), presetList, honesty, rulesBox),
                 section(translateUi("主动找你"), notifyBox),
                 section(translateUi("微信"), wechat),

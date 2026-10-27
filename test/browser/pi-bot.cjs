@@ -487,14 +487,18 @@ const NEW_FACE = { kind: 'preset', id: 'pivane-pebble' };
                     await page.locator('#pi-session-pane.open .pi-bot-settings').waitFor();
                 }
                 await page.locator('.pi-bot-settings').click();
-                await page.locator('.pi-bot-sheet[open] select').first().waitFor({ timeout: 8000 });
+                await page.locator('.pi-bot-sheet[open] [data-sheet-model-trigger]').waitFor({ timeout: 8000 });
                 const sheet = page.locator('.pi-bot-sheet[open]');
                 assert.equal(await sheet.locator('h2').textContent(), '小狸 的设置');
                 if (evidence) { await page.waitForTimeout(250); await page.screenshot({ path: path.join(evidence, `bot-settings-open-${width}.png`) }); }
                 assert.equal(await sheet.locator('textarea').nth(1).inputValue(), '温柔耐心，说话简短。');
                 assert.equal(await sheet.locator('.pi-bot-sheet-save').isDisabled(), true, 'nothing to save yet');
-                assert.equal(await sheet.locator('select').first().locator('option').first().textContent(), '跟随默认（Small）');
-                await sheet.locator('select').first().selectOption({ label: 'Large' });
+                assert.equal(await sheet.locator('[data-sheet-model-trigger] .pi-model-trigger-label').textContent(), '跟随默认（Small）');
+                await sheet.locator('[data-sheet-model-trigger]').click();
+                const sheetModelDialog = page.locator('#pi-bot-sheet-model-dialog[open]');
+                await sheetModelDialog.waitFor();
+                await sheetModelDialog.locator('.pi-model-all').click();
+                await sheetModelDialog.locator('.pi-model-option').filter({ hasText: 'Large' }).click();
                 await sheet.locator('select').nth(1).selectOption({ label: '高' });
                 await sheet.locator('.pi-bot-sheet-preset', { hasText: '稳妥' }).click();
                 if (evidence) { await page.waitForTimeout(250); await page.screenshot({ path: path.join(evidence, `bot-settings-${width}.png`) }); }
@@ -502,7 +506,7 @@ const NEW_FACE = { kind: 'preset', id: 'pivane-pebble' };
                 await page.waitForFunction(() => /别处改过/.test(document.querySelector('.pi-bot-sheet-status')?.textContent || ''));
                 assert.equal(settingsReads, settingsReadsBeforeConflict + 2, 'the conflict rereads the saved settings');
                 assert.equal(await sheet.locator('.pi-bot-sheet-preset input:checked').evaluate(input => input.value), 'balanced', 'the edits stay');
-                assert.equal(await sheet.locator('select').first().evaluate(select => select.selectedOptions[0].textContent), 'Large');
+                assert.equal(await sheet.locator('[data-sheet-model-trigger] .pi-model-trigger-label').textContent(), 'Large');
                 assert.equal(await sheet.locator('textarea').nth(1).inputValue(), '活泼一点，多用表情。', 'untouched fields follow the newer saved value');
                 await sheet.locator('.pi-bot-sheet-save').click();
                 await page.locator('.pi-bot-sheet').waitFor({ state: 'detached', timeout: 8000 });
