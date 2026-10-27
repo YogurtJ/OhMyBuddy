@@ -15,6 +15,8 @@
     const THINKING = { off: () => translateUi("不启用"), minimal: () => translateUi("极简"), low: () => translateUi("低"), medium: () => translateUi("中"),
         high: () => translateUi("高"), xhigh: () => translateUi("极高"), max: () => translateUi("最大") };
     const modelKey = model => model ? `${model.provider}\u0000${model.id}` : '';
+    // From pi-bot.js where it is loaded; otherwise the boxes keep their rows and scroll.
+    const fitTextarea = area => window.PiBot?.fitTextarea?.(area);
     // Why the server would not move a Bot to the trash (nothing was changed).
     const TRASH_BLOCKED = {
         BOT_HAS_SCHEDULES: name => translateUi("还有定时任务发给 {0}。先在“定时”页改掉或取消它们。", name),
@@ -78,6 +80,7 @@
             preset: controls.presets.find(input => input.checked)?.value || '', revoked: [...revoked].sort().join('\n') } : null;
         function applyValues(values) {
             for (const key of ['name', 'job', 'soul']) if (values[key] !== undefined) controls[key].value = values[key];
+            fitTextarea(controls.job); fitTextarea(controls.soul);
             if (values.faceDraft !== undefined) {
                 const draft = JSON.parse(values.faceDraft); faceChoice = draft.avatar; picture = draft.picture; controls.avatar.value = draft.text;
             }
@@ -234,9 +237,11 @@
             avatarBox.append(preview, avatarSide);
             const identity = el('div', 'pi-bot-sheet-identity');
             identity.append(avatarBox, field(translateUi("名字"), name));
-            const job = el('textarea'); job.rows = 2; job.maxLength = LIMITS.job; job.value = current.job;
+            const job = el('textarea', 'pi-bot-sheet-long is-job'); job.rows = 2; job.maxLength = LIMITS.job; job.value = current.job;
             job.placeholder = translateUi("比如：帮我安排生活琐事、陪我练英语");
-            const soul = el('textarea'); soul.rows = 5; soul.maxLength = LIMITS.soul; soul.value = bot.soul || '';
+            const soul = el('textarea', 'pi-bot-sheet-long is-soul'); soul.rows = 5; soul.maxLength = LIMITS.soul; soul.value = bot.soul || '';
+            // Long text grows with what is there and typed, up to a bound (pi-bot.css), then scrolls.
+            for (const area of [job, soul]) area.addEventListener('input', () => fitTextarea(area));
             soul.placeholder = translateUi("比如：说话简短直接，偶尔开个玩笑。");
 
             const model = el('select');
@@ -339,6 +344,7 @@
             const levels = data.models?.models.find(item => modelKey(item) === model.value)?.thinkingLevels || [];
             thinkingWrap.hidden = !levels.length;
             if (levels.length) fillThinking(levels, current.model?.thinking || '');
+            for (const area of [job, soul]) fitTextarea(area);
             initial = formValues();
             refreshState();
         }

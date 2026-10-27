@@ -1,4 +1,5 @@
-// Bot mode page: welcome → create → main chat with the Bot's identity, rotation reopens the
+// Bot mode page: welcome → create (the new Bot starts as the 小石 preset; getting acquainted does
+// not ask for a face) → main chat with the Bot's identity, rotation reopens the
 // window's new generation (never the old one), and leaving restores Pi Agent controls.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -30,6 +31,8 @@ const toolTurn = [
         api: 'openai-completions', stopReason: 'stop', usage, timestamp: Date.parse('2026-10-24T06:03:15Z') }
 ];
 const APPROVAL = '允许这一步吗？ / Allow this step?';
+// The face a new Bot starts with (server/bot/bot-service.js); not a choice of the user's.
+const NEW_FACE = { kind: 'preset', id: 'pivane-pebble' };
 
 (async () => {
     const app = express(); app.use(express.static(path.join(__dirname, '../../public')));
@@ -42,16 +45,16 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
         for (const width of [1440, 393]) {
             const context = await browser.newContext({ viewport: { width, height: 860 }, locale: 'zh-CN' });
             const page = await context.newPage(), errors = [], opened = [];
-            let bots = [], revision = 'r0', generation = 0, sessionId = 'gen-0', socket = null, phase = 'greeting', name = '新伙伴', face = '🦊';
+            let bots = [], revision = 'r0', generation = 0, sessionId = 'gen-0', socket = null, phase = 'greeting', name = '新伙伴', face = NEW_FACE;
             let history = [], prompts = [], responses = [], setupBodies = [], historyReads = [], second = false, known2 = undefined, aboutBodies = [];
             let modelCount = 0, profileList = [], reconnectHistory = null, scheduleDeletes = [];
             let patchBodies = [], settingsReads = 0, model = null, preset = 'free', quietHours = { start: '23:00', end: '08:00' }, soul = '温柔耐心，说话简短。';
             const botOpens = []; let lagging = null;
             const bot = () => ({ id: BOT, name, description: '', avatar: typeof face === 'string' ? { kind: 'emoji', value: face } : face, enabled: true, profileRevision: 'p',
-                chosen: { name: name !== '新伙伴', avatar: face !== '✨' },
+                chosen: { name: name !== '新伙伴', avatar: face !== NEW_FACE },
                 bot: { version: 1, enabled: true, order: 0, job: '', model, permissions: { preset, rules: 0 },
                     notify: { quietHours, dailyProactiveLimit: 5 },
-                    onboarding: { version: 1, phase, firstBot: true, steps: {}, startedAt: null, completedAt: null }, createdAt: '2026-10-24T00:00:00Z' },
+                    onboarding: { version: 1, phase, firstBot: true, steps: {}, defaultAvatar: NEW_FACE.id, startedAt: null, completedAt: null }, createdAt: '2026-10-24T00:00:00Z' },
                 windowsRevision: 'w', windows: [{ id: MAIN, kind: 'main', title: '主聊天', emoji: '💬', focus: '', createdAt: '2026-10-24T00:00:00Z',
                     updatedAt: '2026-10-24T00:00:00Z', archivedAt: null, generation, sessionId, generations: generation + 1 }] });
             // A later Bot: not the first, so it first offers to keep what 小狸 knows.
@@ -181,7 +184,7 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                         prompts.push(command.message);
                         // The Bot answers with a setup card for the user to confirm.
                         ws.send(JSON.stringify({ type: 'tool_execution_start', toolCallId: 'call-1', toolName: 'bot_setup_propose',
-                            args: { name: '阿狸', avatar: '🦊', job: '帮我安排生活琐事', aboutUser: ['希望被叫做小王'] } }));
+                            args: { name: '阿狸', job: '帮我安排生活琐事', aboutUser: ['希望被叫做小王'] } }));
                         ws.send(JSON.stringify({ type: 'extension_ui_request', id: 'ui-1', method: 'select', title: '保存这些设置？ / Save these settings?',
                             options: ['保存 / Save', '先不改 / Not now'] }));
                     }
@@ -199,6 +202,7 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                 modelCount = 1;
                 await page.evaluate(() => window.dispatchEvent(new CustomEvent('workspace:models-changed')));
                 await page.locator('.pi-bot-empty [data-bot-action="create"]').waitFor({ timeout: 8000 });
+                assert.equal(await page.locator('.pi-bot-empty.is-welcome .pi-bot-face .pi-preset-svg[data-preset="pivane-pebble"]').count(), 1, 'the welcome shows the face a new Bot starts with');
                 for (const selector of ['#pi-project-button', '.pi-runtime-controls', '#pi-connection-banner', '#pi-session-list'])
                     assert.equal(await page.locator(selector).isVisible(), false, `${selector} hidden in Bot mode`);
                 assert.equal(await page.locator('.pi-start').count(), 0, 'the Pi Agent start page never shows');
@@ -211,6 +215,7 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                 await page.waitForFunction(() => location.hash.includes('windowId='));
                 await page.locator('.pi-bot-greeting').waitFor({ timeout: 8000 });
                 assert.match(await page.locator('.pi-bot-greeting p').textContent(), /还没有名字/);
+                assert.equal(await page.locator('.pi-bot-greeting-head .pi-preset-svg[data-preset="pivane-pebble"]').count(), 1, 'a new Bot starts as 小石');
                 assert.deepEqual(prompts, [], 'the hello costs no model call');
                 if (evidence) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(evidence, `bot-greeting-${width}.png`) }); }
                 await page.locator('.pi-bot-greeting [data-bot-action="greet-yes"]').click();
@@ -219,14 +224,15 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                 assert.equal(phase, 'interview');
                 assert.equal(await page.locator('#pi-request-dialog[open]').count(), 0, 'no generic dialog for the setup card');
                 assert.equal(await page.locator('.pi-bot-setup [data-setup-field="name"]').inputValue(), '阿狸');
-                assert.equal(await page.locator('.pi-bot-setup [data-setup-field="avatar"]').count(), 1, 'the face step always offers presets or a picture');
+                assert.equal(await page.locator('.pi-bot-setup [data-setup-field="avatar"]').count(), 0, 'getting acquainted does not ask for a face');
+                assert.equal(await page.locator('.pi-bot-setup [data-setup-field="job"]').evaluate(node => node.tagName), 'TEXTAREA', 'the job wraps');
                 await page.locator('.pi-bot-setup [data-setup-field="name"]').fill('小狸');
                 await page.locator('.pi-bot-setup [data-setup-field="job"]').fill('');
                 if (evidence) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(evidence, `bot-setup-${width}.png`) }); }
                 await page.locator('.pi-bot-setup .pi-bot-setup-save').click();
                 await page.waitForFunction(() => document.querySelector('.pi-bot-setup').hidden);
-                assert.deepEqual(setupBodies.map(body => [body.toolCallId, body.windowId, body.changes]),
-                    [['call-1', MAIN, { name: '小狸', avatar: null, job: null, aboutUser: ['希望被叫做小王'] }]], 'the chosen face is kept until the user changes it');
+                assert.deepEqual(setupBodies.map(body => [body.toolCallId, body.windowId, body.changes, body.workStyleShown]),
+                    [['call-1', MAIN, { name: '小狸', job: null, aboutUser: ['希望被叫做小王'] }, false]], 'only the fields on the card');
                 assert.deepEqual(responses.map(item => [item.id, item.value]), [['ui-1', '保存 / Save']], 'Save is answered only after the server saved');
                 await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-who strong')?.textContent === '小狸');
                 // Reopen with a conversation to check replies carry the Bot's identity.
@@ -237,7 +243,7 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                 await page.locator('.pi-message.assistant').first().waitFor({ timeout: 8000 });
                 assert.equal(await page.locator('.pi-message.assistant > header > strong').first().textContent(), '小狸');
                 assert.equal(await page.locator('.pi-message.assistant > header .pi-bot-face').count(), 0, 'no repeated avatar above replies');
-                assert.equal(await page.locator('#pi-bot-header .pi-bot-identity > .pi-bot-face').textContent(), '🦊');
+                assert.equal(await page.locator('#pi-bot-header .pi-bot-identity > .pi-bot-face .pi-preset-svg[data-preset="pivane-pebble"]').count(), 1, 'still 小石');
                 assert.equal(await page.locator('.pi-message.assistant > header').first().isVisible(), false);
                 assert.equal(await page.locator('.pi-message.assistant > header > span:not(.pi-bot-face)').first().isVisible().catch(() => false), false, 'no model name');
                 assert.equal(await page.locator('#pi-input').getAttribute('placeholder'), '给 小狸 发消息');
@@ -335,7 +341,7 @@ const APPROVAL = '允许这一步吗？ / Allow this step?';
                     const article = document.createElement('article'); article.id = 'header-scroll-probe'; article.className = 'pi-message assistant';
                     const body = document.createElement('div'); body.className = 'pi-message-body';
                     const text = document.createElement('div'); text.className = 'pi-markdown';
-                    for (let i = 0; i < 24; i++) {
+                    for (let i = 0; i < 32; i++) {
                         const p = document.createElement('p');
                         p.textContent = i % 2 ? '头像留在聊天上方，翻看之前说过的话时，两侧的内容仍然沿着阅读区域自然向上滚动。'
                             : '把这周的安排慢慢理清：周三整理笔记，周五留一点时间回顾，周末带上相机出去走走。';

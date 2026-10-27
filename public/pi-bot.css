@@ -32,6 +32,10 @@
 #chat-tab.pi-bot-mode .pi-message.assistant > header > span:not(.pi-bot-face) { display: none !important; }
 #chat-tab:not(.pi-bot-mode) #pi-bot-pane,
 #chat-tab:not(.pi-bot-mode) #pi-bot-header { display: none !important; }
+/* The row under the composer only holds the three items hidden above; with nothing else in it, it
+   takes no room and the composer sits near the bottom edge (attachment problems show above the
+   composer, send problems as notices). Its own rule: browsers without :has() keep the row. */
+#chat-tab.pi-bot-mode .pi-composer-meta:not(:has(> :not(#pi-composer-identity, #pi-composer-status, #pi-attachment-limit))) { display: none; }
 /* The right panel appears in Bot mode only as the file preview (delivery cards, file links);
    pi-chat.js closes it when anything else would open there. */
 #chat-tab.pi-bot-mode .pi-inspector.show-changes .inspector-heading { justify-content: flex-end; }
@@ -183,14 +187,20 @@
 @media (prefers-reduced-motion: reduce) { .pi-bot-greeting, .pi-bot-setup { animation: none !important; } }
 
 /* ---- setup card: docked above the composer like the question panel ------------------- */
+/* --pi-bot-card-room: the height the page leaves the panel below the floating identity, measured
+   by pi-bot.js (docked panels) from the laid-out page; without it (another page) 66vh. */
 .pi-bot-setup {
-    display: flex; flex-direction: column; gap: 12px; max-height: min(66vh, 600px); margin: 0 0 10px; padding: 14px 14px 12px;
+    display: flex; flex-direction: column; gap: 12px; max-height: min(var(--pi-bot-card-room, 66vh), 600px); margin: 0 0 10px; padding: 14px 14px 12px;
     border: 1px solid var(--line); border-radius: 18px; background: var(--surface-2); color: var(--text-main);
     box-shadow: 0 10px 30px color-mix(in srgb, var(--shadow-tint, #000) 10%, transparent), 0 1px 3px color-mix(in srgb, var(--shadow-tint, #000) 6%, transparent);
     animation: pi-bot-rise .18s ease-out;
 }
 .pi-bot-setup[hidden] { display: none; }
+/* With too little room the panel keeps its title and actions and is drawn above the identity. */
+#chat-tab.pi-bot-mode .pi-composer-wrap > .pi-bot-setup { position: relative; z-index: 7; }
+.pi-bot-setup > .pi-bot-setup-head, .pi-bot-setup > .pi-bot-setup-foot { flex: none; }
 .pi-bot-setup-head { display: flex; align-items: center; gap: 10px; font-size: .95rem; }
+.pi-bot-setup-head > strong { min-width: 0; overflow-wrap: anywhere; }
 .pi-bot-setup-fields { display: grid; gap: 10px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 2px; }
 .pi-bot-setup-field { display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: start; gap: 6px 10px; }
 .pi-bot-setup-label { padding-top: 9px; color: var(--text-muted); font-size: .82rem; }
@@ -208,6 +218,10 @@
     background: var(--surface-1); color: var(--text-main); font: inherit; font-size: .92rem; line-height: 1.5; resize: vertical;
 }
 .pi-bot-setup-field.is-avatar .pi-bot-setup-value input { width: 64px; text-align: center; font-size: 1.3rem; padding: 4px; }
+/* Long text wraps and grows with what is typed (pi-bot.js fitTextarea), then scrolls inside. */
+.pi-bot-setup-value textarea { resize: none; overflow-y: auto; }
+.pi-bot-setup-field.is-job .pi-bot-setup-value textarea { max-height: calc(6 * 1.5em + 18px); }
+.pi-bot-setup-field.is-personality .pi-bot-setup-value textarea { max-height: calc(10 * 1.5em + 18px); }
 .pi-bot-setup-field input:focus-visible, .pi-bot-setup-field textarea:focus-visible, .pi-bot-setup-fact input:focus-visible,
 .pi-bot-setup-later:focus-visible, .pi-bot-chip:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
 .pi-bot-setup-about { display: grid; gap: 6px; margin: 0; padding: 0; border: 0; }
@@ -239,6 +253,10 @@
     .pi-bot-setup-current { grid-column: 1; }
     .pi-bot-setup-value input:not([type="file"]), .pi-bot-setup-value textarea { font-size: 16px; }
     .pi-bot-setup-value .pi-bot-chip, .pi-bot-setup-use { min-height: 44px; }
+    .pi-bot-setup-foot > .pi-bot-setup-later, .pi-bot-setup .pi-bot-setup-foot > .pi-bot-primary { min-height: 44px; }
+    /* A message gets the whole width above the actions instead of a narrow column beside them. */
+    .pi-bot-setup-foot { flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
+    .pi-bot-setup-foot > .pi-bot-setup-note:not(:empty) { flex-basis: 100%; }
 }
 
 /* ---- one lifelong conversation: compaction and generations stay invisible ----------- */
@@ -319,6 +337,10 @@
     background: var(--surface-1, var(--surface)); color: var(--text-main); font: inherit; font-size: .92rem; line-height: 1.5;
 }
 .pi-bot-sheet textarea { resize: vertical; min-height: 64px; }
+/* Job and personality grow with their text (pi-bot.js fitTextarea) up to a bound, then scroll. */
+.pi-bot-sheet textarea.pi-bot-sheet-long { resize: none; overflow-y: auto; }
+.pi-bot-sheet textarea.pi-bot-sheet-long.is-job { max-height: calc(8 * 1.5em + 18px); }
+.pi-bot-sheet textarea.pi-bot-sheet-long.is-soul { max-height: calc(16 * 1.5em + 18px); }
 .pi-bot-sheet input.pi-bot-sheet-emoji[type="text"] { text-align: center; font-size: 1.45rem; padding: 2px 4px; line-height: 1.2; }
 .pi-bot-sheet input:focus-visible, .pi-bot-sheet textarea:focus-visible, .pi-bot-sheet select:focus-visible,
 .pi-bot-sheet-link:focus-visible, .pi-bot-sheet-close:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
@@ -609,7 +631,7 @@
 @media (max-width: 680px) {
     /* Phones: a bounded panel leaves the Bot's last reply readable above it; the six choices sit
        in two rows of three that never scroll away. */
-    .pi-bot-closure { gap: 10px; padding: 12px 12px 10px; max-height: min(42vh, 400px); max-height: min(42dvh, 400px); }
+    .pi-bot-closure { gap: 10px; padding: 12px 12px 10px; max-height: min(42vh, 400px, var(--pi-bot-card-room, 42vh)); max-height: min(42dvh, 400px, var(--pi-bot-card-room, 42dvh)); }
     .pi-bot-closure-model-row select { font-size: 16px; min-height: 44px; }
     .pi-bot-closure-model-row .pi-bot-chip, .pi-bot-closure-chips .pi-bot-chip, .pi-bot-closure .pi-bot-setup-later { min-height: 44px; }
     .pi-bot-closure-about > summary { min-height: 44px; }
