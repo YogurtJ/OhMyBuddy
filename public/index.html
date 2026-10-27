@@ -94,7 +94,6 @@
                 <button class="nav-btn" data-tab="cron" type="button"><svg class="pv-icon" aria-hidden="true" focusable="false"><use href="#pv-icon-cron"/></svg><span data-cron-nav>定时任务</span></button>
                 <button class="nav-btn workspace-more-toggle" id="workspace-more-toggle" type="button" title="更多功能" aria-label="更多功能" aria-haspopup="menu" aria-expanded="false" aria-controls="workspace-more-menu" data-i18n-title="s2652" data-i18n-aria-label="s2652"><svg class="pv-icon" aria-hidden="true" focusable="false"><use href="#pv-icon-more"/></svg><span><!--i18n:s2652-->更多功能</span></button>
                 <div id="workspace-more-menu" class="workspace-more-menu" role="menu" aria-label="更多功能" data-i18n-aria-label="s2652" hidden>
-                    <button type="button" role="menuitem" data-more-tab="assistant"><svg class="pv-icon" aria-hidden="true" focusable="false"><use href="#pv-icon-assistant"/></svg><span><!--i18n:s2548-->助手对话</span></button>
                     <button type="button" role="menuitem" data-more-tab="cron"><svg class="pv-icon" aria-hidden="true" focusable="false"><use href="#pv-icon-cron"/></svg><span data-cron-nav>定时任务</span></button>
                     <button type="button" role="menuitem" data-more-tab="artifacts"><svg class="pv-icon" aria-hidden="true" focusable="false"><use href="#pv-icon-artifacts"/></svg><span data-artifacts-label>成果中心</span></button>
                     <button type="button" role="menuitem" data-more-tab="media"><svg class="pv-icon" aria-hidden="true" focusable="false"><use href="#pv-icon-media"/></svg><span><!--i18n:s1318-->多媒体实验室</span></button>
@@ -105,7 +104,6 @@
                 <button class="nav-btn" data-tab="media" title="多媒体实验室" data-i18n-title="s1318">
                     <svg class="pv-icon" aria-hidden="true" focusable="false"><use href="#pv-icon-media"/></svg><span><!--i18n:s1318-->多媒体实验室</span>
                 </button>
-                <button class="nav-btn" id="workspace-assistant-toggle" data-tab="assistant" type="button" title="助手对话" data-i18n-title="s2548"><svg class="pv-icon" aria-hidden="true" focusable="false"><use href="#pv-icon-assistant"/></svg><span><!--i18n:s2548-->助手对话</span></button>
                 <span class="workspace-nav-heading"><!--i18n:s2549-->管理</span>
                 <button class="nav-btn" id="workspace-profiles-toggle" data-tab="profiles" type="button" title="助手身份" data-i18n-title="s2469"><svg class="pv-icon" aria-hidden="true" focusable="false"><use href="#pv-icon-profiles"/></svg><span><!--i18n:s2469-->助手身份</span></button>
                 <button class="nav-btn" id="workspace-extensions-toggle" data-tab="extensions" type="button" title="扩展" data-i18n-title="s530"><svg class="pv-icon" aria-hidden="true" focusable="false"><use href="#pv-icon-extensions"/></svg><span><!--i18n:s530-->扩展</span></button>
@@ -198,12 +196,6 @@
             <div class="pi-workbench">
                 <aside id="pi-session-pane" class="pi-session-pane">
                     <div id="pi-bot-pane" hidden></div>
-                    <div id="pi-assistant-switcher" class="pi-assistant-switcher" hidden>
-                        <div class="pi-assistant-switcher-head"><label for="pi-assistant-profile"><!--i18n:s2550-->助手档案</label><button id="pi-assistant-add-project" class="icon-btn subtle" type="button" title="新建项目" aria-label="新建项目" data-i18n-title="s2564" data-i18n-aria-label="s2564"><i class="fa-solid fa-folder-plus"></i></button></div>
-                        <div class="pi-assistant-profile-row"><span id="pi-assistant-avatar" class="pi-identity-avatar" aria-hidden="true"></span><select id="pi-assistant-profile" aria-label="选择助手档案" data-i18n-aria-label="s2551"></select></div>
-                        <button id="pi-assistant-manage-profiles" class="pi-assistant-manage-profiles" type="button"><i class="fa-solid fa-user-gear" aria-hidden="true"></i><span>管理助手身份</span><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></button>
-                        <p id="pi-assistant-profile-status" role="status"></p>
-                    </div>
                     <div class="pi-pane-heading pi-session-heading">
                         <h3 id="pi-session-heading-title"><!--i18n:s1337-->项目与线程</h3>
                         <label id="pi-session-search-field" class="pi-search-field" hidden>
@@ -245,7 +237,6 @@
                         <span id="pi-session-profile" class="pi-session-profile" hidden></span>
                         <span id="pi-actual-identity" class="pi-actual-identity" hidden></span>
                         <button id="pi-profile-authoring-return" class="pi-conversation-origin" type="button" hidden><i class="fa-solid fa-user-pen" aria-hidden="true"></i><span></span></button>
-                        <button id="pi-conversation-origin" class="pi-conversation-origin" type="button" hidden title="在 Pi Agent 中打开当前线程" aria-label="在 Pi Agent 中打开当前线程" data-i18n-title="s2582" data-i18n-aria-label="s2582"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i><span>Pi Agent</span></button>
                         <button id="pi-current-thread-menu" type="button" title="当前线程操作" aria-label="当前线程操作" aria-haspopup="menu" aria-expanded="false" disabled data-i18n-title="s1347" data-i18n-aria-label="s1347"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button>
                     </div>
                     <div id="pi-pending-ui-banner" class="pi-pending-ui-banner hidden">
@@ -978,7 +969,6 @@
     <script src="pi-avatar-presets.js"></script>
     <script src="pi-avatar.js"></script>
     <script src="pi-bot-motion.js"></script>
-    <script src="pi-assistant-projects.js"></script>
     <script src="pi-profile-dialog.js"></script>
     <script src="pi-identity-thread.js"></script>
     <script src="pi-identity-ui.js"></script>

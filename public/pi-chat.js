@@ -156,23 +156,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let botUi = null;
     const state = {
         token: sessionStorage.getItem('pi.web.token') || '',
-        assistantMode: window.PiWorkspaceRoute?.current().tab === 'assistant',
         botMode: window.PiWorkspaceRoute?.current().tab === 'bot',
         bot: null,
         botReturnCwd: null,
         windowRotation: null,
-        assistantSupported: false,
-        assistantProfiles: [],
         profileInventory: [],
-        assistantProfileId: null,
-        assistantGroups: [],
-        assistantSessions: new Map(),
-        assistantProjectId: null,
-        sessionClassificationSupported: false,
-        assistantArchivedOpen: false,
-        assistantExpandedLists: new Map(),
-        assistantRevision: null,
-        assistantEpoch: 0,
         navigationEpoch: 0,
         routeKey: location.hash || '#/chat',
         creatingSession: false,
@@ -213,7 +201,6 @@ document.addEventListener('DOMContentLoaded', () => {
         activityEnabled: false,
         // Loading placeholders: never show "no projects" or a welcome page before the answer is known.
         projectsDiscovered: false,
-        assistantListLoading: false,
         transcriptBooting: true,
         pendingRestore: false,
         projectSessions: new Map(),
@@ -348,9 +335,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const thinkingName = state.connected && state.session
             ? [...elements.thinkingSelect.options].find(option => option.value === state.thinkingLevel)?.textContent || '' : '';
         const percent = elements.contextPercent.textContent;
-        elements.mobileTitle.textContent = state.assistantMode
-            ? state.assistantGroups.find(group => group.id === state.assistantProjectId)?.name || state.assistantProfiles.find(profile => profile.id === state.assistantProfileId)?.name || translateUi('对话')
-            : elements.projectName.textContent;
+        elements.mobileTitle.textContent = elements.projectName.textContent;
         elements.mobileThreadTitle.textContent = state.session ? getSessionTitle(state.session)
             : state.cwd ? translateUi('选择会话开始工作') : translateUi('选择项目会话后开始工作');
         elements.mobileThreadTitle.title = state.session ? elements.mobileThreadTitle.textContent : '';
@@ -735,7 +720,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const conversationSearch = new window.PiSessionSearch({
         api: apiFetch, cwd: () => state.cwd, toast,
-        contextKey: () => JSON.stringify([state.assistantMode, state.assistantProfileId || null]),
+        contextKey: () => 'chat',
         open: async (row, q) => {
             const navigation = beginConversationNavigation();
             const data = await apiFetch('/api/pi/sessions?cwd=' + encodeURIComponent(row.cwd));
@@ -1032,11 +1017,9 @@ document.addEventListener('DOMContentLoaded', () => {
             state.nativeResources = status.nativeResources === true;
             extensionAssistant.setEnabled(status.extensionAssistant === true);
             state.systemPrompts = status.systemPrompts === true;
-            state.assistantSupported = status.assistantProjects === true && status.agentProfiles === true;
-            state.sessionClassificationSupported = status.sessionClassification === true;
             state.profileLearningSupported = status.profileLearning === true;
             state.agentProfilesEnabled = status.agentProfiles === true;
-            if (status.agentProfiles === true && !state.assistantMode) {
+            if (status.agentProfiles === true) {
                 void apiFetch('/api/pi/profiles').then(data => {
                     if (Array.isArray(data?.profiles)) { state.profileInventory = data.profiles; syncActualIdentity(); }
                 }).catch(() => {});
@@ -1055,21 +1038,11 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.tokenDialog.classList.add('hidden');
             $('workspace-bot-toggle').hidden = status.bots !== true;
             document.body.classList.toggle('pv-bots-on', status.bots === true);
-            if (state.assistantMode && assistantRetired()) {
+            if (window.PiWorkspaceRoute?.current().tab === 'assistant') {
                 // Opened at an old assistant link: leave the retired page before anything loads there.
-                state.assistantMode = false; state.assistantEpoch++;
-                $('pi-assistant-switcher').hidden = true;
-                elements.sessionFilters.hidden = false; elements.projectButton.hidden = false;
-                elements.sessionHeadingTitle.textContent = translateUi('项目与线程');
-                syncActualIdentity(); syncMobileHeader();
                 await leaveAssistantPage(window.PiWorkspaceRoute?.current().params);
             }
-            // Assistant projects do not depend on scanning every native project.
             const initialParams = window.PiWorkspaceRoute?.current().params;
-            const initialAssistant = state.assistantMode ? refreshAssistant({ profileId: initialParams?.get('profileId'),
-                projectId: initialParams?.get('projectId'), sessionId: initialParams?.get('sessionId') }) : null;
-            const initialAssistantEpoch = state.assistantEpoch;
-            if (initialAssistant) setConnection('idle', translateUi('选择会话开始工作'));
             // Global discovery may scan every native project. Reserve it, but validate
             // the saved cwd and visibility independently so its own thread can open first.
             const selectionEpoch = state.projectSelectionEpoch;
@@ -1077,14 +1050,14 @@ document.addEventListener('DOMContentLoaded', () => {
             void discovery.catch(() => {}); // The fallback below still observes failures.
             let restored = false;
             const savedProject = localStorage.getItem('pi.web.cwd');
-            if (!state.assistantMode && !state.botMode && transfer.movesEnabled && initialParams?.get('cwd') && initialParams?.get('sessionId')) {
+            if (!state.botMode && transfer.movesEnabled && initialParams?.get('cwd') && initialParams?.get('sessionId')) {
                 const result = await apiFetch('/api/pi/sessions/' + encodeURIComponent(initialParams.get('sessionId')) + '/resolve?cwd=' + encodeURIComponent(initialParams.get('cwd')));
-                if (selectionEpoch === state.projectSelectionEpoch && !state.assistantMode && !state.botMode) {
+                if (selectionEpoch === state.projectSelectionEpoch && !state.botMode) {
                     await navigateToSession(result.session);
                     restored = true;
                 }
             }
-            if (!restored && !state.assistantMode && !state.botMode && state.projectIdentity && savedProject) {
+            if (!restored && !state.botMode && state.projectIdentity && savedProject) {
                 const preferenceRevision = state.projectPreferenceRevision;
                 try {
                     const [resolved, activity] = await Promise.all([
@@ -1095,16 +1068,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         && !activity.hiddenProjects.includes(resolved.cwd)
                         && !state.hiddenProjects.includes(resolved.cwd)
                         && preferenceRevision === state.projectPreferenceRevision
-                        && selectionEpoch === state.projectSelectionEpoch && !state.assistantMode && !state.botMode) {
+                        && selectionEpoch === state.projectSelectionEpoch && !state.botMode) {
                         state.projectAliases.set(savedProject, resolved.cwd);
                         await selectProject(resolved.cwd, { restoreSession: true, passive: true });
                         restored = true;
                     }
                 } catch { /* Missing validation falls back to the authoritative project list. */ }
             }
-            if (!restored && !state.assistantMode && !state.botMode) {
+            if (!restored && !state.botMode) {
                 await discovery;
-                if (selectionEpoch === state.projectSelectionEpoch && !state.assistantMode && !state.botMode) {
+                if (selectionEpoch === state.projectSelectionEpoch && !state.botMode) {
                     const preferred = state.projectAliases.get(savedProject) || savedProject;
                     const visibleProjects = orderedProjects();
                     const project = visibleProjects.find(item => item.cwd === preferred) || visibleProjects[0];
@@ -1115,15 +1088,6 @@ document.addEventListener('DOMContentLoaded', () => {
             state.activityEnabled = true;
             void refreshActivity();
             if (state.botMode && botUi) void botUi.activate(window.PiWorkspaceRoute?.current().params || new URLSearchParams());
-            if (state.assistantMode) {
-                if (initialAssistant) {
-                    await initialAssistant;
-                    void discovery.then(() => loadAssistantUnclassified(initialAssistantEpoch, state.assistantProfileId)).catch(() => {});
-                } else {
-                    const params = window.PiWorkspaceRoute?.current().params;
-                    refreshAssistant({ profileId: params?.get('profileId'), projectId: params?.get('projectId'), sessionId: params?.get('sessionId') });
-                }
-            }
         } catch (error) {
             if (!elements.tokenDialog.classList.contains('hidden')) return;
             setConnection('error', error.message);
@@ -1195,7 +1159,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Expanded unrelated histories must never delay restoration of the selected thread.
         const saved = localStorage.getItem('pi.web.cwd');
         for (const project of state.projects) {
-            if (!state.assistantMode && project.cwd !== state.cwd
+            if (project.cwd !== state.cwd
                 && (state.cwd || project.cwd !== (state.projectAliases.get(saved) || saved))
                 && !state.hiddenProjects.includes(project.cwd)
                 && state.expandedProjects.has(project.cwd) && !state.projectSessions.has(project.cwd))
@@ -1606,12 +1570,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function beginConversationNavigation() {
-        return { selectionEpoch: ++state.projectSelectionEpoch, navigationEpoch: state.navigationEpoch, assistantMode: state.assistantMode, botMode: state.botMode };
+        return { selectionEpoch: ++state.projectSelectionEpoch, navigationEpoch: state.navigationEpoch, botMode: state.botMode };
     }
 
     function isCurrentNavigation(navigation, cwd) {
         return navigation.selectionEpoch === state.projectSelectionEpoch && navigation.navigationEpoch === state.navigationEpoch
-            && navigation.assistantMode === state.assistantMode && navigation.botMode === state.botMode && (cwd === undefined || cwd === state.cwd);
+            && navigation.botMode === state.botMode && (cwd === undefined || cwd === state.cwd);
     }
 
     async function navigateToSession(session, navigation = beginConversationNavigation()) {
@@ -1683,7 +1647,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             if (isCurrentNavigation(navigation)) {
                 state.pendingRestore = false; settleTranscriptPlaceholder();
-                elements.newSession.disabled = state.assistantMode && !state.assistantGroups.some(group => group.id === state.assistantProjectId && !group.unclassified && !group.archived);
+                elements.newSession.disabled = false;
             }
         }
     }
@@ -1711,7 +1675,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             state.projectSessions.set(cwd, sessions);
-            syncAssistantSessionLists(cwd, sessions);
             if (cwd === state.cwd) state.sessions = sessions;
             const project = state.projects.find(item => item.cwd === cwd);
             if (project) project.sessionCount = sessions.length;
@@ -1725,22 +1688,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return request;
     }
 
-    function syncAssistantSessionLists(cwd, rows) {
-        if (!state.assistantMode || !state.assistantProfileId) return;
-        const sessions = rows.filter(session => session.agentProfile?.id === state.assistantProfileId && !session.ephemeral);
-        for (const group of state.assistantGroups.filter(group => group.cwd === cwd && !group.unclassified)) {
-            state.assistantSessions.set(group.id, sessions.filter(session => session.assistantProject?.id === group.id));
-        }
-        const id = `unclassified:${cwd}`, orphaned = sessions.filter(session => !session.assistantProject);
-        if (orphaned.length) {
-            if (!state.assistantGroups.some(group => group.id === id)) state.assistantGroups.push({ id, name: translateUi('未分类'), cwd, unclassified: true });
-            state.assistantSessions.set(id, orphaned);
-        } else {
-            state.assistantGroups = state.assistantGroups.filter(group => group.id !== id);
-            state.assistantSessions.delete(id);
-        }
-    }
-
     function sessionClassified(session) {
         if (!session?.id || !session.cwd) return;
         const rows = state.projectSessions.get(session.cwd) || [];
@@ -1748,208 +1695,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const updated = rows.some(item => item.id === session.id)
             ? rows.map(item => item.id === session.id ? { ...item, ...session } : item) : [session, ...rows];
         state.projectSessions.set(session.cwd, updated);
-        syncAssistantSessionLists(session.cwd, updated);
         if (session.cwd === state.cwd) state.sessions = updated;
         if (current) {
             state.session = { ...state.session, ...session };
-            if (state.assistantMode && session.agentProfile?.id === state.assistantProfileId) {
-                state.assistantProjectId = session.assistantProject?.id || `unclassified:${session.cwd}`;
-                if (window.PiWorkspaceRoute?.current().tab === 'assistant') window.PiWorkspaceRoute.navigate('assistant', {
-                    profileId: state.assistantProfileId, projectId: state.assistantProjectId, sessionId: session.id
-                }, true);
-            }
             syncActualIdentity(); updateSessionMeta(); syncMobileHeader();
         }
         renderSessions();
-    }
-
-    function showAssistantError(error) {
-        $('pi-assistant-profile-status').textContent = error.message;
-        elements.sessionList.replaceChildren();
-        const message = document.createElement('p'); message.className = 'pi-list-state'; message.textContent = error.message;
-        elements.sessionList.append(message);
-    }
-
-    function refreshAssistant(requested = {}) {
-        const pending = loadAssistant(requested), epoch = state.assistantEpoch;
-        void pending.catch(error => { if (state.assistantMode && state.assistantEpoch === epoch) { state.assistantListLoading = false; showAssistantError(error); } });
-        return pending;
-    }
-
-    async function loadAssistant(requested = {}) {
-        if (!state.assistantMode || !accessBootstrapped) return;
-        const epoch = ++state.assistantEpoch;
-        const navigation = beginConversationNavigation();
-        const status = $('pi-assistant-profile-status');
-        status.textContent = translateUi('正在读取助手身份');
-        const profiles = await apiFetch('/api/pi/profiles');
-        if (epoch !== state.assistantEpoch || !state.assistantMode) return;
-        if (profiles?.version !== 1 || !Array.isArray(profiles.profiles)) throw new Error(translateUi('助手身份数据不可用'));
-        // Bots are chatted with on the Bot page; a link here for a usable one goes there. A
-        // disabled Bot stays an unavailable identity here instead of opening another Bot.
-        const isBot = profile => Boolean(profile?.bot) && typeof profile.bot === 'object';
-        const requestedBot = requested.profileId ? profiles.profiles.find(profile => profile.id === requested.profileId && isBot(profile)
-            && profile.enabled && profile.bot.enabled !== false) : null;
-        if (requestedBot && document.body.classList.contains('pv-bots-on')) {
-            window.PiWorkspaceRoute?.navigate('bot', { profileId: requestedBot.id }, true); return;
-        }
-        state.assistantProfiles = profiles.profiles.filter(profile => profile.enabled && !isBot(profile));
-        state.profileInventory = profiles.profiles;
-        const selector = $('pi-assistant-profile');
-        selector.replaceChildren();
-        for (const profile of state.assistantProfiles) {
-            const option = document.createElement('option'); option.value = profile.id; option.textContent = profile.name; selector.append(option);
-        }
-        // A requested or currently shown identity never silently becomes another one; only a choice
-        // remembered from an earlier visit falls back to the first available identity.
-        const preferred = requested.profileId || state.assistantProfileId || state.assistantMissingProfileId || null;
-        const stored = localStorage.getItem('pi.web.assistantProfile');
-        const remembered = state.assistantProfiles.some(profile => profile.id === stored) ? stored : null;
-        const chosen = preferred ? state.assistantProfiles.find(profile => profile.id === preferred)?.id || null
-            : remembered || state.assistantProfiles[0]?.id || null;
-        state.assistantMissingProfileId = preferred && !chosen ? preferred : null;
-        state.assistantProfileId = chosen;
-        selector.value = chosen || '';
-        selector.disabled = !state.assistantProfiles.length;
-        if (!chosen) {
-            const option = document.createElement('option'); option.value = '';
-            option.textContent = translateUi(state.assistantProfiles.length ? '选择助手身份' : '暂无可用助手');
-            option.selected = true; selector.prepend(option);
-        }
-        $('pi-assistant-manage-profiles').querySelector('span').textContent = translateUi(profiles.profiles.length ? '管理助手身份' : '添加助手身份');
-        const profile = state.assistantProfiles.find(item => item.id === chosen);
-        $('pi-assistant-avatar').replaceWith(Object.assign(window.PiAssistantProjects.avatar(profile), { id: 'pi-assistant-avatar' }));
-        $('pi-assistant-add-project').disabled = !chosen || !state.assistantSupported;
-        elements.newSession.disabled = !chosen || !state.assistantSupported;
-        if (!chosen || !state.assistantSupported) {
-            state.assistantGroups = []; state.assistantSessions = new Map(); state.assistantProjectId = null;
-            state.assistantListLoading = false;
-            status.replaceChildren(document.createTextNode(!state.assistantSupported ? translateUi('当前服务尚未启用助手项目')
-                : translateUi(preferred ? '当前身份不可用；不会自动改用其他身份' : '还没有已启用的助手身份')));
-            syncMobileHeader();
-            renderAssistantSessions(); return;
-        }
-        localStorage.setItem('pi.web.assistantProfile', chosen);
-        const previousProjectId = state.assistantProjectId;
-        state.assistantGroups = [];
-        state.assistantSessions = new Map();
-        state.assistantProjectId = null;
-        status.textContent = translateUi('正在读取项目');
-        state.assistantListLoading = true;
-        renderAssistantSessions();
-        const data = await apiFetch(`/api/pi/assistant-projects?profileId=${encodeURIComponent(chosen)}`);
-        if (epoch !== state.assistantEpoch || chosen !== state.assistantProfileId || !state.assistantMode) return;
-        if (data?.version !== 1 || !Array.isArray(data.projects) || typeof data.revision !== 'string') throw new Error(translateUi('助手项目数据不可用'));
-        const groups = data.projects.filter(group => !group.archived && group.profileIds?.includes(chosen));
-        const archivedGroups = data.projects.filter(group => group.archived && group.profileIds?.includes(chosen));
-        const listedGroups = [...groups, ...archivedGroups];
-        const unclassifiedProject = requested.projectId || previousProjectId;
-        const unclassifiedCwd = unclassifiedProject?.startsWith('unclassified:') ? unclassifiedProject.slice('unclassified:'.length) : null;
-        const cwds = [...new Set([...listedGroups.map(group => group.cwd), ...(unclassifiedCwd ? [unclassifiedCwd] : [])])];
-        state.assistantDiscovery = { epoch, profileId: chosen, cwds: new Set(cwds) };
-        state.assistantRevision = data.revision;
-        state.assistantListLoading = false;
-        state.assistantGroups = listedGroups;
-        state.assistantProjectId = listedGroups.some(group => group.id === previousProjectId) ? previousProjectId : groups[0]?.id || null;
-        renderAssistantSessions();
-        const unclassified = await Promise.all(cwds.map(cwd => apiFetch(`/api/pi/sessions?cwd=${encodeURIComponent(cwd)}`)));
-        if (epoch !== state.assistantEpoch || chosen !== state.assistantProfileId || !state.assistantMode) return;
-        state.assistantRevision = data.revision;
-        state.assistantGroups = groups;
-        state.assistantSessions = new Map(listedGroups.map(group => [group.id,
-            (unclassified[cwds.indexOf(group.cwd)].sessions || []).filter(session => session.assistantProject?.id === group.id
-                && session.agentProfile?.id === chosen && !state.deletedSessions.has(JSON.stringify([group.cwd, session.id])))]));
-        for (let i = 0; i < cwds.length; i++) {
-            const cwd = cwds[i], rows = (unclassified[i].sessions || []).filter(session => !state.deletedSessions.has(JSON.stringify([cwd, session.id])));
-            invalidateSessionList(cwd);
-            state.projectSessions.set(cwd, rows);
-            if (cwd === state.cwd) state.sessions = rows;
-            const orphaned = rows.filter(session => session.agentProfile?.id === chosen && !session.assistantProject && !session.ephemeral);
-            if (orphaned.length) {
-                const id = `unclassified:${cwd}`;
-                state.assistantGroups.push({ id, name: translateUi('未分类'), cwd, unclassified: true });
-                state.assistantSessions.set(id, orphaned);
-            }
-        }
-        state.assistantGroups.push(...archivedGroups);
-        const candidate = requested.projectId || (previousProjectId && state.assistantGroups.some(group => group.id === previousProjectId) ? previousProjectId : localStorage.getItem(`pi.web.assistantProject:${chosen}`));
-        state.assistantProjectId = state.assistantGroups.some(group => group.id === candidate) ? candidate : state.assistantGroups.find(group => !group.unclassified)?.id || null;
-        if (window.PiWorkspaceRoute?.current().tab === 'assistant' && !requested.sessionId) {
-            window.PiWorkspaceRoute.navigate('assistant', { profileId: chosen, projectId: state.assistantProjectId }, true);
-        }
-        status.textContent = '';
-        syncActualIdentity();
-        renderAssistantSessions();
-        void loadAssistantUnclassified(epoch, chosen);
-        if (requested.sessionId) {
-            const selected = state.assistantSessions.get(state.assistantProjectId)?.find(row => row.id === requested.sessionId);
-            if (selected) {
-                if (!isCurrentNavigation(navigation) || epoch !== state.assistantEpoch || !state.assistantMode) return;
-                await navigateToSession(selected, navigation);
-            }
-        }
-    }
-
-    async function loadAssistantUnclassified(epoch, profileId) {
-        const discovery = state.assistantDiscovery;
-        const current = () => state.assistantMode && state.assistantEpoch === epoch
-            && state.assistantProfileId === profileId && state.assistantDiscovery === discovery;
-        if (!discovery || discovery.epoch !== epoch || !current()) return;
-        const hiddenCwds = new Set(state.hiddenProjects);
-        const visibleGroups = state.assistantGroups.filter(group => !group.unclassified || !hiddenCwds.has(group.cwd));
-        if (visibleGroups.length !== state.assistantGroups.length) {
-            for (const group of state.assistantGroups) if (group.unclassified && hiddenCwds.has(group.cwd)) state.assistantSessions.delete(group.id);
-            state.assistantGroups = visibleGroups;
-            renderAssistantSessions();
-        }
-        // Reserve before awaiting; bootstrap and an identity refresh may both
-        // discover projects. Load unrelated directories without hiding ready rows.
-        for (const project of orderedProjects()) {
-            if (!current()) return;
-            const cwd = project.cwd;
-            if (discovery.cwds.has(cwd)) continue;
-            discovery.cwds.add(cwd);
-            try {
-                const data = await apiFetch(`/api/pi/sessions?cwd=${encodeURIComponent(cwd)}`);
-                if (!current()) return;
-                const rows = (data.sessions || []).filter(session => !state.deletedSessions.has(JSON.stringify([cwd, session.id])));
-                invalidateSessionList(cwd);
-                state.projectSessions.set(cwd, rows);
-                if (cwd === state.cwd) state.sessions = rows;
-                const orphaned = rows.filter(session => session.agentProfile?.id === profileId && !session.assistantProject && !session.ephemeral);
-                if (orphaned.length) {
-                    const id = `unclassified:${cwd}`;
-                    state.assistantGroups.push({ id, name: translateUi('未分类'), cwd, unclassified: true });
-                    state.assistantSessions.set(id, orphaned);
-                    renderAssistantSessions();
-                }
-            } catch (error) {
-                if (!current()) return;
-                discovery.cwds.delete(cwd);
-                $('pi-assistant-profile-status').textContent = error.message;
-            }
-        }
-    }
-
-    function renderAssistantSessions() {
-        const anchor = captureSessionListAnchor();
-        const query = elements.sessionSearch.value.trim().toLowerCase();
-        const groups = state.assistantGroups.filter(group => !query || `${group.name} ${group.cwd}`.toLowerCase().includes(query)
-            || state.assistantSessions.get(group.id)?.some(session => `${session.name || ''} ${session.firstMessage || ''}`.toLowerCase().includes(query)));
-        const sessions = new Map(groups.map(group => [group.id, [...new Map((state.assistantSessions.get(group.id) || [])
-            .filter(session => !query || `${group.name} ${group.cwd} ${session.name || ''} ${session.firstMessage || ''}`.toLowerCase().includes(query))
-            .map(session => [session.id, session])).values()]]));
-        const active = groups.filter(group => !group.archived);
-        const archived = groups.filter(group => group.archived);
-        const options = { query, expanded: state.assistantExpandedLists.get(state.assistantProfileId), cwd: state.cwd, sessionId: state.session?.id };
-        elements.sessionList.innerHTML = window.PiAssistantProjects.renderGroups(active, sessions, state.assistantProjectId, renderSessionItem, options)
-            + (archived.length ? `<details class="pi-archive-group pi-archived-projects" data-archive-kind="assistant-projects" ${state.assistantArchivedOpen || query ? 'open' : ''}><summary>${translateUi('已归档项目（{0}）', archived.length)}</summary>${window.PiAssistantProjects.renderGroups(archived, sessions, state.assistantProjectId, renderSessionItem, options)}</details>` : '')
-            || (state.assistantListLoading && !query && window.PiSkeleton?.html('projects', { rows: 3, label: translateUi('正在读取项目') }))
-            || `<div class="pi-list-state">${translateUi(query ? '没有匹配的项目或线程' : '还没有助手项目')}</div>`;
-        elements.sessionCount.textContent = state.assistantListLoading && !state.assistantGroups.length ? '' : translateUi('{0} 个项目', state.assistantGroups.length);
-        elements.newSession.disabled = !state.assistantGroups.some(group => group.id === state.assistantProjectId && !group.unclassified && !group.archived);
-        renderActivityBadges();
-        restoreSessionListAnchor(anchor);
     }
 
     function getSessionTitle(session) {
@@ -2094,7 +1845,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderSessions() {
         if (state.botMode) return;
-        if (state.assistantMode) return renderAssistantSessions();
         const anchor = captureSessionListAnchor();
         const focused = elements.sessionList.contains(document.activeElement) ? document.activeElement : null;
         const focusedWorkAction = focused?.dataset.workAction;
@@ -2314,11 +2064,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!state.session) return;
         // Presentation only: never unhide/unarchive a project or open a worker.
         if (!elements.sessionSearchField.hidden) setSessionSearchOpen(false);
-        if (!state.assistantMode) {
-            state.expandedProjects.add(state.cwd);
-            state.archiveThreadsOpen.add(state.cwd); state.archiveProjectsOpen = true;
-            elements.sessionFilters.querySelector('[data-filter="all"]').click();
-        } else state.assistantArchivedOpen = true;
+        state.expandedProjects.add(state.cwd);
+        state.archiveThreadsOpen.add(state.cwd); state.archiveProjectsOpen = true;
+        elements.sessionFilters.querySelector('[data-filter="all"]').click();
         renderSessions();
         const row = elements.sessionList.querySelector(`[data-cwd="${CSS.escape(state.cwd)}"][data-session-id="${CSS.escape(state.session.id)}"]`);
         if (!row?.getClientRects().length) { toast(translateUi('当前线程不在此列表中'), 'info'); return; }
@@ -2382,10 +2130,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // M4-5c: with Bots available the assistant chat page is retired. Its links open the Bot's chat,
+    // M4-5c: the assistant chat page is retired. Its links open the Bot's chat,
     // or the thread in the Pi Agent list (identity and category kept), or else Pi Agent.
-    const assistantRetired = () => document.body.classList.contains('pv-bots-on');
     async function leaveAssistantPage(params) {
+        if (!document.getElementById('workspace-settings-dialog')?.classList.contains('hidden')) {
+            await new Promise(resolve => window.addEventListener('workspace:settings-closed', resolve, { once: true }));
+            if (window.PiWorkspaceRoute?.current().tab !== 'assistant') return;
+        }
         const profileId = params?.get('profileId'), projectId = params?.get('projectId'), sessionId = params?.get('sessionId');
         let tab = 'chat', target = {};
         try {
@@ -2413,38 +2164,31 @@ document.addEventListener('DOMContentLoaded', () => {
     async function createIdentitySession(cwd) {
         const project = state.projects.find(item => item.cwd === cwd);
         const profileId = await window.PiIdentityThread.choose({ apiFetch, projectName: project?.name || cwd.split(/[\\/]/).filter(Boolean).pop() || cwd });
-        if (!profileId || state.assistantMode || state.botMode) return;
+        if (!profileId || state.botMode) return;
         const navigation = beginConversationNavigation();
         if (!await selectProject(cwd, { navigation }) || !isCurrentNavigation(navigation, cwd)) return;
         return createSession(navigation, { profileId });
     }
 
-    async function createSession(navigation = beginConversationNavigation(), { profileId: chosenProfileId = null } = {}) {
+    async function createSession(navigation = beginConversationNavigation(), { profileId = null } = {}) {
         if (!isCurrentNavigation(navigation) || state.creatingSession) return;
-        if (state.assistantMode && !state.assistantGroups.some(group => group.id === state.assistantProjectId && !group.unclassified && !group.archived)) return;
         if (!state.cwd) return openProjectDialog();
-        const cwd = state.cwd, assistantMode = state.assistantMode, assistantProjectId = assistantMode ? state.assistantProjectId : null;
-        const profileId = state.assistantMode ? state.assistantProfileId : chosenProfileId;
+        const cwd = state.cwd;
         state.creatingSession = true;
         elements.newSession.disabled = true;
         try {
             const session = await apiFetch('/api/pi/sessions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cwd, profileId, ...(assistantProjectId ? { assistantProjectId } : {}) })
+                body: JSON.stringify({ cwd, profileId })
             });
             const route = window.PiWorkspaceRoute?.current();
-            const stillSelected = isCurrentNavigation(navigation, cwd) && assistantMode === state.assistantMode
-                && (assistantMode ? route?.tab === 'assistant' && route.params.get('profileId') === profileId
-                    && assistantProjectId === state.assistantProjectId : route?.tab === 'chat');
-            if (!stillSelected) { toast(translateUi('线程已创建在原项目，请从项目列表打开'), 'info'); return; }
+            if (!isCurrentNavigation(navigation, cwd) || route?.tab !== 'chat') {
+                toast(translateUi('线程已创建在原项目，请从项目列表打开'), 'info'); return;
+            }
             state.sessions.unshift(session);
             invalidateSessionList(cwd);
             state.projectSessions.set(cwd, state.sessions);
-            if (assistantProjectId) {
-                const list = state.assistantSessions.get(assistantProjectId) || [];
-                state.assistantSessions.set(assistantProjectId, [session, ...list.filter(item => item.id !== session.id)]);
-            }
             const project = state.projects.find(item => item.cwd === cwd);
             if (project) project.sessionCount = state.sessions.length;
             rememberProject(cwd);
@@ -2455,7 +2199,7 @@ document.addEventListener('DOMContentLoaded', () => {
             toast(error.message, 'error');
         } finally {
             state.creatingSession = false;
-            elements.newSession.disabled = state.assistantMode && !state.assistantGroups.some(group => group.id === state.assistantProjectId && !group.unclassified && !group.archived);
+            elements.newSession.disabled = false;
         }
     }
 
@@ -2492,14 +2236,11 @@ document.addEventListener('DOMContentLoaded', () => {
             elements.input.value = ''; clearAttachments();
             clearSessionView(); workflows.update();
             setConnection('idle', translateUi("选择会话开始工作"));
-            const tab = state.assistantMode ? 'assistant' : 'chat';
-            const params = state.assistantMode ? { profileId: state.assistantProfileId, projectId: state.assistantProjectId } : { cwd };
-            if (window.PiWorkspaceRoute?.current().tab === tab) window.PiWorkspaceRoute.navigate(tab, params);
+            if (window.PiWorkspaceRoute?.current().tab === 'chat') window.PiWorkspaceRoute.navigate('chat', { cwd });
         }
         const nextSessions = (state.projectSessions.get(cwd) || []).filter(item => item.id !== session.id);
         invalidateSessionList(cwd);
         state.projectSessions.set(cwd, nextSessions);
-        for (const [id, sessions] of state.assistantSessions) state.assistantSessions.set(id, sessions.filter(item => item.id !== session.id || item.cwd !== cwd));
         if (state.cwd === cwd) state.sessions = nextSessions;
         const project = state.projects.find(item => item.cwd === cwd);
         if (project) project.sessionCount = nextSessions.length;
@@ -2664,17 +2405,12 @@ document.addEventListener('DOMContentLoaded', () => {
         extensionAssistant.update(session);
         workflows.update();
         if (!session.ephemeral) localStorage.setItem(`pi.web.session:${state.cwd}`, session.id);
-        if (state.assistantMode) {
-            const groupId = session.assistantProject?.id || state.assistantGroups.find(group => group.unclassified && group.cwd === state.cwd && state.assistantSessions.get(group.id)?.some(item => item.id === session.id))?.id;
-            if (groupId) state.assistantProjectId = groupId;
-        }
         renderSessions();
         updateSessionMeta();
-        const routeTab = state.botMode ? 'bot' : state.assistantMode ? 'assistant' : 'chat';
+        const routeTab = state.botMode ? 'bot' : 'chat';
         // A Bot window is addressed by Bot and window, never by its current session file.
-        const routeParams = state.botMode ? { profileId: state.bot?.profileId, windowId: state.bot?.windowId }
-            : state.assistantMode ? { profileId: state.assistantProfileId, projectId: state.assistantProjectId, sessionId: session.id } : { cwd: state.cwd, sessionId: session.id };
-        if (['chat', 'assistant', 'bot'].includes(window.PiWorkspaceRoute?.current().tab)) window.PiWorkspaceRoute.navigate(routeTab, routeParams, state.botMode);
+        const routeParams = state.botMode ? { profileId: state.bot?.profileId, windowId: state.bot?.windowId } : { cwd: state.cwd, sessionId: session.id };
+        if (['chat', 'bot'].includes(window.PiWorkspaceRoute?.current().tab)) window.PiWorkspaceRoute.navigate(routeTab, routeParams, state.botMode);
         else window.PiWorkspaceRoute?.rememberConversation(routeTab, routeParams);
         navigation.navigationEpoch = state.navigationEpoch;
         elements.input.disabled = true;
@@ -3609,8 +3345,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const description = document.createElement('p');
         description.textContent = extension ? translateUi('描述你想完成的任务，或粘贴技能、扩展包的链接。我会先检查已有能力，再查找适合的方案。')
             : state.session ? translateUi('描述目标、贴上资料，或从下面选一个开始。')
-                : state.assistantMode ? translateUi('选择助手项目与线程，继续你的工作。')
-                    : state.cwd ? translateUi('继续最近的聊天，或在当前项目开始新聊天。') : translateUi('打开服务器上的项目目录，开始你的第一项工作。');
+                : state.cwd ? translateUi('继续最近的聊天，或在当前项目开始新聊天。') : translateUi('打开服务器上的项目目录，开始你的第一项工作。');
         hero.append(mark, title, description);
         const projectName = state.cwd ? state.projects.find(project => project.cwd === state.cwd)?.name || getProjectName(state.cwd) : '';
         if (projectName && !extension) {
@@ -3637,9 +3372,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const node = document.createElement('button'); node.type = 'button'; node.textContent = label;
                     if (primary) node.className = 'pi-empty-primary'; node.addEventListener('click', handler); actions.append(node); return node;
                 };
-                if (state.assistantMode) {
-                    action(translateUi('选择助手项目'), () => { if (innerWidth <= 900) elements.sessionPane.classList.add('open'); $('pi-assistant-profile').focus(); }, true);
-                } else if (!state.cwd) action(translateUi('打开服务器目录'), () => elements.projectButton.click(), true);
+                if (!state.cwd) action(translateUi('打开服务器目录'), () => elements.projectButton.click(), true);
                 else {
                     const recent = state.sessions.find(item => !item.ephemeral && !isThreadArchived(state.cwd, item.id));
                     if (recent) action(translateUi('继续：{0}', getSessionTitle(recent)), () => openSession(recent).catch(error => toast(error.message, 'error')), true);
@@ -4352,22 +4085,32 @@ document.addEventListener('DOMContentLoaded', () => {
         if (stats?.totalMessages != null) elements.metaMessages.textContent = String(stats.totalMessages);
     }
 
+    function identityAvatar(profile) {
+        if (window.PiAvatar) return window.PiAvatar.render(profile, 'pi-identity-avatar');
+        const span = document.createElement('span');
+        span.className = 'pi-identity-avatar';
+        if (profile?.avatar?.kind === 'emoji') span.textContent = profile.avatar.value;
+        else if (profile?.avatar?.kind === 'image' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(profile.id) && /^[a-f0-9]{64}$/i.test(profile.avatar.version)) {
+            const img = document.createElement('img');
+            img.src = `/api/pi/profiles/${encodeURIComponent(profile.id)}/avatar?version=${encodeURIComponent(profile.avatar.version)}`;
+            img.alt = ''; span.append(img);
+        } else span.textContent = (profile?.name || '?').trim().slice(0, 1).toLocaleUpperCase();
+        span.setAttribute('aria-hidden', 'true');
+        return span;
+    }
+
     function syncActualIdentity() {
         const profile = state.session?.ephemeral ? null : state.session?.agentProfile;
         const header = $('pi-actual-identity'), composer = $('pi-composer-identity');
-        const origin = $('pi-conversation-origin');
         const authoringReturn = $('pi-profile-authoring-return');
         authoringReturn.hidden = !state.session?.profileAuthoring || Boolean(state.session?.ephemeral);
         authoringReturn.querySelector('span').textContent = translateUi('查看档案起草建议');
-        const groupId = state.session?.assistantProject?.id || state.assistantGroups.find(group => group.unclassified
-            && group.cwd === state.cwd && state.assistantSessions.get(group.id)?.some(item => item.id === state.session?.id))?.id;
-        origin.hidden = !state.assistantMode || !state.session || profile?.id === state.assistantProfileId && groupId === state.assistantProjectId;
         for (const node of [header, composer]) {
             node.hidden = !profile;
             node.replaceChildren();
             if (!profile) continue;
             const source = state.profileInventory.find(item => item.id === profile.id) || profile;
-            node.append(window.PiAssistantProjects.avatar(source), document.createTextNode(source.name || profile.name || translateUi('身份不可用')));
+            node.append(identityAvatar(source), document.createTextNode(source.name || profile.name || translateUi('身份不可用')));
             node.title = $('pi-session-profile').title || profile.name || '';
         }
     }
@@ -5175,11 +4918,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!await navigateToSession(session)) return;
                     await workflows.openClone();
                 }, { disabled: session.ephemeral })] : []),
-                ...(state.assistantMode && state.sessionClassificationSupported && session.agentProfile?.id === state.assistantProfileId
-                    && state.assistantGroups.some(group => group.cwd === cwd && !group.unclassified && !group.archived)
-                    ? [command(translateUi('更改分类…'), 'fa-folder-open', () => classificationEditor.open(session, cwd), { disabled: session.ephemeral })]
-                    : !session.agentProfile && !session.assistantProject && transfer.movesEnabled
-                        ? [command(translateUi("移动到项目…"), 'fa-folder-open', () => transfer.openMove(session, cwd), { disabled: session.ephemeral })] : []),
+                ...(!session.agentProfile && !session.assistantProject && transfer.movesEnabled
+                    ? [command(translateUi("移动到项目…"), 'fa-folder-open', () => transfer.openMove(session, cwd), { disabled: session.ephemeral })] : []),
                 ...(state.manualUnread ? [command(translateUi("标记为未读"), 'fa-envelope', () => markThreadUnread(session, cwd),
                     { disabled: session.ephemeral || state.unreadRequests.has(activityKey(cwd, session.id)) })] : []),
                 { label: translateUi("复制"), icon: 'fa-copy', children: [
@@ -5227,35 +4967,6 @@ document.addEventListener('DOMContentLoaded', () => {
         threadMenu.open(anchor, items, point);
     }
 
-    const classificationEditor = window.PiAssistantProjects.createClassificationEditor({ apiFetch, toast,
-        identity: () => JSON.stringify([state.assistantMode, state.assistantProfileId, state.assistantEpoch]),
-        saved: async session => {
-            sessionClassified(session);
-            invalidateSessionList(session.cwd);
-            await loadSessions(session.cwd);
-        }
-    });
-    const projectEditor = window.PiAssistantProjects.createEditor({ apiFetch, profileId: () => state.assistantProfileId,
-        onSaved: project => { state.assistantProjectId = project.id; refreshAssistant(); },
-        onDeleted: async project => {
-            toast(translateUi('分类已删除，目录和文件未更改'), 'success');
-            if (state.assistantProjectId === project.id) state.assistantProjectId = null;
-            try { await refreshAssistant(); }
-            catch { toast(translateUi('分类已删除，请刷新列表查看'), 'info'); }
-        } });
-    function showAssistantMenu(target, group) {
-        const cwd = group.cwd;
-        const command = (label, icon, run) => ({ label, icon, run: () => Promise.resolve().then(run).catch(error => toast(error.message, 'error')) });
-        threadMenu.open(target, [
-            ...(!group.unclassified && !group.archived ? [command(translateUi('新聊天'), 'fa-plus', async () => {
-                state.assistantProjectId = group.id;
-                await createSessionInProject(cwd);
-            })] : []),
-            ...(!group.unclassified ? [command(translateUi('编辑项目'), 'fa-pen', () => projectEditor.open(group, state.assistantRevision))] : []),
-            command(translateUi('临时会话（不保存）'), 'fa-bolt', () => createEphemeralSession(cwd))
-        ]);
-    }
-
     const archiveSearchLabel = document.createElement('label');
     archiveSearchLabel.className = 'pi-archive-search';
     archiveSearchLabel.hidden = true;
@@ -5275,7 +4986,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!details?.matches('details[data-archive-kind]')) return;
         const opening = !details.open;
         if (details.dataset.archiveKind === 'projects') state.archiveProjectsOpen = opening;
-        else if (details.dataset.archiveKind === 'assistant-projects') state.assistantArchivedOpen = opening;
         else if (opening) state.archiveThreadsOpen.add(details.dataset.cwd);
         else state.archiveThreadsOpen.delete(details.dataset.cwd);
     });
@@ -5291,25 +5001,11 @@ document.addEventListener('DOMContentLoaded', () => {
         void loadFilteredProjects();
     });
     elements.sessionList.addEventListener('contextmenu', event => {
-        const groupNode = state.assistantMode && !event.target.closest('[data-session-id]') && event.target.closest('[data-assistant-project-id]');
-        if (groupNode) {
-            event.preventDefault();
-            const group = state.assistantGroups.find(item => item.id === groupNode.dataset.assistantProjectId);
-            if (group) showAssistantMenu(groupNode.querySelector('[data-assistant-action="menu"]'), group);
-            return;
-        }
         if (!event.target.closest('[data-project-cwd], [data-session-id]') || event.target.closest('input, textarea, [contenteditable]') || window.getSelection()?.toString()) return;
         event.preventDefault();
         showThreadMenu(event.target, { x: event.clientX, y: event.clientY });
     });
     elements.sessionList.addEventListener('keydown', event => {
-        const groupNode = state.assistantMode && !event.target.closest('[data-session-id]') && event.target.closest('[data-assistant-project-id]');
-        if (groupNode && (event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey)) {
-            event.preventDefault();
-            const group = state.assistantGroups.find(item => item.id === groupNode.dataset.assistantProjectId);
-            if (group) showAssistantMenu(groupNode.querySelector('[data-assistant-action="menu"]'), group);
-            return;
-        }
         if (event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey) {
             if (!event.target.closest('[data-project-cwd], [data-session-id]')) return;
             event.preventDefault();
@@ -5378,31 +5074,15 @@ document.addEventListener('DOMContentLoaded', () => {
         sessionStorage.setItem('pi.web.token', state.token);
         bootstrap();
     });
-    elements.newSession.addEventListener('click', () => {
-        if (!state.assistantMode) return void createSession();
-        const group = state.assistantGroups.find(item => item.id === state.assistantProjectId);
-        if (!group || group.unclassified || group.archived) return;
-        void createSessionInProject(group.cwd).catch(error => toast(error.message, 'error'));
-    });
-    $('pi-assistant-add-project').addEventListener('click', () => projectEditor.open(null, state.assistantRevision, state.cwd));
-    $('pi-assistant-manage-profiles').addEventListener('click', () => {
-        if (innerWidth <= 900) elements.sessionPane.classList.remove('open');
-        window.PiWorkspaceRoute.navigate('profiles', { profileId: state.assistantProfileId });
-    });
+    elements.newSession.addEventListener('click', () => void createSession());
     $('pi-profile-authoring-return').addEventListener('click', () => {
         const session = state.session;
         if (!session?.profileAuthoring || session.ephemeral) return;
         window.dispatchEvent(new CustomEvent('workspace:open-settings', { detail: { tab: 'profiles',
             profileId: session.profileAuthoring.profileId, authoringSession: { cwd: session.cwd || state.cwd, id: session.id } } }));
     });
-    $('pi-conversation-origin').addEventListener('click', () => window.PiWorkspaceRoute?.navigate('chat', { cwd: state.cwd, sessionId: state.session?.id }));
-    $('pi-assistant-profile').addEventListener('change', event => {
-        state.assistantProjectId = null;
-        window.PiWorkspaceRoute?.navigate('assistant', { profileId: event.target.value });
-    });
     window.addEventListener('workspace:agent-profiles-changed', () => {
-        if (state.assistantMode) refreshAssistant();
-        else void apiFetch('/api/pi/profiles').then(data => {
+        void apiFetch('/api/pi/profiles').then(data => {
             if (Array.isArray(data?.profiles)) { state.profileInventory = data.profiles; syncActualIdentity(); }
         }).catch(() => {});
     });
@@ -5421,61 +5101,40 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('workspace:tabchanged', event => {
         const { tab, params } = event.detail;
         const routeKey = location.hash || '#/chat';
-        const previousTab = /^#\/([^?]+)/.exec(state.routeKey || '')?.[1];
         if (routeKey !== state.routeKey) { state.routeKey = routeKey; state.navigationEpoch++; }
-        if (tab !== 'chat' && tab !== 'assistant' && tab !== 'bot') { state.assistantEpoch++; return; }
-        if (tab === 'assistant' && assistantRetired()) { void leaveAssistantPage(params); return; }
-        const wasAssistant = state.assistantMode, wasBot = state.botMode;
-        const previousMode = wasBot ? 'bot' : wasAssistant ? 'assistant' : 'chat';
+        if (tab !== 'chat' && tab !== 'assistant' && tab !== 'bot') return;
+        if (tab === 'assistant') { void leaveAssistantPage(params); return; }
+        const wasBot = state.botMode;
+        const previousMode = wasBot ? 'bot' : 'chat';
         if (previousMode !== tab) clearConversationForWorkspaceSwitch();
         if (tab === 'bot' && !wasBot) state.botReturnCwd = state.cwd;
         state.botMode = tab === 'bot';
         $('chat-tab').classList.toggle('pi-bot-mode', state.botMode);
         if (state.botMode && !wasBot) elements.inspector.classList.remove('open');
         if (state.botMode) {
-            state.assistantMode = false; state.assistantEpoch++;
-            $('pi-assistant-switcher').hidden = true;
             if (accessBootstrapped && botUi?.wants(params)) void botUi.activate(params);
             return;
         }
         if (wasBot) { botUi?.deactivate(); botHistory?.reset(); state.bot = null; }
-        state.assistantMode = tab === 'assistant';
-        $('pi-assistant-switcher').hidden = !state.assistantMode;
-        elements.sessionFilters.hidden = state.assistantMode;
-        elements.projectButton.hidden = state.assistantMode;
-        elements.sessionHeadingTitle.textContent = state.assistantMode ? translateUi('对话') : translateUi('项目与线程');
         syncActualIdentity();
         syncMobileHeader();
-        if (state.assistantMode && state.sessionFilter !== 'all') {
-            state.sessionFilter = 'all';
-            elements.sessionFilters.querySelectorAll('button').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.filter === 'all')));
+        renderSessions();
+        // Back from a Bot: return to the Pi Agent project that was open before.
+        if (wasBot && accessBootstrapped && !params.get('cwd') && state.botReturnCwd && state.botReturnCwd !== state.cwd) {
+            void selectProject(state.botReturnCwd, { restoreSession: true, passive: true }).catch(error => toast(error.message, 'error'));
         }
-        if (state.assistantMode) {
-            if (!wasAssistant || previousTab !== 'assistant' || params.get('profileId') !== state.assistantProfileId || params.get('projectId') && params.get('projectId') !== state.assistantProjectId) {
-                refreshAssistant({ profileId: params.get('profileId'), projectId: params.get('projectId'), sessionId: params.get('sessionId') });
-            } else if (params.get('sessionId') && state.session?.id !== params.get('sessionId')) {
-                const session = state.assistantSessions.get(state.assistantProjectId)?.find(item => item.id === params.get('sessionId'));
-                if (session) void navigateToSession(session).catch(showAssistantError);
-            }
-        } else {
-            state.assistantEpoch++; renderSessions();
-            // Back from a Bot: return to the Pi Agent project that was open before.
-            if (wasBot && accessBootstrapped && !params.get('cwd') && state.botReturnCwd && state.botReturnCwd !== state.cwd) {
-                void selectProject(state.botReturnCwd, { restoreSession: true, passive: true }).catch(error => toast(error.message, 'error'));
-            }
-            // The startup replay runs before bootstrap(), which restores the session itself;
-            // opening here as well would race it and touch controllers not created yet.
-            if (accessBootstrapped && params.get('cwd') && params.get('sessionId') && (state.session?.id !== params.get('sessionId') || state.cwd !== params.get('cwd'))) {
-                const navigation = beginConversationNavigation();
-                void (async () => {
-                    const resolved = transfer.movesEnabled ? await apiFetch('/api/pi/sessions/' + encodeURIComponent(params.get('sessionId')) + '/resolve?cwd=' + encodeURIComponent(params.get('cwd'))) : null;
-                    if (!isCurrentNavigation(navigation)) return;
-                    const cwd = resolved?.session.cwd || params.get('cwd');
-                    if (!await selectProject(cwd, { navigation }) || !isCurrentNavigation(navigation, cwd)) return;
-                    const rows = await loadSessions(cwd), session = resolved?.session || rows.find(item => item.id === params.get('sessionId'));
-                    if (isCurrentNavigation(navigation, cwd) && session) await openSession(session, navigation);
-                })().catch(error => toast(error.message, 'error'));
-            }
+        // The startup replay runs before bootstrap(), which restores the session itself;
+        // opening here as well would race it and touch controllers not created yet.
+        if (accessBootstrapped && params.get('cwd') && params.get('sessionId') && (state.session?.id !== params.get('sessionId') || state.cwd !== params.get('cwd'))) {
+            const navigation = beginConversationNavigation();
+            void (async () => {
+                const resolved = transfer.movesEnabled ? await apiFetch('/api/pi/sessions/' + encodeURIComponent(params.get('sessionId')) + '/resolve?cwd=' + encodeURIComponent(params.get('cwd'))) : null;
+                if (!isCurrentNavigation(navigation)) return;
+                const cwd = resolved?.session.cwd || params.get('cwd');
+                if (!await selectProject(cwd, { navigation }) || !isCurrentNavigation(navigation, cwd)) return;
+                const rows = await loadSessions(cwd), session = resolved?.session || rows.find(item => item.id === params.get('sessionId'));
+                if (isCurrentNavigation(navigation, cwd) && session) await openSession(session, navigation);
+            })().catch(error => toast(error.message, 'error'));
         }
     });
     // Bot greeting chips speak through the normal composer path, never over a draft.
@@ -5523,7 +5182,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return target;
         }
     });
-    elements.refreshSessions.addEventListener('click', () => Promise.all([loadProjects(), loadSessions(), refreshActivity(), ...(state.assistantMode ? [loadAssistant()] : [])]).catch(error => toast(error.message, 'error')));
+    elements.refreshSessions.addEventListener('click', () => Promise.all([loadProjects(), loadSessions(), refreshActivity()]).catch(error => toast(error.message, 'error')));
     setInterval(() => void refreshActivity(), 3000);
     document.addEventListener('visibilitychange', () => {
         if (document.hidden) {
@@ -5545,26 +5204,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     elements.sessionSearch.addEventListener('input', () => handleSessionSearch().catch(error => toast(error.message, 'error')));
     elements.sessionList.addEventListener('click', event => {
-        const assistantControl = event.target.closest('[data-assistant-action]');
-        if (assistantControl && state.assistantMode) {
-            const group = state.assistantGroups.find(item => item.id === assistantControl.closest('[data-assistant-project-id]')?.dataset.assistantProjectId);
-            if (!group) return;
-            if (assistantControl.dataset.assistantAction === 'menu') showAssistantMenu(assistantControl, group);
-            else if (['more-threads', 'less-threads'].includes(assistantControl.dataset.assistantAction)) {
-                const expanded = state.assistantExpandedLists.get(state.assistantProfileId) || new Set();
-                if (assistantControl.dataset.assistantAction === 'more-threads') expanded.add(group.id); else expanded.delete(group.id);
-                state.assistantExpandedLists.set(state.assistantProfileId, expanded);
-                const top = elements.sessionList.scrollTop;
-                renderAssistantSessions(); elements.sessionList.scrollTop = top;
-                elements.sessionList.querySelector(`[data-assistant-project-id="${CSS.escape(group.id)}"] .pi-thread-more`)?.focus({ preventScroll: true });
-            } else {
-                state.assistantProjectId = group.id;
-                localStorage.setItem(`pi.web.assistantProject:${state.assistantProfileId}`, group.id);
-                renderAssistantSessions();
-                window.PiWorkspaceRoute?.navigate('assistant', { profileId: state.assistantProfileId, projectId: group.id });
-            }
-            return;
-        }
         const recentToggle = event.target.closest('[data-work-action="toggle-recent"]');
         if (recentToggle) {
             state.recentSessionsExpanded = !state.recentSessionsExpanded;
@@ -5609,7 +5248,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!await selectProject(cwd, { navigation }) || !isCurrentNavigation(navigation, cwd)) return;
             const session = state.session?.ephemeral && state.session.id === item.dataset.sessionId
                 ? state.session
-                : (state.assistantMode ? [...state.assistantSessions.values()].flat() : (state.projectSessions.get(cwd) || state.sessions)).find(candidate => candidate.id === item.dataset.sessionId);
+                : (state.projectSessions.get(cwd) || state.sessions).find(candidate => candidate.id === item.dataset.sessionId);
             if (!session) return;
             if (action === 'rename') await renameCurrent(session, cwd);
             else if (action === 'delete') await deleteOneSession(session, cwd);
