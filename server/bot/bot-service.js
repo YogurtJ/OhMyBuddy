@@ -332,7 +332,9 @@ class BotService extends EventEmitter {
                 const worker = this.supervisor.getActiveWorker(file);
                 if (worker) { worker._broadcast({ type: 'gateway_reconnect' }); await this.supervisor.stopSession(file); }
             }
-            return save();
+            const saved = await save();
+            this.cron?.dropBotRuns({ profileId, windowId: window.id });
+            return saved;
         })() : this.supervisor.withSessionEdit(paths[index], () => reserve(index + 1));
         try { return await reserve(0); }
         catch (error) { if (error.status === 409 || error.code === 'SESSION_BUSY') busy(); throw error; }

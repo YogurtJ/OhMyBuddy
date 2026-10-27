@@ -224,22 +224,7 @@ class CronService {
             }
             const run = this.db.run(input.runId);
             if (!run || run.jobId !== id) fail('Run not found');
-            if (input.action === 'acknowledge' && run.status === 'uncertain') {
-                if (run.target) {
-                    let session;
-                    try { session = await this.store.getSession(run.target.cwd, run.target.sessionId); }
-                    catch (error) {
-                        if ([...this.supervisor.workers.values()].some(worker => worker.sessionId === run.target.sessionId && !worker.disposed)) throw error;
-                    }
-                    if (session) {
-                        const worker = await this.supervisor.getWorker({ cwd: session.cwd, sessionId: session.id, sessionPath: session.path });
-                        await worker.cron({ action: 'acknowledge', runId: run.id });
-                    }
-                }
-                if (this.db.run(run.id)?.status === 'uncertain')
-                    this.db.saveRun({ ...this.db.run(run.id), status: 'stopped', reason: 'reviewed-uncertain', completedAt: this.now() });
-                return this.db.run(run.id);
-            }
+            if (input.action === 'acknowledge' && run.status === 'uncertain') return this.acknowledgeRun(run);
             if (input.action === 'stop') {
                 if (run.status === 'waiting') this.db.saveRun({ ...run, status: 'cancelled', completedAt: this.now() });
                 else if (run.target) {
@@ -309,6 +294,13 @@ class CronService {
             const job = run.job, now = this.now();
             const grace = job.misfire.policy === 'skip' ? 60000 : job.misfire.graceMinutes * 60000;
             if (now - run.scheduledAt > grace) { this.db.saveRun({ ...run, status: 'skipped', reason: 'expired', completedAt: now }); return; }
+            if (job.origin === 'bot') {
+                // Switched off after it was queued: not sent.
+                const owner = await this.profiles.getProfile(job.target.profileId);
+                if (require('./bot/bot-settings').readBot(owner)?.notify?.proactive === false) {
+                    this.db.saveRun({ ...run, status: 'skipped', reason: 'proactive-off', completedAt: now }); return;
+                }
+            }
             const session = await this.target(job.target);
             if (!this.supervisor.isSessionIdle(session.path)) return;
             let worker = await this.supervisor.getWorker({ cwd: session.cwd, sessionId: session.id, sessionPath: session.path });
@@ -465,19 +457,39 @@ class CronService {
             if (this.now() - this.botReviewed.get(run.id) < 120000) continue;
             this.botReviewed.set(run.id, this.now());
             if (this.botReviewed.size > 200) this.botReviewed.delete(this.botReviewed.keys().next().value);
-            try {
-                if (run.target) {
-                    let session = null;
-                    try { session = await this.store.getSession(run.target.cwd, run.target.sessionId); } catch { session = null; }
-                    if (session) {
-                        if (!this.supervisor.isSessionIdle(session.path)) continue;
-                        const worker = await this.supervisor.getWorker({ cwd: session.cwd, sessionId: session.id, sessionPath: session.path });
-                        await worker.cron({ action: 'acknowledge', runId: run.id });
-                    }
-                }
-                if (this.db.run(run.id)?.status === 'uncertain') this.db.saveRun({ ...this.db.run(run.id), status: 'stopped', reason: 'reviewed-uncertain', completedAt: this.now() });
-            } catch { /* Retried on the next pass. */ }
+            // The same path as the task page's "acknowledge": the worker itself refuses while its chat
+            // is running or has queued messages, and a live worker with an unreadable session keeps it uncertain.
+            try { await this.acknowledgeRun(run); } catch { /* Retried on a later pass. */ }
         }
+    }
+    // Closes an uncertain run as stopped: the chat's worker records that first (restoring its model
+    // and tools). A session that cannot be read while a worker for it is live stays uncertain.
+    async acknowledgeRun(run) {
+        if (run.target) {
+            let session;
+            try { session = await this.store.getSession(run.target.cwd, run.target.sessionId); }
+            catch (error) {
+                if ([...this.supervisor.workers.values()].some(worker => worker.sessionId === run.target.sessionId && !worker.disposed)) throw error;
+            }
+            if (session) {
+                const worker = await this.supervisor.getWorker({ cwd: session.cwd, sessionId: session.id, sessionPath: session.path });
+                await worker.cron({ action: 'acknowledge', runId: run.id });
+            }
+        }
+        if (this.db.run(run.id)?.status === 'uncertain')
+            this.db.saveRun({ ...this.db.run(run.id), status: 'stopped', reason: 'reviewed-uncertain', completedAt: this.now() });
+        return this.db.run(run.id);
+    }
+    // A Bot's own follow-ups that have not started are dropped with an archived topic or a trashed Bot.
+    dropBotRuns({ profileId, windowId }) {
+        if (!this.db) return 0;
+        let dropped = 0;
+        for (const run of this.db.activeRuns()) {
+            const target = run.job?.target;
+            if (run.origin !== 'bot' || run.status !== 'waiting' || target?.profileId !== profileId || windowId !== undefined && target.windowId !== windowId) continue;
+            this.db.saveRun({ ...run, status: 'cancelled', reason: 'dropped', completedAt: this.now() }); dropped++;
+        }
+        return dropped;
     }
     async removing(session) {
         await this.ready; this.healthy();

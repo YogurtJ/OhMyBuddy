@@ -56,6 +56,13 @@ export function registerBotSchedule(pi: ExtensionAPI, verified: (ctx: any) => bo
             prepared.set(event.toolCallId, { input });
             if (input.action !== 'cancel' || preset === 'free' || !ctx.hasUI || scheduledRunActive(ctx.sessionManager)) return { input };
             const result = await request('list', {}, signal);
+            if (/^[a-f0-9]{24}$/.test(input.id)) {
+                // The Bot's own check-in is cancelled the way it was set, without asking; a reminder of a
+                // noted commitment asks like a task. Unknown ids are refused by the route (404).
+                const followUp = (result.followUps || []).find((item: any) => item.id === input.id);
+                if (!followUp || followUp.kind === 'checkin') return { input, skipApproval: true };
+                return { input: { ...input, approvalFollowUp: followUp } };
+            }
             const job = result.jobs.find((item: any) => item.id === input.id);
             if (!job) return { input, skipApproval: true };
             prepared.set(event.toolCallId, { input, expectedRevision: job.revision });

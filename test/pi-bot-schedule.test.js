@@ -292,6 +292,41 @@ test('schedule approval cleanup handles declines and aborted calls, while unatte
     assert.equal(list.details.pivaneBotSchedule.action, 'listed');
 });
 
+test('the Bot\'s own check-ins skip approval; cancelling a commitment reminder asks like a task (M4-3)', async t => {
+    const f = await fixture(t), w = await workerTool(t, f), tool = w.tools.get('bot_schedule');
+    await f.bots.update(f.profileId, { expectedRevision: (await f.store.profiles.state()).revision, changes: { bot: { permissions: { preset: 'ask' } } } });
+    const items = [{ id: 'a'.repeat(24), kind: 'due', windowId: f.windowId, at: Date.parse('2026-10-30T01:00:00Z'), title: '交房租', state: 'pending' },
+        { id: 'b'.repeat(24), kind: 'checkin', windowId: f.windowId, at: Date.parse('2026-10-31T01:00:00Z'), title: '看看', state: 'pending' }];
+    const calls = [];
+    f.bots.proactive = {
+        list: async () => items.slice(),
+        cancel: async (profileId, id) => { calls.push(['cancel', id]); return { cancelled: items.find(item => item.id === id) }; },
+        checkIn: async (profileId, windowId, input) => { calls.push(['checkIn', input]); return { item: { id: input.id, kind: 'checkin', windowId, at: input.at, title: input.title, state: 'pending' } }; }
+    };
+    const before = w.approvals.length;
+    const create = { toolName: 'bot_schedule', toolCallId: 'own-checkin', input: { action: 'create', title: '回来看看', message: 'Ask how it went.', once: '2026-10-27 10:00', timeZone: 'Asia/Shanghai', proactive: true } };
+    assert.equal(await w.handlers.get('tool_call')(create, w.ctx), undefined);
+    const created = (await tool.execute(create.toolCallId, create.input, undefined, undefined, w.ctx)).details.pivaneBotSchedule;
+    assert.deepEqual([created.action, created.proactive, created.followUp.kind], ['created', true, 'checkin']);
+    assert.match(calls[0][1].id, /^[a-f0-9]{24}$/);
+    assert.equal(f.cron.db.jobs().length, 0, 'never a saved task');
+    const own = { toolName: 'bot_schedule', toolCallId: 'cancel-own', input: { action: 'cancel', id: 'b'.repeat(24) } };
+    assert.equal(await w.handlers.get('tool_call')(own, w.ctx), undefined);
+    assert.equal(w.approvals.length, before, 'its own check-in: no card');
+    const due = { toolName: 'bot_schedule', toolCallId: 'cancel-due', input: { action: 'cancel', id: 'a'.repeat(24) } };
+    w.ctx.ui.confirm = async (_title, message) => { w.approvals.push(parseApprovalMessage(message)); return false; };
+    assert.deepEqual(await w.handlers.get('tool_call')(due, w.ctx), { block: true, reason: BLOCKED.not_approved });
+    assert.equal(w.approvals.length, before + 1);
+    assert.match(w.approvals.at(-1).detail, /^Cancel reminder: 交房租\n/);
+    const listed = (await tool.execute('list-own', { action: 'list' }, undefined, undefined, w.ctx)).details.pivaneBotSchedule;
+    assert.deepEqual(listed.followUps.map(item => item.id), [items[0].id, items[1].id]);
+    for (const bad of [{ repeat: '0 9 * * *' }, { needsTools: true }]) {
+        const input = { action: 'create', title: 'x', message: 'y', proactive: true, timeZone: 'Asia/Shanghai', ...(bad.repeat ? bad : { once: '2026-10-27 10:00', ...bad }) };
+        await assert.rejects(w.handlers.get('tool_call')({ toolName: 'bot_schedule', toolCallId: `bad-${Object.keys(bad)[0]}`, input }, w.ctx),
+            /single message/, 'a repeating or tool-using "check-in" is refused before running');
+    }
+});
+
 test('schedule normalization treats empty optional fields as absent and resolves a DST fold once', () => {
     const normalized = normalizeScheduleInput({ action: 'create', title: 'Test', message: 'Hi', once: '2026-11-01 01:30', repeat: '', timeZone: 'America/New_York', needsTools: false, id: '' });
     assert.equal(scheduleFor(normalized).at, Date.parse('2026-11-01T05:30:00Z'));

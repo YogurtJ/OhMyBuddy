@@ -56,6 +56,7 @@ async function trashBot(service, profileId, input) {
             const profile = state.profiles.find(item => item.id === profileId);
             if (!readBot(profile) || profile.trashedAt !== undefined) fail('Bot not found', 404, 'BOT_NOT_FOUND');
         });
+        service.cron?.dropBotRuns?.({ profileId });
         service.emit('botChanged', { profileId, trashed: true });
         return { ok: true, revision: saved.revision, trashed: true,
             bot: { id: saved.profile.id, name: saved.profile.name, trashedAt: saved.profile.trashedAt },
