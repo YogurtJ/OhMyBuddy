@@ -10642,5 +10642,32 @@
         ["比如：功能开发", "For example: Feature development"],
         ["围绕这项功能讨论需求、实现思路和待解决的问题。", "Discuss the requirements, implementation approach and open questions for this feature."]
     );
+    rows.push(
+        ["所有 Bot", "All Bots"],
+        ["所有 Bot，另有 {0} 个 Bot 有新回复或等你确认", "All Bots. {0} other Bots have new replies or are waiting for you", "All Bots. {0} other Bot has new replies or is waiting for you"],
+        ["另有 {0} 个有动静", "{0} others with news", "{0} other with news"],
+        ["回到聊天", "Back to the chat"],
+        ["{0} 个", "{0}"],
+        ["找 Bot 或话题", "Find a Bot or topic"],
+        ["筛选", "Filter"],
+        ["有新回复", "New replies"],
+        ["没有新回复", "No new replies"],
+        ["现在没有等你确认的事", "Nothing is waiting for you right now"],
+        ["没有找到“{0}”", "Nothing found for “{0}”"],
+        ["试试 Bot 的名字或话题名。", "Try a Bot's name or a topic name."],
+        ["有新的动静时会出现在这里。", "Bots with news will show up here."],
+        ["清除筛选", "Clear filters"],
+        ["Bot 列表", "Bots"],
+        ["{0} 个聊天有新回复", "{0} chats have new replies", "{0} chat has new replies"],
+        ["等你确认 · {0}", "Waiting for you · {0}"],
+        ["正在忙 · {0}", "Working · {0}"],
+        ["正在忙", "Working"],
+        ["话题“{0}”", "Topic “{0}”"],
+        ["话题“{0}”，{1}", "Topic “{0}”, {1}"],
+        ["暂时看不到它在做什么", "Its status can't be read right now"],
+        ["{0} 的话题", "{0}'s topics"],
+        ["{0} 的聊天和话题（{1} 个话题）", "{0}'s chats and topics ({1} topics)"],
+        ["话题 {0}", "Topics {0}"]
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

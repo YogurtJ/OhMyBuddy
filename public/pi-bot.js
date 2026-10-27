@@ -69,6 +69,53 @@
             // Topic ids being restored, and unsettled items per topic (when the server lists them).
             this.restoring = new Set(); this.topicIndex = null; this.topicIndexMissing = false; this.topicIndexSerial = 0; this.archivedOpen = false;
             this.topicIndexAt = 0; this.topicIndexTimer = 0; this.leavingWindow = null;
+            // What each Bot's chats are doing, from the page's activity poll (pi-bot-home.js); null until read.
+            this.live = null; this.liveKey = 'none';
+            // Phones: "All Bots", opened from the drawer; it covers the chat until a Bot or topic is chosen.
+            this.home = window.PiBotHome?.create({ face: (bot, size) => face(bot, size),
+                onOpen: (botId, windowId) => { this.closeHome(false); this.go(botId, windowId || undefined); },
+                onTopics: botId => this.homeTopics(botId),
+                onCreate: () => { void this.create(); },
+                onClose: () => this.closeHome(true) }) || null;
+            if (this.home) {
+                pane.closest('.pi-workbench')?.append(this.home.element);
+                // The home exists only on phones; widening the window returns to the chat.
+                window.matchMedia?.('(max-width: 900px)').addEventListener?.('change', event => { if (!event.matches) this.closeHome(false); });
+            }
+        }
+
+        // The page's /activity result (fresh false after a failed read). Repaints only when what is
+        // shown changes, so the 3-second poll does not rebuild the lists for nothing.
+        activity(data, fresh = true) {
+            if (!window.PiBotHome) return;
+            this.live = window.PiBotHome.live(data, fresh);
+            const key = window.PiBotHome.signature(this.bots, this.live);
+            if (key === this.liveKey) return;
+            this.liveKey = key;
+            if (!this.active) return;
+            this.renderPane();
+            this.home?.update(this.bots, this.live, this.creating);
+        }
+        get homeOpen() { return Boolean(this.active && this.home?.open); }
+        openHome() {
+            if (!this.home || !this.active || window.innerWidth > 900) return;
+            document.getElementById('pi-session-pane')?.classList.remove('open');
+            this.home.show(this.bots, this.live, this.profileId);
+            this.onChange?.('home');
+        }
+        closeHome(focusMenu) {
+            if (!this.home?.open) return;
+            this.home.hide();
+            if (focusMenu) this.header.querySelector('.pi-bot-menu')?.focus({ preventScroll: true });
+            this.onChange?.('home');
+        }
+        // "Topics N" on a home row: that Bot's chats and topics, in the drawer.
+        homeTopics(botId) {
+            this.closeHome(false);
+            if (botId !== this.profileId) { this.drawerAfterOpen = botId; this.go(botId); return; }
+            document.getElementById('pi-session-pane')?.classList.add('open');
+            this.refreshTopicIndex();
+            this.pane.querySelector('.pi-bot-window[aria-current="page"]')?.focus({ preventScroll: true });
         }
 
         // The user sent a message of their own (from the composer) in the open chat.
@@ -140,6 +187,10 @@
                 this.render(); this.onChange?.('identity');
                 await this.open({ profileId: bot.id, windowId });
                 this.rotationRetries = 0;
+                if (this.drawerAfterOpen === bot.id && epoch === this.epoch) {
+                    this.drawerAfterOpen = null;
+                    if (window.innerWidth <= 900) { document.getElementById('pi-session-pane')?.classList.add('open'); this.refreshTopicIndex(); }
+                }
                 if (this.focusNextOpen === windowId) {
                     this.focusNextOpen = null;
                     this.focusComposer?.();
@@ -162,6 +213,7 @@
             this.epoch++; this.active = false;
             clearTimeout(this.topicIndexTimer); this.topicIndexTimer = 0;
             this.closure?.hide();
+            this.home?.hide(); this.drawerAfterOpen = null;
             this.motion?.update({ key: '', connected: false });
             this.pane.closest('#chat-tab')?.classList.remove('pi-bot-welcome');
             this.pane.hidden = true; this.header.hidden = true;
@@ -240,12 +292,13 @@
 
         go(profileId, windowId) {
             if (window.innerWidth <= 900) document.getElementById('pi-session-pane')?.classList.remove('open');
+            if (this.home?.open) this.closeHome(false);
             window.PiWorkspaceRoute?.navigate('bot', { profileId, ...(windowId ? { windowId } : {}) });
         }
 
         async create() {
             if (this.creating) return;
-            this.creating = true; this.render();
+            this.creating = true; this.render(); this.home?.update(this.bots, this.live, true);
             try {
                 if (this.revision === null) await this.load();
                 const data = await this.api('/api/pi/bots', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -257,7 +310,7 @@
                 // A stale revision means another tab changed Bots; reload and let the user try again.
                 if (error.status === 409) await this.load().catch(() => {});
                 this.toast(error.status === 409 ? translateUi("Bot 列表刚刚有变化，请再试一次") : error.message, 'error');
-            } finally { this.creating = false; this.render(); }
+            } finally { this.creating = false; this.render(); this.home?.update(this.bots, this.live, false); }
         }
 
         // The Bot as the setup card compares a proposal with it.
@@ -445,6 +498,7 @@
             if (action === 'bot') this.go(target.dataset.botId);
             else if (action === 'window') this.go(this.profileId, target.dataset.windowId);
             else if (action === 'create') void this.create();
+            else if (action === 'home') this.openHome();
             else if (action === 'greet-yes') void this.onboarding('start');
             else if (action === 'greet-skip') void this.onboarding('skip');
             else if (action === 'models') window.dispatchEvent(new CustomEvent('workspace:open-settings', { detail: { tab: 'providers' } }));
@@ -634,12 +688,22 @@
         }
 
         renderPane() {
+            // A repaint (activity, a refresh) keeps keyboard focus on the same control.
+            const focused = this.pane.contains(document.activeElement) ? document.activeElement : null;
+            const focusKey = focused?.dataset.botAction ? `${focused.dataset.botAction}|${focused.dataset.botId || ''}|${focused.dataset.windowId || ''}` : null;
+            const home = window.PiBotHome, live = this.live;
             const rail = el('nav', 'pi-bot-rail'); rail.setAttribute('aria-label', translateUi("我的 Bot"));
             for (const bot of this.bots) {
                 const item = button('pi-bot-rail-item', bot.name); item.dataset.botAction = 'bot'; item.dataset.botId = bot.id;
                 if (bot.id === this.profileId) item.setAttribute('aria-current', 'true');
                 if (!bot.enabled) item.classList.add('is-disabled');
                 item.append(face(bot, 'md'));
+                // Other Bots: a confirmation waiting, or how many of their chats have a reply not yet seen.
+                const summary = home && live && bot.id !== this.profileId ? home.summarize(bot, live) : null;
+                const notes = [];
+                if (summary?.kind === 'waiting') { item.append(el('span', 'pi-bot-rail-waiting')); notes.push(translateUi("等你确认")); }
+                if (summary?.unread) { item.append(el('span', 'pi-bot-rail-unread', String(summary.unread))); notes.push(translateUi("{0} 个聊天有新回复", summary.unread)); }
+                if (notes.length) { const label = [bot.name, ...notes].join('，'); item.title = label; item.setAttribute('aria-label', label); }
                 rail.append(item);
             }
             const add = button('pi-bot-rail-add', this.creating ? translateUi("正在创建…") : translateUi("新建 Bot"));
@@ -649,6 +713,18 @@
 
             const side = el('div', 'pi-bot-side');
             const bot = this.bot();
+            if (bot && this.bots.length > 1 && this.home) {
+                // Phones: back to every Bot at a glance (hidden on wide screens, where the rail shows them).
+                const all = button('pi-bot-all'); all.dataset.botAction = 'home';
+                all.append(icon('fa-chevron-left'), el('span', null, translateUi("所有 Bot")));
+                const others = home && live ? home.othersWithNews(this.bots, live, bot.id) : 0;
+                if (others) {
+                    const news = el('span', 'pi-bot-all-news'); news.append(el('i', 'pi-bot-status-dot'), document.createTextNode(translateUi("另有 {0} 个有动静", others)));
+                    all.append(news);
+                    all.setAttribute('aria-label', translateUi("所有 Bot，另有 {0} 个 Bot 有新回复或等你确认", others));
+                }
+                side.append(all);
+            }
             if (bot) {
                 const head = el('header', 'pi-bot-side-head');
                 const copy = el('div', 'pi-bot-side-copy');
@@ -687,6 +763,10 @@
                 state.append(el('p', null, this.error), retry); side.append(state);
             }
             this.pane.replaceChildren(rail, side);
+            if (focusKey && focused !== document.activeElement) {
+                [...this.pane.querySelectorAll('[data-bot-action]')].find(node => `${node.dataset.botAction}|${node.dataset.botId || ''}|${node.dataset.windowId || ''}` === focusKey)
+                    ?.focus({ preventScroll: true });
+            }
         }
 
         windowItem(item, glyph, title, emoji) {
@@ -696,13 +776,24 @@
             if (emoji) mark.textContent = emoji; else mark.append(icon(glyph));
             mark.setAttribute('aria-hidden', 'true');
             node.append(mark, el('span', 'pi-bot-window-title', title));
+            // Another chat of this Bot waiting for you, with a reply not yet seen, or working. The open
+            // chat shows its own state in the header.
+            const state = item.id !== this.windowId ? window.PiBotHome?.windowState(item, this.live) : null;
+            if (state) {
+                const text = { waiting: translateUi("等你确认"), new: translateUi("新回复"), working: translateUi("正在忙") }[state];
+                const badge = el('span', `pi-bot-window-state is-${state}`); badge.setAttribute('aria-hidden', 'true');
+                badge.append(el('i', 'pi-bot-status-dot'));
+                if (state === 'waiting') badge.append(el('span', 'pi-bot-window-state-text', text));
+                node.append(badge, el('span', 'pi-bot-sr', text));
+                node.dataset.state = state; node.title = `${title} · ${text}`;
+            }
             return node;
         }
 
         topicItem(bot, topic) {
             const row = el('div', 'pi-bot-topic-row');
             const open = this.windowItem(topic, 'fa-hashtag', topic.title, topic.emoji);
-            const unsettled = this.topicIndex?.botId === bot.id ? this.topicIndex.map.get(topic.id) : null;
+            const unsettled = !open.dataset.state && this.topicIndex?.botId === bot.id ? this.topicIndex.map.get(topic.id) : null;
             if (unsettled) {
                 // Busy topics were not read, so their items are unknown rather than none.
                 const text = unsettled.busy ? translateUi("这个话题正在忙") : translateUi("{0} 件没办完", unsettled.count);

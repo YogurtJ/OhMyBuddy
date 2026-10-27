@@ -646,3 +646,132 @@
     .pi-bot-closure-chips .pi-bot-chip, .pi-bot-closure-chips .pi-bot-setup-later { min-width: 0; margin: 0; padding: 0 4px; font-size: .86rem; }
     .pi-bot-closure-chips .pi-bot-setup-later { margin-left: 0; }
 }
+
+/* ---- what each Bot is doing: rail marks, chat states, "All Bots" (pi-bot-home.js) ---------- */
+.pi-bot-rail-waiting, .pi-bot-rail-unread { position: absolute; pointer-events: none; }
+.pi-bot-rail-waiting { top: 0; right: 0; width: 10px; height: 10px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 2px var(--surface-0, var(--surface-1)); }
+.pi-bot-rail-unread {
+    right: -4px; bottom: -3px; min-width: 18px; height: 18px; padding: 0 5px; display: inline-grid; place-items: center; border-radius: 999px;
+    background: var(--primary, var(--green)); color: var(--primary-contrast, #0d1110); font-size: .68rem; font-weight: 700; line-height: 1;
+    font-variant-numeric: tabular-nums; box-shadow: 0 0 0 2px var(--surface-0, var(--surface-1));
+}
+.pi-bot-window-state { flex: none; display: inline-flex; align-items: center; gap: 5px; margin-left: auto; color: var(--text-muted); font-size: .72rem; font-weight: 600; }
+.pi-bot-window-state.is-waiting {
+    padding: 1px 7px; border-radius: 999px; background: color-mix(in srgb, var(--amber) 16%, transparent); color: var(--amber); line-height: 1.5;
+}
+.pi-bot-window-state .pi-bot-status-dot { width: 7px; height: 7px; }
+.pi-bot-window-state.is-waiting .pi-bot-status-dot { width: 6px; height: 6px; background: var(--amber); }
+.pi-bot-window-state.is-new .pi-bot-status-dot { background: var(--primary, var(--green)); width: 8px; height: 8px; }
+.pi-bot-window-state.is-working .pi-bot-status-dot { background: var(--green); animation: pi-bot-pulse 1.2s ease-in-out infinite; }
+.pi-bot-window[data-state="new"] .pi-bot-window-title { color: var(--text-main); font-weight: 600; }
+/* The wide chat list is narrow: a waiting chat keeps only its amber dot there (the name stays readable;
+   the words are in the tooltip and for screen readers). Phone drawers have room for the words. */
+@media (min-width: 901px) {
+    .pi-bot-window-state.is-waiting { padding: 0; background: transparent; }
+    .pi-bot-window-state.is-waiting .pi-bot-status-dot { width: 8px; height: 8px; }
+    .pi-bot-window-state-text { display: none; }
+}
+/* Phones only: the drawer's way back to every Bot. Wide screens show all Bots in the rail. */
+.pi-bot-all { display: none; }
+.pi-bot-home { display: none; }
+@media (max-width: 900px) {
+    .pi-bot-all {
+        display: flex; align-items: center; gap: 8px; min-height: 48px; margin: 6px 8px 0; padding: 0 10px; border: 0; border-radius: 10px;
+        background: transparent; color: var(--text-main); font-size: .92rem; font-weight: 650; text-align: left; cursor: pointer;
+    }
+    .pi-bot-all > i { color: var(--text-muted); font-size: .8rem; }
+    .pi-bot-all:hover { background: var(--pv-nav-hover, var(--surface-2)); }
+    .pi-bot-all:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
+    .pi-bot-all-news {
+        margin-left: auto; display: inline-flex; align-items: center; gap: 5px; min-width: 0; padding: 2px 8px; border-radius: 999px;
+        background: var(--surface-3, var(--surface-2)); color: var(--text-muted); font-size: .74rem; font-weight: 600; white-space: nowrap;
+    }
+    .pi-bot-all-news .pi-bot-status-dot { width: 6px; height: 6px; background: var(--primary, var(--green)); }
+    .pi-bot-all + .pi-bot-side-head { padding-top: 8px; }
+
+    #chat-tab.pi-bot-mode .pi-bot-home:not([hidden]) {
+        position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain;
+        background: var(--surface-1);
+    }
+}
+.pi-bot-home-inner { width: 100%; max-width: 720px; margin: 0 auto; padding: 4px 12px calc(28px + env(safe-area-inset-bottom)); }
+.pi-bot-home-head { display: flex; align-items: center; gap: 6px; min-height: 60px; }
+.pi-bot-home-head h2 { margin: 0; color: var(--text-main); font-size: 1.25rem; font-weight: 650; }
+.pi-bot-home-count { flex: 1; min-width: 0; color: var(--text-muted); font-size: .84rem; }
+.pi-bot-home-back {
+    flex: none; display: inline-grid; place-items: center; width: 44px; height: 44px; margin-left: -6px; padding: 0; border: 0; border-radius: 12px;
+    background: transparent; color: var(--text-muted); font-size: .95rem; cursor: pointer;
+}
+.pi-bot-home-new {
+    flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px 0 12px; border: 1px solid var(--line-strong);
+    border-radius: 12px; background: var(--surface-2); color: var(--text-main); font-size: .9rem; cursor: pointer;
+}
+.pi-bot-home-new:disabled { cursor: progress; opacity: .7; }
+.pi-bot-home-back:hover, .pi-bot-home-new:hover:not(:disabled) { background: var(--surface-3, var(--surface-2)); color: var(--text-main); }
+.pi-bot-home-search { position: relative; margin: 2px 0 10px; }
+.pi-bot-home-search > i { position: absolute; left: 13px; top: 50%; translate: 0 -50%; color: var(--text-muted); font-size: .85rem; pointer-events: none; }
+.pi-bot-home-search input {
+    width: 100%; min-height: 44px; padding: 9px 12px 9px 38px; border: 1px solid var(--line-strong); border-radius: 12px;
+    background: var(--surface-2); color: var(--text-main); font: inherit; font-size: 16px; line-height: 1.4;
+}
+.pi-bot-home-search input::placeholder { color: var(--text-muted); }
+.pi-bot-home-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.pi-bot-home-filter {
+    display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border: 1px solid var(--line); border-radius: 999px;
+    background: transparent; color: var(--text-muted); font-size: .88rem; cursor: pointer;
+}
+.pi-bot-home-filter[aria-pressed="true"] {
+    border-color: color-mix(in srgb, var(--primary, var(--green)) 45%, var(--line)); background: color-mix(in srgb, var(--primary, var(--green)) 13%, transparent);
+    color: var(--text-main); font-weight: 600;
+}
+.pi-bot-home-filter-count { font-variant-numeric: tabular-nums; font-weight: 500; color: var(--text-muted); }
+.pi-bot-home-bots { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.pi-bot-home-row { min-width: 0; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-2); }
+.pi-bot-home-row.is-disabled { opacity: .55; }
+.pi-bot-home-open {
+    display: grid; grid-template-columns: 46px minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: 12px; row-gap: 2px; align-items: center;
+    width: 100%; min-height: 72px; padding: 12px 12px 8px; border: 0; border-radius: 16px 16px 8px 8px; background: transparent; color: inherit;
+    text-align: left; cursor: pointer;
+}
+.pi-bot-home-open:hover { background: color-mix(in srgb, var(--text-main) 3%, transparent); }
+.pi-bot-home-open > .pi-bot-face { grid-row: 1 / span 2; }
+.pi-bot-home-name { grid-column: 2; grid-row: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-main); font-size: 1rem; font-weight: 650; }
+.pi-bot-home-state { grid-column: 2; grid-row: 2; display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--text-muted); font-size: .85rem; }
+.pi-bot-home-state > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-bot-home-state.is-waiting { color: var(--amber); }
+.pi-bot-home-state.is-waiting .pi-bot-status-dot { background: var(--amber); }
+.pi-bot-home-state.is-working { color: var(--text-main); }
+.pi-bot-home-state.is-working .pi-bot-status-dot { background: var(--green); animation: pi-bot-pulse 1.2s ease-in-out infinite; }
+.pi-bot-home-unread {
+    grid-column: 3; grid-row: 1 / span 2; min-width: 22px; height: 22px; padding: 0 6px; display: inline-grid; place-items: center; border-radius: 999px;
+    background: var(--primary, var(--green)); color: var(--primary-contrast, #0d1110); font-size: .74rem; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.pi-bot-home-quick { display: flex; align-items: center; gap: 8px; padding: 0 12px 12px; }
+@media (min-width: 420px) { .pi-bot-home-quick { padding-left: 70px; } }
+.pi-bot-home-topic, .pi-bot-home-all {
+    display: inline-flex; align-items: center; gap: 6px; min-width: 0; min-height: 44px; padding: 0 12px; border: 0; border-radius: 12px;
+    background: var(--surface-1); color: var(--text-main); font-size: .84rem; text-align: left; cursor: pointer;
+}
+.pi-bot-home-topic { flex: 0 1 auto; }
+.pi-bot-home-topic > i, .pi-bot-home-all > i { color: var(--text-muted); font-size: .78rem; }
+.pi-bot-home-all { flex: none; margin-left: auto; color: var(--text-muted); }
+.pi-bot-home-topic:hover, .pi-bot-home-all:hover { background: var(--surface-3, var(--surface-2)); }
+.pi-bot-home-topic-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-bot-home-topic-state { flex: none; display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted); font-size: .78rem; }
+.pi-bot-home-topic-state.is-waiting { color: var(--amber); }
+.pi-bot-home-topic-state.is-waiting .pi-bot-status-dot { background: var(--amber); }
+.pi-bot-home-topic-state.is-new .pi-bot-status-dot { background: var(--primary, var(--green)); }
+.pi-bot-home-topic-state.is-working .pi-bot-status-dot { background: var(--green); }
+.pi-bot-home-calm {
+    display: grid; justify-items: center; gap: 10px; margin: 18px 0; padding: 32px 20px; border: 1px dashed var(--line-strong); border-radius: 18px;
+    color: var(--text-muted); text-align: center;
+}
+.pi-bot-home-calm strong { color: var(--text-main); font-size: 1rem; }
+.pi-bot-home-calm p { margin: 0; font-size: .9rem; line-height: 1.6; }
+.pi-bot-home-back:focus-visible, .pi-bot-home-new:focus-visible, .pi-bot-home-filter:focus-visible, .pi-bot-home-open:focus-visible,
+.pi-bot-home-topic:focus-visible, .pi-bot-home-all:focus-visible, .pi-bot-home-search input:focus-visible {
+    outline: 2px solid var(--primary, var(--green)); outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+    .pi-bot-window-state .pi-bot-status-dot, .pi-bot-home-state .pi-bot-status-dot { animation: none !important; }
+}

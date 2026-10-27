@@ -1448,6 +1448,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderActivityBadges() {
+        // Bot mode shows the same runtimes and reply notices as Bot and chat badges (pi-bot-home.js).
+        if (state.botMode && state.activityLoaded) botUi?.activity({ runtimes: [...state.activity.values()], replyNotices: [...state.replyNotices.values()] }, state.activityFresh);
         const anchor = captureSessionListAnchor();
         const focused = elements.sessionList.contains(document.activeElement) ? document.activeElement : null;
         restoreWorkSessionRows();
@@ -2194,7 +2196,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function isViewingSession() {
         if (innerWidth <= 900 && elements.inspector.classList.contains('open')) return false;
         return !document.hidden && $('chat-tab').classList.contains('active') && state.connected && state.session
-            && !(window.innerWidth <= 900 && elements.sessionPane.classList.contains('open'));
+            && !(window.innerWidth <= 900 && elements.sessionPane.classList.contains('open')) && !(state.botMode && botUi?.homeOpen);
     }
 
     async function markThreadUnread(session, cwd) {
