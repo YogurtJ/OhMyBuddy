@@ -141,6 +141,8 @@ const DEDICATED = { name: '', job: ' ', aboutUser: [''], workStyle: 'free' };
                 assert.deepEqual(await card.locator('[data-setup-field]').evaluateAll(nodes => nodes.map(node => [node.dataset.setupField, node.tagName])),
                     [['name', 'INPUT'], ['job', 'TEXTAREA'], ['personality', 'TEXTAREA']]);
                 const first = await usable('.pi-bot-setup:not(.pi-bot-approval):not(.pi-bot-closure)', 'setup card');
+                assert.deepEqual(await page.locator('.pi-composer-wrap').evaluate(node => [node.classList.contains('is-bot-dock-lifted'), node.style.getPropertyValue('--pi-bot-dock-lift'), getComputedStyle(node).transform]),
+                    [false, '', 'none'], 'a visible card never lifts the composer when no keyboard occludes it');
                 if (height < 700) assert.ok(first.scrollable, 'on a short phone the body scrolls inside the card');
                 // Long "mainly helps with" text wraps over several lines, grows to its bound and then scrolls.
                 const job = await card.locator('[data-setup-field="job"]').evaluate(node => {
