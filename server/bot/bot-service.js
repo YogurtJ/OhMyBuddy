@@ -780,6 +780,8 @@ class BotService extends EventEmitter {
                     fail('Window conversation does not match its native marker', 409);
                 return found;
             });
+            if (input.workStyleShown !== undefined && (typeof input.workStyleShown !== 'boolean'
+                || input.workStyleShown && !Object.hasOwn(proposal, 'workStyle'))) fail('Invalid setup confirmation');
             if (input.later !== undefined && (input.later !== true || input.changes !== undefined || input.picture !== undefined)) fail('Invalid setup confirmation');
             const later = input.later === true;
             const changes = later ? {} : setup.confirmedChanges(proposal, input.changes ?? proposal);
@@ -796,10 +798,11 @@ class BotService extends EventEmitter {
                 const previous = state.profiles[index], bot = settings.readBot(previous);
                 if (index < 0 || !bot || previous.trashedAt !== undefined) fail('Bot not found', 404);
                 progressBefore = bot.onboarding;
-                // Ignore an unchanged mode carried along with another step. An explicit edited
-                // choice of a different mode (including older clients) still needs the usual check.
-                const workOffered = setup.workStyleOffered(proposal, bot.permissions.preset, bot.onboarding.steps)
-                    || changes.workStyle !== undefined && changes.workStyle !== bot.permissions.preset;
+                // The current page reports whether its retained draft actually showed the
+                // selector. This survives refresh/conflict without answering a hidden field.
+                // Older clients infer it from the proposal and any explicit edited mode.
+                const workOffered = input.workStyleShown ?? (setup.workStyleOffered(proposal, bot.permissions.preset, bot.onboarding.steps)
+                    || changes.workStyle !== undefined && changes.workStyle !== bot.permissions.preset);
                 if (!workOffered) delete changes.workStyle;
                 if (picture && (previous.avatar?.kind !== 'image' || previous.avatar.version !== input.picture))
                     fail('The face is no longer the uploaded picture; upload it again', 409, 'BOT_PICTURE_CHANGED');
