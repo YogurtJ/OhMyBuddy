@@ -3,9 +3,12 @@ const { createHash } = require('node:crypto');
 const fail = (message, status = 400, code) => { throw Object.assign(new Error(message), { status, code }); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const MAX_TOPICS = 100;
+const DEFAULT_TOPIC_TITLES = Object.freeze({ 'zh-CN': '新话题', en: 'New topic' });
+const defaultTopicTitle = value => Object.values(DEFAULT_TOPIC_TITLES).includes(String(value ?? '').trim());
 
 // Shared by HTTP and the worker: no coercion, unknown fields or empty titles.
-function topicFields(raw, { patch = false, revision = false } = {}) {
+// Optional title on create defaults to '新话题' so one click opens a fresh topic immediately.
+function topicFields(raw, { patch = false, revision = false, requireTitle = false } = {}) {
     const allowed = ['title', 'focus', 'emoji', ...(patch ? ['archived'] : []), ...(revision ? ['expectedRevision'] : [])];
     if (!object(raw) || Object.keys(raw).some(key => !allowed.includes(key))) fail('Invalid topic fields');
     if (revision && (typeof raw.expectedRevision !== 'string' || !/^[a-f0-9]{64}$/.test(raw.expectedRevision))) fail('Expected windows revision is required');
@@ -17,7 +20,10 @@ function topicFields(raw, { patch = false, revision = false } = {}) {
             fail(`Invalid topic ${key} (maximum ${max} characters)`);
         result[key] = value.trim();
     }
-    if (!patch && !Object.hasOwn(result, 'title')) fail('A topic title is required');
+    if (!patch && !Object.hasOwn(result, 'title')) {
+        if (requireTitle) fail('A topic title is required');
+        result.title = DEFAULT_TOPIC_TITLES['zh-CN'];
+    }
     if (Object.hasOwn(raw, 'archived')) {
         if (typeof raw.archived !== 'boolean') fail('Invalid topic archived flag');
         result.archived = raw.archived;
@@ -45,7 +51,7 @@ function mountBotTopics(router, { bots, authenticate }) {
             if (!object(req.body)) fail('Invalid topic request');
             const { toolCallId, ...raw } = req.body;
             if (typeof toolCallId !== 'string' || !toolCallId.trim() || toolCallId.length > 500) fail('A stable toolCallId is required');
-            const fields = topicFields(raw);
+            const fields = topicFields(raw, { requireTitle: true });
             const result = await bots.proposeTopic(worker, toolCallId, fields);
             return res.json({ v: 1, action: 'created', profileId: worker.loadedBot.profileId, window: result.window });
         } catch (error) { res.status(error.status || 400).json({ error: error.message, code: error.code }); }
@@ -60,4 +66,4 @@ function sameThreadTarget(target, refs, resolveProject = value => value) {
     return refs.some(ref => ref.cwd === cwd && ref.sessionId === target.sessionId);
 }
 
-module.exports = { MAX_TOPICS, topicFields, topicId, mountBotTopics, sameThreadTarget };
+module.exports = { MAX_TOPICS, DEFAULT_TOPIC_TITLES, defaultTopicTitle, topicFields, topicId, mountBotTopics, sameThreadTarget };

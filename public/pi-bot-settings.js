@@ -8,7 +8,7 @@
     const button = (className, text) => { const b = el('button', className, text); b.type = 'button'; return b; };
     const LIMITS = { name: 40, avatar: 16, job: 500, soul: 6000 };
     const PRESETS = [
-        ['free', () => translateUi("放手"), () => translateUi("大部分事直接办好。删东西、改工作目录以外的文件、对外发消息、花钱多的事会先问你。")],
+        ['free', () => translateUi("放手"), () => translateUi("大部分事直接办好。删东西、改系统配置、对外发消息、花钱多的事会先问你。")],
         ['balanced', () => translateUi("稳妥"), () => translateUi("查资料、记东西、在工作目录里写文件直接做；运行命令、改工作目录以外的文件、交给别的助手前，会弹出确认等你允许。")],
         ['ask', () => translateUi("每次都问"), () => translateUi("除了看和回答，每一步动手前都会弹出确认，等你允许。")]
     ];
@@ -75,14 +75,14 @@
         let revoked = new Set();
         // The avatar and picture are one draft value, so rebasing never combines two sources.
         const formValues = () => controls ? { name: controls.name.value,
-            faceDraft: JSON.stringify({ avatar: faceChoice, picture, text: controls.avatar.value }), job: controls.job.value, soul: controls.soul.value,
+            faceDraft: JSON.stringify({ avatar: faceChoice, picture }), job: controls.job.value, soul: controls.soul.value,
             model: controls.model.value, thinking: controls.thinkingWrap.hidden ? '' : controls.thinking.value,
             preset: controls.presets.find(input => input.checked)?.value || '', revoked: [...revoked].sort().join('\n') } : null;
         function applyValues(values) {
             for (const key of ['name', 'job', 'soul']) if (values[key] !== undefined) controls[key].value = values[key];
             fitTextarea(controls.job); fitTextarea(controls.soul);
             if (values.faceDraft !== undefined) {
-                const draft = JSON.parse(values.faceDraft); faceChoice = draft.avatar; picture = draft.picture; controls.avatar.value = draft.text;
+                const draft = JSON.parse(values.faceDraft); faceChoice = draft.avatar; picture = draft.picture;
             }
             controls.showFace();
             if (values.model !== undefined && [...controls.model.options].some(option => option.value === values.model)) controls.model.value = values.model;
@@ -147,16 +147,17 @@
             select.dataset.for = controls.model.value;
         }
 
+        const DEFAULT_FACE = { kind: 'preset', id: 'pivane-pebble' };
+        const savedFace = avatar => avatar?.kind === 'preset' || avatar?.kind === 'image' ? avatar : DEFAULT_FACE;
+
         // Fields the user changed, against the latest saved settings; null on invalid input.
         function changes() {
             const bot = data.bot, current = bot.bot, out = {}, patch = {};
             const name = controls.name.value.trim();
             if (!name || name.length > LIMITS.name) return null;
             if (name !== bot.name) out.name = name;
-            const avatar = controls.avatar.value.trim();
-            if (avatar.length > LIMITS.avatar) return null;
             if (picture) out.avatar = { kind: 'image' };
-            else if (JSON.stringify(faceChoice) !== JSON.stringify(bot.avatar ?? null)) out.avatar = faceChoice;
+            else if (JSON.stringify(faceChoice) !== JSON.stringify(savedFace(bot.avatar))) out.avatar = faceChoice;
             const soul = controls.soul.value.trim();
             if (soul !== (bot.soul || '').trim()) out.soul = soul;
             const job = controls.job.value.trim();
@@ -189,29 +190,27 @@
             const headFace = options.face(bot, 'md'); headFace.classList.add('pi-bot-sheet-face');
             head.querySelector('.pi-bot-sheet-face').replaceWith(headFace);
             const name = el('input'); name.type = 'text'; name.maxLength = LIMITS.name; name.value = bot.name; name.required = true; name.autocomplete = 'off';
-            const avatar = el('input'); avatar.type = 'text'; avatar.maxLength = LIMITS.avatar; avatar.className = 'pi-bot-sheet-emoji';
-            avatar.value = bot.avatar?.kind === 'emoji' ? bot.avatar.value : ''; avatar.autocomplete = 'off';
-            avatar.placeholder = '🙂'; avatar.setAttribute('aria-label', translateUi("自己输入一个表情"));
-            picture = null; faceChoice = structuredClone(bot.avatar ?? null); fileSerial++; decoding = false;
+            picture = null; faceChoice = structuredClone(savedFace(bot.avatar)); fileSerial++; decoding = false;
             // Preview stays local until Save; every source replaces the same draft.
             const preview = el('span', 'pi-bot-sheet-avatar-face');
             const facePresets = window.PiAvatar?.choices(faceChoice, value => {
-                fileSerial++; decoding = false; picture = null; faceChoice = value; avatar.value = ''; warned = null; showFace(); refreshState();
+                fileSerial++; decoding = false; picture = null; faceChoice = value; warned = null; showFace(); refreshState();
             });
             const showFace = () => {
                 if (picture) { const img = el('img'); img.src = picture; img.alt = ''; const node = el('span', 'pi-bot-face is-xl'); node.append(img); preview.replaceChildren(node); }
                 else preview.replaceChildren(options.face({ ...bot, avatar: faceChoice }, 'xl'));
                 for (const item of facePresets?.children || []) item.setAttribute('aria-pressed', String(faceChoice?.kind === 'preset' && faceChoice.id === item.dataset.avatarPreset && !picture));
                 back.hidden = !picture;
-                pick.textContent = picture || bot.avatar?.kind === 'image' ? translateUi("换一张图片") : translateUi("上传图片");
+                remove.hidden = Boolean(picture || faceChoice?.kind !== 'image');
+                pick.textContent = picture || faceChoice?.kind === 'image' ? translateUi("换一张图片") : translateUi("上传图片");
             };
             const file = el('input'); file.type = 'file'; file.accept = 'image/png,image/jpeg,image/webp,image/gif'; file.hidden = true; file.dataset.sheetPictureFile = '';
             const pick = button('pi-bot-chip'); pick.dataset.sheetPicture = 'pick';
             pick.addEventListener('click', () => file.click());
             const back = button('pi-bot-chip', translateUi("不用这张图片")); back.dataset.sheetPicture = 'clear';
-            back.addEventListener('click', () => { fileSerial++; decoding = false; picture = null; status.textContent = ''; showFace(); refreshState(); });
-            const remove = button('pi-bot-chip', translateUi("移除头像"));
-            remove.addEventListener('click', () => { fileSerial++; decoding = false; picture = null; faceChoice = null; avatar.value = ''; warned = null; showFace(); refreshState(); });
+            back.addEventListener('click', () => { fileSerial++; decoding = false; picture = null; faceChoice = structuredClone(savedFace(bot.avatar)); status.textContent = ''; showFace(); refreshState(); });
+            const remove = button('pi-bot-chip', translateUi("移除头像")); remove.dataset.sheetPicture = 'remove';
+            remove.addEventListener('click', () => { fileSerial++; decoding = false; picture = null; faceChoice = { ...DEFAULT_FACE }; warned = null; showFace(); refreshState(); });
             file.addEventListener('change', async () => {
                 const chosen = file.files?.[0]; file.value = '';
                 if (!chosen || saving) return;
@@ -220,16 +219,15 @@
                 try {
                     const decoded = await window.PiBot.pictureData(chosen);
                     if (!sheet.open || request !== fileSerial) return;
-                    picture = decoded; faceChoice = null; avatar.value = '';
+                    picture = decoded; faceChoice = null;
                     warned = null; status.textContent = translateUi("图片会在保存时上传"); delete status.dataset.tone;
                 } catch (error) { if (sheet.open && request === fileSerial) { status.dataset.tone = 'error'; status.textContent = error.message; } }
                 finally { if (request === fileSerial) decoding = false; }
                 if (!sheet.open || request !== fileSerial) return;
                 showFace(); refreshState();
             });
-            avatar.addEventListener('input', () => { fileSerial++; decoding = false; picture = null; faceChoice = avatar.value.trim() ? { kind: 'emoji', value: avatar.value.trim() } : null; showFace(); });
             const actions = el('div', 'pi-bot-sheet-avatar-actions');
-            actions.append(avatar, pick, back, remove, file);
+            actions.append(pick, back, remove, file);
             const avatarBox = el('div', 'pi-bot-sheet-avatar');
             const avatarSide = el('div', 'pi-bot-sheet-avatar-side');
             if (facePresets) avatarSide.append(facePresets);
@@ -332,7 +330,7 @@
             trash.append(icon('fa-trash-can'), el('span', null, translateUi("移到回收站")), icon('fa-chevron-right'));
             trash.addEventListener('click', () => void moveToTrash());
 
-            controls = { name, avatar, job, soul, model, thinking, thinkingWrap, presets, showFace, showRules };
+            controls = { name, job, soul, model, thinking, thinkingWrap, presets, showFace, showRules };
             showFace();
             body.replaceChildren(
                 section(translateUi("名字和样子"), identity),

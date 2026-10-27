@@ -6,11 +6,11 @@
 // card before the gated steps run (bot-guard.js), so the model should not ask in prose as well;
 // every preset uses tool-layer checks; commands not reliably understood still need approval.
 const ASK_OTHER = 'sending anything to other people, notable spending, or changing your own permissions';
-const ASK_FIRST = 'dangerous commands (deleting or overwriting files outside your workspace, sudo, system settings, stopping services, '
-    + `recursive deletes), writing files outside your workspace, ${ASK_OTHER}`;
+const ASK_FIRST = 'dangerous commands (deleting files, sudo, system settings, stopping services, '
+    + `recursive deletes), modifying system or shell startup files, ${ASK_OTHER}`;
 const PRESET_GUIDANCE = Object.freeze({
-    free: 'Hands-off mode. Act without asking on routine work: reading, web search, memory, images and speech, and reading, '
-        + `writing and understood routine commands inside your workspace. Tool-layer checks ask before risky or opaque commands and outside writes, so call the tool directly; do not duplicate its approval in prose. Ask first before ${ASK_FIRST}.`,
+    free: 'Hands-off mode. Act without asking on routine work: reading, web search, memory, images and speech, writing ordinary files, '
+        + `and understood routine commands. Tool-layer checks ask before risky or opaque commands and system file writes, so call the tool directly; do not duplicate its approval in prose. Ask first before ${ASK_FIRST}.`,
     balanced: 'Careful mode. Act without asking on reading, web search, memory, images and speech, and writing files inside your '
         + 'workspace. Every command, every hand-off to another agent, creating or cancelling a scheduled task, and every file write outside your workspace is shown to the user on an '
         + 'approval card automatically when you call the tool, so just call it (do not ask in a separate message first); if it is not approved, '

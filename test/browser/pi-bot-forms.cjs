@@ -72,42 +72,43 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
 
             // 1. A failed save keeps every edit and unticked fact; the retry sends the user's values (UAT-09).
             await load('pi-bot.js');
-            const fresh = { id: BOT, name: '新伙伴', avatar: { kind: 'emoji', value: '✨' }, job: '', chosen: { name: false, avatar: false }, steps: {} };
-            await mount({ name: '提议名字', avatar: '👋', job: '默认职责', personality: '默认性格', aboutUser: ['条目一', '条目二'] }, fresh, 1);
+            const fresh = { id: BOT, name: '新伙伴', avatar: { kind: 'preset', id: 'pivane-pebble' }, job: '', chosen: { name: false, avatar: false }, steps: {} };
+            await mount({ name: '提议名字', avatar: { kind: 'preset', id: 'pivane-pebble' }, job: '默认职责', personality: '默认性格', aboutUser: ['条目一', '条目二'] }, fresh, 1);
             await page.locator('[data-setup-field="name"]').fill('用户选定名字');
-            await page.locator('[data-setup-field="avatar"]').fill('🦊');
+            await page.locator('[data-avatar-preset="pivane-bean"]').click();
             await page.locator('[data-setup-field="job"]').fill('只帮我整理计划');
             await page.locator('[data-setup-fact]').last().uncheck();
             await page.locator('.pi-bot-setup-save').click();
             await page.locator('.pi-bot-setup-note.is-error').filter({ hasText: '你的修改还在' }).waitFor();
-            assert.deepEqual(await values(), { name: '用户选定名字', avatar: '🦊', job: '只帮我整理计划', personality: '默认性格' });
+            assert.deepEqual(await values(), { name: '用户选定名字', job: '只帮我整理计划', personality: '默认性格' });
+            assert.equal(await page.locator('[data-avatar-preset="pivane-bean"]').getAttribute('aria-pressed'), 'true');
             assert.deepEqual(await page.locator('[data-setup-fact]').evaluateAll(boxes => boxes.map(box => box.checked)), [true, false]);
             await page.locator('.pi-bot-setup-save').click();
             await page.waitForFunction(() => t.responses.length === 1);
             const saves = await page.evaluate(() => t.saves.map(item => item.changes));
-            const chosen = { name: '用户选定名字', avatar: '🦊', job: '只帮我整理计划', personality: '默认性格', aboutUser: ['条目一'] };
+            const chosen = { name: '用户选定名字', avatar: { kind: 'preset', id: 'pivane-bean' }, job: '只帮我整理计划', personality: '默认性格', aboutUser: ['条目一'] };
             assert.deepEqual(saves, [chosen, chosen], 'the retry sends what the user chose');
             assert.deepEqual(await page.evaluate(() => t.responses), [{ id: 'ui-1', value: '保存 / Save' }]);
 
             // 2. A later card does not bring back a chosen face; what is already set is left out (UAT-03).
             // Chosen as the server reports it (here: in Bot settings, before the interview's identity step).
-            const chosenFace = { id: BOT, name: '小狸', avatar: { kind: 'emoji', value: '🦉' }, job: '帮我整理', chosen: { name: true, avatar: true }, steps: {} };
-            await mount({ name: '小狸', avatar: '👋', job: '只帮我整理计划', finish: true }, chosenFace);
+            const chosenFace = { id: BOT, name: '小狸', avatar: { kind: 'preset', id: 'pivane-bean' }, job: '帮我整理', chosen: { name: true, avatar: true }, steps: {} };
+            await mount({ name: '小狸', avatar: { kind: 'preset', id: 'pivane-pebble' }, job: '只帮我整理计划', finish: true }, chosenFace);
             assert.equal(await page.locator('[data-setup-field="name"]').count(), 0, 'the unchanged name is not shown');
             assert.equal(await page.locator('.pi-bot-setup-field.is-avatar').evaluate(row => row.classList.contains('is-kept')), true);
-            assert.match(await page.locator('.pi-bot-setup-current').textContent(), /现在：🦉/);
+            assert.equal(await page.locator('.pi-bot-setup-current .pi-preset-svg[data-preset="pivane-bean"]').count(), 1);
             assert.equal(await page.locator('[data-setup-use="avatar"]').isChecked(), false);
             await shot('bot-setup-followup');
             await page.locator('.pi-bot-setup-save').click();
             await page.waitForFunction(() => t.responses.length === 1);
             assert.deepEqual(await page.evaluate(() => t.saves[0].changes), { avatar: null, job: '只帮我整理计划', finish: true });
-            // Typing a new face, or ticking the change, is the user asking for it.
-            await mount({ avatar: '👋', job: '只帮我整理计划' }, chosenFace);
-            await page.locator('[data-setup-field="avatar"]').fill('🐱');
+            // Picking a new preset, or ticking the change, is the user asking for it.
+            await mount({ avatar: { kind: 'preset', id: 'pivane-pebble' }, job: '只帮我整理计划' }, chosenFace);
+            await page.locator('[data-avatar-preset="pivane-tile"]').click();
             assert.equal(await page.locator('[data-setup-use="avatar"]').isChecked(), true);
             await page.locator('.pi-bot-setup-save').click();
             await page.waitForFunction(() => t.saves.length === 1);
-            assert.equal(await page.evaluate(() => t.saves[0].changes.avatar), '🐱');
+            assert.deepEqual(await page.evaluate(() => t.saves[0].changes.avatar), { kind: 'preset', id: 'pivane-tile' });
             // A card with nothing new still records the confirmed steps on the server.
             await mount({ name: '小狸', job: '帮我整理' }, chosenFace);
             assert.equal(await page.locator('.pi-bot-setup-head strong').textContent(), '这些已经是现在的设置了');
@@ -186,13 +187,13 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
             await page.evaluate(() => u.cards.sync(new Map([['ui-2', { id: 'ui-2', method: 'select', title: '保存这些设置？ / Save these settings?', options: ['保存 / Save', '先不改 / Not now'] }]]), true));
             await page.locator('.pi-bot-setup-field.is-avatar.is-kept').waitFor();
             assert.equal(await page.locator('[data-setup-use="avatar"]').isChecked(), false);
-            // Back to an emoji: no upload.
-            await mount({ avatar: '👋' }, fresh);
+            // Back to a built-in preset: no upload.
+            await mount({ avatar: { kind: 'preset', id: 'pivane-pebble' } }, fresh);
             await page.locator('[data-setup-picture-file]').setInputFiles({ name: 'face.png', mimeType: 'image/png', buffer: PNG });
             await page.locator('[data-setup-picture="clear"]').click();
             await page.locator('.pi-bot-setup-save').click();
             await page.waitForFunction(() => t.responses.length === 1);
-            assert.deepEqual(await page.evaluate(() => [t.uploads.length, t.saves[0].changes, t.saves[0].options]), [0, { avatar: '👋' }, { picture: null, workStyleShown: false }]);
+            assert.deepEqual(await page.evaluate(() => [t.uploads.length, t.saves[0].changes, t.saves[0].options]), [0, { avatar: { kind: 'preset', id: 'pivane-pebble' } }, { picture: null, workStyleShown: false }]);
 
             // 3b. The way of working (same rule as workStyleOffered on the server). The card says whether it
             // showed the choice (workStyleShown) when saved or left for later.

@@ -3730,7 +3730,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 taskProgress.apply(event.progress);
                 break;
             case 'gateway_session_named':
-                if (event.cwd === state.cwd && event.sessionId === state.session?.id && typeof event.name === 'string') sessionNamed(state.session, event.cwd, event.name);
+                if (event.cwd === state.cwd && event.sessionId === state.session?.id && typeof event.name === 'string') {
+                    sessionNamed(state.session, event.cwd, event.name);
+                    if (state.botMode) void botUi?.refresh();
+                }
                 break;
             case 'gateway_shell': {
                 const changed = shell.value?.job?.id !== event.shell.job?.id || shell.value?.job?.status !== event.shell.job?.status;

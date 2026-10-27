@@ -16,14 +16,15 @@
     const button = (className, label) => { const b = el('button', className); b.type = 'button'; if (label) { b.title = label; b.setAttribute('aria-label', label); } return b; };
 
     function face(bot, size = 'md') {
-        if (window.PiAvatar) return window.PiAvatar.render(bot, `pi-bot-face is-${size}`);
+        const profile = bot?.avatar?.kind === 'preset' || bot?.avatar?.kind === 'image' ? bot : { ...bot, avatar: NEW_BOT_FACE };
+        if (window.PiAvatar) return window.PiAvatar.render(profile, `pi-bot-face is-${size}`);
         const node = el('span', `pi-bot-face is-${size}`);
         node.setAttribute('aria-hidden', 'true');
-        if (bot?.avatar?.kind === 'image' && bot.id) {
+        if (profile?.avatar?.kind === 'image' && profile.id) {
             const img = el('img'); img.alt = ''; img.decoding = 'async';
-            img.src = `/api/pi/profiles/${encodeURIComponent(bot.id)}/avatar?version=${encodeURIComponent(bot.avatar.version)}`;
+            img.src = `/api/pi/profiles/${encodeURIComponent(profile.id)}/avatar?version=${encodeURIComponent(profile.avatar.version)}`;
             node.append(img);
-        } else node.textContent = bot?.avatar?.kind === 'emoji' ? bot.avatar.value : DEFAULT_FACE;
+        }
         return node;
     }
 
@@ -139,6 +140,10 @@
                 this.render(); this.onChange?.('identity');
                 await this.open({ profileId: bot.id, windowId });
                 this.rotationRetries = 0;
+                if (this.focusNextOpen === windowId) {
+                    this.focusNextOpen = null;
+                    this.focusComposer?.();
+                }
                 void this.loadTopicIndex();
             } catch (error) {
                 if (epoch !== this.epoch) return;
@@ -447,7 +452,7 @@
             else if (action === 'known-decline') void this.knownAction('decline');
             else if (action === 'known-source' && this.known) { this.known.sourceId = target.dataset.profileId; this.onChange?.('identity'); }
             else if (action === 'retry') void this.activate(new URLSearchParams(this.profileId ? { profileId: this.profileId } : {}));
-            else if (action === 'topic-add') this.editTopic(null);
+            else if (action === 'topic-add') void this.createTopic();
             else if (action === 'topic-edit') this.editTopic(target.dataset.windowId);
             else if (action === 'topic-restore') void this.restoreTopic(target.dataset.windowId);
             else if (action === 'notes') {
@@ -468,6 +473,47 @@
             window.PiBotNotebook.open({ api: this.api, toast: this.toast, profileId: current.profileId, windowId: current.windowId,
                 name: bot.name, face: size => face(bot, size),
                 onAbout: () => window.PiWorkspaceRoute?.navigate('profiles', { profileId: current.profileId, section: 'user' }) });
+        }
+
+        // Create a fresh topic immediately on click, switch to it and focus the composer.
+        async createTopic() {
+            const bot = this.bot();
+            if (!bot || this.creatingTopic) return;
+            const profileId = bot.id, epoch = this.epoch;
+            if (window.innerWidth <= 900) document.getElementById('pi-session-pane')?.classList.remove('open');
+            this.creatingTopic = true; this.renderPane();
+            const post = revision => this.api(`/api/pi/bots/${encodeURIComponent(profileId)}/windows`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ expectedRevision: revision })
+            });
+            try {
+                let result;
+                try { result = await post(bot.windowsRevision); }
+                catch (error) {
+                    if (error.status === 409 && !error.code) {
+                        await this.load();
+                        const fresh = this.bots.find(item => item.id === profileId);
+                        if (!fresh) return;
+                        result = await post(fresh.windowsRevision);
+                    } else throw error;
+                }
+                await this.refresh();
+                if (!this.active || this.epoch !== epoch || this.profileId !== profileId) return;
+                const id = result?.window?.id || result?.id;
+                if (id) {
+                    this.focusNextOpen = id;
+                    this.go(profileId, id);
+                }
+            } catch (error) {
+                if (this.profileId === profileId) {
+                    this.toast(error.code === 'BOT_TOPIC_LIMIT'
+                        ? translateUi("话题已经到上限了（已归档的也算在内），可以先接着用已有的话题。")
+                        : error.message || translateUi("创建失败"), 'error');
+                }
+            } finally {
+                this.creatingTopic = false;
+                if (this.active) this.renderPane();
+            }
         }
 
         // Create (windowId null) or edit a topic; the main chat has no such sheet.
@@ -618,7 +664,8 @@
                 // Topics: separate focused chats. Archived ones keep their history and can come back.
                 const heading = el('div', 'pi-bot-section-row');
                 const add = button('pi-bot-topic-add', translateUi("新话题")); add.dataset.botAction = 'topic-add';
-                add.append(icon('fa-plus'));
+                add.disabled = Boolean(this.creatingTopic);
+                add.append(this.creatingTopic ? el('span', 'pi-spinner') : icon('fa-plus'));
                 heading.append(el('p', 'pi-bot-section', translateUi("话题")), add);
                 list.append(heading);
                 for (const topic of topics) list.append(this.topicItem(bot, topic));
@@ -795,7 +842,7 @@
         ['job', () => translateUi("主要帮你做"), 300], ['personality', () => translateUi("性格"), 6000], ['workStyle', () => translateUi("做事方式"), 0]];
     // The three ways a Bot works, from most freedom to most careful (same words as Bot settings).
     const WORK_STYLES = [
-        ['free', () => translateUi("放手"), () => translateUi("大部分事直接办好。删东西、改工作目录以外的文件、对外发消息、花钱多的事会先问你。")],
+        ['free', () => translateUi("放手"), () => translateUi("大部分事直接办好。删东西、改系统配置、对外发消息、花钱多的事会先问你。")],
         ['balanced', () => translateUi("稳妥"), () => translateUi("查资料、记东西、在工作目录里写文件直接做；运行命令、改工作目录以外的文件、交给别的助手前，会弹出确认等你允许。")],
         ['ask', () => translateUi("每次都问"), () => translateUi("除了看和回答，每一步动手前都会弹出确认，等你允许。")]
     ];
@@ -975,7 +1022,7 @@
                 : now.steps?.identity === 'done' || now.steps?.[key] === 'done' || key === 'avatar' && ['image', 'preset'].includes(now.avatar?.kind));
             const fields = [];
             for (const [key] of SETUP_FIELDS) {
-                const value = key === 'avatar' && args.avatar?.kind === 'preset' ? { ...args.avatar }
+                const value = key === 'avatar' && args.avatar ? (args.avatar?.kind === 'preset' ? { ...args.avatar } : { ...NEW_BOT_FACE })
                     : typeof args[key] === 'string' ? args[key].trim() : '';
                 if (key === 'workStyle') {
                     // Shown when offered (workStyleOffered): the point is then to let the user pick. Only the
@@ -987,8 +1034,9 @@
                 }
                 // A proposed face is always shown, even the current one, so a picture can be uploaded instead (UAT-14).
                 if (!value || existing(key) === value && key !== 'avatar') continue;
+                const sameFace = key === 'avatar' && now.avatar?.kind === 'preset' && now.avatar.id === value.id;
                 // The current face is shown beside a different proposed one, so keeping it is a visible choice.
-                const show = chosen(key) || key === 'avatar' && now.avatar && existing(key) !== value;
+                const show = chosen(key) || key === 'avatar' && now.avatar && !sameFace;
                 fields.push({ key, value, use: !chosen(key), kept: show ? { name: now.name, avatar: now.avatar, id: now.id } : null });
             }
             const facts = [...new Set((Array.isArray(args.aboutUser) ? args.aboutUser : []).filter(item => typeof item === 'string' && item.trim()))]
@@ -1022,28 +1070,31 @@
             const [, label, max] = SETUP_FIELDS.find(([key]) => key === field.key);
             const row = el('div', `pi-bot-setup-field is-${field.key}`);
             const id = `pi-bot-setup-${serial}-${field.key}`;
-            const caption = el('label', 'pi-bot-setup-label', label()); caption.htmlFor = id;
+            const caption = el('label', 'pi-bot-setup-label', label()); if (field.key !== 'avatar') caption.htmlFor = id;
             const body = el('div', 'pi-bot-setup-value');
             // Long text wraps and grows (job: one line when saved; personality: keeps its paragraphs).
             const long = field.key === 'job' || field.key === 'personality';
-            const input = long ? el('textarea') : el('input');
-            input.id = id; input.value = typeof field.value === 'string' ? field.value : ''; input.maxLength = max; input.dataset.setupField = field.key;
-            if (long) input.rows = field.key === 'job' ? 2 : 3;
-            if (field.key === 'avatar') { input.setAttribute('inputmode', 'text'); input.setAttribute('aria-label', translateUi("头像表情")); }
+            const input = field.key === 'avatar' ? null : (long ? el('textarea') : el('input'));
+            if (input) {
+                input.id = id; input.value = typeof field.value === 'string' ? field.value : ''; input.maxLength = max; input.dataset.setupField = field.key;
+                if (long) input.rows = field.key === 'job' ? 2 : 3;
+            }
             let toggle = null;
             const use = on => { field.use = on; row.classList.toggle('is-kept', !on); if (toggle) toggle.checked = on; };
-            input.addEventListener('input', () => {
-                field.value = input.value; if (field.key === 'avatar') { draft.pictureRequest = (draft.pictureRequest || 0) + 1; draft.picture = null; draft.pictureVersion = null; }
+            input?.addEventListener('input', () => {
+                field.value = input.value;
                 if (long) fitTextarea(input);
                 if (!field.use) use(true);
             });
-            if (field.key === 'avatar' && window.PiAvatar) {
-                const selected = typeof field.value === 'object' ? field.value : { kind: 'emoji', value: field.value };
-                body.append(window.PiAvatar.choices(selected, value => {
-                    draft.pictureRequest = (draft.pictureRequest || 0) + 1;
-                    field.value = value; draft.picture = null; draft.pictureVersion = null; use(true); render();
-                }));
-                if (field.value?.kind === 'preset') body.append(face({ avatar: field.value }, 'lg'));
+            if (field.key === 'avatar') {
+                if (typeof field.value !== 'object' || field.value?.kind !== 'preset') field.value = { ...NEW_BOT_FACE };
+                if (window.PiAvatar) {
+                    body.append(window.PiAvatar.choices(field.value, value => {
+                        draft.pictureRequest = (draft.pictureRequest || 0) + 1;
+                        field.value = value; draft.picture = null; draft.pictureVersion = null; use(true); render();
+                    }));
+                    if (!draft.picture && field.value?.kind === 'preset') body.append(face({ avatar: field.value }, 'lg'));
+                }
             }
             if (field.key === 'personality') {
                 const styles = el('div', 'pi-bot-setup-styles'); styles.setAttribute('role', 'group'); styles.setAttribute('aria-label', translateUi("快速选一种性格"));
@@ -1057,10 +1108,10 @@
             if (field.key === 'avatar' && draft.picture) {
                 const preview = el('span', 'pi-bot-setup-picture'), img = el('img');
                 img.src = draft.picture; img.alt = translateUi("新头像图片"); preview.append(img);
-                const back = el('button', 'pi-bot-chip', translateUi("改用表情")); back.type = 'button'; back.dataset.setupPicture = 'clear';
-                back.addEventListener('click', () => { draft.picture = null; draft.pictureVersion = null; render(); panel.querySelector('[data-setup-field="avatar"]')?.focus(); });
+                const back = el('button', 'pi-bot-chip', translateUi("不用这张图片")); back.type = 'button'; back.dataset.setupPicture = 'clear';
+                back.addEventListener('click', () => { draft.picture = null; draft.pictureVersion = null; render(); panel.querySelector('[data-avatar-preset]')?.focus(); });
                 body.append(preview, back);
-            } else body.append(input);
+            } else if (input) body.append(input);
             if (field.key === 'avatar' && uploadPicture) {
                 const file = el('input'); file.type = 'file'; file.accept = 'image/png,image/jpeg,image/webp,image/gif'; file.hidden = true; file.dataset.setupPictureFile = '';
                 const pick = el('button', 'pi-bot-chip', draft.picture ? translateUi("换一张") : translateUi("上传图片")); pick.type = 'button'; pick.dataset.setupPicture = 'pick';

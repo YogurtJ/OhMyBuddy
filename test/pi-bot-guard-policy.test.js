@@ -27,18 +27,19 @@ const classify = (command, toolName = 'bash') => classifyCommand({ toolName, inp
 
 test('free permits understood routine commands and asks before danger or opaque shell syntax', () => {
     for (const command of ['pwd', 'date', 'ls -la', 'cat "notes.txt"', "cat 'notes.txt'", 'cat no\\ tes.txt', 'echo "hello; world"', 'printf "%s" "hi"',
-        'git status --short', 'git diff --no-ext-diff --no-textconv', 'mkdir -p notes/new', 'touch notes/new.txt']) {
+        'git status --short', 'git diff', 'git diff --no-ext-diff --no-textconv', 'git log -n 5 --oneline', 'rg -n pattern notes.txt',
+        'find . -maxdepth 2 -name notes.txt', 'ls | head -n 5', 'echo ok && pwd', 'cd .. && ls -la', 'mkdir -p notes/new', 'touch notes/new.txt']) {
         assert.equal(classify(command), 'safe', command);
         assert.equal(check('free', 'bash', { command }), null, command);
         assert.ok(check('balanced', 'bash', { command }).rule, command);
     }
     const risky = ['rm -rf notes', 'sudo ls', 'systemctl restart example', 'kill 123', 'chmod 777 notes', 'git push origin main', 'git reset --hard',
         'curl https://example.invalid', 'gh release create v1', 'npm publish', 'docker restart example', 'cp notes.txt ../outside/note.txt',
-        `touch ${outside}/new.txt`, "touch '@where/new.txt'", 'sed -i s/a/b/ notes.txt'];
-    const opaque = ['echo ok; date', 'ls | head', 'echo ok && pwd', 'echo ok\npwd', 'echo hi > ../outside/note.txt',
+        `touch ${outside}/new.txt`, "touch '@where/new.txt'", 'sed -i s/a/b/ notes.txt', 'ls && rm -rf notes'];
+    const opaque = ['echo ok; date', 'echo ok || pwd', 'echo ok\npwd', 'echo hi > ../outside/note.txt',
         'cat <(echo hi)', 'cat $(echo notes.txt)', 'cat `echo notes.txt`', 'cat *.txt', 'cat "$FILE"',
         "python -c 'print(1)'", 'node -e "console.log(1)"', "bash -c 'date'", "eval 'date'", 'command date',
-        'timeout 2 date', 'X=1 date', 'LS', 'ls.exe', './script.sh', '/tmp/ls', 'cat "unterminated', 'git diff', 'git -c core.pager=x status', 'git status --help', 'git log --no-ext-diff --no-textconv --help',
+        'timeout 2 date', 'X=1 date', 'LS', 'ls.exe', './script.sh', '/tmp/ls', 'cat "unterminated', 'git -c core.pager=x status', 'git status --help', 'git log --no-ext-diff --no-textconv --help',
         'git log --no-ext-diff --no-textconv --output=notes.txt', 'find . -exec echo {} \\;'];
     for (const command of [...risky, ...opaque]) {
         const decision = check('free', 'bash', { command });
@@ -80,7 +81,8 @@ test('all presets refuse obvious credentials, private state and aliases before a
 
 test('file grants are canonical, exact and bound to tool and working directory', () => {
     const input = { path: 'escape/new.txt', content: 'synthetic' };
-    const approval = check('free', 'write', input), rule = approval.rule;
+    assert.equal(check('free', 'write', input), null, 'free allows ordinary file writes outside the Bot workspace');
+    const approval = check('balanced', 'write', input), rule = approval.rule;
     assert.equal(approval.kind, 'outside');
     assert.equal(rule.value, path.join(outside, 'new.txt'));
     assert.deepEqual(normalizeRule(rule), rule);

@@ -120,7 +120,12 @@ function createPiAgentGateway(options = {}) {
     const notifications = new (require('./pi-notification-service').PiNotificationService)({ access, store });
     supervisor.on('attention', event => { void notifications.notify(event); });
     supervisor.on('completion', (notice, worker) => {
-        if (worker) { void titles.auto(worker); void learning?.register(worker, 'settled'); }
+        if (worker) {
+            void titles.auto(worker).then(result => {
+                if (result && worker.loadedBot) void bots.learnTopicMeta(worker, { title: result.name, focus: result.focus });
+            });
+            void learning?.register(worker, 'settled');
+        }
         // Bot windows: a large, long or old generation moves on once the reply is shown (D-030).
         if (worker?.loadedBot) setTimeout(() => { void bots.maintainWindow(worker, { trigger: 'completion' }); }, 3000).unref?.();
         if (worker?.cronRun) return;
