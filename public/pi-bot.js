@@ -9,6 +9,8 @@
     // once in this many milliseconds; a request inside the gap waits for its end once.
     const TOPIC_INDEX_GAP = 5000;
     const DEFAULT_FACE = '✨';
+    // The face a new Bot starts with (server/bot/bot-service.js), shown on the welcome page too.
+    const NEW_BOT_FACE = Object.freeze({ kind: 'preset', id: 'pivane-pebble' });
     const el = (tag, className, text) => { const n = document.createElement(tag); if (className) n.className = className; if (text != null) n.textContent = text; return n; };
     const icon = name => { const i = el('i', `fa-solid ${name}`); i.setAttribute('aria-hidden', 'true'); return i; };
     const button = (className, label) => { const b = el('button', className); b.type = 'button'; if (label) { b.title = label; b.setAttribute('aria-label', label); } return b; };
@@ -62,7 +64,7 @@
                 submit: (profileId, body) => this.onboardingStep(profileId, body),
                 say: text => this.say?.(text), draft: () => Boolean(this.draft?.()), focusComposer: () => this.focusComposer?.(),
                 notify: (message, timeout) => this.toast(message, 'info', timeout), face: () => this.face('sm'), changed: () => this.onChange?.('panel') }) || null;
-            if (this.closure) input.addEventListener('input', () => this.closure.composerChanged());
+            if (this.closure) { input.addEventListener('input', () => this.closure.composerChanged()); dock(this.closure.element); }
             // Topic ids being restored, and unsettled items per topic (when the server lists them).
             this.restoring = new Set(); this.topicIndex = null; this.topicIndexMissing = false; this.topicIndexSerial = 0; this.archivedOpen = false;
             this.topicIndexAt = 0; this.topicIndexTimer = 0; this.leavingWindow = null;
@@ -277,26 +279,30 @@
         }
 
         // picture: the version of the picture just uploaded for this card, if it answers the face.
-        async saveSetup(toolCallId, changes, { picture = null } = {}) {
+        // workStyleShown: whether the card showed the way-of-working choice (the server then saves or
+        // records that step only if it did); left out by callers that do not know.
+        async saveSetup(toolCallId, changes, { picture = null, workStyleShown } = {}) {
             const current = this.current();
             if (!current) throw new Error(translateUi("请先打开 Bot 的聊天"));
             if (this.revision === null) await this.load();
             try {
                 const result = await this.api(`/api/pi/bots/${encodeURIComponent(current.profileId)}/setup`, { method: 'POST',
                     headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ windowId: current.windowId, toolCallId, changes,
-                        ...(picture ? { picture } : {}), expectedRevision: this.revision }) });
+                        ...(picture ? { picture } : {}), ...(typeof workStyleShown === 'boolean' ? { workStyleShown } : {}), expectedRevision: this.revision }) });
                 if (result.user && result.user.documentSaved === false) this.toast(translateUi("关于你的内容这次没记下：{0}", result.user.error || ''), 'error');
                 return result;
             } finally { await this.refresh(); }
         }
 
         // The user leaves a setup card's steps for later; one retry after a revision conflict.
-        async leaveSetupForLater(toolCallId) {
+        // workStyleShown: as for saveSetup, from the card as shown (also on the retry).
+        async leaveSetupForLater(toolCallId, { workStyleShown } = {}) {
             const current = this.current();
             if (!current) return;
             if (this.revision === null) await this.load();
             const send = () => this.api(`/api/pi/bots/${encodeURIComponent(current.profileId)}/setup`, { method: 'POST',
-                headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ windowId: current.windowId, toolCallId, later: true, expectedRevision: this.revision }) });
+                headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ windowId: current.windowId, toolCallId, later: true,
+                    ...(typeof workStyleShown === 'boolean' ? { workStyleShown } : {}), expectedRevision: this.revision }) });
             try { return await send(); }
             catch (error) { if (error.status !== 409 || error.code) throw error; await this.load(); return await send(); }
             finally { await this.refresh(); }
@@ -716,7 +722,7 @@
             if (!this.loaded) return null;
             if (!this.bots.length) {
                 root.classList.add('is-welcome');
-                root.append(el('span', 'pi-bot-face is-xl', DEFAULT_FACE));
+                root.append(face({ avatar: NEW_BOT_FACE }, 'xl'));
                 root.append(el('h2', null, translateUi("认识你的 Bot")));
                 root.append(el('p', null, translateUi("一个一直在的私人助理：记得你说过的话，帮你查、记、写、提醒。先花两三分钟互相认识一下。")));
                 const missing = this.needsModel();
@@ -807,6 +813,104 @@
             && event.options.length === 2 && event.options[0] === SAVE && event.options[1] === DECLINE;
     }
 
+    // The fields a card proposes as the server reads them (normalizeProposal in server/bot/bot-setup.js):
+    // blank text, a list of blank items, null and finish:false propose nothing.
+    const proposedKeys = args => Object.keys(args).filter(key => {
+        const value = args[key];
+        if (value == null || typeof value === 'string' && !value.trim()) return false;
+        if (key === 'finish') return value !== false;
+        return !Array.isArray(value) || value.some(item => !(typeof item === 'string' && !item.trim()));
+    });
+    // Same rule as workStyleOffered in server/bot/bot-setup.js: an unchanged way of working is asked
+    // only on its own card while the work step is still open; a copy carried along with other fields,
+    // or asked again after the step was answered, is neither shown nor saved.
+    function workStyleOffered(args, now) {
+        if (workRank(args.workStyle) < 0) return false;
+        return args.workStyle !== now.workStyle
+            || !now.steps?.work && proposedKeys(args).every(key => key === 'workStyle' || key === 'finish');
+    }
+    // "Mainly helps with" is saved as one line: runs of line breaks and other control characters
+    // (typed or pasted into its wrapping box) become one space.
+    const oneLine = value => value.replace(/ *[\x00-\x1f\x7f][\x00-\x1f\x7f ]*/g, ' ').trim();
+
+    // A textarea that grows with its text from its rows up to its CSS max-height, then scrolls.
+    // Called once it is in the page and on every input; the scrolling part around it keeps its place.
+    function fitTextarea(area) {
+        if (!area?.isConnected) return;
+        const scroller = area.closest('.pi-bot-setup-fields, .pi-bot-sheet-body'), top = scroller?.scrollTop, inner = area.scrollTop;
+        const style = getComputedStyle(area);
+        area.style.height = 'auto';
+        area.style.height = `${area.scrollHeight + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth)}px`;
+        area.scrollTop = inner;
+        if (scroller) scroller.scrollTop = top;
+    }
+
+    // ---- docked panels ---------------------------------------------------------------
+    // Setup, approval and closing panels sit above the composer, under the floating identity in the
+    // transcript. Their height comes from the page as it is laid out now (window, on-screen keyboard,
+    // composer, chips, large text): the transcript keeps the identity clear (and, on taller screens,
+    // a strip of the conversation), the panels share what is left, and only their bodies scroll.
+    // With too little room for even the title, the actions and a bit of the body, a panel keeps
+    // those and is drawn above the identity (pi-bot.css).
+    const docked = new Set(), dockWatched = new WeakSet();
+    let dockFrame = 0, dockObserver = null;
+    const DOCK_GAP = 8, DOCK_BODY = 64;
+    // Bodies that may shrink and scroll; every other part of a panel keeps its height.
+    const DOCK_SCROLLING = '.pi-bot-setup-fields, .pi-bot-approval-detail';
+    function dockWatch(node) {
+        if (!node || dockWatched.has(node) || typeof ResizeObserver !== 'function') return;
+        dockObserver ||= new ResizeObserver(scheduleDock);
+        dockObserver.observe(node); dockWatched.add(node);
+    }
+    function dock(panel) {
+        if (!docked.size) {
+            window.addEventListener('resize', scheduleDock);
+            window.visualViewport?.addEventListener('resize', scheduleDock);
+        }
+        docked.add(panel); dockWatch(panel);
+        scheduleDock();
+    }
+    function scheduleDock() { if (!dockFrame) dockFrame = requestAnimationFrame(fitDocked); }
+    // The least a panel needs: its fixed parts, gaps and padding, and a little of its body.
+    function dockFloor(panel) {
+        const style = getComputedStyle(panel), parts = [...panel.children].filter(child => getComputedStyle(child).display !== 'none');
+        let total = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom) + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth)
+            + Math.max(0, parts.length - 1) * (parseFloat(style.rowGap) || 0);
+        for (const part of parts) total += part.matches(DOCK_SCROLLING) ? Math.min(part.scrollHeight, DOCK_BODY) : part.getBoundingClientRect().height;
+        return Math.ceil(total);
+    }
+    function fitDocked() {
+        dockFrame = 0;
+        const groups = new Map();
+        for (const panel of docked) {
+            const wrap = panel.isConnected && !panel.hidden ? panel.closest('.pi-composer-wrap') : null;
+            const viewport = wrap?.parentElement?.querySelector(':scope > .pi-transcript-viewport');
+            if (!viewport) { panel.style.removeProperty('--pi-bot-card-room'); continue; }
+            if (!groups.has(wrap)) groups.set(wrap, { viewport, panels: [] });
+            groups.get(wrap).panels.push(panel);
+        }
+        for (const [wrap, { viewport, panels }] of groups) {
+            const shell = wrap.parentElement, header = viewport.querySelector(':scope > #pi-bot-header');
+            for (const node of [shell, wrap, header]) dockWatch(node);
+            for (const panel of panels) for (const area of panel.querySelectorAll('textarea')) fitTextarea(area);
+            const box = header && !header.hidden ? header.getBoundingClientRect() : null;
+            const clear = box?.height ? Math.max(0, box.bottom - viewport.getBoundingClientRect().top) : 0;
+            let others = 0;
+            for (const child of shell.children) if (child !== viewport && child !== wrap) others += child.offsetHeight;
+            const height = shell.clientHeight, strip = Math.min(96, Math.max(0, height - 520) / 3);
+            const rest = wrap.getBoundingClientRect().height - panels.reduce((sum, panel) => sum + panel.getBoundingClientRect().height, 0);
+            const room = Math.floor((height - others - rest - clear - DOCK_GAP - strip) / panels.length);
+            for (const panel of panels) panel.style.setProperty('--pi-bot-card-room', `${Math.max(room, dockFloor(panel))}px`);
+        }
+    }
+
+    // The control a redraw puts focus back on: the same field, choice or button of the same card.
+    const setupFocusKey = node => !node?.dataset ? '' : node.dataset.setupField ? `field:${node.dataset.setupField}`
+        : node.dataset.setupWork ? `work:${node.dataset.setupWork}` : node.dataset.setupUse ? `use:${node.dataset.setupUse}`
+        : node.dataset.setupStyle ? `style:${node.dataset.setupStyle}` : node.dataset.avatarPreset ? `preset:${node.dataset.avatarPreset}`
+        : node.dataset.setupPicture ? `picture:${node.dataset.setupPicture}` : node.matches('[data-setup-fact]') ? `fact:${node.value}`
+        : node.matches('.pi-bot-setup-save') ? 'save' : node.matches('.pi-bot-setup-later') ? 'later' : '';
+
     // A picture chosen on the card, as the PNG data URL the avatar service accepts (≤ 1 MiB).
     async function pictureData(file) {
         if (!/^image\/(png|jpeg|webp|gif)$/.test(file?.type || '') || file.size > 6 * 1024 * 1024) throw new Error(translateUi("请选择不超过 6 MiB 的 PNG、JPEG、WebP 或 GIF 图片"));
@@ -827,14 +931,18 @@
 
     // identity(): { id, name, avatar, job, workStyle, phase, chosen, steps } of the Bot now; uploadPicture(dataUrl) saves
     // a picture face and resolves to the avatar service's answer; notify(message) tells the user something in passing;
-    // later(toolCallId) records that the user leaves the card's steps for later (during the interview).
+    // later(toolCallId, { workStyleShown }) records that the user leaves the card's steps for later (during the
+    // interview); save(toolCallId, changes, { picture, workStyleShown }) saves the card. workStyleShown says whether
+    // this card, as drawn, showed the way of working (from its retained draft, never from a reread Bot).
     function createSetupCards({ enabled, calls, respond, save, face: currentFace, changed, identity = () => null, uploadPicture = null, notify = null, later: leaveForLater = null }) {
         const panel = el('section', 'pi-bot-setup'); panel.hidden = true;
         panel.setAttribute('role', 'region'); panel.setAttribute('aria-label', translateUi("请你确认设置"));
-        let current = null, retry = 0, retries = 0, serial = 0;
+        // drawn: the card the panel shows, so a redraw of the same card keeps its scroll and focus.
+        let current = null, retry = 0, retries = 0, serial = 0, drawn = null;
         const owns = event => enabled() && setupFits(event);
+        dock(panel);
 
-        function hide() { current = null; panel.hidden = true; panel.replaceChildren(); changed?.(); }
+        function hide() { current = null; drawn = null; panel.hidden = true; panel.replaceChildren(); changed?.(); }
 
         // What the card starts from, kept while the card is open (a failed save keeps every edit).
         // A proposed value the Bot already has is left out; a name or face the user chose before
@@ -851,10 +959,10 @@
                 const value = key === 'avatar' && args.avatar?.kind === 'preset' ? { ...args.avatar }
                     : typeof args[key] === 'string' ? args[key].trim() : '';
                 if (key === 'workStyle') {
-                    // Always shown when proposed: the point is to let the user pick. Only the current way
-                    // or more careful ones are offered; more freedom is set in Bot settings.
+                    // Shown when offered (workStyleOffered): the point is then to let the user pick. Only the
+                    // current way or more careful ones are offered; more freedom is set in Bot settings.
+                    if (!workStyleOffered(args, now)) continue;
                     const now_ = workRank(now.workStyle) < 0 ? 'free' : now.workStyle;
-                    if (workRank(value) < 0) continue;
                     fields.push({ key, value: workRank(value) >= workRank(now_) ? value : now_, use: true, kept: null, floor: now_ });
                     continue;
                 }
@@ -897,14 +1005,17 @@
             const id = `pi-bot-setup-${serial}-${field.key}`;
             const caption = el('label', 'pi-bot-setup-label', label()); caption.htmlFor = id;
             const body = el('div', 'pi-bot-setup-value');
-            const input = field.key === 'personality' ? el('textarea') : el('input');
+            // Long text wraps and grows (job: one line when saved; personality: keeps its paragraphs).
+            const long = field.key === 'job' || field.key === 'personality';
+            const input = long ? el('textarea') : el('input');
             input.id = id; input.value = typeof field.value === 'string' ? field.value : ''; input.maxLength = max; input.dataset.setupField = field.key;
-            if (field.key === 'personality') input.rows = Math.min(8, Math.max(3, field.value.split('\n').length + 1));
+            if (long) input.rows = field.key === 'job' ? 2 : 3;
             if (field.key === 'avatar') { input.setAttribute('inputmode', 'text'); input.setAttribute('aria-label', translateUi("头像表情")); }
             let toggle = null;
             const use = on => { field.use = on; row.classList.toggle('is-kept', !on); if (toggle) toggle.checked = on; };
             input.addEventListener('input', () => {
                 field.value = input.value; if (field.key === 'avatar') { draft.pictureRequest = (draft.pictureRequest || 0) + 1; draft.picture = null; draft.pictureVersion = null; }
+                if (long) fitTextarea(input);
                 if (!field.use) use(true);
             });
             if (field.key === 'avatar' && window.PiAvatar) {
@@ -917,9 +1028,9 @@
             }
             if (field.key === 'personality') {
                 const styles = el('div', 'pi-bot-setup-styles'); styles.setAttribute('role', 'group'); styles.setAttribute('aria-label', translateUi("快速选一种性格"));
-                for (const [title, text] of PERSONALITY_STYLES) {
-                    const chip = el('button', 'pi-bot-chip', title()); chip.type = 'button'; chip.dataset.setupStyle = '';
-                    chip.addEventListener('click', () => { input.value = field.value = text(); use(true); input.focus(); });
+                for (const [index, [title, text]] of PERSONALITY_STYLES.entries()) {
+                    const chip = el('button', 'pi-bot-chip', title()); chip.type = 'button'; chip.dataset.setupStyle = String(index + 1);
+                    chip.addEventListener('click', () => { input.value = field.value = text(); use(true); fitTextarea(input); input.focus(); });
                     styles.append(chip);
                 }
                 body.append(styles);
@@ -996,9 +1107,28 @@
             later.addEventListener('click', () => void decline());
             confirm.addEventListener('click', () => void submit());
             foot.append(note, later, confirm);
+            // A redraw of the same card (a picked face or picture, saving, an error) keeps the place the
+            // user scrolled to and the control they were on, with its text selection. A control redrawn
+            // while disabled (saving) gets focus back once it is usable, unless the user moved on.
+            const active = document.activeElement, same = drawn === current;
+            const inside = same && panel.contains(active) && active !== panel;
+            const { key, selection } = inside ? { key: setupFocusKey(active), selection: typeof active.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd] : null }
+                : same && (!active || active === document.body) && current.refocus || { key: '', selection: null };
+            const scrolled = same ? panel.querySelector('.pi-bot-setup-fields')?.scrollTop || 0 : 0;
             panel.replaceChildren(head, form, foot);
             if (current.saving) for (const control of form.querySelectorAll('button,input,select,textarea')) control.disabled = true;
             panel.hidden = false;
+            drawn = current; current.refocus = null;
+            for (const area of form.querySelectorAll('textarea')) fitTextarea(area);
+            form.scrollTop = scrolled;
+            if (key) {
+                const target = [...panel.querySelectorAll('button,input,textarea')].find(node => setupFocusKey(node) === key);
+                if (target && !target.disabled) {
+                    target.focus({ preventScroll: true });
+                    if (selection && typeof target.selectionStart === 'number') target.setSelectionRange(...selection);
+                } else current.refocus = { key, selection };
+            }
+            scheduleDock();
         }
 
         // While getting to know each other every card can be left for later; that is recorded, so
@@ -1010,7 +1140,7 @@
             const target = current, draft = target.draft;
             if (interviewing() && leaveForLater) {
                 target.saving = true; target.error = ''; render();
-                try { await leaveForLater(target.call.id); }
+                try { await leaveForLater(target.call.id, { workStyleShown: workShown(draft) }); }
                 catch (error) {
                     if (current === target) { target.saving = false; target.error = error.message || translateUi("保存失败"); render(); }
                     return;
@@ -1024,11 +1154,12 @@
             respond({ id: target.event.id, value: DECLINE }); hide();
         }
 
+        const workShown = draft => draft.fields.some(field => field.key === 'workStyle');
         // The user's choices, from the draft: a field left unticked or emptied is not saved (null).
         function collect(draft) {
             const changes = {};
             for (const field of draft.fields) {
-                const value = typeof field.value === 'string' ? field.value.trim() : field.value;
+                const value = typeof field.value === 'string' ? (field.key === 'job' ? oneLine(field.value) : field.value.trim()) : field.value;
                 changes[field.key] = field.use && value ? value : null;
             }
             const picture = Boolean(draft.picture && draft.fields.find(field => field.key === 'avatar')?.use);
@@ -1053,7 +1184,7 @@
                     if (!/^[a-f0-9]{64}$/.test(uploaded?.profile?.avatar?.version || '')) throw new Error(translateUi("头像图片没有保存成功，请再试一次"));
                     draft.pictureVersion = draft.uploaded = uploaded.profile.avatar.version;
                 }
-                await save(target.call.id, changes, { picture: picture ? draft.pictureVersion : null });
+                await save(target.call.id, changes, { picture: picture ? draft.pictureVersion : null, workStyleShown: workShown(draft) });
                 if (current !== target) return;
                 respond({ id: target.event.id, value: SAVE });
                 hide();
@@ -1120,10 +1251,13 @@
     function createApprovalCards({ enabled, respond, face: currentFace, name, changed, remember = null, owner = () => '', notify = null }) {
         const panel = el('section', 'pi-bot-setup pi-bot-approval'); panel.hidden = true;
         panel.setAttribute('role', 'region'); panel.setAttribute('aria-label', translateUi("等你确认"));
-        let current = null;
+        // drawn: the request the panel shows, so a redraw of it keeps the detail's scroll and the focus.
+        let current = null, drawn = null;
         const owns = event => enabled() && Boolean(parseApproval(event));
+        dock(panel);
+        const FOCUSABLE = ['.pi-bot-approval-detail', '.pi-bot-approval-allow', '.pi-bot-approval-keep', '.pi-bot-setup-later'];
 
-        function hide() { if (!current && panel.hidden) return; current = null; panel.hidden = true; panel.replaceChildren(); changed?.(); }
+        function hide() { if (!current && panel.hidden) return; current = null; drawn = null; panel.hidden = true; panel.replaceChildren(); changed?.(); }
 
         function render(waiting) {
             const target = current, { event, kind, detail, rule } = target;
@@ -1172,9 +1306,15 @@
                 foot.append(note, deny, keep, allow);
             } else foot.append(note, deny, allow);
             parts.push(foot);
+            const active = document.activeElement, same = drawn === target && panel.contains(active);
+            const focused = same ? FOCUSABLE.find(selector => active.matches(selector)) : null;
+            const scrolled = drawn === target ? panel.querySelector('.pi-bot-approval-detail')?.scrollTop || 0 : 0;
             panel.replaceChildren(...parts);
             if (target.saving || target.answered) for (const control of panel.querySelectorAll('button')) control.disabled = true;
             panel.hidden = false;
+            drawn = target; body.scrollTop = scrolled;
+            if (focused) panel.querySelector(focused)?.focus({ preventScroll: true });
+            scheduleDock();
         }
 
         // Save the grant first; allow this step only if the same request of the same conversation is
@@ -1285,5 +1425,5 @@
     }
 
     window.PiBot = Object.freeze({ create: options => new PiBotUi(options), setupCards: createSetupCards, approvalCards: createApprovalCards,
-        history: createWindowHistory, face, pictureData });
+        history: createWindowHistory, face, pictureData, fitTextarea });
 })();

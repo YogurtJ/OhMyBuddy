@@ -132,7 +132,8 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
             const one = '1'.repeat(64), two = '2'.repeat(64);
             assert.equal(pictured.uploads.length, 2, 'not uploaded again after a plain conflict, but again after the face changed elsewhere');
             assert.deepEqual(pictured.saves.map(item => [item.changes, item.options, item.uploadsBefore]),
-                [[{ avatar: null, job: '整理计划' }, { picture: one }, 1], [{ avatar: null, job: '整理计划' }, { picture: one }, 1], [{ avatar: null, job: '整理计划' }, { picture: two }, 2]]);
+                [[{ avatar: null, job: '整理计划' }, { picture: one, workStyleShown: false }, 1], [{ avatar: null, job: '整理计划' }, { picture: one, workStyleShown: false }, 1],
+                    [{ avatar: null, job: '整理计划' }, { picture: two, workStyleShown: false }, 2]]);
             assert.deepEqual(pictured.notes, []);
             // Not saving after the picture went up: the user is told the picture is already the face.
             await mount({ avatar: '👋', job: '整理计划' }, fresh, 1);
@@ -191,7 +192,74 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
             await page.locator('[data-setup-picture="clear"]').click();
             await page.locator('.pi-bot-setup-save').click();
             await page.waitForFunction(() => t.responses.length === 1);
-            assert.deepEqual(await page.evaluate(() => [t.uploads.length, t.saves[0].changes, t.saves[0].options]), [0, { avatar: '👋' }, { picture: null }]);
+            assert.deepEqual(await page.evaluate(() => [t.uploads.length, t.saves[0].changes, t.saves[0].options]), [0, { avatar: '👋' }, { picture: null, workStyleShown: false }]);
+
+            // 3b. The way of working (same rule as workStyleOffered on the server). The card says whether it
+            // showed the choice (workStyleShown) when saved or left for later.
+            const work = (workStyle, steps = {}) => ({ ...chosenFace, workStyle, steps, phase: 'interview' });
+            const choices = () => page.locator('[data-setup-work]').evaluateAll(nodes => nodes.map(node => [node.value, node.checked]));
+            // Unchanged and carried along with other fields: not shown, not saved.
+            await mount({ job: '只帮我整理计划', personality: '慢慢说', workStyle: 'free' }, work('free'));
+            assert.deepEqual(await choices(), []);
+            await page.locator('.pi-bot-setup-save').click();
+            await page.waitForFunction(() => t.saves.length === 1);
+            assert.deepEqual(await page.evaluate(() => [t.saves[0].changes, t.saves[0].options.workStyleShown]), [{ job: '只帮我整理计划', personality: '慢慢说' }, false]);
+            // Its own card while the step is open: the three choices, once; a pick is saved.
+            await mount({ workStyle: 'free', finish: true }, work('free'));
+            assert.deepEqual(await choices(), [['free', true], ['balanced', false], ['ask', false]]);
+            await page.locator('[data-setup-work="balanced"]').check();
+            await page.locator('.pi-bot-setup-save').click();
+            await page.waitForFunction(() => t.saves.length === 1);
+            assert.deepEqual(await page.evaluate(() => [t.saves[0].changes, t.saves[0].options.workStyleShown]), [{ workStyle: 'balanced', finish: true }, true]);
+            // Blank optional fields propose nothing: still its own card, also when left for later.
+            await mount({ name: '', job: ' ', personality: '', aboutUser: ['', ' '], finish: false, workStyle: 'free' }, work('free'));
+            assert.deepEqual(await choices(), [['free', true], ['balanced', false], ['ask', false]]);
+            await page.evaluate(() => { t.later = []; });
+            await page.evaluate(() => {
+                document.querySelector('.pi-bot-setup')?.remove();
+                const cards = PiBot.setupCards({ enabled: () => true, calls: () => [{ id: 'call-1', args: { name: '', aboutUser: [''], workStyle: 'free' } }],
+                    respond: value => t.responses.push(value), face: () => document.createElement('span'), changed: () => {}, identity: () => t.identity,
+                    save: async () => {}, later: async (id, options) => { t.later.push([id, options]); } });
+                document.querySelector('#forms').append(cards.element);
+                cards.sync(new Map([['ui-1', { id: 'ui-1', method: 'select', title: '保存这些设置？ / Save these settings?', options: ['保存 / Save', '先不改 / Not now'] }]]), true);
+            });
+            assert.equal(await page.locator('[data-setup-work]').count(), 3);
+            await page.locator('.pi-bot-setup-later').click();
+            assert.deepEqual(await page.evaluate(() => [t.later, t.responses]), [[['call-1', { workStyleShown: true }]], [{ id: 'ui-1', value: '先不改 / Not now' }]]);
+            // Answered already and asked again unchanged: not shown; nothing to choose.
+            await mount({ workStyle: 'free' }, work('free', { work: 'done' }));
+            assert.deepEqual(await choices(), []);
+            assert.equal(await page.locator('.pi-bot-setup-head strong').textContent(), '这些已经是现在的设置了');
+            await page.locator('.pi-bot-setup-save').click();
+            await page.waitForFunction(() => t.saves.length === 1);
+            assert.deepEqual(await page.evaluate(() => [t.saves[0].changes, t.saves[0].options.workStyleShown]), [{}, false]);
+            await mount({ workStyle: 'balanced' }, work('balanced', { work: 'skipped' }));
+            assert.deepEqual(await choices(), [], 'a skipped step counts as answered');
+            // A different way among other fields is a real change: shown and saved. A freer one starts at the
+            // current way, and only that or more careful ones are offered.
+            await mount({ job: '只帮我整理计划', workStyle: 'balanced' }, work('free', { work: 'done' }));
+            assert.deepEqual(await choices(), [['free', false], ['balanced', true], ['ask', false]]);
+            await page.locator('.pi-bot-setup-save').click();
+            await page.waitForFunction(() => t.saves.length === 1);
+            assert.deepEqual(await page.evaluate(() => [t.saves[0].changes, t.saves[0].options.workStyleShown]), [{ job: '只帮我整理计划', workStyle: 'balanced' }, true]);
+            await mount({ name: '新名字', workStyle: 'free' }, work('ask', { work: 'done' }));
+            assert.deepEqual(await choices(), [['ask', true]]);
+            assert.match(await page.locator('.pi-bot-setup-work-note').textContent(), /在设置里改/);
+
+            // 3c. "Mainly helps with" wraps and grows; it is saved as one line. Personality keeps its paragraphs.
+            await mount({ job: '整理计划', personality: '第一段。\n\n第二段。' }, fresh);
+            const box = page.locator('[data-setup-field="job"]');
+            assert.equal(await box.evaluate(node => node.tagName), 'TEXTAREA');
+            const grown = async () => box.evaluate(node => node.clientHeight);
+            const short = await grown();
+            await box.fill('先整理本周计划，\n再把下周要做的事列出来；\r\n遇到冲突先问我。'.repeat(4));
+            assert.ok(await grown() > short, 'the box grows with what is typed');
+            assert.ok(await box.evaluate(node => node.scrollWidth <= node.clientWidth + 1), 'long text wraps');
+            await box.fill('先整理本周计划，\n\n 再把下周要做的事列出来；\t遇到冲突先问我。');
+            await page.locator('[data-setup-field="personality"]').fill('第一段。\n\n第二段。\n第三段。');
+            await page.locator('.pi-bot-setup-save').click();
+            await page.waitForFunction(() => t.saves.length === 1);
+            assert.deepEqual(await page.evaluate(() => t.saves[0].changes), { job: '先整理本周计划， 再把下周要做的事列出来； 遇到冲突先问我。', personality: '第一段。\n\n第二段。\n第三段。' });
 
             // 4. Every way out of the settings sheet warns once about unsaved edits, valid or not (UAT-11).
             const settings = { revision: 'r1', bot: { id: BOT, name: '小狸', avatar: { kind: 'emoji', value: '🦉' }, soul: '回答简短。',

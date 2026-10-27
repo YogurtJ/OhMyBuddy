@@ -62,20 +62,26 @@
         const mark = el('span', 'pi-bot-topic-sheet-mark'); mark.setAttribute('aria-hidden', 'true');
         head.append(mark, title, close);
 
-        let revision = options.bot.windowsRevision, base = creating ? { title: '', focus: '', emoji: '' }
-            : { title: options.window.title || '', focus: options.window.focus || '', emoji: options.window.emoji || '' };
+        // An older topic's saved emoji keeps its own field; a new topic, or one without, has none.
+        const emoji = !creating && options.window.emoji ? el('input') : null;
+        const own = topic => ({ title: topic?.title || '', focus: topic?.focus || '', ...(emoji ? { emoji: topic?.emoji || '' } : {}) });
+        let revision = options.bot.windowsRevision, base = own(creating ? null : options.window);
         let busy = false, warned = null, archiveArmed = false, gone = false;
 
-        const emoji = el('input'); emoji.type = 'text'; emoji.maxLength = LIMITS.emoji; emoji.autocomplete = 'off'; emoji.className = 'pi-bot-sheet-emoji';
-        emoji.placeholder = '📚'; emoji.dataset.topicField = 'emoji';
         const name = el('input'); name.type = 'text'; name.maxLength = LIMITS.title; name.required = true; name.autocomplete = 'off'; name.dataset.topicField = 'title';
-        name.placeholder = translateUi("比如：英语考试");
+        name.placeholder = translateUi("比如：功能开发");
         const focus = el('textarea'); focus.rows = 3; focus.maxLength = LIMITS.focus; focus.dataset.topicField = 'focus';
-        focus.placeholder = translateUi("这个话题专心聊什么，比如：准备 12 月的英语考试，每天练一点听力。");
-        const fill = values => { emoji.value = values.emoji; name.value = values.title; focus.value = values.focus; };
+        focus.placeholder = translateUi("围绕这项功能讨论需求、实现思路和待解决的问题。");
+        const fill = values => { name.value = values.title; focus.value = values.focus; if (emoji) emoji.value = values.emoji; };
+        let identity = field(translateUi("话题名"), name);
+        if (emoji) {
+            emoji.type = 'text'; emoji.maxLength = LIMITS.emoji; emoji.autocomplete = 'off'; emoji.className = 'pi-bot-sheet-emoji';
+            emoji.placeholder = '📚'; emoji.dataset.topicField = 'emoji';
+            const title = identity;
+            identity = el('div', 'pi-bot-topic-identity');
+            identity.append(field(translateUi("表情（可不填）"), emoji), title);
+        }
         fill(base);
-        const identity = el('div', 'pi-bot-topic-identity');
-        identity.append(field(translateUi("表情（可不填）"), emoji), field(translateUi("话题名"), name));
         const body = el('div', 'pi-bot-sheet-body');
         body.append(el('p', 'pi-bot-sheet-note pi-bot-topic-intro',
             translateUi("话题是单独的聊天：{0} 在里面只专心聊这件事，“我记着的事”也分开记。主聊天不受影响。", options.name || 'Bot')),
@@ -100,19 +106,19 @@
         sheet.append(form);
         document.body.append(sheet);
 
-        const values = () => ({ title: name.value, focus: focus.value, emoji: emoji.value });
+        const values = () => ({ title: name.value, focus: focus.value, ...(emoji ? { emoji: emoji.value } : {}) });
         const edited = () => Object.entries(values()).some(([key, value]) => value !== base[key]);
         const say = (text, tone) => { status.textContent = text; if (tone) status.dataset.tone = tone; else delete status.dataset.tone; };
         // Fields the user changed, as single trimmed lines; null when something is not valid yet.
         function changes() {
-            const next = { title: clean(name.value), focus: clean(focus.value), emoji: clean(emoji.value) };
-            if (!next.title || next.title.length > LIMITS.title || next.focus.length > LIMITS.focus || next.emoji.length > LIMITS.emoji) return null;
+            const next = Object.fromEntries(Object.entries(values()).map(([key, value]) => [key, clean(value)]));
+            if (!next.title || next.title.length > LIMITS.title || next.focus.length > LIMITS.focus || (next.emoji ?? '').length > LIMITS.emoji) return null;
             if (creating) return next;
             return Object.fromEntries(Object.entries(next).filter(([key, value]) => value !== clean(base[key])));
         }
         function refresh() {
-            mark.textContent = emoji.value.trim() || '';
-            mark.hidden = !emoji.value.trim();
+            mark.textContent = emoji?.value.trim() || '';
+            mark.hidden = !mark.textContent;
             const pending = changes();
             save.disabled = busy || gone || !pending || !Object.keys(pending).length;
             for (const control of form.querySelectorAll('input,textarea')) control.disabled = busy || gone;
@@ -141,7 +147,7 @@
             const now = fresh?.windows?.find(item => item.id === options.window.id);
             if (!now || now.archivedAt) { gone = true; say(translateUi("这个话题已经被归档或移走了。"), 'error'); refresh(); return false; }
             // A field counts as the user's own edit only when its saved form differs from before.
-            const mine = values(), next = { title: now.title || '', focus: now.focus || '', emoji: now.emoji || '' };
+            const mine = values(), next = own(now);
             fill(Object.fromEntries(Object.keys(next).map(key => [key, clean(mine[key]) !== clean(base[key]) ? mine[key] : next[key]])));
             base = next;
             return true;

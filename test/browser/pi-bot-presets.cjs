@@ -138,10 +138,11 @@ const BOT = '11111111-1111-4111-8111-111111111111';
             assert.deepEqual(await page.evaluate(() => x.responses), []);
             await page.locator('.pi-bot-setup-later').click();
             assert.deepEqual(await page.evaluate(() => x.responses), [{ id: 'select2', value: '先不改 / Not now' }]);
-            // Personality quick picks fill editable text; the three working modes save only this card's fields.
+            // Personality quick picks fill editable text; a different proposed way of working shows the three
+            // modes, and only this card's fields are saved.
             await page.evaluate(() => {
                 x.card.element.remove();
-                x.card = PiBot.setupCards({ enabled: () => true, calls: () => [{ id: 'style', args: { personality: '草稿', workStyle: 'free' } }],
+                x.card = PiBot.setupCards({ enabled: () => true, calls: () => [{ id: 'style', args: { personality: '草稿', workStyle: 'ask' } }],
                     identity: () => ({ ...x.identity, workStyle: 'free' }), face: () => PiBot.face(x.identity), respond() {}, changed() {},
                     save: async (_id, changes) => x.writes.push(changes) });
                 document.querySelector('#fixture').append(x.card.element);

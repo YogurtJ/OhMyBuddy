@@ -10637,5 +10637,9 @@
         ["回收站前的检查暂时还没准备好，稍后再试。", "The checks before moving to the trash are not ready yet. Try again shortly."],
         ["定时任务的检查暂时还没准备好，稍后再试。", "The scheduled task checks are not ready yet. Try again shortly."]
     );
+    rows.push(
+        ["比如：功能开发", "For example: Feature development"],
+        ["围绕这项功能讨论需求、实现思路和待解决的问题。", "Discuss the requirements, implementation approach and open questions for this feature."]
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();
