@@ -66,6 +66,8 @@ test('bots are profiles with a private workspace and a native-marked main window
     assert.equal(created.status, 200, JSON.stringify(created.data));
     const botId = created.data.bot.id;
     assert.equal(created.data.bot.name, '新伙伴');
+    assert.deepEqual(created.data.bot.avatar, { kind: 'preset', id: 'pivane-pebble' });
+    assert.equal(created.data.bot.bot.onboarding.defaultAvatar, 'pivane-pebble');
     assert.equal(created.data.bot.bot.onboarding.firstBot, true);
     assert.equal(created.data.window.kind, 'main');
     assert.equal((await call('POST', '/bots', { expectedRevision: empty.data.revision })).status, 409);

@@ -38,16 +38,19 @@ const UUID = /^[a-f0-9-]{36}$/;
 const WORKSPACE_PARENT = 'PivaneBots';
 const MAX_BOTS = 50;
 const PLACEHOLDER = Object.freeze({ 'zh-CN': '新伙伴', en: 'New buddy' });
-const DEFAULT_AVATAR = Object.freeze({ kind: 'emoji', value: '✨' });
+const DEFAULT_AVATAR = Object.freeze({ kind: 'preset', id: 'pivane-pebble' });
+const LEGACY_DEFAULT_AVATAR = Object.freeze({ kind: 'emoji', value: '✨' });
 // Whether the user has picked the name and the face, kept across a new interview: recorded when
 // they save one on a setup card or in Bot settings (bot.chosen), else inferred (older records,
 // the identity page) from the interview's name/face step (or the older combined identity step)
 // or a value a new Bot does not start with. A later setup card keeps these unless the user asks (UAT-03).
 function chosenIdentity(profile, bot) {
     const steps = bot.onboarding?.steps || {}, both = steps.identity === 'done', avatar = profile.avatar;
+    // Only new records carry this default marker. A pre-existing 小石 choice remains chosen.
+    const defaultFace = isDeepStrictEqual(avatar, LEGACY_DEFAULT_AVATAR)
+        || bot.onboarding?.defaultAvatar === DEFAULT_AVATAR.id && isDeepStrictEqual(avatar, DEFAULT_AVATAR);
     return { name: bot.chosen?.name === true || both || steps.name === 'done' || !Object.values(PLACEHOLDER).includes(profile.name),
-        avatar: bot.chosen?.avatar === true || both || steps.avatar === 'done'
-            || Boolean(avatar) && !(avatar.kind === DEFAULT_AVATAR.kind && avatar.value === DEFAULT_AVATAR.value) };
+        avatar: bot.chosen?.avatar === true || both || steps.avatar === 'done' || Boolean(avatar) && !defaultFace };
 }
 // Interview steps answered elsewhere count as settled; the older combined step covers name and face.
 const settled = (steps, step) => Boolean(steps[step]) || (step === 'name' || step === 'avatar') && steps.identity === 'done';
@@ -175,7 +178,7 @@ class BotService extends EventEmitter {
             const now = new Date().toISOString();
             const defaults = settings.defaultBot({ workspace, now, firstBot: existingBots.length === 0,
                 order: existingBots.reduce((max, profile) => Math.max(max, settings.readBot(profile).order + 1), 0) });
-            const bot = settings.normalizeBot({ ...defaults, onboarding: { ...defaults.onboarding, flowVersion: 2 } });
+            const bot = settings.normalizeBot({ ...defaults, onboarding: { ...defaults.onboarding, flowVersion: 2, defaultAvatar: DEFAULT_AVATAR.id } });
             const base = validateProfile({ name, description: '', soul: '', enabled: true, avatar: DEFAULT_AVATAR,
                 memory: { enabled: true, autoLearn: false }, skills: { learnedEnabled: true } });
             const saved = await this.profiles.mutate(input.expectedRevision, state => {
@@ -793,6 +796,11 @@ class BotService extends EventEmitter {
                 const previous = state.profiles[index], bot = settings.readBot(previous);
                 if (index < 0 || !bot || previous.trashedAt !== undefined) fail('Bot not found', 404);
                 progressBefore = bot.onboarding;
+                // Ignore an unchanged mode carried along with another step. An explicit edited
+                // choice of a different mode (including older clients) still needs the usual check.
+                const workOffered = setup.workStyleOffered(proposal, bot.permissions.preset, bot.onboarding.steps)
+                    || changes.workStyle !== undefined && changes.workStyle !== bot.permissions.preset;
+                if (!workOffered) delete changes.workStyle;
                 if (picture && (previous.avatar?.kind !== 'image' || previous.avatar.version !== input.picture))
                     fail('The face is no longer the uploaded picture; upload it again', 409, 'BOT_PICTURE_CHANGED');
                 const base = validateProfile({ name: changes.name ?? previous.name, description: previous.description,
@@ -805,7 +813,7 @@ class BotService extends EventEmitter {
                 const has = { name: previous.name, avatar: previous.avatar?.kind === 'emoji' ? previous.avatar.value : previous.avatar?.kind === 'preset' ? previous.avatar : null, job: bot.job,
                     personality: previous.soul, workStyle: bot.permissions.preset };
                 for (const [field, step] of Object.entries(setup.STEP_OF)) {
-                    if (!Object.hasOwn(proposal, field)) continue;
+                    if (!Object.hasOwn(proposal, field) || field === 'workStyle' && !workOffered) continue;
                     if (changes[field] !== undefined || field === 'avatar' && picture || !later && isDeepStrictEqual(has[field], proposal[field])) onboarding.steps[step] = 'done';
                     else if (!settled(onboarding.steps, step)) onboarding.steps[step] = 'skipped';
                 }

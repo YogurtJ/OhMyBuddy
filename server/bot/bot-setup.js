@@ -14,6 +14,12 @@ const FIELDS = Object.freeze(['name', 'avatar', 'job', 'personality', 'workStyle
 const WORK_STYLES = Object.freeze(['free', 'balanced', 'ask']);
 const moreCareful = (next, current) => WORK_STYLES.includes(next)
     && WORK_STYLES.indexOf(next) >= WORK_STYLES.indexOf(WORK_STYLES.includes(current) ? current : 'ask');
+// An unchanged way of working belongs only to its own unanswered interview card.
+// A stray copy on another card must not answer, skip or change that permission step.
+function workStyleOffered(proposal, current, steps = {}) {
+    return WORK_STYLES.includes(proposal.workStyle) && (proposal.workStyle !== current
+        || !steps.work && Object.keys(proposal).every(key => key === 'workStyle' || key === 'finish'));
+}
 // The interview step each proposal field answers (onboarding.steps keys).
 const STEP_OF = Object.freeze({ name: 'name', avatar: 'avatar', job: 'job', personality: 'personality', workStyle: 'work', aboutUser: 'about' });
 const LIMITS = Object.freeze({ name: 40, avatar: 16, job: 300, personality: 6000, aboutItems: 6, aboutItem: 300 });
@@ -112,4 +118,4 @@ function appendUserEntries(content, items) {
     return { content: [...parts, ...added].join('\n§\n'), added };
 }
 
-module.exports = { SETUP_TOOL, SETUP_TITLE, SAVE, DECLINE, FIELDS, LIMITS, WORK_STYLES, STEP_OF, moreCareful, normalizeProposal, pendingProposal, confirmedChanges, userEntries, appendUserEntries };
+module.exports = { SETUP_TOOL, SETUP_TITLE, SAVE, DECLINE, FIELDS, LIMITS, WORK_STYLES, STEP_OF, moreCareful, workStyleOffered, normalizeProposal, pendingProposal, confirmedChanges, userEntries, appendUserEntries };

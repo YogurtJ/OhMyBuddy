@@ -52,6 +52,74 @@ async function fixture(t) {
     return { store, profiles, bots, documents, id, windowId, session, manager, revision, propose, confirm, update, onboarding, record, listed, patchRecord };
 }
 
+test('new Bots use the built-in face without treating it as a user choice', { timeout: 60000 }, async t => {
+    const f = await fixture(t);
+    const before = await f.record();
+    assert.deepEqual(before.avatar, { kind: 'preset', id: 'pivane-pebble' });
+    assert.equal(before.bot.onboarding.defaultAvatar, 'pivane-pebble');
+    assert.deepEqual((await f.listed()).chosen, { name: false, avatar: false });
+    assert.deepEqual(before.bot.permissions, { preset: 'free', rules: [] });
+    await f.onboarding('restart');
+    assert.equal((await f.listed()).chosen.avatar, false, 'restarting does not turn the default into a chosen face');
+    await f.confirm(f.propose({ avatar: { kind: 'preset', id: 'pivane-pebble' } }));
+    assert.equal((await f.listed()).chosen.avatar, true, 'an explicit same-preset confirmation is still a choice');
+    await f.onboarding('restart');
+    assert.equal((await f.listed()).chosen.avatar, true, 'the explicit choice survives restart');
+});
+
+test('existing preset and legacy default avatars retain their values and choice meaning', { timeout: 60000 }, async t => {
+    const f = await fixture(t);
+    await f.patchRecord(profile => { delete profile.bot.onboarding.defaultAvatar; });
+    const before = await f.record();
+    assert.equal((await f.listed()).chosen.avatar, true, 'an older 小石 is an existing choice');
+    await f.bots.create({ expectedRevision: await f.revision() });
+    assert.deepEqual(await f.record(), before, 'creating a new Bot does not migrate an existing profile');
+    await f.onboarding('restart');
+    assert.deepEqual((await f.record()).avatar, before.avatar);
+    assert.equal((await f.listed()).chosen.avatar, true);
+    await f.patchRecord(profile => {
+        profile.avatar = { kind: 'emoji', value: '✨' };
+        delete profile.bot.chosen;
+        profile.bot.onboarding.steps = {};
+    });
+    assert.equal((await f.listed()).chosen.avatar, false, 'the older default remains unchosen');
+    await f.onboarding('restart');
+    assert.deepEqual((await f.record()).avatar, { kind: 'emoji', value: '✨' }, 'existing stars are not replaced');
+});
+
+test('unchanged workStyle on other cards never answers or skips the work step', { timeout: 60000 }, async t => {
+    const f = await fixture(t);
+    const saved = await f.confirm(f.propose({ name: 'Cedar', workStyle: 'free' }), { changes: { name: 'Cedar' } });
+    assert.deepEqual(saved.saved, { name: 'Cedar' });
+    assert.deepEqual(saved.bot.bot.onboarding.steps, { name: 'done' });
+    const adopted = await f.confirm(f.propose({ job: 'Organize tasks', workStyle: 'free' }));
+    assert.deepEqual(adopted.saved, { job: 'Organize tasks' }, 'default proposal adoption also omits the hidden unchanged mode');
+    assert.deepEqual(adopted.bot.bot.onboarding.steps, { name: 'done', job: 'done' });
+    const later = await f.confirm(f.propose({ aboutUser: ['Call me Lee'], workStyle: 'free' }), { later: true });
+    assert.deepEqual(later.bot.bot.onboarding.steps, { name: 'done', job: 'done', about: 'skipped' });
+    assert.deepEqual((await f.record()).bot.permissions, { preset: 'free', rules: [] });
+    const work = await f.confirm(f.propose({ workStyle: 'free' }), { changes: {} });
+    assert.equal(work.bot.bot.onboarding.steps.work, 'done', 'the dedicated pending card confirms the current mode');
+    const duplicate = await f.confirm(f.propose({ workStyle: 'free' }), { later: true });
+    assert.deepEqual(duplicate.bot.bot.onboarding.steps, work.bot.bot.onboarding.steps);
+});
+
+test('actual workStyle changes remain effective on mixed cards and retain permission ordering', { timeout: 60000 }, async t => {
+    const f = await fixture(t);
+    // Older clients may still show the selector on a mixed card; an explicit stricter choice is valid.
+    const edited = await f.confirm(f.propose({ job: 'Organize tasks', workStyle: 'free' }),
+        { changes: { job: 'Organize tasks', workStyle: 'balanced' } });
+    assert.equal(edited.saved.workStyle, 'balanced');
+    assert.equal(edited.bot.bot.onboarding.steps.work, 'done');
+    const changed = await f.confirm(f.propose({ name: 'Cedar', workStyle: 'ask' }));
+    assert.equal(changed.saved.workStyle, 'ask');
+    assert.equal((await f.record()).bot.permissions.preset, 'ask');
+    const before = await f.record();
+    await assert.rejects(f.confirm(f.propose({ name: 'Must not save', workStyle: 'free' })),
+        { status: 409, code: 'BOT_WORK_STYLE_FREER' });
+    assert.deepEqual(await f.record(), before);
+});
+
 test('setup marks only proposed steps; a name never settles the face', { timeout: 60000 }, async t => {
     const f = await fixture(t);
     const result = await f.confirm(f.propose({ name: 'Cedar' }));
@@ -111,14 +179,15 @@ test('later records skipped steps without saving facts, guesses, permissions or 
 test('same-value confirmations settle steps and choices survive restarting the interview', { timeout: 60000 }, async t => {
     const f = await fixture(t);
     const before = await f.record();
-    const proposal = { name: before.name, avatar: before.avatar.value, workStyle: 'free' };
+    const proposal = { name: before.name, avatar: before.avatar };
     await f.confirm(f.propose(proposal), { later: true });
     const kept = await f.confirm(f.propose(proposal), { changes: {} });
     assert.deepEqual(kept.saved, {});
-    assert.deepEqual(kept.bot.bot.onboarding.steps, { name: 'done', avatar: 'done', work: 'done' });
+    assert.deepEqual(kept.bot.bot.onboarding.steps, { name: 'done', avatar: 'done' });
+    await f.confirm(f.propose({ workStyle: 'free' }), { changes: {} });
     assert.deepEqual((await f.listed()).chosen, { name: true, avatar: true });
     const declined = await f.confirm(f.propose({ name: 'Guess', avatar: '🦊', workStyle: 'ask' }), { later: true });
-    assert.deepEqual(declined.bot.bot.onboarding.steps, kept.bot.bot.onboarding.steps, 'later preserves settled answers');
+    assert.deepEqual(declined.bot.bot.onboarding.steps, { ...kept.bot.bot.onboarding.steps, work: 'done' }, 'later preserves settled answers');
     await f.onboarding('restart');
     assert.deepEqual((await f.record()).bot.onboarding.steps, {});
     assert.deepEqual((await f.listed()).chosen, { name: true, avatar: true }, 'same-value choices survive cleared steps');
@@ -316,16 +385,16 @@ test('a failed progress correction returns the saved identity and an explicit fl
 test('onboarding prompt renders only remaining steps, including legacy and partial state', () => {
     const guide = (steps, phase = 'interview', kind = 'main') => onboardingGuidance({ onboarding: { phase, steps } }, { kind });
     const remaining = text => text.split('\n').filter(line => /^  \d+\./.test(line));
-    assert.equal(remaining(guide({})).length, 6);
+    assert.equal(remaining(guide({})).length, 5);
+    assert.doesNotMatch(remaining(guide({})).join('\n'), /Your face:|avatar|emoji/);
     const legacy = remaining(guide({ identity: 'done' })).join('\n');
     assert.doesNotMatch(legacy, /Your name:|Your face:/);
     assert.match(legacy, /Your personality:/);
-    assert.match(remaining(guide({ identity: 'skipped' })).join('\n'), /Your name:|Your face:/);
+    assert.match(remaining(guide({ identity: 'skipped' })).join('\n'), /Your name:/);
     const partial = remaining(guide({ about: 'done', job: 'skipped', name: 'done' }));
-    assert.equal(partial.length, 3);
-    assert.match(partial[0], /^  1\. Your face:/);
-    assert.match(partial[1], /^  2\. Your personality:/);
-    assert.match(partial[2], /^  3\. How you work:/);
+    assert.equal(partial.length, 2);
+    assert.match(partial[0], /^  1\. Your personality:/);
+    assert.match(partial[1], /^  2\. How you work:/);
     const allDone = guide({ about: 'done', job: 'done', name: 'done', avatar: 'skipped', personality: 'done', work: 'skipped' });
     assert.deepEqual(remaining(allDone), []);
     assert.doesNotMatch(allDone, /Steps still to do/);
