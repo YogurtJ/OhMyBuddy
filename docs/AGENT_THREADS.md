@@ -30,7 +30,7 @@
 
 来源 worker 空闲后，通过其私有命令写入原生 custom message，不触发新模型轮次。已打开的网页根据实时 message_end 事件追加结果正文，无需刷新；重复事件和历史重载按交付标识去重，迟到的旧历史快照不能覆盖新回执。来源忙碌时面板仍可查看结果，待空闲再纳入会话；来源未打开时不为通知启动 worker，下次打开后补收。结果是 Agent 来源，不增加用户授权。主 Agent 可用 status 查看最新预览，用 result 分页读取指定原生回复。
 
-回执绑定来源 ID、目标 ID、requestId 和 run 标识；重复事件、响应不确定及重开 worker 均先核对原生回执。已读通过来源 worker 保存；来源忙碌或未打开时不能写已读。子线程继续执行产生新的一轮结果，旧结果保留。界面显示最近100份结果和最多100个进行中任务，旧原文仍在目标线程；后台逐批补收尚未交付的结果。
+回执绑定来源 ID、目标 ID、requestId 和 run 标识；重复事件、响应不确定及重开 worker 均先核对原生回执。已读通过已打开的来源 worker 保存，来源运行中也可标记已读（仅写已读 custom entry，正文回执仍待来源空闲后纳入会话）；全部结果已读且没有进行中任务时，输入框上方的“任务结果”条自动隐藏。子线程继续执行产生新的一轮结果，旧结果保留。界面显示最近100份结果和最多100个进行中任务，旧原文仍在目标线程；后台逐批补收尚未交付的结果。
 
 旧任务仍可按原 requestId 查询、打开原线程；没有新回传标记的旧任务不会在升级后集中推送历史通知。任务结果回执本身不唤醒来源 Agent；需要对方处理时使用下文的线程间消息。级联停止和跨项目创建不在此能力内。
 
@@ -51,7 +51,7 @@
 
 ## 界面展示
 
-任务说明、回执和消息默认折叠，展开读取完整内容；来源与状态始终标明。输入框上方“任务结果”可定位正文或查看纯文本预览；已读经来源 worker 保存，来源忙碌时不能修改。简洁视图中，唤醒消息和任务说明开始新一轮；卡片状态不是验收证明。
+任务说明、回执和消息默认折叠，展开读取完整内容；来源与状态始终标明。输入框上方“任务结果”可定位正文或查看纯文本预览；已读经已打开的来源 worker 保存（运行中也可标记，全部已读且无进行中任务时自动隐藏）。简洁视图中，唤醒消息和任务说明开始新一轮；卡片状态不是验收证明。
 
 ## 内容与失败处理
 
@@ -93,7 +93,7 @@ requestId 为 1–160 个字母、数字、下划线、点、冒号或短横线�
 
 创建与查询回执包含 `session:{id,cwd,name}`、requestId、source、model、thinkingLevel、status；复用增加 reused=true，启动未确认增加 notice。正在准备时 status 查询只返回 requestId 和 preparing。其他状态包括 saved、submitted、uncertain、completed、error、stopped，活动 worker 优先返回实际运行阶段。HTTP 成功仅表示创建/查询已处理，不代表任务执行成功。
 
-普通工作台身份可用 `GET /api/pi/agent-threads/results?cwd=...&sourceSessionId=...` 查看来源线程的 tasks/results/coverage；`POST /api/pi/agent-threads/read` 接受 cwd、sourceSessionId、deliveryId，核对归属后仅由已打开且空闲的来源 worker 写已读。私有任务凭据不能调用这两个工作台端点。
+普通工作台身份可用 `GET /api/pi/agent-threads/results?cwd=...&sourceSessionId=...` 查看来源线程的 tasks/results/coverage；`POST /api/pi/agent-threads/read` 接受 cwd、sourceSessionId、deliveryId，核对归属后由已打开的来源 worker 写已读（来源运行中只记录已读，不提前注入会话正文）。私有任务凭据不能调用这两个工作台端点。
 
 `/api/pi/activity.agentThreadLaunches` 计入准备中的创建请求；agentTaskIndexing 和 agentTaskReturns 报告读取/交付工作，维护空闲和停机等待均覆盖这些阶段。启动通过目标唯一 worker 的受保护私有命令，未知/迟到回执继续截获，不广播给浏览器。任务内容、模型选择、来源、提交与终态使用原生 SessionManager/custom entries，不维护第二份聊天记录。
 

@@ -334,7 +334,7 @@ HTTP 成功响应也是工具结果 `details.pivaneBotSchedule` 的值（工具 
 
 `GET /status.agentThreads=true` 标记任务线程后端，`agentTaskResults=true` 标记来源线程结果回执。受管持久 Agent 的 `agent_thread` 工具通过私有 POST `/agent-threads/create|status|models|result` 创建任务、查询状态/模型或分页只读原生结果。身份绑定存活源 worker；工作台 Cookie/Token 不能代替。目录未完成时返回202及 `TASK_INDEXING`/coverage，不把未核实记录当作不存在。`/activity.agentThreadLaunches`、`agentTaskIndexing`、`agentTaskReturns` 分别报告创建、目录读取和交付工作，均进入维护空闲与停机等待。
 
-工作台身份使用 `GET /agent-threads/results?cwd=...&sourceSessionId=...` 读取来源线程的任务与最近100份结果，返回 `status`、`tasks`、`results`、`coverage`、`total`、`truncated`。结果含 deliveryId、requestId、sourceSessionId、session、status、resultId、entryId、completedAt、preview、truncated、delivered、read。`POST /agent-threads/read` 接受 cwd/sourceSessionId/deliveryId，仅由当前来源 worker 在空闲时保存已读；忙碌或归属错误返回409。
+工作台身份使用 `GET /agent-threads/results?cwd=...&sourceSessionId=...` 读取来源线程的任务与最近100份结果，返回 `status`、`tasks`、`results`、`coverage`、`total`、`truncated`。结果含 deliveryId、requestId、sourceSessionId、session、status、resultId、entryId、completedAt、preview、truncated、delivered、read。`POST /agent-threads/read` 接受 cwd/sourceSessionId/deliveryId，由当前已打开的来源 worker 保存已读（来源运行中仅保存已读标记，正文回执仍待空闲交付）；来源未打开、不满足写入条件或归属错误返回409。
 
 来源忙碌或关闭不丢结果，重开后从原生任务状态和回执恢复；回传不触发新的模型轮次。任务参数、预算、旧任务兼容和失败语义见[Agent 任务线程](AGENT_THREADS.md)。
 

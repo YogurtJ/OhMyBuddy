@@ -959,7 +959,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const taskProgress = new window.PiTaskProgress(document.getElementById('pi-task-progress'));
     const taskResults = window.PiTaskResults?.create({ root: document.getElementById('pi-task-results'), fetch: apiFetch,
         scope: () => state.session && !state.session.ephemeral ? { cwd: state.cwd, id: state.session.id, generation: state.socketGeneration,
-            busy: !state.connected || state.streaming || state.compacting || state.shellBusy || state.pendingUi.size > 0 } : null,
+            busy: !state.connected || state.compacting || state.compactRequested || state.controlRequested || state.resourceRequested || state.shellBusy } : null,
         link: appendAgentThreadLink, error: message => toast(message, 'error'), locate: locateTaskResult });
     // A result chip row jumps to the delivered card: unfold its turn, open its body and scroll to it.
     function locateTaskResult(deliveryId) {
