@@ -35,7 +35,18 @@ test('bot settings normalize, tolerate invalid reads and accept only user-editab
     assert.deepEqual(patched.model, { provider: 'p', id: 'm', thinking: 'low' });
     assert.equal(patched.permissions.preset, 'balanced');
     assert.equal(patched.notify.quietHours, null);
-    assert.equal(patched.notify.dailyProactiveLimit, 5);
+    assert.equal(patched.notify.dailyProactiveLimit, 20, 'D-045: a generous default');
+    assert.equal(patched.notify.proactive, true);
+    assert.equal(patched.notify.version, 2);
+    // Before version 2 nothing could set the limit: a stored 5 is the old default and reads as the new one.
+    assert.equal(settings.normalizeBot({ ...bot, notify: { quietHours: null, dailyProactiveLimit: 5 } }).notify.dailyProactiveLimit, 20);
+    const chosen = settings.applyBotPatch(patched, { notify: { dailyProactiveLimit: 5, proactive: false, timeZone: 'Asia/Shanghai' } });
+    assert.deepEqual([chosen.notify.dailyProactiveLimit, chosen.notify.proactive, chosen.notify.timeZone], [5, false, 'Asia/Shanghai']);
+    assert.equal(settings.normalizeBot(chosen).notify.dailyProactiveLimit, 5, 'a version 2 limit is the user\'s own');
+    assert.equal(settings.applyBotPatch(chosen, { notify: { dailyProactiveLimit: null } }).notify.dailyProactiveLimit, null, 'null: no limit');
+    for (const notify of [{ dailyProactiveLimit: -1 }, { dailyProactiveLimit: 201 }, { dailyProactiveLimit: 1.5 }, { proactive: 'yes' }, { timeZone: 'Mars/Base' },
+        { quietHours: { start: '08:00', end: '08:00' } }])
+        assert.throws(() => settings.applyBotPatch(chosen, { notify }), /Invalid/);
     for (const bad of [{ workspace: '/tmp' }, { onboarding: {} }, { permissions: { preset: 'root' } }, { permissions: { rules: [ { v: 99 } ] } },
         { model: { provider: '', id: 'x' } }, { notify: { quietHours: { start: '25:00', end: '08:00' } } }, { order: -1 }, { job: 'x'.repeat(501) }])
         assert.throws(() => settings.applyBotPatch(bot, bad), /Invalid/);

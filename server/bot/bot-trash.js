@@ -74,7 +74,8 @@ function createTrashBlockers({ cron, deferred, learning, store }) {
         const sameThread = target => sameThreadTarget(target, sessionRefs, store ? cwd => store.resolveProject(cwd) : undefined);
         const sameTarget = target => target?.kind === 'profile' && target.profileId === profileId
             || target?.kind === 'thread' && sameThread(target);
-        const accepted = cron.db.activeRuns().some(run => sameTarget(run.job?.target) || sameThread(run.target));
+        // A Bot's own follow-up that has not started yet is simply not sent once the Bot is in the trash.
+        const accepted = cron.db.activeRuns().some(run => !(run.origin === 'bot' && run.status === 'waiting') && (sameTarget(run.job?.target) || sameThread(run.target)));
         if (accepted) return [{ code: 'BOT_HAS_SCHEDULES', message: 'Wait for accepted scheduled work to finish before moving this Bot to trash' }];
         const scheduled = cron.db.jobs().some(job => !job.deleted && job.enabled && sameTarget(job.target));
         if (scheduled) return [{ code: 'BOT_HAS_SCHEDULES', message: 'Disable or cancel this Bot scheduled tasks before moving it to trash' }];

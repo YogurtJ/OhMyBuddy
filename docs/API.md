@@ -259,6 +259,8 @@
 - `PATCH /bots/:id` `{expectedRevision,changes:{name?,description?,soul?,avatar?,bot?}}`；`avatar` 沿用上述 `profile.avatar` 契约；`bot` 只接受 `job`、`model`（null 为跟随默认）、`permissions:{preset?,rules?}`、`notify`、`order`。图片头像需先经头像接口上传。仅在访谈阶段为 `greeting|interview` 时，将实际改动的名字、头像、职责、性格和做事方式对应步骤记为 `done`（旧版 `identity:'done'` 已完成名字和头像）；上传图片后再通过 PATCH 保存该图片头像，即使版本未变，也计为已选头像，并在 `greeting|interview` 阶段完成头像步骤。
 - `POST /bots/:id/trash` `{expectedRevision}` 将 Bot 可恢复地移入身份回收站，返回 `{ok,revision,trashed:true,bot:{id,name,trashedAt},stoppedSessions,recoverable:true,profile}`；历史、工作目录和记忆保留。共享档案预占与全部已知原生会话编辑预占，拒绝忙碌、排队、后台任务、未处理预约消息、学习及关联定时任务/已受理运行，核对修订并停止空闲 worker 后才写入档案；同步的最终依赖检查防止迟到工作。旧 `/profiles/:id/trash` 对 Bot 使用相同协调路径。失败保持未移走，不自动取消工作；可从身份恢复接口恢复。常见 409：`BOT_TRASH_STALE`、`BOT_WINDOW_STALE`、`BOT_WINDOW_ROTATING`、`SESSION_BUSY`、`SESSION_QUEUE_RECOVERY`、`BOT_HAS_SCHEDULES`、`BOT_HAS_DEFERRED`、`BOT_WORK_PENDING`。
 - `POST /bots/:id/windows` `{expectedRevision:<windowsRevision>,title?,focus?,emoji?}` 创建新话题，返回 `{ok,window,windowsRevision}`；title 可省略（默认“新话题”，并在首轮问答自动生成标题与关注点后同步更新未手动改过的字段），传值时 1–80 字，focus 最多 500，emoji 最多 16，拒绝控制字符和未知字段。最多 100 个话题，包含归档；新话题是独立原生对话与记事本，共用 Bot 档案记忆，不复制主聊天。先 CAS 写 prepared 索引，再创建含 metadata seed 的原生标记，最后提交当前会话；中断时采用原标记，不重复创建。
+- `bot.notify` 为 `{version:2,proactive,quietHours:null|{start,end},dailyProactiveLimit:null|0..200,timeZone?}`，`start/end` 为 `HH:mm` 且不能相同，`dailyProactiveLimit:null` 表示不限，`timeZone` 为 IANA 时区。version 2 之前保存的上限读作默认 20。`PATCH` 的 `notify` 与已保存值合并。
+- `GET /bots/:id/follow-ups` → `{items:[{id,kind:'due'|'checkin',windowId,at,title,state:'pending',noteId?,due?}]}`，按时间排序；`DELETE /bots/:id/follow-ups/:itemId` → `{cancelled}`，已开始发送的 409，不存在的 404。到期跟进取消后不会因同一条承诺再次加回。状态存于 `<agentDir>/pivane-bots/<profileId>/proactive.json`（私有文件）。
 - `PATCH /bots/:id/windows/:windowId` `{expectedRevision:<windowsRevision>,title?,focus?,emoji?,archived?:boolean}` 修改话题或归档/恢复，返回同创建。主聊天不可修改；归档保留所有代，恢复沿用当前会话。归档拒绝忙碌/队列/待确认/草稿/后台/预约/侧聊/换代及关联定时工作，返回 409 `BOT_WINDOW_BUSY|BOT_WINDOW_ROTATING|BOT_TOPIC_SCHEDULED`。归档后新消息、原生会话入口和定时/延迟派发拒绝，409 `BOT_WINDOW_ARCHIVED`；只读历史仍可读取归档的当前代，不启动 worker。
 - `GET /bots/:id/topics/open-items` → `{v:1,topics:[{windowId,title,state:'ready'|'busy'|'unavailable'|'budget',items:[{title,kind,due?}],omitted?}],omittedTopics,windowsRevision}`；只读标题级未了事项，取 active open/commitment，按 Bot 隔离。最多 20 话题、40 项、每题 3 项、标题 120 字，每文件 2 MiB、总 8 MiB、150 ms 预算；失败表示未知，不表示空，无新 worker/模型请求。
 - `POST /bots/:id/main-window` 幂等补建或采用已有原生标记的主聊天。
@@ -299,6 +301,7 @@ Bot 窗口会话不能移动或绑定消息渠道。以 Bot 档案为目标的�
 
 Bot 窗口另有 `bot_schedule` 工具，动作是 `create/list/cancel`。内部 `POST /api/pi/bot-schedule/:action` **只接受存活 worker 的导航 Bearer Token**；工作台 Cookie／管理 Token 不能代替。worker 必须加载 Bot 身份，且仍是该窗口当前一代；`profileId/windowId` 仅从 worker 取，不接受请求体指定。查询与取消只涉及以本 Bot 为 profile 目标的任务（包含它的全部窗口）。
 
+- `create` 带 `proactive:true` 时是 Bot 自己约的“回来看看”，不是定时任务：只能 `once`、不能 `needsTools:true`、`message` 最多 2000 字；任何做事方式都不弹确认（受“主动找你”开关、安静时段和推送上限约束，可在设置里取消）。结果为 `{v:1,action:'created',proactive:true,profileId,followUp:{id,kind:'checkin',windowId,at,title,state,local}}`；关闭主动消息时 409 `BOT_PROACTIVE_OFF`，待发过多时 409 `BOT_CHECKIN_LIMIT`。`list` 在有待发跟进时另带 `followUps`；`cancel` 接受 24 位十六进制跟进 ID，返回 `{v:1,action:'cancelled',proactive:true,profileId,followUp}`。
 - `create`：`{toolCallId,title,message,once?,repeat?,timeZone?,needsTools?}`。`title` 最多 120 字，`message` 最多 40000 字；`once` 为本地墙上时间 `YYYY-MM-DD HH:mm`，与五段 cron `repeat` 必须二选一。`timeZone` 为 IANA 时区，默认服务端时区；拒绝过去时间、无效日期和夏令时缺失的本地时刻，重复时刻选首次。`needsTools:false`（默认）保存为文字模式，true 为工作模式；默认启用，其余执行限制和预算沿用调度器。主聊天使用 `{kind:'profile',profileId}`，话题使用 `{kind:'profile',profileId,windowId}`。以窗口当前会话 ID 和 `toolCallId` 派生稳定 UUID，同一调用重试不重复创建；已有同一调用不接受更改内容。定时运行未结束或仍待核对时拒绝创建。
 - `list`：`{timeZone?}`，返回本 Bot 未删除任务和该时区的当前本地时间 `now`（`YYYY-MM-DD HH:mm`）。查看不需要确认。
 - `cancel`：`{id,expectedRevision?}`，删除对应任务但保留历史；按调度器现有规则，正在运行或待核对的任务不能删除。`expectedRevision` 由 worker 审批流程内部保存和发送，不向模型暴露；修订已改变则返回 409，提示任务在批准后有变，请重新列出，不取消任何任务。“放手”无审批时取消当前修订。
@@ -381,6 +384,8 @@ HTTP 成功响应也是工具结果 `details.pivaneBotSchedule` 的值（工具 
   "replyNotices": [{ "cwd": "/workspace/demo", "sessionId": "01...", "completionId": "uuid", "completedAt": "ISO timestamp" }]
 }
 ```
+
+`replyNotices` 项带 `quiet:true` 时是 Bot 主动发的消息在安静时段或超出推送上限时的回复：照常标为未读，但页面不弹提醒、不推送。
 
 `phase` 为 `running`、`tool`、`compacting`、`retrying`、`waiting`、`idle`、`error` 或 `stopped`。`busy` 包含压缩/重试/工具执行及等待确认。`agent_end` 不代表完整任务结束，必须等 `agent_settled`。失败/停止标记只在 worker 生命周期内保留，不是持久任务记录。临时 runtime 和外部终端运行实例不在摘要中；不存在某 ID 不代表外部终端空闲。
 

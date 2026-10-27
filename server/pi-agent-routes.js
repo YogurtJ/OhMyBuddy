@@ -118,6 +118,7 @@ function createPiAgentGateway(options = {}) {
     Object.assign(profiles, { nativeService, settingsService, maintenance });
     const sideChat = new PiSideChatService({ store, supervisor, usage });
     const notifications = new (require('./pi-notification-service').PiNotificationService)({ access, store });
+    let proactive = null;
     supervisor.on('attention', event => { void notifications.notify(event); });
     supervisor.on('completion', (notice, worker) => {
         if (worker) {
@@ -128,10 +129,18 @@ function createPiAgentGateway(options = {}) {
         }
         // Bot windows: a large, long or old generation moves on once the reply is shown (D-030).
         if (worker?.loadedBot) setTimeout(() => { void bots.maintainWindow(worker, { trigger: 'completion' }); }, 3000).unref?.();
+        // Follow-ups for commitments with a due time keep in step with the notebook after each reply.
+        if (worker?.loadedBot) proactive?.afterReply(worker.loadedBot.profileId, worker.loadedBot.windowId);
         if (worker?.cronRun) return;
-        void notifications.notify(notice);
-        try { preferences.recordReplyNotice(notice); }
-        catch { console.error('Pi reply notice could not be persisted'); }
+        // A message a Bot started itself is pushed only outside quiet hours and within its daily
+        // limit (held ones are combined into one push when quiet hours end); it always stays in the chat.
+        const record = (value = 'push') => {
+            if (value === 'push') void notifications.notify(notice);
+            try { preferences.recordReplyNotice(value === 'push' ? notice : { ...notice, quiet: true }); }
+            catch { console.error('Pi reply notice could not be persisted'); }
+        };
+        if (!notice.proactive) return record();
+        void (proactive ? proactive.decide(notice).catch(() => 'capped') : Promise.resolve('capped')).then(record);
     });
 
     supervisor.on('worker', worker => {
@@ -273,6 +282,11 @@ function createPiAgentGateway(options = {}) {
             throw Object.assign(new Error('This topic has pending messages or side chats; finish them before archiving'), { status: 409, code: 'BOT_WINDOW_BUSY' });
     };
     require('./bot/bot-topic').mountBotTopics(router, { bots, authenticate: req => agentThreads.authenticate(req) });
+    // Messages Bots start themselves (M4-3): due follow-ups and check-ins, quiet hours and push limits.
+    proactive = new (require('./bot/bot-proactive').BotProactive)({ profiles, bots, cron, notifications, getAgentDir,
+        isSuspended: () => maintenance.locked || maintenance.referenceLocked || Boolean(store.sessionMoves?.running) });
+    bots.proactive = proactive;
+    proactive.start();
     const channels = new (require('./channels/service').ChannelsService)({ store, supervisor,
         mediaLabService: options.mediaLabService, mediaRoot: options.artifactMediaRoot,
         isSuspended: () => maintenance.locked || maintenance.referenceLocked || Boolean(store.sessionMoves?.running),
@@ -1202,6 +1216,7 @@ function createPiAgentGateway(options = {}) {
         const stoppingTranscription = transcription.dispose();
         const stoppingDocuments = documents.dispose();
         cron.stopping = true;
+        const stoppingProactive = proactive?.dispose();
         const stoppingDeferred = deferred.dispose();
         const stoppingMoves = sessionMoves.dispose();
         const stoppingThreads = agentThreads.dispose();
@@ -1215,6 +1230,7 @@ function createPiAgentGateway(options = {}) {
         await usage.dispose();
         await stoppingThreads;
         await Promise.all([stoppingChannels, stoppingFileRoots, stoppingDeferred, stoppingTitles, stoppingAuxiliaryModels, stoppingMoves, stoppingTranscription, stoppingDocuments]);
+        await stoppingProactive;
         await cron.dispose();
     }, store, supervisor, bots, channels, cron, deferred, sideChat, titles, auxiliaryModels, learning, knowledgeService, agentThreads, sessionMoves, transcription, documents, artifacts };
 }

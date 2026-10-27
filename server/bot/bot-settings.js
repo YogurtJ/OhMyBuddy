@@ -18,12 +18,17 @@ const STEP = /^[a-z][a-z-]{0,31}$/;
 const CLOCK = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const THINKING = /^[a-z]{1,16}$/;
 const MAX_RULES = 200;
+// Pushes of messages the Bot starts itself (D-045): generous, so early, busy days are not cut short.
+// Conversations, setup and the user's own reminders are never counted.
+const DEFAULT_PROACTIVE_LIMIT = 20;
+const MAX_PROACTIVE_LIMIT = 200;
+const validZone = value => { try { new Intl.DateTimeFormat('en-US', { timeZone: value }); return true; } catch { return false; } };
 
 function defaultBot({ workspace, order = 0, firstBot = false, now = new Date().toISOString() }) {
     return {
         version: 1, enabled: true, order, job: '', model: null, workspace,
         permissions: { preset: 'free', rules: [] },
-        notify: { quietHours: { start: '23:00', end: '08:00' }, dailyProactiveLimit: 5 },
+        notify: { version: 2, proactive: true, quietHours: { start: '23:00', end: '08:00' }, dailyProactiveLimit: DEFAULT_PROACTIVE_LIMIT },
         onboarding: { version: 1, phase: 'greeting', firstBot, steps: {}, startedAt: now, completedAt: null },
         createdAt: now
     };
@@ -43,14 +48,21 @@ function normalizePermissions(permissions, previous) {
     return { ...value, preset: value.preset, rules: value.rules ?? [] };
 }
 
+// version 2: proactive switch, daily push limit (null: no limit) and the user's time zone for quiet
+// hours. Before version 2 nothing could set the limit, so a stored value is the old default and is
+// read as the new one.
 function normalizeNotify(notify, previous) {
     const value = notify ?? previous ?? {};
     if (!object(value)) fail('Invalid bot notifications');
     const quiet = value.quietHours === undefined ? { start: '23:00', end: '08:00' } : value.quietHours;
     if (quiet !== null && (!object(quiet) || !CLOCK.test(quiet.start) || !CLOCK.test(quiet.end) || quiet.start === quiet.end)) fail('Invalid quiet hours');
-    const limit = value.dailyProactiveLimit ?? 5;
-    if (!Number.isSafeInteger(limit) || limit < 0 || limit > 50) fail('Invalid proactive message limit');
-    return { ...value, quietHours: quiet && { start: quiet.start, end: quiet.end }, dailyProactiveLimit: limit };
+    const current = value.version === 2;
+    const limit = current && value.dailyProactiveLimit !== undefined ? value.dailyProactiveLimit : DEFAULT_PROACTIVE_LIMIT;
+    if (limit !== null && (!Number.isSafeInteger(limit) || limit < 0 || limit > MAX_PROACTIVE_LIMIT)) fail('Invalid proactive message limit');
+    const proactive = current && value.proactive !== undefined ? value.proactive : true;
+    if (typeof proactive !== 'boolean') fail('Invalid proactive setting');
+    if (value.timeZone !== undefined && (typeof value.timeZone !== 'string' || value.timeZone.length > 64 || !validZone(value.timeZone))) fail('Invalid time zone');
+    return { ...value, version: 2, proactive, quietHours: quiet && { start: quiet.start, end: quiet.end }, dailyProactiveLimit: limit };
 }
 
 function normalizeOnboarding(onboarding) {
@@ -124,4 +136,4 @@ function applyBotPatch(previous, patch) {
     return normalizeBot(next);
 }
 
-module.exports = { PRESETS, ONBOARDING_PHASES, defaultBot, normalizeBot, readBot, isBot, applyBotPatch, normalizeModel };
+module.exports = { PRESETS, ONBOARDING_PHASES, DEFAULT_PROACTIVE_LIMIT, defaultBot, normalizeBot, readBot, isBot, applyBotPatch, normalizeModel };

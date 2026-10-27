@@ -15,6 +15,9 @@
     const THINKING = { off: () => translateUi("不启用"), minimal: () => translateUi("极简"), low: () => translateUi("低"), medium: () => translateUi("中"),
         high: () => translateUi("高"), xhigh: () => translateUi("极高"), max: () => translateUi("最大") };
     const modelKey = model => model ? `${model.provider}\u0000${model.id}` : '';
+    const CLOCK = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+    const browserZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } };
+    const when = at => new Date(at).toLocaleString(globalThis.PiI18n?.locale || 'zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
     // From pi-bot.js where it is loaded; otherwise the boxes keep their rows and scroll.
     const fitTextarea = area => window.PiBot?.fitTextarea?.(area);
     // Why the server would not move a Bot to the trash (nothing was changed).
@@ -77,7 +80,9 @@
         const formValues = () => controls ? { name: controls.name.value,
             faceDraft: JSON.stringify({ avatar: faceChoice, picture }), job: controls.job.value, soul: controls.soul.value,
             model: controls.model.value, thinking: controls.thinkingWrap.hidden ? '' : controls.thinking.value,
-            preset: controls.presets.find(input => input.checked)?.value || '', revoked: [...revoked].sort().join('\n') } : null;
+            preset: controls.presets.find(input => input.checked)?.value || '', revoked: [...revoked].sort().join('\n'),
+            proactive: String(controls.proactive.checked), quietOn: String(controls.quietOn.checked), quietStart: controls.quietStart.value,
+            quietEnd: controls.quietEnd.value, limit: controls.limit.value } : null;
         function applyValues(values) {
             for (const key of ['name', 'job', 'soul']) if (values[key] !== undefined) controls[key].value = values[key];
             fitTextarea(controls.job); fitTextarea(controls.soul);
@@ -90,6 +95,11 @@
             controls.thinkingWrap.hidden = !levels.length;
             if (levels.length) fillThinking(levels, values.thinking ?? controls.thinking.value);
             if (values.preset !== undefined) for (const input of controls.presets) input.checked = input.value === values.preset;
+            if (values.proactive !== undefined) controls.proactive.checked = values.proactive === 'true';
+            if (values.quietOn !== undefined) controls.quietOn.checked = values.quietOn === 'true';
+            for (const key of ['quietStart', 'quietEnd']) if (values[key] !== undefined) controls[key].value = values[key];
+            if (values.limit !== undefined && [...controls.limit.options].some(option => option.value === values.limit)) controls.limit.value = values.limit;
+            controls.showNotify();
             // A revoked grant stays revoked only while it still exists in the reread settings.
             if (values.revoked !== undefined) {
                 const ids = new Set(knownRules().map(rule => rule.id));
@@ -180,6 +190,15 @@
                 if (kept.length !== rules.length) permissions.rules = kept;
             }
             if (Object.keys(permissions).length) patch.permissions = permissions;
+            // Messages the Bot starts itself: only the fields changed; quiet hours follow this browser's time zone.
+            const notify = {}, saved = current.notify || {};
+            if (controls.proactive.checked !== (saved.proactive !== false)) notify.proactive = controls.proactive.checked;
+            const quiet = controls.quietOn.checked ? { start: controls.quietStart.value, end: controls.quietEnd.value } : null;
+            if (quiet && (!CLOCK.test(quiet.start) || !CLOCK.test(quiet.end) || quiet.start === quiet.end)) return null;
+            if (JSON.stringify(quiet) !== JSON.stringify(saved.quietHours ?? null)) notify.quietHours = quiet;
+            const limit = controls.limit.value === 'none' ? null : Number(controls.limit.value);
+            if (limit !== (saved.dailyProactiveLimit === undefined ? 20 : saved.dailyProactiveLimit)) notify.dailyProactiveLimit = limit;
+            if (Object.keys(notify).length) { const zone = browserZone(); if (zone && zone !== saved.timeZone) notify.timeZone = zone; patch.notify = notify; }
             if (Object.keys(patch).length) out.bot = patch;
             return out;
         }
@@ -312,7 +331,74 @@
             };
             showRules();
 
-            // Quiet hours join this sheet once Bots can start conversations on their own (M4).
+            // Messages the Bot starts by itself (M4-3): on/off, quiet hours, a daily push limit, and
+            // the follow-ups it plans, each cancellable right here.
+            const saved = current.notify || {};
+            const proactive = el('input'); proactive.type = 'checkbox'; proactive.checked = saved.proactive !== false; proactive.dataset.notify = 'proactive';
+            const proactiveRow = el('label', 'pi-bot-sheet-check');
+            proactiveRow.append(proactive, el('span', null, translateUi("让 {0} 主动找我", bot.name)));
+            const proactiveNote = el('p', 'pi-bot-sheet-note', translateUi("记下的事到期时，它会来提醒你、问问进展，也可能约好过几天回来看看。它只发消息，不会自己动手。你要它设的提醒不受这里影响。"));
+            const quietOn = el('input'); quietOn.type = 'checkbox'; quietOn.checked = Boolean(saved.quietHours); quietOn.dataset.notify = 'quiet';
+            const quietRow = el('label', 'pi-bot-sheet-check'); quietRow.append(quietOn, el('span', null, translateUi("安静时段")));
+            const clock = value => { const input = el('input'); input.type = 'time'; input.step = 60; input.value = value; return input; };
+            const quietStart = clock(saved.quietHours?.start || '23:00'), quietEnd = clock(saved.quietHours?.end || '08:00');
+            quietStart.setAttribute('aria-label', translateUi("安静时段开始")); quietEnd.setAttribute('aria-label', translateUi("安静时段结束"));
+            const quietTimes = el('div', 'pi-bot-sheet-times'); quietTimes.append(quietStart, el('span', null, translateUi("到")), quietEnd);
+            const quietNote = el('p', 'pi-bot-sheet-note', translateUi("这段时间它主动发的消息不推送，结束时合成一条提醒。"));
+            const limit = el('select'); limit.dataset.notify = 'limit';
+            const limits = [5, 10, 20, 30, 50, 100];
+            const currentLimit = saved.dailyProactiveLimit === undefined ? 20 : saved.dailyProactiveLimit;
+            if (Number.isSafeInteger(currentLimit) && !limits.includes(currentLimit)) limits.push(currentLimit);
+            for (const count of limits.sort((a, b) => a - b)) limit.append(new Option(translateUi("每天最多 {0} 条", count), String(count)));
+            limit.append(new Option(translateUi("不限"), 'none'));
+            limit.value = currentLimit === null ? 'none' : String(currentLimit);
+            const limitField = field(translateUi("推送上限"), limit, translateUi("只算它主动发的推送；超出后消息照样留在聊天里，只是不再推送。聊天、设置和你要的提醒都不算。"));
+            const followUps = el('div', 'pi-bot-sheet-followups'); followUps.setAttribute('role', 'group');
+            const followTitle = el('h4', null, translateUi("准备跟进的事")); followTitle.id = 'pi-bot-sheet-followups-title';
+            followUps.setAttribute('aria-labelledby', followTitle.id);
+            const showFollowUps = () => {
+                const nodes = [followTitle], list = data.followUps;
+                if (!Array.isArray(list)) nodes.push(el('p', 'pi-bot-sheet-note', translateUi("暂时读不到准备跟进的事。")));
+                else if (!list.length) nodes.push(el('p', 'pi-bot-sheet-note', translateUi("现在没有准备跟进的事。")));
+                else {
+                    const items = el('ul', 'pi-bot-sheet-rule-list');
+                    for (const entry of list) {
+                        const item = el('li', 'pi-bot-sheet-rule'); item.dataset.followUpId = entry.id;
+                        const copy = el('div', 'pi-bot-sheet-rule-copy');
+                        copy.append(el('strong', null, entry.title), el('small', null, (entry.kind === 'due' ? translateUi("到期提醒 · {0}", when(entry.at)) : translateUi("回来看看 · {0}", when(entry.at)))));
+                        const drop = button('pi-bot-chip', translateUi("取消")); drop.dataset.followUpCancel = entry.id;
+                        drop.setAttribute('aria-label', translateUi("取消跟进：{0}", entry.title));
+                        drop.addEventListener('click', async () => {
+                            if (drop.disabled || saving) return;
+                            drop.disabled = true;
+                            try {
+                                await options.api(`/api/pi/bots/${encodeURIComponent(options.profileId)}/follow-ups/${encodeURIComponent(entry.id)}`, { method: 'DELETE' });
+                                if (!sheet.open) return;
+                                data.followUps = data.followUps.filter(other => other.id !== entry.id);
+                                showFollowUps(); followTitle.focus?.();
+                                options.toast?.(translateUi("已取消这次跟进"), 'success');
+                            } catch (error) {
+                                if (!sheet.open) return;
+                                if (error.status === 404 || error.status === 409) { await loadFollowUps(); showFollowUps(); }
+                                status.dataset.tone = 'error'; status.textContent = translateUi("没有取消：{0}", error.message || translateUi("保存失败"));
+                            } finally { drop.disabled = false; }
+                        });
+                        item.append(copy, drop); items.append(item);
+                    }
+                    nodes.push(items);
+                }
+                followUps.replaceChildren(...nodes);
+            };
+            followTitle.tabIndex = -1;
+            showFollowUps();
+            const showNotify = () => {
+                quietTimes.hidden = quietNote.hidden = !quietOn.checked;
+                for (const node of [quietRow, quietTimes, quietNote, limitField]) node.classList.toggle('is-off', !proactive.checked);
+            };
+            proactive.addEventListener('change', showNotify); quietOn.addEventListener('change', showNotify);
+            showNotify();
+            const notifyBox = el('div', 'pi-bot-sheet-notify');
+            notifyBox.append(proactiveRow, proactiveNote, quietRow, quietTimes, quietNote, limitField, followUps);
 
             const memory = button('pi-bot-sheet-link'); memory.append(icon('fa-book-open'), el('span', null, translateUi("记忆和关于你")), icon('fa-chevron-right'));
             memory.addEventListener('click', () => leave('memory', () => options.onMemory?.()));
@@ -330,7 +416,7 @@
             trash.append(icon('fa-trash-can'), el('span', null, translateUi("移到回收站")), icon('fa-chevron-right'));
             trash.addEventListener('click', () => void moveToTrash());
 
-            controls = { name, job, soul, model, thinking, thinkingWrap, presets, showFace, showRules };
+            controls = { name, job, soul, model, thinking, thinkingWrap, presets, showFace, showRules, proactive, quietOn, quietStart, quietEnd, limit, showNotify };
             showFace();
             body.replaceChildren(
                 section(translateUi("名字和样子"), identity),
@@ -338,6 +424,7 @@
                 section(translateUi("性格"), soul),
                 section(translateUi("用哪个模型"), field(null, model, modelHint), thinkingWrap),
                 section(translateUi("做事方式"), presetList, honesty, rulesBox),
+                section(translateUi("主动找你"), notifyBox),
                 section(translateUi("更多"), memory, restart, trash));
             const levels = data.models?.models.find(item => modelKey(item) === model.value)?.thinkingLevels || [];
             thinkingWrap.hidden = !levels.length;
@@ -347,8 +434,13 @@
             refreshState();
         }
 
+        async function loadFollowUps() {
+            try { data.followUps = (await options.api(`/api/pi/bots/${encodeURIComponent(options.profileId)}/follow-ups`)).items; }
+            catch { data.followUps = null; }
+        }
         async function load() {
             data = await options.api(`/api/pi/bots/${encodeURIComponent(options.profileId)}/settings`);
+            await loadFollowUps();
         }
 
         // The edits made in this sheet, to put back after rereading (only fields the user touched).
@@ -395,7 +487,7 @@
             event.preventDefault();
             if (saving || decoding || !controls) return;
             const pending = changes();
-            if (!pending) { status.dataset.tone = 'error'; status.textContent = translateUi("名字不能为空"); return; }
+            if (!pending) { status.dataset.tone = 'error'; status.textContent = controls.name.value.trim() ? translateUi("安静时段的开始和结束要是两个不同的时间") : translateUi("名字不能为空"); return; }
             if (!Object.keys(pending).length) return;
             saving = true; refreshState(); status.textContent = translateUi("正在保存…"); delete status.dataset.tone;
             try {

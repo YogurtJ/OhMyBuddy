@@ -84,7 +84,7 @@
     async function ingest(data, generation) {
         if (generation !== epoch) return;
         const phases = new Map((data.runtimes || []).map(r => [JSON.stringify([r.cwd, r.sessionId]), r.phase]));
-        const notices = (data.replyNotices || []).filter(n => !n.manual);
+        const notices = (data.replyNotices || []).filter(n => !n.manual && !n.quiet);
         if (previous === null) {
             previous = phases;
             notices.forEach(n => seen.add(n.completionId));

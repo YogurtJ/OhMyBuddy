@@ -318,8 +318,9 @@ class BotService extends EventEmitter {
                     || target?.kind === 'thread' && thread(target);
                 if (this.cron.db.jobs().some(job => !job.deleted && job.enabled && targets(job.target)))
                     fail('Disable or retarget this topic’s scheduled tasks before archiving', 409, 'BOT_TOPIC_SCHEDULED');
-                if (this.cron.db.activeRuns().some(run => targets(run.job?.target)
-                    || thread(run.target))) busy();
+                // A follow-up the Bot started itself that has not run yet is dropped with the topic.
+                if (this.cron.db.activeRuns().some(run => !(run.origin === 'bot' && run.status === 'waiting') && (targets(run.job?.target)
+                    || thread(run.target)))) busy();
             }
         };
         for (const file of paths) if (!this.supervisor.isSessionIdle(file)) busy();
