@@ -2,6 +2,23 @@
     const translateUi = globalThis.PiI18n?.t || ((text, ...values) => text.replace(/\{(\d+)\}/g, (_, index) => values[index] ?? `{${index}}`));
     const $ = id => document.getElementById(id);
     const node = (tag, text, className) => { const n = document.createElement(tag); if (text != null) n.textContent = text; if (className) n.className = className; return n; };
+    // Plus-menu placement: gap above the composer, margin to the visible edge, and the
+    // smallest room (about two rows) kept above the draft before the panel may cover it.
+    const MENU_GAP = 10, MENU_EDGE = 8, MENU_MIN_ROOM = 156, MENU_MIN_HEIGHT = 68;
+    // The part of the layout viewport the user can see around an element: the visual
+    // viewport (soft keyboard, browser bars, zoom) intersected with every ancestor that
+    // clips overflow. Phone shells clip the conversation below the header and safe area.
+    const visibleBounds = element => {
+        const view = window.visualViewport;
+        let top = view ? view.offsetTop : 0, bottom = view ? view.offsetTop + view.height : window.innerHeight;
+        for (let n = element.parentElement; n && n !== document.body; n = n.parentElement) {
+            const style = getComputedStyle(n);
+            if (style.overflowX === 'visible' && style.overflowY === 'visible' && !/paint|strict|content/.test(style.contain)) continue;
+            const box = n.getBoundingClientRect();
+            top = Math.max(top, box.top + n.clientTop); bottom = Math.min(bottom, box.top + n.clientTop + n.clientHeight);
+        }
+        return { top, bottom };
+    };
     const examples = [
         ['review-changes', translateUi("检查当前改动"), translateUi("检查当前项目的改动，关注正确性、回归风险与测试缺口。先阅读项目约定；没有 Git 时根据当前文件与可用备份核对，不假设存在 Git。\n额外要求：${1:-优先指出需要修复的问题}")],
         ['finish-task', translateUi("按项目约定收尾"), translateUi("按当前项目的 AGENTS.md 和开发约定完成收尾：核对改动、运行相关验证、更新必要文档，并说明结果及尚未完成的事项。\n范围：${1:-本轮任务}")],
@@ -16,7 +33,7 @@
             this.delivery = $('pi-delivery-mode'); this.deliveryToggle = $('pi-delivery-toggle'); this.deliveryChoices = $('pi-delivery-choices');
             this.enabled = false; this.epoch = 0; this.request = 0; this.remote = []; this.builtins = []; this.templates = [];
             this.items = []; this.active = -1; this.catalog = null;
-            this.fileActivity = null; this.fileQuery = null;
+            this.fileActivity = null; this.fileQuery = null; this.placeFrame = 0;
             this.catalogRequest = 0;
             this.input.setAttribute('aria-autocomplete', 'list');
             this.input.setAttribute('aria-controls', this.menu.id); this.input.setAttribute('aria-expanded', 'false');
@@ -52,7 +69,19 @@
             this.addMenu.addEventListener('keydown', e => this.actionsKey(e));
             document.addEventListener('pointerdown', e => { if (!this.addButton.parentElement.contains(e.target)) this.closeActions(); });
             document.addEventListener('focusin', e => { if (!this.addButton.parentElement.contains(e.target)) this.closeActions(); });
-            window.addEventListener('resize', () => this.closeActions());
+            // Keep an open menu inside the visible area while the keyboard, browser bars,
+            // window or composer change size; closing here would drop the menu just opened
+            // when the keyboard hides after focus moves into it.
+            const place = () => {
+                if (this.addMenu.hidden || this.placeFrame) return;
+                this.placeFrame = requestAnimationFrame(() => { this.placeFrame = 0; this.placeActions(); });
+            };
+            window.addEventListener('resize', place);
+            window.visualViewport?.addEventListener('resize', place); window.visualViewport?.addEventListener('scroll', place);
+            if (window.ResizeObserver) {
+                const observer = new ResizeObserver(place), composer = this.addButton.closest('.pi-composer');
+                observer.observe(composer); observer.observe(composer.parentElement);
+            }
             $('settings-manage-templates').addEventListener('click', () => this.openTemplates());
             $('pi-template-close').addEventListener('click', () => this.dialog.close());
             this.dialog.addEventListener('keydown', e => { if (e.key === 'Escape') e.stopPropagation(); });
@@ -84,10 +113,23 @@
             });
         }
         actionItems() { return [...this.addMenu.querySelectorAll('button')].filter(b => !b.closest('[hidden]') && !b.disabled); }
+        // Fit the menu between the visible top and the composer. A tall draft can leave the
+        // composer close to the header; then the panel extends over the draft but never over
+        // the plus button, so every item stays reachable by internal scrolling.
+        placeActions() {
+            const menu = this.addMenu, composer = this.addButton.closest('.pi-composer');
+            if (menu.hidden) return;
+            const box = composer.getBoundingClientRect(), view = visibleBounds(composer);
+            const top = view.top + MENU_EDGE, lowest = view.bottom - MENU_EDGE, anchor = box.top + composer.clientTop - MENU_GAP;
+            const content = menu.scrollHeight + menu.offsetHeight - menu.clientHeight;
+            let bottom = Math.min(anchor, lowest);
+            if (bottom - top < Math.min(content, MENU_MIN_ROOM)) bottom = Math.max(bottom, Math.min(this.addButton.getBoundingClientRect().top - MENU_GAP, lowest));
+            if (Math.abs(bottom - anchor) < 0.5) menu.style.removeProperty('--pi-composer-menu-bottom');
+            else menu.style.setProperty('--pi-composer-menu-bottom', `${box.top + composer.clientTop + composer.clientHeight - bottom}px`);
+            menu.style.setProperty('--pi-composer-menu-height', `${Math.max(MENU_MIN_HEIGHT, Math.floor(bottom - top))}px`);
+        }
         openActions(last = false) {
-            const top = this.addButton.closest('.pi-composer').getBoundingClientRect().top;
-            this.addMenu.style.setProperty('--pi-composer-menu-height', `${Math.max(68, top - 22)}px`);
-            this.hide(); this.addMenu.hidden = false; this.addMenu.scrollTop = 0; this.addButton.setAttribute('aria-expanded', 'true');
+            this.hide(); this.addMenu.hidden = false; this.placeActions(); this.addMenu.scrollTop = 0; this.addButton.setAttribute('aria-expanded', 'true');
             const items = this.actionItems(); (last ? items.at(-1) : items[0])?.focus({ preventScroll: true });
             document.activeElement?.scrollIntoView({ block: 'nearest' });
         }
