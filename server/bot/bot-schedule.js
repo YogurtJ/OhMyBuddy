@@ -66,6 +66,8 @@ function jobView(job) {
 }
 function scheduleDetail(input) {
     if (input.action === 'cancel') {
+        const followUp = input.approvalFollowUp;
+        if (followUp) return `Cancel reminder: ${followUp.title}\n${followUp.local}`;
         const job = input.approvalJob;
         if (!job) return `Cancel: ${input.id}`;
         const time = job.schedule.kind === 'cron' ? job.schedule.expression : localTime(job.schedule.at, job.schedule.timeZone);

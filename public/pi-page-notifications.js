@@ -142,7 +142,7 @@
     window.addEventListener('workspace:access-ready', () => { reset(); void poll(); });
     window.PiPageNotifications = {
         observeCompletion(notice) {
-            if (!notice || notice.manual || seen.has(notice.completionId) || !(Date.parse(notice.completedAt) >= enabledAt)
+            if (!notice || notice.manual || notice.quiet || seen.has(notice.completionId) || !(Date.parse(notice.completedAt) >= enabledAt)
                 || !(prefs.desktop || prefs.sound)) return;
             seen.add(notice.completionId);
             while (seen.size > 512) seen.delete(seen.values().next().value);

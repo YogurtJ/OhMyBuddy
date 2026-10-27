@@ -119,7 +119,15 @@ function createPiAgentGateway(options = {}) {
     const sideChat = new PiSideChatService({ store, supervisor, usage });
     const notifications = new (require('./pi-notification-service').PiNotificationService)({ access, store });
     let proactive = null;
-    supervisor.on('attention', event => { void notifications.notify(event); });
+    supervisor.on('attention', event => {
+        // A Bot's own follow-up that ended in an error is pushed (or not) by its completion, under the
+        // Bot's quiet hours and daily limit, never through this immediate path.
+        try {
+            if (event.kind === 'error' && cron?.db?.activeRuns().some(run => run.origin === 'bot' && run.target?.cwd === event.cwd
+                && run.target?.sessionId === event.sessionId)) return;
+        } catch { /* Scheduler not ready: notify as usual. */ }
+        void notifications.notify(event);
+    });
     supervisor.on('completion', (notice, worker) => {
         if (worker) {
             void titles.auto(worker).then(result => {
@@ -283,7 +291,7 @@ function createPiAgentGateway(options = {}) {
     };
     require('./bot/bot-topic').mountBotTopics(router, { bots, authenticate: req => agentThreads.authenticate(req) });
     // Messages Bots start themselves (M4-3): due follow-ups and check-ins, quiet hours and push limits.
-    proactive = new (require('./bot/bot-proactive').BotProactive)({ profiles, bots, cron, notifications, getAgentDir,
+    proactive = new (require('./bot/bot-proactive').BotProactive)({ profiles, bots, cron, notifications, preferences, getAgentDir,
         isSuspended: () => maintenance.locked || maintenance.referenceLocked || Boolean(store.sessionMoves?.running) });
     bots.proactive = proactive;
     proactive.start();

@@ -8,7 +8,8 @@
 // protections. The user's own reminders, conversations and setup are never counted or delayed.
 //
 // <agentDir>/pivane-bots/<profileId>/proactive.json:
-//   { version: 1, profileId, items: [item], push: { day, count }, held: [{ completionId, at }] }
+//   { version: 1, profileId, items: [item], push: { day, count }, held: [{ completionId, at, cwd?, sessionId? }] }
+//   item.state: pending (cancellable), sending (claimed, being handed to the scheduler), queued, skipped
 //   item: { id, kind: 'due'|'checkin', windowId, noteId?, due?, at, title, text, state, reason?, runId?, createdAt }
 const fs = require('node:fs');
 const path = require('node:path');
@@ -22,11 +23,12 @@ const settings = require('./bot-settings');
 const UUID = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/;
 const ITEM_ID = /^[a-f0-9]{24}$/;
 const KINDS = Object.freeze(['due', 'checkin']);
-const STATES = Object.freeze(['pending', 'queued', 'skipped']);
+const STATES = Object.freeze(['pending', 'sending', 'queued', 'skipped']);
 const MAX_PENDING = 60;          // follow-ups and check-ins waiting, per Bot
 const MAX_CHECKINS = 10;         // check-ins waiting, per Bot
 const MAX_KEPT = 20;             // finished items kept for the settings list and idempotent retries
 const MAX_HELD = 200;
+const MAX_TOMBSTONES = 100;      // cancelled due follow-ups still ahead, so a sync does not add them back
 const MAX_AHEAD = 60 * 86400000; // a check-in at most 60 days ahead
 const LATE = 2 * 3600000;        // a message missed by more than this (service stopped) is dropped
 const DUE_HOUR = 9;
@@ -65,18 +67,22 @@ function validItem(item) {
         && Number.isSafeInteger(item.createdAt);
 }
 function validState(state, profileId) {
-    return object(state) && state.version === 1 && state.profileId === profileId && Array.isArray(state.items) && state.items.length <= MAX_PENDING + MAX_KEPT + 10
+    return object(state) && state.version === 1 && state.profileId === profileId && Array.isArray(state.items) && state.items.length <= MAX_PENDING + MAX_TOMBSTONES + MAX_KEPT + 10
         && state.items.every(validItem) && object(state.push) && (state.push.day === null || text(state.push.day, 10)) && Number.isSafeInteger(state.push.count)
-        && Array.isArray(state.held) && state.held.length <= MAX_HELD && state.held.every(entry => object(entry) && text(entry.completionId, 200) && Number.isSafeInteger(entry.at));
+        && Array.isArray(state.held) && state.held.length <= MAX_HELD && state.held.every(entry => object(entry) && text(entry.completionId, 200) && Number.isSafeInteger(entry.at)
+            && (entry.cwd === undefined || text(entry.cwd, 4096)) && (entry.sessionId === undefined || text(entry.sessionId, 200)));
 }
 const empty = profileId => ({ version: 1, profileId, items: [], push: { day: null, count: 0 }, held: [] });
 
-// Finished items beyond the newest MAX_KEPT are forgotten; pending ones always stay.
-function trim(state) {
-    const done = state.items.filter(item => item.state !== 'pending');
-    if (done.length <= MAX_KEPT) return;
-    const drop = new Set(done.sort((a, b) => b.at - a.at).slice(MAX_KEPT));
-    state.items = state.items.filter(item => !drop.has(item));
+// Pending and claimed items always stay, and so do cancelled due follow-ups still ahead (up to
+// MAX_TOMBSTONES, the soonest); of the rest only the newest MAX_KEPT are kept.
+const live = item => item.state === 'pending' || item.state === 'sending';
+const tombstone = (item, now) => item.state === 'skipped' && item.reason === 'cancelled' && item.kind === 'due' && item.at > now;
+function trim(state, now) {
+    const stones = state.items.filter(item => tombstone(item, now)).sort((a, b) => a.at - b.at);
+    const rest = state.items.filter(item => !live(item) && !tombstone(item, now)).sort((a, b) => b.at - a.at);
+    const drop = new Set([...stones.slice(MAX_TOMBSTONES), ...rest.slice(MAX_KEPT)]);
+    if (drop.size) state.items = state.items.filter(item => !drop.has(item));
 }
 const view = item => ({ id: item.id, kind: item.kind, windowId: item.windowId, at: item.at, title: item.title, state: item.state,
     ...(item.noteId ? { noteId: item.noteId } : {}), ...(item.due ? { due: item.due } : {}), ...(item.reason ? { reason: item.reason } : {}) });
@@ -90,8 +96,9 @@ function duePrompt(note) {
 }
 
 class BotProactive {
-    constructor({ profiles, bots, cron, notifications, getAgentDir, isSuspended = () => false, now = Date.now, interval = 60000 }) {
-        Object.assign(this, { profiles, bots, cron, notifications, getAgentDir, isSuspended, now, interval });
+    // preferences: reply notices, so pages without push also hear about held messages once quiet hours end.
+    constructor({ profiles, bots, cron, notifications, preferences, getAgentDir, isSuspended = () => false, now = Date.now, interval = 60000 }) {
+        Object.assign(this, { profiles, bots, cron, notifications, preferences, getAgentDir, isSuspended, now, interval });
         this.timer = null; this.ticking = null; this.syncing = new Map(); this.stopped = false; this.replies = new Map();
     }
 
@@ -135,7 +142,7 @@ class BotProactive {
         for (let attempt = 0; ; attempt++) {
             const document = await this.document(profileId, true);
             const { revision } = document.read();
-            try { return document.mutate(revision, state => { const result = update(state) ?? {}; trim(state); return result; }); }
+            try { return document.mutate(revision, state => { const result = update(state) ?? {}; trim(state, this.now()); return result; }); }
             catch (error) { if (error.status !== 409 || attempt) throw error; }
         }
     }
@@ -168,23 +175,32 @@ class BotProactive {
                 .filter(item => item.kind === 'commitment' && item.status === 'active' && item.due);
         }
         const zone = zoneOf(found?.notify), now = this.now();
-        const wanted = new Map();
+        // keep: every active commitment's follow-up, even one about to be sent (the next tick sends it);
+        // wanted: those far enough ahead to be added now.
+        const keep = new Map(), wanted = new Map();
         for (const note of notes) {
             const at = dueInstant(note.due, zone);
-            if (at === null || at <= now + 60000) continue;
+            if (at === null) continue;
             const id = hash('due', windowId, note.id, at).slice(0, 24);
-            wanted.set(id, { id, kind: 'due', windowId, noteId: note.id, due: note.due, at, title: note.text.slice(0, 120), text: duePrompt(note), state: 'pending', createdAt: now });
+            const item = { id, kind: 'due', windowId, noteId: note.id, due: note.due, at, title: note.text.slice(0, 120), text: duePrompt(note), state: 'pending', createdAt: now };
+            keep.set(id, item);
+            if (at > now + 60000) wanted.set(id, item);
         }
         if (!wanted.size && !(await this.read(profileId)).state.items.some(item => item.kind === 'due' && item.windowId === windowId && item.state === 'pending')) return { changed: 0 };
         const { changed } = await this.mutate(profileId, state => {
             let changed = 0;
             state.items = state.items.filter(item => {
-                if (item.kind !== 'due' || item.windowId !== windowId || item.state !== 'pending' || wanted.has(item.id)) return true;
+                if (item.kind !== 'due' || item.windowId !== windowId || item.state !== 'pending' || keep.has(item.id)) return true;
                 changed++; return false;
             });
-            for (const [id, item] of wanted) {
+            for (const [id, item] of keep) {
                 const existing = state.items.find(entry => entry.id === id);
-                if (existing) { if (existing.state === 'pending' && existing.title !== item.title) { existing.title = item.title; existing.text = item.text; changed++; } continue; }
+                if (existing?.state === 'pending' && (existing.title !== item.title || existing.text !== item.text || existing.due !== item.due)) {
+                    Object.assign(existing, { title: item.title, text: item.text, due: item.due }); changed++;
+                }
+            }
+            for (const [id, item] of wanted) {
+                if (state.items.some(entry => entry.id === id)) continue;
                 if (state.items.filter(entry => entry.state === 'pending').length >= MAX_PENDING) break;
                 state.items.push(item); changed++;
             }
@@ -267,36 +283,54 @@ class BotProactive {
             const { state } = await this.profiles.state();
             for (const profile of state.profiles) {
                 if (this.stopped || this.isSuspended()) break;
-                if (!settings.readBot(profile) || !fs.existsSync(safeFile(await this.getAgentDir(), ['pivane-bots', profile.id, 'proactive.json']))) continue;
-                try { await this.tickBot(profile.id); } catch { /* One Bot's failure must not stop the others; retried next tick. */ }
+                // One Bot's failure must not stop the others; retried on the next tick.
+                try {
+                    if (!settings.readBot(profile) || !fs.existsSync(safeFile(await this.getAgentDir(), ['pivane-bots', profile.id, 'proactive.json']))) continue;
+                    await this.tickBot(profile.id);
+                } catch { /* next tick */ }
             }
-        })().finally(() => { this.ticking = null; });
+        })().catch(() => { /* Registry unreadable: next tick. */ }).finally(() => { this.ticking = null; });
         return this.ticking;
     }
 
     async tickBot(profileId) {
         const now = this.now(), found = await this.bot(profileId);
         const { state } = await this.read(profileId);
-        const due = state.items.filter(item => item.state === 'pending' && item.at <= now);
+        const due = state.items.filter(item => live(item) && item.at <= now);
         if (due.length) {
             const windows = found ? (await this.bots.windows.read(profileId)).state.windows : [];
-            const outcome = new Map();
+            const plan = new Map();
             for (const item of due) {
                 const window = windows.find(entry => entry.id === item.windowId);
                 const reason = !found ? 'bot-unavailable' : !found.notify.proactive ? 'off' : !window?.current || window.archivedAt ? 'chat-gone'
                     : now - item.at > LATE ? 'late' : null;
-                if (reason) { outcome.set(item.id, { state: 'skipped', reason }); continue; }
-                const runId = hash('run', profileId, item.id);
+                plan.set(item.id, reason ? { state: 'skipped', reason } : { state: 'sending', runId: hash('run', profileId, item.id), window });
+            }
+            // Claimed first, so a cancellation from now on is refused instead of racing the scheduler.
+            const { claimed } = await this.mutate(profileId, next => {
+                const claimed = [];
+                for (const item of next.items) {
+                    const step = plan.get(item.id);
+                    if (!step || !live(item)) continue;
+                    if (step.state === 'skipped') { Object.assign(item, { state: 'skipped', reason: step.reason }); delete item.runId; continue; }
+                    Object.assign(item, { state: 'sending', runId: step.runId });
+                    claimed.push({ ...item, window: step.window });
+                }
+                return { claimed };
+            });
+            const outcome = new Map();
+            for (const item of claimed) {
                 try {
-                    await this.cron.enqueueProactive({ runId, profileId, windowId: window.kind === 'main' ? undefined : window.id, at: item.at,
+                    // Idempotent per runId: a claimed item retried after a crash or a busy scheduler is one run.
+                    await this.cron.enqueueProactive({ runId: item.runId, profileId, windowId: item.window.kind === 'main' ? undefined : item.window.id, at: item.at,
                         name: item.title, prompt: item.text, note: item.title, kind: item.kind, timeZone: zoneOf(found.notify) });
-                    outcome.set(item.id, { state: 'queued', runId });
+                    outcome.set(item.id, { state: 'queued' });
                 } catch (error) {
-                    // Scheduler busy or stopping: tried again on the next tick. Anything else drops this one.
+                    // Scheduler busy or stopping: stays claimed and is tried again next tick. Anything else drops it.
                     if (error.status !== 409 && error.status !== 503) outcome.set(item.id, { state: 'skipped', reason: 'refused' });
                 }
             }
-            if (outcome.size) await this.mutate(profileId, next => { for (const item of next.items) if (item.state === 'pending' && outcome.has(item.id)) Object.assign(item, outcome.get(item.id)); });
+            if (outcome.size) await this.mutate(profileId, next => { for (const item of next.items) if (item.state === 'sending' && outcome.has(item.id)) Object.assign(item, outcome.get(item.id)); });
         }
         // The end of quiet hours: one push for everything held, if today's limit allows.
         if (state.held.length && found && !isQuiet(found.notify, now)) await this.flush(profileId, found);
@@ -307,12 +341,14 @@ class BotProactive {
     async decide(notice) {
         const profileId = notice?.proactive?.profileId;
         const found = UUID.test(profileId || '') ? await this.bot(profileId) : null;
-        if (!found) return 'capped';
+        // Switched off after the message was queued: it stays in the chat without a push.
+        if (!found || !found.notify.proactive) return 'capped';
         const now = this.now(), quiet = isQuiet(found.notify, now), day = dayKey(now, zoneOf(found.notify)), limit = found.notify.dailyProactiveLimit;
         return (await this.mutate(profileId, state => {
             if (state.push.day !== day) state.push = { day, count: 0 };
             if (quiet) {
-                if (!state.held.some(entry => entry.completionId === notice.completionId)) state.held.push({ completionId: notice.completionId, at: now });
+                if (!state.held.some(entry => entry.completionId === notice.completionId)) state.held.push({ completionId: notice.completionId, at: now,
+                    ...(typeof notice.cwd === 'string' && typeof notice.sessionId === 'string' ? { cwd: notice.cwd, sessionId: notice.sessionId } : {}) });
                 if (state.held.length > MAX_HELD) state.held.splice(0, state.held.length - MAX_HELD);
                 return { decision: 'held' };
             }
@@ -322,18 +358,43 @@ class BotProactive {
         })).decision;
     }
 
+    // Held messages are cleared only after the push was taken by the notification service (or there
+    // is nothing to push: switched off or over today's limit); a busy service is retried next tick.
     async flush(profileId, found) {
         const now = this.now(), day = dayKey(now, zoneOf(found.notify)), limit = found.notify.dailyProactiveLimit;
-        const { count, push } = await this.mutate(profileId, state => {
-            const count = state.held.length;
-            state.held = [];
-            if (state.push.day !== day) state.push = { day, count: 0 };
-            if (!count || limit !== null && state.push.count >= limit) return { count, push: false };
-            state.push.count++;
-            return { count, push: true };
+        const { state } = await this.read(profileId);
+        const held = state.held;
+        if (!held.length) return;
+        const used = state.push.day === day ? state.push.count : 0;
+        const push = found.notify.proactive && (limit === null || used < limit);
+        if (push) {
+            const count = held.length;
+            const accepted = await this.notifications?.broadcast?.({ id: hash('digest', profileId, now).slice(0, 32), title: 'Pivane',
+                body: count === 1 ? `${found.profile.name} 在安静时段给你留了 1 条消息。` : `${found.profile.name} 在安静时段给你留了 ${count} 条消息。` });
+            if (accepted === false) return;
+            this.reveal(held);
+        }
+        const ids = new Set(held.map(entry => entry.completionId));
+        await this.mutate(profileId, next => {
+            next.held = next.held.filter(entry => !ids.has(entry.completionId));
+            if (!push) return;
+            if (next.push.day !== day) next.push = { day, count: 0 };
+            next.push.count++;
         });
-        if (push) await this.notifications?.broadcast?.({ id: hash('digest', profileId, now).slice(0, 32), title: 'Pivane',
-            body: count === 1 ? `${found.profile.name} 在安静时段给你留了 1 条消息。` : `${found.profile.name} 在安静时段给你留了 ${count} 条消息。` });
+    }
+
+    // Pages without push notifications hear about held messages too: a chat whose held reply is
+    // still unread gets its notice again without quiet, under a new id, so open pages alert once.
+    reveal(held) {
+        if (!this.preferences) return;
+        try {
+            const notices = this.preferences.getReplyNotices();
+            for (const entry of held) {
+                const notice = entry.cwd && notices.find(item => item.cwd === entry.cwd && item.sessionId === entry.sessionId && item.completionId === entry.completionId && item.quiet);
+                if (notice) this.preferences.recordReplyNotice({ cwd: notice.cwd, sessionId: notice.sessionId,
+                    completionId: hash('reveal', notice.completionId).slice(0, 36), completedAt: new Date(this.now()).toISOString() });
+            }
+        } catch { /* Page alerts are best effort. */ }
     }
 }
 

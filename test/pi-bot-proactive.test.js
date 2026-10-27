@@ -28,15 +28,17 @@ function world({ notify = {}, now = at('2026-10-28T10:00:00') } = {}) {
     const profile = { id, name: '小狸', enabled: true, bot };
     const windows = [{ id: main, kind: 'main', current: { generation: 0 }, archivedAt: null }, { id: topic, kind: 'topic', current: { generation: 0 }, archivedAt: null }];
     const notes = new Map([[main, []], [topic, []]]);
-    const enqueued = [], pushed = [];
+    const enqueued = [], pushed = [], replyNotices = [];
     const clock = { value: now };
-    const cron = { fail: null, async enqueueProactive(input) { if (cron.fail) throw cron.fail; enqueued.push(input); return { id: input.runId }; } };
+    const cron = { fail: null, hook: null, async enqueueProactive(input) { await cron.hook?.(); if (cron.fail) throw cron.fail; enqueued.push(input); return { id: input.runId }; } };
+    const notifications = { busy: false, async broadcast(payload) { if (notifications.busy) return false; pushed.push(payload); return true; } };
+    const preferences = { getReplyNotices: () => replyNotices.slice(),
+        recordReplyNotice: notice => { const i = replyNotices.findIndex(n => n.cwd === notice.cwd && n.sessionId === notice.sessionId); if (i >= 0) replyNotices.splice(i, 1); replyNotices.push(notice); } };
     const proactive = new BotProactive({
         profiles: { getProfile: async pid => pid === id ? profile : null, state: async () => ({ state: { profiles: [profile] } }) },
         bots: { windows: { read: async () => ({ state: { windows } }) }, notebook: async (_pid, wid) => ({ items: notes.get(wid) || [] }) },
-        cron, notifications: { broadcast: async payload => { pushed.push(payload); } },
-        getAgentDir: async () => agentDir, now: () => clock.value });
-    return { id, main, topic, profile, windows, notes, enqueued, pushed, clock, cron, proactive, agentDir };
+        cron, notifications, preferences, getAgentDir: async () => agentDir, now: () => clock.value });
+    return { id, main, topic, profile, windows, notes, enqueued, pushed, clock, cron, proactive, agentDir, notifications, replyNotices };
 }
 const note = (id, text, due, extra = {}) => ({ id, kind: 'commitment', status: 'active', text, due, ...extra });
 
@@ -114,7 +116,7 @@ test('sending: late, switched-off or gone chats are skipped; a busy scheduler re
     w.clock.value = at('2026-10-28T12:00:05');
     w.cron.fail = Object.assign(new Error('busy'), { status: 409 });
     await w.proactive.tickBot(w.id);
-    assert.equal((await w.proactive.list(w.id)).length, 1, 'still pending after a busy scheduler');
+    assert.equal((await w.proactive.read(w.id)).state.items[0].state, 'sending', 'still claimed after a busy scheduler');
     w.cron.fail = null;
     await w.proactive.tickBot(w.id);
     assert.equal(w.enqueued.length, 1);
@@ -225,4 +227,115 @@ test('replies sync the notebook at most every two minutes, always including the 
     await w.proactive.dispose();
     w.proactive.afterReply(w.id, w.main);
     assert.equal(calls.length, 3, 'nothing after stopping');
+});
+
+test('review fixes: imminent reminders survive a sync, tombstones outlive trimming, edits refresh the prompt', async () => {
+    const w = world();
+    w.notes.set(w.main, [note('n1', '交房租', '2026-10-28 10:30')]);
+    await w.proactive.syncNotes(w.id, w.main);
+    w.clock.value = at('2026-10-28T10:29:30');
+    assert.equal((await w.proactive.syncNotes(w.id, w.main)).changed, 0);
+    assert.equal((await w.proactive.list(w.id)).length, 1, 'a reminder about to be sent is kept by a sync');
+    // A changed text past the title's 120 characters still refreshes what the Bot is told.
+    const long = 'x'.repeat(130);
+    w.notes.set(w.main, [note('n1', `${long}A`, '2026-10-28 10:30')]);
+    await w.proactive.syncNotes(w.id, w.main);
+    w.notes.set(w.main, [note('n1', `${long}B`, '2026-10-28 10:30')]);
+    await w.proactive.syncNotes(w.id, w.main);
+    w.clock.value = at('2026-10-28T10:30:10');
+    await w.proactive.tickBot(w.id);
+    assert.match(w.enqueued.at(-1).prompt, /xB"/);
+    // 25 cancelled future reminders, then many finished items: none comes back.
+    const t = world();
+    t.notes.set(t.topic, Array.from({ length: 25 }, (_, n) => note(`n${n + 1}`, `事 ${n}`, `2026-11-${String(n % 28 + 1).padStart(2, '0')} 1${n % 10}:00`)));
+    await t.proactive.syncNotes(t.id, t.topic);
+    for (const item of await t.proactive.list(t.id)) await t.proactive.cancel(t.id, item.id);
+    for (let n = 0; n < 25; n++) await t.proactive.checkIn(t.id, t.main, { id: n.toString(16).padStart(24, 'e'), title: `c${n}`, message: 'Check.', at: at('2026-10-28T11:00:00') + n * 60000 })
+        .catch(error => { if (error.code !== 'BOT_CHECKIN_LIMIT') throw error; });
+    t.clock.value = at('2026-10-28T12:00:00');
+    await t.proactive.tickBot(t.id);
+    await t.proactive.syncNotes(t.id, t.topic);
+    assert.equal((await t.proactive.list(t.id)).length, 0, 'cancelled reminders stay cancelled after trimming');
+});
+
+test('review fixes: a claimed follow-up cannot be cancelled; switched off means no push and no digest', async () => {
+    const w = world();
+    const plan = { id: 'f'.repeat(24), title: '看看', message: 'Check.', at: at('2026-10-28T11:00:00') };
+    await w.proactive.checkIn(w.id, w.topic, plan);
+    w.clock.value = at('2026-10-28T11:00:05');
+    let cancelled;
+    w.cron.hook = async () => { w.cron.hook = null; cancelled = await w.proactive.cancel(w.id, plan.id).catch(error => error); };
+    await w.proactive.tickBot(w.id);
+    assert.equal(cancelled.status, 409, 'cancelling while it is handed to the scheduler is refused');
+    assert.equal(w.enqueued.length, 1);
+    // A busy scheduler leaves it claimed; the next tick hands over the same run.
+    const b = world();
+    await b.proactive.checkIn(b.id, b.topic, plan);
+    b.clock.value = at('2026-10-28T11:00:05');
+    b.cron.fail = Object.assign(new Error('busy'), { status: 409 });
+    await b.proactive.tickBot(b.id);
+    assert.equal((await b.proactive.read(b.id)).state.items[0].state, 'sending');
+    b.cron.fail = null;
+    await b.proactive.tickBot(b.id);
+    assert.equal((await b.proactive.read(b.id)).state.items[0].state, 'queued');
+    // Held at night; switched off before morning: no digest, held messages are let go.
+    const n = world();
+    n.clock.value = at('2026-10-28T23:30:00');
+    assert.equal(await n.proactive.decide({ completionId: 'r1', cwd: '/w', sessionId: 's1', proactive: { profileId: n.id } }), 'held');
+    n.profile.bot = settings.applyBotPatch(n.profile.bot, { notify: { proactive: false } });
+    assert.equal(await n.proactive.decide({ completionId: 'r2', proactive: { profileId: n.id } }), 'capped');
+    n.clock.value = at('2026-10-29T08:05:00');
+    await n.proactive.tickBot(n.id);
+    assert.equal(n.pushed.length, 0);
+    assert.equal((await n.proactive.read(n.id)).state.held.length, 0);
+});
+
+test('review fixes: a busy push service keeps the digest; pages hear about still-unread held replies', async () => {
+    const w = world();
+    w.clock.value = at('2026-10-28T23:30:00');
+    w.replyNotices.push({ cwd: '/w', sessionId: 's1', completionId: 'r1', completedAt: 'x', quiet: true });
+    w.replyNotices.push({ cwd: '/w', sessionId: 's2', completionId: 'r2', completedAt: 'x', quiet: true });
+    await w.proactive.decide({ completionId: 'r1', cwd: '/w', sessionId: 's1', proactive: { profileId: w.id } });
+    await w.proactive.decide({ completionId: 'r2', cwd: '/w', sessionId: 's2', proactive: { profileId: w.id } });
+    w.replyNotices.splice(1, 1); // s2 was read during the night
+    w.clock.value = at('2026-10-29T08:01:00');
+    w.notifications.busy = true;
+    await w.proactive.tickBot(w.id);
+    assert.equal((await w.proactive.read(w.id)).state.held.length, 2, 'kept while the service is busy');
+    w.notifications.busy = false;
+    await w.proactive.tickBot(w.id);
+    assert.equal(w.pushed.length, 1);
+    assert.equal((await w.proactive.read(w.id)).state.held.length, 0);
+    assert.equal(w.replyNotices.length, 1);
+    assert.equal(w.replyNotices[0].sessionId, 's1');
+    assert.equal(w.replyNotices[0].quiet, undefined, 'the unread one is shown again, so open pages alert');
+    assert.notEqual(w.replyNotices[0].completionId, 'r1');
+});
+
+test('review fixes: switched-off, archived and trashed follow-ups never run from the scheduler', async () => {
+    const id = randomUUID(), cwd = path.join(root, 'bot-ws2'), sessionId = randomUUID();
+    const profile = { id, name: '小狸', enabled: true, bot: settings.normalizeBot(settings.defaultBot({ workspace: cwd })) };
+    const clock = { value: Date.parse('2026-10-28T04:00:00Z') }, calls = [];
+    const worker = { disposed: false, loadedAgentProfileConfirmed: true, loadedAgentProfileId: id, loadedAgentProfileRevision: profileRevision(profile),
+        exclusive: async callback => callback(null, { model: null }), cron: async input => { calls.push(input); return { status: 'completed' }; } };
+    const service = new CronService({ filename: path.join(root, `${randomUUID()}.sqlite`), now: () => clock.value, catalog: async () => ({ models: [] }),
+        profiles: { getProfile: async () => profile }, bots: { mainSession: async () => ({ cwd, id: sessionId }) },
+        store: { getSession: async (c, s) => ({ cwd: c, id: s, path: path.join(root, s), agentProfile: { id, available: true } }) },
+        supervisor: { workers: new Map(), isSessionIdle: () => true, getWorker: async () => worker, getActiveWorker: () => null, emit: () => {} } });
+    clearInterval(service.timer);
+    try {
+        await service.ready;
+        const topic = randomUUID();
+        const input = n => ({ runId: String(n).repeat(64), profileId: id, at: clock.value, name: 'x', prompt: 'y', note: 'x', kind: 'checkin', timeZone: ZONE,
+            ...(n === 3 ? { windowId: topic } : {}) });
+        await service.enqueueProactive(input(1));
+        profile.bot = settings.applyBotPatch(profile.bot, { notify: { proactive: false } });
+        await service.tick();
+        assert.equal(calls.length, 0);
+        assert.deepEqual([service.db.run('1'.repeat(64)).status, service.db.run('1'.repeat(64)).reason], ['skipped', 'proactive-off']);
+        await service.enqueueProactive(input(2)); await service.enqueueProactive(input(3));
+        assert.equal(service.dropBotRuns({ profileId: id, windowId: input(3).windowId }), 1, 'an archived topic drops only its own');
+        assert.equal(service.dropBotRuns({ profileId: id }), 1, 'a trashed Bot drops the rest');
+        assert.equal(service.db.run('2'.repeat(64)).status, 'cancelled');
+    } finally { await service.dispose(); }
 });
