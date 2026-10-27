@@ -25,8 +25,29 @@ test.after(() => fs.rmSync(root, { recursive: true, force: true }));
 const check = (preset, toolName, input, rules = [], annotations) => approvalFor({ permissions: { preset, rules }, cwd, agentDir, toolName, input, annotations });
 const classify = (command, toolName = 'bash') => classifyCommand({ toolName, input: { command }, cwd, agentDir }).status;
 
-test('free permits understood routine commands and asks before danger or opaque shell syntax', () => {
-    for (const command of ['pwd', 'date', 'ls -la', 'cat "notes.txt"', "cat 'notes.txt'", 'cat no\\ tes.txt', 'echo "hello; world"', 'printf "%s" "hi"',
+test('free is full access: ordinary, opaque and unrecognised commands run; only the short danger list asks', () => {
+    const runs = ['node script.js', "python -c 'print(1)'", 'npm test', 'npm install lodash', 'pip install x', 'cp a b', 'mv a b', 'sed -i s/a/b/ notes.txt',
+        'curl https://example.invalid', "ssh host 'rm -rf /tmp/x'", 'scp a host:b', 'docker run --rm img', 'docker restart example', 'echo ok; date', 'rm notes.txt',
+        'git commit -m x', 'git branch -d old', 'export FOO=1 && npm test', 'env FOO=1 node x.js', 'set -e', 'chmod 755 x', 'rg "rm -rf" .',
+        'git log --grep=push', 'systemctl status example', 'crontab -l', `touch ${outside}/new.txt`, 'cat $(echo notes.txt)'];
+    for (const command of runs) assert.equal(check('free', 'bash', { command }), null, command);
+    assert.equal(check('free', 'powershell', { command: 'Remove-Item notes.txt' }), null);
+    const asks = ['sudo ls', 'rm -rf notes', 'rm -r -f notes', 'find . -name x -delete', "bash -c 'cd x && rm -rf y'", 'ls | xargs rm -rf', 'timeout 5 rm -rf x',
+        'shutdown now', 'kill 123', 'pkill -f server.js', 'systemctl --user restart pivane', 'git push origin main', 'git reset --hard', 'git clean -fd',
+        'git branch -D old', 'npm publish', 'gh release create v1', 'crontab -e', 'cat x > .pivane-runtime/state.json', 'mkfs.ext4 disk.img', 'ls && rm -rf notes'];
+    for (const command of asks) {
+        const decision = check('free', 'bash', { command });
+        assert.equal(decision?.kind, 'command', command);
+        assert.equal(decision.rule, undefined, command);
+    }
+    assert.equal(check('free', 'powershell', { command: 'Remove-Item -Recurse notes' }).kind, 'command');
+    assert.equal(check('free', 'bash', { command: 'ls' }, [], { destructiveHint: true }).kind, 'command');
+    for (const command of ['env', 'printenv', 'export', 'export -p', 'set', 'env | grep KEY', "bash -c 'env'"])
+        assert.deepEqual(check('free', 'bash', { command }), { block: true, reason: BLOCKED.protected }, command);
+});
+
+test('balanced classification still recognises understood commands and asks before danger or opaque shell syntax', () => {
+    for (const command of ['pwd', 'date', "date '+%Y-%m-%d %H:%M:%S %:z %u'", 'date -u "+%Y-%m-%dT%H:%M:%SZ"', "date -d 'next friday' '+%F'", 'date --date="tomorrow" +%F', 'cal', 'cal 2026', 'ls -la', 'cat "notes.txt"', "cat 'notes.txt'", 'cat no\\ tes.txt', 'echo "hello; world"', 'printf "%s" "hi"',
         'git status --short', 'git diff', 'git diff --no-ext-diff --no-textconv', 'git log -n 5 --oneline', 'rg -n pattern notes.txt',
         'find . -maxdepth 2 -name notes.txt', 'ls | head -n 5', 'echo ok && pwd', 'cd .. && ls -la', 'mkdir -p notes/new', 'touch notes/new.txt']) {
         assert.equal(classify(command), 'safe', command);
@@ -39,10 +60,10 @@ test('free permits understood routine commands and asks before danger or opaque 
     const opaque = ['echo ok; date', 'echo ok || pwd', 'echo ok\npwd', 'echo hi > ../outside/note.txt',
         'cat <(echo hi)', 'cat $(echo notes.txt)', 'cat `echo notes.txt`', 'cat *.txt', 'cat "$FILE"',
         "python -c 'print(1)'", 'node -e "console.log(1)"', "bash -c 'date'", "eval 'date'", 'command date',
-        'timeout 2 date', 'X=1 date', 'LS', 'ls.exe', './script.sh', '/tmp/ls', 'cat "unterminated', 'git -c core.pager=x status', 'git status --help', 'git log --no-ext-diff --no-textconv --help',
+        'timeout 2 date', 'X=1 date', 'date -s "2026-01-01"', 'date --set="2026-01-01"', 'date -f notes.txt', 'date -r 1700000000', 'LS', 'ls.exe', './script.sh', '/tmp/ls', 'cat "unterminated', 'git -c core.pager=x status', 'git status --help', 'git log --no-ext-diff --no-textconv --help',
         'git log --no-ext-diff --no-textconv --output=notes.txt', 'find . -exec echo {} \\;'];
     for (const command of [...risky, ...opaque]) {
-        const decision = check('free', 'bash', { command });
+        const decision = check('balanced', 'bash', { command });
         assert.equal(decision.kind, 'command', command);
         assert.equal(decision.rule, undefined, command);
         assert.notEqual(classify(command), 'safe', command);
@@ -51,7 +72,7 @@ test('free permits understood routine commands and asks before danger or opaque 
     assert.equal(check('free', 'powershell', { command: 'Get-Content "notes.txt"' }), null);
     for (const command of ['Remove-Item -Recurse notes', 'Restart-Service Example', 'Invoke-WebRequest https://example.invalid',
         'Get-Date; Get-Location', '& "script.ps1"', 'powershell -EncodedCommand AAAA', 'Get-Content $file', 'Get-Content @files', 'Get-Content notes.txt,other.txt', '/usr/bin/get-date', 'Get-Content Function:foo']) {
-        assert.equal(check('free', 'powershell', { command }).kind, 'command', command);
+        assert.equal(check('balanced', 'powershell', { command }).kind, 'command', command);
         assert.equal(check('balanced', 'powershell', { command }).rule, undefined, command);
     }
 });
@@ -97,8 +118,15 @@ test('file grants are canonical, exact and bound to tool and working directory',
     assert.equal(check('ask', 'write', { path: 'notes.txt' }, [ordinary]).block, true, 'retargeted paths cannot reuse a grant');
     fs.unlinkSync(path.join(cwd, 'notes.txt')); fs.writeFileSync(path.join(cwd, 'notes.txt'), 'synthetic note');
     for (const target of ['/etc/example.conf', '.git/config', '.bashrc', '.config/systemd/test.service']) {
-        const decision = check('free', 'write', { path: target });
+        const decision = check('balanced', 'write', { path: target });
         assert.ok(decision);
+        assert.equal(decision.rule, undefined, target);
+    }
+    // Hands-off writes system and startup files directly; only Pivane's runtime, autostart and scheduler locations ask.
+    for (const target of ['.git/config', '.bashrc', '.zprofile']) assert.equal(check('free', 'write', { path: target }), null, target);
+    for (const target of ['.config/systemd/test.service', '.config/autostart/x.desktop', 'Library/LaunchAgents/x.plist', '.pivane-runtime/state.json']) {
+        const decision = check('free', 'write', { path: target });
+        assert.ok(decision?.kind, target);
         assert.equal(decision.rule, undefined, target);
     }
 });

@@ -4,13 +4,14 @@
 // the native coding-agent introduction as capabilities, not persona.
 // Mirrors DESIGN §3.5. In the careful presets the worker itself asks the user on an approval
 // card before the gated steps run (bot-guard.js), so the model should not ask in prose as well;
-// every preset uses tool-layer checks; commands not reliably understood still need approval.
+// every preset uses tool-layer checks; Hands-off asks only for a short list of dangerous steps.
 const ASK_OTHER = 'sending anything to other people, notable spending, or changing your own permissions';
-const ASK_FIRST = 'dangerous commands (deleting files, sudo, system settings, stopping services, '
-    + `recursive deletes), modifying system or shell startup files, ${ASK_OTHER}`;
 const PRESET_GUIDANCE = Object.freeze({
-    free: 'Hands-off mode. Act without asking on routine work: reading, web search, memory, images and speech, writing ordinary files, '
-        + `and understood routine commands. Tool-layer checks ask before risky or opaque commands and system file writes, so call the tool directly; do not duplicate its approval in prose. Ask first before ${ASK_FIRST}.`,
+    free: 'Hands-off mode (full access). Act without asking: reading, web search, memory, images and speech, writing any ordinary file, '
+        + 'and running commands, scripts and installs. Tool-layer checks still ask before a short list: sudo, recursive or disk-level deletes, '
+        + 'shutdown, killing processes or controlling services, git push / reset --hard / clean -f / branch -D, publishing packages or releases, '
+        + 'sending mail, scheduled or autostart jobs, and anything under Pivane\'s own .pivane-runtime directory. Call the tool directly; '
+        + `do not duplicate its approval in prose. Ask first before ${ASK_OTHER}.`,
     balanced: 'Careful mode. Act without asking on reading, web search, memory, images and speech, and writing files inside your '
         + 'workspace. Every command, every hand-off to another agent, creating or cancelling a scheduled task, and every file write outside your workspace is shown to the user on an '
         + 'approval card automatically when you call the tool, so just call it (do not ask in a separate message first); if it is not approved, '

@@ -3,7 +3,7 @@
 // it does not sandbox shell execution, inspect program contents or replace OS isolation.
 const { randomBytes } = require('node:crypto');
 const { insideWorkspace, resolvePiPath, protectedPath, privateName, fileOperation } = require('./bot-guard-paths');
-const { classifyCommand, shellWords } = require('./bot-guard-shell');
+const { classifyCommand, freeModeAsks, shellWords } = require('./bot-guard-shell');
 const { parseRule, normalizeRule, ruleFor, matchesRule } = require('./bot-guard-rules');
 const { scheduleDetail } = require('./bot-schedule');
 
@@ -59,7 +59,8 @@ function approvalFor({ permissions, preset = permissions?.preset, toolName, inpu
     if (COMMANDS.has(toolName)) {
         const command = classifyCommand({ toolName, input, cwd, agentDir });
         if (command.status === 'blocked') return { block: true, reason: BLOCKED.protected };
-        if (preset === 'free' && command.status === 'safe' && annotations?.destructiveHint !== true) return null;
+        // Hands-off is full access: everything runs except a short list of clearly dangerous commands.
+        if (preset === 'free') return freeModeAsks({ toolName, input }) || annotations?.destructiveHint === true ? ask('command') : null;
         return ask('command', command.status === 'safe' && annotations?.destructiveHint !== true);
     }
     if (DELEGATES.has(toolName)) return preset === 'free' ? null : ask('delegate');
@@ -67,8 +68,9 @@ function approvalFor({ permissions, preset = permissions?.preset, toolName, inpu
         const operation = fileOperation({ input, cwd, agentDir });
         if (operation.status === 'blocked') return { block: true, reason: BLOCKED.protected };
         const outside = !insideWorkspace(cwd, input?.path);
+        // Hands-off asks only for Pivane's own runtime, autostart/scheduler locations and directories.
+        if (preset === 'free') return operation.critical || annotations?.destructiveHint === true ? ask(outside ? 'outside' : 'write') : null;
         if (operation.status === 'risk' || annotations?.destructiveHint === true) return ask(outside ? 'outside' : 'write');
-        if (preset === 'free') return null;
         return outside ? ask('outside', true) : preset === 'ask' ? ask('write', true) : null;
     }
     if (annotations?.destructiveHint === true) return ask('action');

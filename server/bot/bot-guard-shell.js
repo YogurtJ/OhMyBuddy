@@ -44,7 +44,8 @@ const DANGEROUS = new Set(('sudo doas su runas rm rmdir unlink shred truncate dd
     + 'remove-item clear-content set-content add-content out-file move-item copy-item rename-item '
     + 'start-process stop-process stop-service restart-service start-service set-service invoke-webrequest invoke-restmethod '
     + 'set-executionpolicy set-itemproperty new-service unregister-scheduledtask').split(' '));
-const CREDENTIAL_COMMANDS = new Set(['printenv', 'env', 'set', 'export', 'pass', 'secret-tool', 'get-credential', 'get-secret', 'get-childitem-env']);
+// env, export and set are refused only when they print the whole environment (see dumpsEnvironment).
+const CREDENTIAL_COMMANDS = new Set(['printenv', 'pass', 'secret-tool', 'get-credential', 'get-secret', 'get-childitem-env']);
 const READ_COMMANDS = new Set(['ls', 'cat', 'head', 'tail', 'wc', 'stat', 'file', 'realpath', 'readlink', 'du', 'df', 'which', 'whereis', 'uname', 'basename', 'dirname', 'sort', 'uniq', 'cut', 'tr', 'nl']);
 const SEARCH_COMMANDS = new Set(['rg', 'grep', 'egrep', 'fgrep', 'find', 'fd', 'tree', 'jq']);
 const PS_READ = new Set(['get-content', 'get-childitem', 'get-item', 'test-path', 'resolve-path']);
@@ -81,7 +82,118 @@ function splitSimpleSegments(command) {
 }
 
 function commandName(value) { return path.posix.basename(value.replaceAll('\\', '/')).toLowerCase().replace(/\.exe$/, ''); }
-function obviousPrivate(command, words, cwd, agentDir, resolve) {
+
+// Best-effort walk over every simple command in literal text, including -c scripts, eval,
+// wrappers such as sudo/xargs/timeout and find -exec. Splitting ignores quotes on purpose:
+// it may visit a quoted fragment as a command (asking more), never fewer real commands.
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+const PIECES = /\r?\n|;|&&|\|\||\||&|\$\(|`|\(|\)|\{|\}/;
+const SHELLS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'pwsh', 'powershell', 'cmd']);
+const WRAPPERS = new Map([['nohup', []], ['time', []], ['exec', ['-a']], ['command', []], ['builtin', []], ['caffeinate', ['-t', '-w']],
+    ['env', ['-u', '--unset', '-C', '--chdir']], ['xargs', ['-I', '-n', '-P', '-s', '-L', '-d', '-E', '-a']], ['watch', ['-n', '-d']],
+    ['timeout', ['-s', '-k', '--signal', '--kill-after']], ['nice', ['-n']], ['ionice', ['-c', '-n', '-p']], ['stdbuf', ['-i', '-o', '-e']],
+    ['sudo', ['-u', '-g', '-h', '-p', '-C', '-U', '-r', '-t']], ['doas', ['-u', '-C']], ['gsudo', ['-u']], ['pkexec', ['--user']]]);
+function visitCommands(text, tool, visit, depth = 0) {
+    if (depth > 4) return true;
+    return text.split(PIECES).some(piece => piece.trim() && visitWords(shellWords(piece, tool).words, tool, visit, depth));
+}
+function visitWords(words, tool, visit, depth) {
+    if (depth > 4) return true;
+    let i = 0;
+    while (i < words.length && ASSIGNMENT.test(words[i])) i++;
+    if (i >= words.length) return false;
+    const name = commandName(words[i]), args = words.slice(i + 1);
+    if (visit(name, args, tool)) return true;
+    const valueFlags = WRAPPERS.get(name);
+    if (valueFlags) {
+        if (name === 'command' && /^-[vV]$/.test(args[0] || '')) return false;
+        let j = 0;
+        while (j < args.length && (args[j].startsWith('-') || ASSIGNMENT.test(args[j]))) { if (valueFlags.includes(args[j])) j++; j++; }
+        if (name === 'timeout' && /^\d/.test(args[j] || '')) j++;
+        return visitWords(args.slice(j), tool, visit, depth + 1);
+    }
+    if (SHELLS.has(name)) {
+        const k = args.findIndex(arg => /^-[a-z]*c$/i.test(arg) || /^-command$/i.test(arg) || /^\/[ck]$/i.test(arg));
+        return k >= 0 && visitCommands(args.slice(k + 1).join(' '), ['pwsh', 'powershell'].includes(name) ? 'powershell' : 'bash', visit, depth + 1);
+    }
+    if (['eval', 'invoke-expression', 'iex'].includes(name)) return visitCommands(args.join(' '), tool, visit, depth + 1);
+    if (name === 'find') {
+        const k = args.findIndex(arg => /^-(?:exec|execdir|ok|okdir)$/.test(arg));
+        if (k >= 0) {
+            const end = args.findIndex((arg, index) => index > k && (arg === ';' || arg === '+'));
+            return visitWords(args.slice(k + 1, end < 0 ? undefined : end), tool, visit, depth + 1);
+        }
+    }
+    return false;
+}
+
+// env/export/set themselves are ordinary; only printing the whole environment is refused.
+function dumpsEnvironment(name, args) {
+    if (name === 'env') {
+        let j = 0;
+        while (j < args.length && (args[j].startsWith('-') || ASSIGNMENT.test(args[j]))) { if (['-u', '--unset', '-C', '--chdir'].includes(args[j])) j++; j++; }
+        return j >= args.length;
+    }
+    if (name === 'export') return args.every(arg => arg.startsWith('-'));
+    if (name === 'set') return !args.length;
+    return false;
+}
+
+// Hands-off mode runs every command except this short list, which still asks first:
+// privilege escalation, recursive or disk-level deletion, power, process and service
+// control, history-destroying Git, publishing, outgoing mail, persistent background jobs
+// and anything that touches Pivane's own runtime. Best effort over literal text, not a sandbox.
+const ELEVATE = new Set(['sudo', 'doas', 'su', 'runas', 'pkexec', 'gsudo']);
+const ALWAYS_ASK = new Set(['shutdown', 'reboot', 'halt', 'poweroff', 'stop-computer', 'restart-computer',
+    'kill', 'killall', 'pkill', 'skill', 'taskkill', 'stop-process', 'spps',
+    'shred', 'wipefs', 'fdisk', 'sfdisk', 'gdisk', 'parted', 'diskpart', 'format-volume', 'clear-disk', 'initialize-disk', 'remove-partition',
+    'sendmail', 'mail', 'mailx', 'mutt', 'msmtp', 'send-mailmessage', 'rimraf', 'systemd-run',
+    'stop-service', 'restart-service', 'start-service', 'set-service', 'new-service', 'remove-service', 'suspend-service',
+    'register-scheduledtask', 'set-scheduledtask', 'unregister-scheduledtask']);
+const RUNTIME_TEXT = /\.pivane-runtime\b/i;
+function dangerous(name, args, tool) {
+    const lower = args.map(arg => arg.toLowerCase()), first = lower.find(arg => !arg.startsWith('-'));
+    if (ELEVATE.has(name) || ALWAYS_ASK.has(name) || name.startsWith('mkfs')) return true;
+    if (['rm', 'del', 'erase', 'rd', 'rmdir', 'remove-item', 'ri'].includes(name)) {
+        if (lower.some(arg => /^\/s$/.test(arg))) return true;
+        if (tool === 'powershell') return lower.some(arg => /^-r(?:e(?:c(?:u(?:r(?:s(?:e)?)?)?)?)?)?(?::\$?true)?$/.test(arg));
+        return name === 'rm' && args.some(arg => /^-[a-zA-Z]*[rR][a-zA-Z]*$/.test(arg) || arg === '--recursive');
+    }
+    if (name === 'find') return lower.includes('-delete');
+    if (name === 'dd') return lower.some(arg => arg.startsWith('of='));
+    if (name === 'diskutil') return /^(?:erase|zero|secureerase|partitiondisk|reformat|eject)/.test(first || '');
+    if (name === 'systemctl') return !/^(?:status|show|cat|list-[a-z-]+|is-[a-z-]+|help)$/.test(first || 'status');
+    if (name === 'launchctl') return !/^(?:list|print|print-disabled|blame|version|help)$/.test(first || 'list');
+    if (name === 'service') return !lower.includes('status') && !lower.includes('--status-all');
+    if (name === 'sc') return !/^(?:query|queryex|qc|qdescription|getdisplayname|getkeyname)$/.test(first || 'query');
+    if (name === 'crontab') return !lower.includes('-l');
+    if (['at', 'batch'].includes(name)) return !lower.includes('-l');
+    if (name === 'schtasks') return !lower.includes('/query');
+    if (name === 'git') {
+        let k = 0;
+        while (k < args.length && args[k].startsWith('-')) { if (['-C', '-c', '--git-dir', '--work-tree', '--namespace'].includes(args[k])) k++; k++; }
+        const sub = args[k], rest = args.slice(k + 1), force = rest.some(arg => arg === '--force' || /^-[a-zA-Z]*f[a-zA-Z]*$/.test(arg));
+        return sub === 'push' || sub === 'reset' && rest.includes('--hard') || sub === 'clean' && force
+            || sub === 'branch' && (rest.some(arg => /^-[a-zA-Z]*D[a-zA-Z]*$/.test(arg)) || rest.includes('--delete') && force);
+    }
+    if (['npm', 'pnpm', 'yarn', 'bun'].includes(name)) return lower.includes('publish') || lower.includes('unpublish');
+    if (['cargo'].includes(name)) return ['publish', 'yank'].includes(first);
+    if (['vsce', 'ovsx', 'poetry', 'flit', 'hatch', 'uv'].includes(name)) return first === 'publish';
+    if (name === 'twine') return first === 'upload';
+    if (name === 'gem') return first === 'push';
+    if (['gh', 'glab'].includes(name)) {
+        const [area, action] = lower.filter(arg => !arg.startsWith('-'));
+        return area === 'release' && !['list', 'view', 'download'].includes(action) || area === 'repo' && action === 'delete';
+    }
+    return false;
+}
+function freeModeAsks({ toolName, input }) {
+    const command = input?.command;
+    if (typeof command !== 'string' || !command.trim() || command.length > 20000 || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(command)) return true;
+    return RUNTIME_TEXT.test(command) || visitCommands(command, toolName === 'powershell' ? 'powershell' : 'bash', dangerous);
+}
+
+function obviousPrivate(command, words, cwd, agentDir, resolve, tool = 'bash') {
     // Inspect literals even in opaque programs before deciding whether to ask. Splitting
     // quoted program text catches obvious interpreter/eval attempts without evaluating it.
     const fragments = [command, ...words].flatMap(value => value.split(/[\s'"`=;,:|<>(){}]+/));
@@ -93,6 +205,7 @@ function obviousPrivate(command, words, cwd, agentDir, resolve) {
     }
     if (/\$(?:\{)?(?:[a-z0-9_]*(?:token|secret|password|api_key|private_key|credential)[a-z0-9_]*)(?:\})?\b/i.test(command)
         || /\$env\s*:/i.test(command) || /\b(?:env|variable):\s*[^\s]*/i.test(command)) return true;
+    if (visitCommands(command, tool, dumpsEnvironment)) return true;
     for (const word of words) {
         const name = commandName(word);
         if (CREDENTIAL_COMMANDS.has(name) || name === 'security' || name === 'credential') return true;
@@ -104,10 +217,24 @@ function obviousPrivate(command, words, cwd, agentDir, resolve) {
     }
     return false;
 }
+function isSafeDateArgs(args) {
+    for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        if (arg.startsWith('+')) continue;
+        if (/^(?:-[uR]|--utc|--universal|--rfc-email|--rfc-2822|--rfc-3339=(?:date|seconds|ns)|-I(?:date|hours|minutes|seconds|ns)?|--iso-8601(?:=(?:date|hours|minutes|seconds|ns))?)$/.test(arg)) continue;
+        if (arg === '-d' || arg === '--date') {
+            if (i + 1 >= args.length || !args[i + 1]) return false;
+            i++; continue;
+        }
+        if (/^(?:-d.+|--date=.+)$/.test(arg)) continue;
+        return false;
+    }
+    return true;
+}
 function classifySingleCommand({ toolName, command, cwd, agentDir }) {
     const { words, opaque } = shellWords(command, toolName);
     const resolve = toolName === 'powershell' ? resolvePowerShellPath : resolveShellPath;
-    if (obviousPrivate(command, words, cwd, agentDir, resolve) || protectedPath(cwd, cwd, agentDir, resolve)) return { status: 'blocked' };
+    if (obviousPrivate(command, words, cwd, agentDir, resolve, toolName === 'powershell' ? 'powershell' : 'bash') || protectedPath(cwd, cwd, agentDir, resolve)) return { status: 'blocked' };
     if (!words.length) return { status: 'unknown' };
     const names = words.map(commandName), name = toolName === 'powershell' ? names[0] : path.posix.basename(words[0]), args = words.slice(1);
     // PowerShell expands -Path wildcards in quoted strings too. Without a strictly
@@ -129,7 +256,9 @@ function classifySingleCommand({ toolName, command, cwd, agentDir }) {
         if (PS_READ.has(name) && args.every(arg => !arg.includes(':') && (!arg.startsWith('-') || ['-path', '-literalpath', '-name', '-force'].includes(arg.toLowerCase())))) return { status: 'safe' };
         return { status: 'unknown' };
     }
-    if (['pwd', 'whoami', 'date', 'true', 'false'].includes(name) && !args.length) return { status: 'safe' };
+    if (['pwd', 'whoami', 'id', 'hostname', 'uptime', 'true', 'false'].includes(name) && !args.length) return { status: 'safe' };
+    if (name === 'date' && isSafeDateArgs(args)) return { status: 'safe' };
+    if (['cal', 'ncal'].includes(name) && args.every(arg => /^(?:-[13jywmSM]+|\d{1,4})$/.test(arg))) return { status: 'safe' };
     if (name === 'cd' && args.length <= 1 && args.every(arg => !arg.startsWith('-'))) return { status: 'safe' };
     if (['echo', 'printf'].includes(name) && args.every(arg => !arg.startsWith('-'))) return { status: 'safe' };
     if (READ_COMMANDS.has(name)) {
@@ -198,4 +327,4 @@ function classifyCommand({ toolName, input, cwd, agentDir }) {
     }
     return { status: 'safe' };
 }
-module.exports = { shellWords, classifyCommand };
+module.exports = { shellWords, classifyCommand, freeModeAsks };
