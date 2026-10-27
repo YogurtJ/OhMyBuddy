@@ -907,8 +907,8 @@
         for (const [wrap, { viewport, panels }] of groups) {
             const shell = wrap.parentElement, header = viewport.querySelector(':scope > #pi-bot-header');
             const bottom = wrap.getBoundingClientRect().bottom + (liftedDocks.get(wrap) || 0);
-            const visibleBottom = visual ? Math.min(shell.getBoundingClientRect().bottom, visual.offsetTop + visual.height - DOCK_GAP) : bottom;
-            const lift = visual ? Math.max(0, Math.ceil(bottom - visibleBottom)) : 0;
+            const shellBottom = shell.getBoundingClientRect().bottom, visualBottom = visual ? visual.offsetTop + visual.height : Infinity;
+            const lift = visualBottom < shellBottom - 0.5 ? Math.max(0, Math.ceil(bottom - (visualBottom - DOCK_GAP))) : 0;
             liftDock(wrap, lift);
             for (const node of [shell, wrap, header]) dockWatch(node);
             for (const panel of panels) for (const area of panel.querySelectorAll('textarea')) fitTextarea(area);
