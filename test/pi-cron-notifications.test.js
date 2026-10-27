@@ -299,3 +299,13 @@ test('a pushed Bot-started message is admitted for WeChat once; other runs are n
     await service.reconcileChannelNotifications();
     assert.equal(service.db.run(run.id).channelNotify.status, 'accepted');
 });
+test('reconciliation leaves a running run alone while its session file is being written', async t => {
+    const f = await fixture(t), { service, run } = f;
+    let failure = Object.assign(new Error('Session file changed'));
+    service.store.getSession = async () => { throw failure; };
+    await service.reconcile();
+    assert.equal(service.db.run(run.id).status, 'running', 'a transient read conflict is not an uncertain outcome');
+    failure = new Error('disk unreadable');
+    await service.reconcile();
+    assert.deepEqual([service.db.run(run.id).status, service.db.run(run.id).reason], ['uncertain', 'disk unreadable']);
+});
