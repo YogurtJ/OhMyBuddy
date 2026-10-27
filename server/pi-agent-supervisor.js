@@ -473,7 +473,7 @@ class AgentWorker extends EventEmitter {
             this.once('exit', exited); this.once('disposed', exited);
             unsubscribe = this.subscribe(event => {
                 if (event.type === 'agent_settled') setImmediate(finish);
-                if (event.type === 'extension_ui_request' && ['confirm', 'select', 'input', 'editor'].includes(event.method)) waiting();
+                if (event.type === 'extension_ui_request' && ['confirm', 'select', 'input', 'editor'].includes(event.method)) waiting(event);
             });
             try {
                 const started = await this.navigate(rpc, { mode: 'channel', input: { ...input, action: 'start', sessionId: this.sessionId } }, { timeoutMs: 30000, beforeSend: admit });
