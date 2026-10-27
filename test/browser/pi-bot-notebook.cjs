@@ -47,7 +47,7 @@ const startNotes = () => [
             let notes = startNotes(), version = 1, refuse = null, reads = 0;
             const book = () => ({ generation: 2, version: `v${version}`, items: notes.map(note => ({ ...note })) });
             const bot = { id: BOT, name: '小狸', description: '', avatar: { kind: 'emoji', value: '🦊' }, enabled: true, profileRevision: 'p',
-                bot: { version: 1, enabled: true, order: 0, job: '', model: null, permissions: { preset: 'free', rules: 0 }, notify: { quietHours: null, dailyProactiveLimit: 5 },
+                bot: { version: 1, enabled: true, order: 0, job: '', model: null, permissions: { preset: 'free', rules: 0 }, notify: { quietHours: null, dailyProactiveLimit: 20 },
                     onboarding: { version: 1, phase: 'done', firstBot: true, steps: {}, startedAt: null, completedAt: '2026-10-24T00:00:00Z' }, createdAt: '2026-10-24T00:00:00Z' },
                 windowsRevision: 'w', windows: [{ id: MAIN, kind: 'main', title: '主聊天', emoji: '💬', focus: '', createdAt: '2026-10-24T00:00:00Z',
                     updatedAt: '2026-10-24T00:00:00Z', archivedAt: null, generation: 0, sessionId: 'gen-0', generations: 1 }] };

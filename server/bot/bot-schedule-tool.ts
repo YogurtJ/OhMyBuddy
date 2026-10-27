@@ -23,7 +23,7 @@ export function registerBotSchedule(pi: ExtensionAPI, verified: (ctx: any) => bo
     const discard = (id: string) => prepared.delete(id);
     pi.registerTool({
         name: 'bot_schedule', label: 'Scheduled task',
-        description: 'Create, list or cancel this Bot’s scheduled tasks. Results go to the chat that asks, following its later generations. Create needs title, message and exactly one of once (YYYY-MM-DD HH:mm local wall time) or repeat (five-field cron). timeZone is an IANA zone, defaulting to the server zone. needsTools defaults to false (write a message); true allows work with tools. List includes local now; use it to check dates. Cancel uses the listed task id. Creation is unavailable during a scheduled run. Say a task is set only after success, with the resolved local time. User-requested tasks run at their requested time, including quiet hours.',
+        description: 'Create, list or cancel this Bot’s scheduled tasks. Results go to the chat that asks, following its later generations. Create needs title, message and exactly one of once (YYYY-MM-DD HH:mm local wall time) or repeat (five-field cron). timeZone is an IANA zone, defaulting to the server zone. needsTools defaults to false (write a message); true allows work with tools. List includes local now, tasks and your own pending follow-ups; use it to check dates. Cancel uses the listed task or follow-up id. Creation is unavailable during a scheduled run. Say a task is set only after success, with the resolved local time. User-requested tasks run at their requested time, including quiet hours. proactive: true makes it your own check-in instead of a task the user asked for: once only, no tools, delivered in this chat; the user\'s quiet hours and daily limit decide whether it also notifies them, and they can turn these off.',
         parameters: Type.Object({
             action: Type.Union([Type.Literal('create'), Type.Literal('list'), Type.Literal('cancel')]),
             title: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
@@ -32,6 +32,7 @@ export function registerBotSchedule(pi: ExtensionAPI, verified: (ctx: any) => bo
             repeat: Type.Optional(Type.String({ maxLength: 150, description: 'Five-field cron: minute hour day month weekday.' })),
             timeZone: Type.Optional(Type.String({ maxLength: 100 })),
             needsTools: Type.Optional(Type.Boolean()),
+            proactive: Type.Optional(Type.Boolean({ description: 'true: your own check-in (once, a message only), not a user-requested task.' })),
             id: Type.Optional(Type.String({ description: 'Task id from list, for cancellation.' }))
         }),
         prepareArguments: normalizeScheduleInput,

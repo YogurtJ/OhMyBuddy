@@ -25,7 +25,7 @@ const windowRecord = (id, extra = {}) => ({ id, kind: 'main', title: '主聊天'
 function botRecord({ id = BOT, name = '小狸', avatar = { kind: 'emoji', value: '🦊' }, bot = {}, windows = [windowRecord(MAIN)], windowsRevision = 'w1' } = {}) {
     return { id, name, description: '', avatar, enabled: true, profileRevision: 'p', chosen: { name: true, avatar: true },
         bot: { version: 1, enabled: true, order: 0, job: '帮我安排生活', model: null, permissions: { preset: 'free', rules: 0 },
-            notify: { quietHours: { start: '23:00', end: '08:00' }, dailyProactiveLimit: 5 },
+            notify: { quietHours: { start: '23:00', end: '08:00' }, dailyProactiveLimit: 20 },
             onboarding: { version: 1, phase: 'done', firstBot: true, steps: {}, startedAt: null, completedAt: '2026-10-24T00:10:00Z' },
             createdAt: '2026-10-24T00:00:00Z', ...bot },
         windowsRevision, windows };

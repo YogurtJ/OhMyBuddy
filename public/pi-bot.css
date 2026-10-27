@@ -775,3 +775,15 @@
 @media (prefers-reduced-motion: reduce) {
     .pi-bot-window-state .pi-bot-status-dot, .pi-bot-home-state .pi-bot-status-dot { animation: none !important; }
 }
+
+/* ---- messages a Bot starts itself, in Bot settings (M4-3) ------------------------------ */
+.pi-bot-sheet-notify { display: grid; gap: 10px; }
+.pi-bot-sheet-check { display: flex; align-items: center; gap: 10px; min-height: 40px; font-size: .92rem; color: var(--text-main); cursor: pointer; }
+.pi-bot-sheet-check input { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--primary, var(--green)); }
+.pi-bot-sheet-times { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: .86rem; color: var(--text-muted); }
+.pi-bot-sheet-times[hidden], .pi-bot-sheet-notify .pi-bot-sheet-note[hidden] { display: none; }
+.pi-bot-sheet-notify .is-off { opacity: .55; }
+.pi-bot-sheet-followups { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+.pi-bot-sheet-followups h4 { margin: 0; font-size: .86rem; font-weight: 650; color: var(--text-main); }
+.pi-bot-sheet-followups h4:focus { outline: none; }
+@media (max-width: 900px) { .pi-bot-sheet-check { min-height: 44px; } }

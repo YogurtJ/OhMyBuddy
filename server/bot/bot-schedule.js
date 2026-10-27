@@ -4,6 +4,7 @@ const { localParts, wallInstant, parseCron } = require('../pi-cron-schedule');
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 const uuid = value => typeof value === 'string' && /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(value);
 const defaultTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+const followUpId = value => typeof value === 'string' && /^[a-f0-9]{24}$/.test(value);
 
 function localTime(at, timeZone) {
     const p = localParts(at, timeZone), pad = value => String(value).padStart(2, '0');
@@ -13,7 +14,7 @@ function localTime(at, timeZone) {
 // Shared by the worker approval and execution: provider-materialized empty optionals
 // are omitted, and the default zone is fixed before showing the approval card.
 function normalizeScheduleInput(raw) {
-    const fields = { create: ['title', 'message', 'once', 'repeat', 'timeZone', 'needsTools'], list: ['timeZone'], cancel: ['id'] };
+    const fields = { create: ['title', 'message', 'once', 'repeat', 'timeZone', 'needsTools', 'proactive'], list: ['timeZone'], cancel: ['id'] };
     const known = new Set(['action', ...Object.values(fields).flat()]);
     if (!raw || typeof raw !== 'object' || Array.isArray(raw) || !Object.hasOwn(fields, raw.action)
         || Object.keys(raw).some(key => !known.has(key))) fail('Invalid bot_schedule arguments');
@@ -33,10 +34,15 @@ function normalizeScheduleInput(raw) {
         input.title = input.title.trim();
         if ((input.once === undefined) === (input.repeat === undefined)) fail('Specify exactly one of once or repeat');
         if (input.needsTools !== undefined && typeof input.needsTools !== 'boolean') fail('Invalid needsTools');
+        if (input.proactive !== undefined && typeof input.proactive !== 'boolean') fail('Invalid proactive');
+        if (input.proactive === false) delete input.proactive;
+        // A check-in the Bot starts itself: once, a message only, short.
+        if (input.proactive && (input.repeat !== undefined || input.needsTools === true || input.message.length > 2000))
+            fail('A proactive check-in is a single message (once, no tools, up to 2000 characters)');
         if (input.repeat !== undefined) input.repeat = parseCron(input.repeat).expression;
         if (input.once !== undefined) onceInstant(input.once, input.timeZone);
     }
-    if (input.action === 'cancel' && !uuid(input.id)) fail('A valid task id is required');
+    if (input.action === 'cancel' && !uuid(input.id) && !followUpId(input.id)) fail('A valid task id is required');
     return input;
 }
 function onceInstant(once, timeZone) {
@@ -65,6 +71,7 @@ function scheduleDetail(input) {
         const time = job.schedule.kind === 'cron' ? job.schedule.expression : localTime(job.schedule.at, job.schedule.timeZone);
         return `Cancel: ${job.title}\n${time} (${job.schedule.timeZone})`;
     }
+    if (input.proactive) return `Check back with you (my own follow-up): ${input.title}\n${input.once} (${input.timeZone ?? defaultTimeZone()})`;
     return `Create: ${input.title}\n${input.once ?? input.repeat} (${input.timeZone ?? defaultTimeZone()})`;
 }
 // UUID with a private, stable namespace. Retries of one native tool call address one job.
@@ -88,7 +95,16 @@ function mountBotSchedule(router, { cron, bots, authenticate }) {
             const input = normalizeScheduleInput({ ...raw, action });
             await cron.ready; cron.healthy();
             const belongs = job => job && !job.deleted && job.target.kind === 'profile' && job.target.profileId === profileId;
-            if (action === 'list') return res.json({ v: 1, action: 'listed', jobs: cron.db.jobs().filter(belongs).map(jobView), now: localTime(cron.now(), input.timeZone) });
+            const followUps = async () => (await bots.proactive?.list(profileId) || []).map(item => ({ ...item, local: localTime(item.at, input.timeZone ?? defaultTimeZone()) }));
+            if (action === 'list') {
+                const planned = await followUps();
+                return res.json({ v: 1, action: 'listed', jobs: cron.db.jobs().filter(belongs).map(jobView), ...(planned.length ? { followUps: planned } : {}), now: localTime(cron.now(), input.timeZone) });
+            }
+            if (action === 'cancel' && followUpId(input.id)) {
+                if (!bots.proactive) fail('Follow-ups are unavailable', 503);
+                const { cancelled } = await bots.proactive.cancel(profileId, input.id);
+                return res.json({ v: 1, action: 'cancelled', proactive: true, profileId, followUp: cancelled });
+            }
             if (action === 'cancel') {
                 const job = cron.db.job(input.id);
                 if (!belongs(job)) fail('Task not found', 404);
@@ -98,6 +114,13 @@ function mountBotSchedule(router, { cron, bots, authenticate }) {
             }
             if (worker.cronRun) fail('Cannot create scheduled tasks during an unattended scheduled run', 409);
             if (typeof toolCallId !== 'string' || !toolCallId.trim() || toolCallId.length > 500) fail('A stable toolCallId is required');
+            if (input.proactive) {
+                if (!bots.proactive) fail('Follow-ups are unavailable', 503);
+                const at = onceInstant(input.once, input.timeZone);
+                const { item } = await bots.proactive.checkIn(profileId, windowId, { id: scheduleId(worker.sessionId, toolCallId).replace(/-/g, '').slice(0, 24),
+                    title: input.title, message: input.message, at });
+                return res.json({ v: 1, action: 'created', proactive: true, profileId, followUp: { ...item, local: localTime(item.at, input.timeZone) } });
+            }
             const schedule = scheduleFor(input), id = scheduleId(worker.sessionId, toolCallId);
             const job = { id, name: input.title, prompt: input.message, enabled: true, mode: input.needsTools === true ? 'work' : 'text', schedule,
                 target: { kind: 'profile', profileId, ...(window.kind === 'topic' ? { windowId } : {}) } };

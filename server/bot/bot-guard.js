@@ -55,7 +55,9 @@ function approvalFor({ permissions, preset = permissions?.preset, toolName, inpu
         if (matchesRule(permissions?.rules, rule)) return null;
         return { kind, detail: detailFor(kind, toolName, input), ...(rule ? { rule } : {}) };
     };
-    if (toolName === 'bot_schedule') return preset === 'free' || input?.action === 'list' ? null : ask('schedule');
+    // A check-in the Bot sets for itself is one message, governed by the user's proactive settings
+    // (on/off, quiet hours, daily limit) and cancellable in settings, so it does not ask each time.
+    if (toolName === 'bot_schedule') return preset === 'free' || input?.action === 'list' || input?.action === 'create' && input?.proactive === true ? null : ask('schedule');
     if (COMMANDS.has(toolName)) {
         const command = classifyCommand({ toolName, input, cwd, agentDir });
         if (command.status === 'blocked') return { block: true, reason: BLOCKED.protected };

@@ -17,6 +17,7 @@ function limits(value, defaults = { maxRunsPerDay: 8, maxTokensPerDay: 200000, m
         || result.maxCostPerDay !== null && (!Number.isFinite(result.maxCostPerDay) || result.maxCostPerDay <= 0 || result.maxCostPerDay > 10000)) fail('Invalid daily budget');
     return result;
 }
+const PROACTIVE_RUNS_PER_DAY = 50;
 function validateJob(input, now) {
     if (!input || typeof input.name !== 'string' || !input.name.trim() || input.name.length > 120
         || typeof input.prompt !== 'string' || !input.prompt.trim() || input.prompt.length > 40000
@@ -252,6 +253,24 @@ class CronService {
             fail('Unsupported task action');
         });
     }
+    // A message a Bot starts by itself (bot/bot-proactive.js): one run with its task inline, never a
+    // saved task. runId is stable per follow-up, so asking again returns the same run. Text only, the
+    // Bot's own model, a short time limit, and counted per Bot instead of in the user's budget.
+    enqueueProactive({ runId, profileId, windowId, at, name, prompt, note, kind, timeZone }) {
+        return this.reserve(async () => {
+            if (!/^[a-f0-9]{64}$/.test(runId) || !uuid(profileId) || windowId !== undefined && !uuid(windowId) || !Number.isSafeInteger(at)
+                || typeof name !== 'string' || !name || name.length > 120 || typeof prompt !== 'string' || !prompt || prompt.length > 4000
+                || typeof note !== 'string' || note.length > 200 || !['due', 'checkin'].includes(kind)) fail('Invalid Bot follow-up');
+            const previous = this.db.run(runId); if (previous) return previous;
+            if (this.db.runCount() >= 10000) fail('Execution history capacity reached; scheduling is paused');
+            const job = { id: `bot:${runId.slice(0, 32)}`, revision: 1, name, prompt, enabled: true, mode: 'text', origin: 'bot', kind, note,
+                target: { kind: 'profile', profileId, ...(windowId ? { windowId } : {}) }, schedule: { kind: 'once', at, timeZone },
+                model: null, condition: null, misfire: { policy: 'latest', graceMinutes: 120 },
+                execution: { maxCalls: 3, maxTokens: 32000, maxDurationSeconds: 180 }, budget: limits() };
+            const run = { id: runId, jobId: job.id, scheduledAt: at, status: 'waiting', manual: false, job, origin: 'bot', profileId, createdAt: this.now() };
+            this.db.saveRun(run); return run;
+        });
+    }
     enqueue(job, at, id = hash([job.id, job.revision, at]), manual = false) {
         const previous = this.db.run(id); if (previous) return previous;
         if (this.db.runCount() >= 10000) fail('Execution history capacity reached; scheduling is paused');
@@ -315,7 +334,10 @@ class CronService {
                 const rates = ['input', 'output', 'cacheRead', 'cacheWrite'].map(key => pricing?.[key]);
                 const reservedCost = rates.every(rate => Number.isFinite(rate) && rate >= 0) && Math.max(...rates) > 0
                     ? Math.max(...rates) * job.execution.maxTokens / 1000000 : null;
-                for (const [limit, usage] of [[this.db.limits(), this.db.usage(day)], [job.budget, this.db.usage(day, job.id)]]) {
+                if (job.origin === 'bot') {
+                    // A safety bound on runs a Bot starts by itself; pushes have their own limit (bot-proactive.js).
+                    if (this.db.proactiveRuns(day, job.target.profileId) >= PROACTIVE_RUNS_PER_DAY) fail('Daily limit of Bot follow-ups reached');
+                } else for (const [limit, usage] of [[this.db.limits(), this.db.usage(day)], [job.budget, this.db.usage(day, job.id)]]) {
                     if (usage.runs >= limit.maxRunsPerDay || usage.tokens + job.execution.maxTokens > limit.maxTokensPerDay)
                         fail('Daily execution or token budget exhausted');
                     if (limit.maxCostPerDay !== null && (reservedCost === null || usage.unknownCost || usage.cost + reservedCost > limit.maxCostPerDay))
@@ -334,7 +356,8 @@ class CronService {
             const result = await worker.cron({ action: 'start', runId: run.id, jobId: job.id, sessionId: session.id,
                 name: job.name, prompt: job.prompt, scheduledAt: run.scheduledAt, timeZone: job.schedule.timeZone,
                 profile: session.agentProfile ? { id: worker.loadedAgentProfileId, revision: worker.loadedAgentProfileRevision } : null,
-                mode: job.mode, condition: job.condition, model: job.model, ...job.execution });
+                mode: job.mode, condition: job.condition, model: job.model, ...job.execution,
+                ...(job.origin === 'bot' ? { origin: 'bot', note: job.note || '' } : {}) });
             this.applyResult(run, result);
         } catch (error) {
             if (error.code === 'SESSION_BUSY' && !handedOff) return;
@@ -370,7 +393,8 @@ class CronService {
             const complete = ['completed', 'silent', 'skipped', 'stopped', 'error'].includes(status);
             completed = complete && status !== 'silent' && status !== 'skipped';
             const job = run.job || this.db.job(run.jobId);
-            const channelNotify = completed && job && weixinNotification(job) !== 'off' ? this.captureNotification({
+            // Bot-started messages reach channels only through the Bot's push rules (M4-4), never here.
+            const channelNotify = completed && job && job.origin !== 'bot' && weixinNotification(job) !== 'off' ? this.captureNotification({
                 runId: run.id, jobId: job.id, name: job.name, status, target: run.target, notificationMode: weixinNotification(job),
                 replyEntryId: result.replyEntryId || null, scheduledAt: run.scheduledAt
             }) : null;
@@ -379,7 +403,8 @@ class CronService {
                 ...(channelNotify ? { channelNotify } : {}) });
         });
         if (completed) this.supervisor.emit('completion', { cwd: run.target.cwd, sessionId: run.target.sessionId,
-            completionId: run.id, completedAt: new Date(this.now()).toISOString() });
+            completionId: run.id, completedAt: new Date(this.now()).toISOString(),
+            ...(run.origin === 'bot' ? { proactive: { profileId: run.profileId } } : {}) });
     }
     reconcileChannelNotifications() {
         if (this.notifying || this.stopping || this.isSuspended() || this.mutating) return this.notifying;
@@ -430,6 +455,28 @@ class CronService {
             } catch (error) {
                 if (error.code !== 'SESSION_BUSY' && run.status !== 'uncertain') this.db.saveRun({ ...run, status: 'uncertain', reason: error.message });
             }
+        }
+        // A Bot-started message has no task page where someone could review an uncertain run. It is
+        // text only, so closing it as stopped (after the worker records that) changes nothing else.
+        this.botReviewed ??= new Map();
+        for (const run of this.db.activeRuns().filter(item => item.origin === 'bot' && item.status === 'uncertain')) {
+            // Only after it stayed uncertain for two minutes, and then at most every two minutes: this may start the chat's worker.
+            if (!this.botReviewed.has(run.id)) { this.botReviewed.set(run.id, this.now()); continue; }
+            if (this.now() - this.botReviewed.get(run.id) < 120000) continue;
+            this.botReviewed.set(run.id, this.now());
+            if (this.botReviewed.size > 200) this.botReviewed.delete(this.botReviewed.keys().next().value);
+            try {
+                if (run.target) {
+                    let session = null;
+                    try { session = await this.store.getSession(run.target.cwd, run.target.sessionId); } catch { session = null; }
+                    if (session) {
+                        if (!this.supervisor.isSessionIdle(session.path)) continue;
+                        const worker = await this.supervisor.getWorker({ cwd: session.cwd, sessionId: session.id, sessionPath: session.path });
+                        await worker.cron({ action: 'acknowledge', runId: run.id });
+                    }
+                }
+                if (this.db.run(run.id)?.status === 'uncertain') this.db.saveRun({ ...this.db.run(run.id), status: 'stopped', reason: 'reviewed-uncertain', completedAt: this.now() });
+            } catch { /* Retried on the next pass. */ }
         }
     }
     async removing(session) {

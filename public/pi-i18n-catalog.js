@@ -10669,5 +10669,29 @@
         ["{0} 的聊天和话题（{1} 个话题）", "{0}'s chats and topics ({1} topics)"],
         ["话题 {0}", "Topics {0}"]
     );
+    rows.push(
+        ["主动找你", "Reaching out to you"],
+        ["让 {0} 主动找我", "Let {0} reach out to me"],
+        ["记下的事到期时，它会来提醒你、问问进展，也可能约好过几天回来看看。它只发消息，不会自己动手。你要它设的提醒不受这里影响。", "When something it noted falls due, it reminds you and asks how it is going, and it may arrange to check back in a few days. It only sends a message and does not act on its own. Reminders you ask for are not affected by this."],
+        ["安静时段", "Quiet hours"],
+        ["安静时段开始", "Quiet hours start"],
+        ["安静时段结束", "Quiet hours end"],
+        ["到", "to"],
+        ["这段时间它主动发的消息不推送，结束时合成一条提醒。", "Messages it starts during this time are not pushed; you get one combined notification when quiet hours end."],
+        ["每天最多 {0} 条", "Up to {0} a day"],
+        ["不限", "No limit"],
+        ["推送上限", "Notification limit"],
+        ["只算它主动发的推送；超出后消息照样留在聊天里，只是不再推送。聊天、设置和你要的提醒都不算。", "Counts only notifications for messages it starts itself. Past the limit, messages still appear in the chat without a notification. Conversations, setup and reminders you ask for never count."],
+        ["准备跟进的事", "Planned follow-ups"],
+        ["暂时读不到准备跟进的事。", "Planned follow-ups can't be read right now."],
+        ["现在没有准备跟进的事。", "No follow-ups are planned right now."],
+        ["到期提醒 · {0}", "Due reminder · {0}"],
+        ["回来看看 · {0}", "Check-in · {0}"],
+        ["取消跟进：{0}", "Cancel follow-up: {0}"],
+        ["已取消这次跟进", "Follow-up cancelled"],
+        ["没有取消：{0}", "Not cancelled: {0}"],
+        ["安静时段的开始和结束要是两个不同的时间", "Quiet hours need different start and end times"],
+        ["主动跟进", "Follow-up"]
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

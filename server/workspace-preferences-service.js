@@ -303,14 +303,15 @@ class WorkspacePreferencesService {
         return notices.filter(item => item && typeof item.cwd === 'string' && path.isAbsolute(item.cwd)
             && typeof item.sessionId === 'string' && typeof item.completionId === 'string'
             && typeof item.completedAt === 'string')
-            .map(({ cwd, sessionId, completionId, completedAt, manual }) => ({ cwd, sessionId, completionId, completedAt,
-                ...(manual === true ? { manual: true } : {}) }));
+            .map(({ cwd, sessionId, completionId, completedAt, manual, quiet }) => ({ cwd, sessionId, completionId, completedAt,
+                ...(manual === true ? { manual: true } : {}), ...(quiet === true ? { quiet: true } : {}) }));
     }
 
     recordReplyNotice(notice) {
         const { cwd, sessionId, completionId, completedAt } = notice;
         const notices = this.getReplyNotices().filter(item => item.cwd !== cwd || item.sessionId !== sessionId);
-        notices.push({ cwd, sessionId, completionId, completedAt, ...(notice.manual === true ? { manual: true } : {}) });
+        // quiet: a Bot's own message that was not pushed (quiet hours or its daily limit); pages do not alert for it.
+        notices.push({ cwd, sessionId, completionId, completedAt, ...(notice.manual === true ? { manual: true } : {}), ...(notice.quiet === true ? { quiet: true } : {}) });
         this.writeDocument({ ...this.readDocument(), replyNotices: notices });
     }
 

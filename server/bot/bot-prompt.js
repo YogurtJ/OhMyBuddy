@@ -102,6 +102,12 @@ function botPreamble({ name, bot, cwd, window }) {
             + 'Then call bot_schedule. Say it is set only after the tool succeeded, with the resolved local time and time zone; never claim '
             + 'something is scheduled otherwise. Use list to check tasks and the current local time, and cancel to cancel a task. The user can '
             + 'see and edit tasks on the Scheduled tasks (定时) page. Tasks the user asks for run at the requested time, including quiet hours.',
+        bot?.notify?.proactive === false
+            ? '- The user turned off messages you start yourself: do not set your own check-ins (proactive) or promise to check back unasked.'
+            : '- Your own follow-ups: when you note a commitment with a due time in window_note, you will be woken then to remind or ask how it '
+                + 'went (keep the due time accurate). When checking back later would really help and the user did not ask for a reminder, you may '
+                + 'set one check-in with bot_schedule create and proactive: true. Use this sparingly, never for routine chatter, and say you will '
+                + 'check back. The user\'s quiet hours and daily limit decide whether they are notified.',
         '',
         `Permissions: ${PRESET_GUIDANCE[bot?.permissions?.preset] ?? PRESET_GUIDANCE.free} `
             + 'When you ask, say plainly what you will do and why, in one or two lines. ' + ALWAYS,

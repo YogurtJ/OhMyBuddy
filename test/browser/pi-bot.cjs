@@ -53,7 +53,7 @@ const NEW_FACE = { kind: 'preset', id: 'pivane-pebble' };
             const bot = () => ({ id: BOT, name, description: '', avatar: typeof face === 'string' ? { kind: 'emoji', value: face } : face, enabled: true, profileRevision: 'p',
                 chosen: { name: name !== '新伙伴', avatar: face !== NEW_FACE },
                 bot: { version: 1, enabled: true, order: 0, job: '', model, permissions: { preset, rules: 0 },
-                    notify: { quietHours, dailyProactiveLimit: 5 },
+                    notify: { quietHours, dailyProactiveLimit: 20 },
                     onboarding: { version: 1, phase, firstBot: true, steps: {}, defaultAvatar: NEW_FACE.id, startedAt: null, completedAt: null }, createdAt: '2026-10-24T00:00:00Z' },
                 windowsRevision: 'w', windows: [{ id: MAIN, kind: 'main', title: '主聊天', emoji: '💬', focus: '', createdAt: '2026-10-24T00:00:00Z',
                     updatedAt: '2026-10-24T00:00:00Z', archivedAt: null, generation, sessionId, generations: generation + 1 }] });

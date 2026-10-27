@@ -113,6 +113,17 @@ class PiNotificationService {
         } catch { /* Notification failure must not interrupt an Agent. */ }
         finally { this.running--; }
     }
+    // One push to every device (a Bot's combined message at the end of quiet hours). Never throws.
+    async broadcast(payload) {
+        if (this.running >= 4) return;
+        this.running++;
+        try {
+            const data = this.read(); if (!data) return;
+            const message = { id: String(payload.id).slice(0, 64), title: String(payload.title || 'Pivane').slice(0, 80), body: String(payload.body || '').slice(0, 300) };
+            for (let i = 0; i < data.devices.length; i += 4) await Promise.all(data.devices.slice(i, i + 4).map(d => this.deliver(d, message, data.vapid)));
+        } catch { /* Notification failure must not interrupt anything else. */ }
+        finally { this.running--; }
+    }
     mount(router) {
         const route = fn => async (req, res) => {
             res.set('Cache-Control', 'no-store');
