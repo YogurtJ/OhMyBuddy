@@ -10,6 +10,7 @@ const { DeliverableStore } = require('../pi-deliverables');
 const { customTypeIs } = require('../pivane-compat');
 const botChannel = require('./bot-channel');
 const { readWindowBinding } = require('../bot/bot-window-state');
+const { ChannelApprovals, parseApproval } = require('./bot-approvals');
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const same = (a, b) => a?.cwd === b?.cwd && a?.sessionId === b?.sessionId;
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
@@ -266,7 +267,8 @@ class ChannelsService {
                 const binding = v.bindings.find(b => b.accountId === accountId && b.peerId === msg.peerId);
                 const activeCount = v.jobs.filter(j => pending(j) && j.accountId === accountId && j.peerId === msg.peerId).length;
                 const slash = !msg.images?.length ? parseSlash(msg.text) : null;
-                const isControl = Boolean(slash && ['/stop', '/status', '/help'].includes(slash.command));
+                // Answers to a waiting Bot approval go ahead of the turn that waits for them.
+                const isControl = Boolean(slash && ['/stop', '/status', '/help'].includes(slash.command)) || Boolean(!msg.images?.length && parseApproval(msg.text));
                 const isStop = slash?.command === '/stop';
                 const stopQueued = isStop && v.jobs.some(j => pending(j) && j.accountId === accountId && j.peerId === msg.peerId && parseSlash(j.text)?.command === '/stop');
                 const hasContent = Boolean(msg.text.trim() || msg.images?.length);
@@ -386,7 +388,8 @@ class ChannelsService {
         if (this.stopping || this.isSuspended() || this.mutating || this.error || !this.db?.owner) return;
         for (const job of this.db.value.jobs) {
             const slash = job.status === 'queued' && !job.images?.length ? parseSlash(job.text) : null;
-            const control = Boolean(slash && ['/stop', '/status', '/help'].includes(slash.command));
+            const control = Boolean(slash && ['/stop', '/status', '/help'].includes(slash.command))
+                || Boolean(job.status === 'queued' && !job.images?.length && parseApproval(job.text));
             if (this.runs.size >= (control ? 4 : 3)) continue;
             if (!['queued', 'ready'].includes(job.status) || this.runs.has(job.id)) continue;
             const account = this.db.value.accounts.find(a => a.id === job.accountId);
@@ -460,7 +463,16 @@ class ChannelsService {
                 if (error.message === 'Session file changed' || error.code === 'SESSION_BUSY') return;
                 throw error;
             }
-            if (job.status === 'queued') {
+            const approvals = this.approvals ||= new ChannelApprovals();
+            const approval = job.status === 'queued' && !job.images?.length ? parseApproval(job.text) : null;
+            if (approval) {
+                // Never a chat message: it answers one pending approval of a turn this chat started, or nothing.
+                if (!this.canAdmit(this.job(id))) { this.updateJob(id, { status: 'cancelled', reason: 'admission-changed', text: undefined }); return; }
+                const answered = approvals.answer({ accountId: job.accountId, peerId: job.peerId, code: approval.code, allow: approval.allow });
+                this.updateJob(id, { status: 'ready', kind: 'approval', text: undefined, directReply: answered === 'done'
+                    ? approval.allow ? `✅ 已同意 ${approval.code}，继续进行。` : `已拒绝 ${approval.code}，这一步不会做。`
+                    : `❌ 确认 ${approval.code} 已失效（已处理、超时或不是这个聊天发起的），没有改变什么。` });
+            } else if (job.status === 'queued') {
                 slash = !job.images?.length ? parseSlash(job.text) : null;
                 if (slash) {
                     await require('./command-control').executeCommand(this, job, slash, run);
@@ -497,15 +509,18 @@ class ChannelsService {
                             result = await worker.channelTurn({ id, peerId: job.peerId, text: job.text, images }, {
                                 admit: () => !moved() && this.canAdmit(this.job(id)),
                                 accepted: () => this.updateJob(id, { status: 'running', text: undefined, images: undefined }),
-                                waiting: () => {
+                                waiting: event => {
                                     try { this.updateJob(id, { waiting: true }); } catch { this.error = '渠道记录保存失败'; }
-                                    if (waitingNotified) return;
-                                    waitingNotified = true;
                                     const currentAccount = this.db.value.accounts.find(a => a.id === job.accountId);
                                     const peer = this.db.value.peers.find(p => p.accountId === job.accountId && p.peerId === job.peerId);
-                                    if (currentAccount?.enabled && currentAccount.allowedUsers.includes(job.peerId) && this.bindingFor(this.job(id)) && peer?.contextToken) {
-                                        void this.adapter.send(currentAccount, peer, '⚠️ 当前任务正在等待交互确认，请打开 Pivane 网页端处理。', `pivane-wait-${id}`).catch(() => {});
-                                    }
+                                    const binding = this.bindingFor(this.job(id));
+                                    if (!currentAccount?.enabled || !currentAccount.allowedUsers.includes(job.peerId) || !binding || !peer?.contextToken) return;
+                                    // A Bot approval can be answered right here (bot-approvals.js); each one is offered once.
+                                    const offer = botWindow ? approvals.offer({ event, worker, job, botName: binding.name }) : null;
+                                    if (offer) { void this.adapter.send(currentAccount, peer, offer, `pivane-approval-${id}-${event.id}`.slice(0, 120)).catch(() => {}); return; }
+                                    if (waitingNotified) return;
+                                    waitingNotified = true;
+                                    void this.adapter.send(currentAccount, peer, '⚠️ 当前任务正在等待交互确认，请打开 Pivane 网页端处理。', `pivane-wait-${id}`).catch(() => {});
                                 }
                             });
                         } catch (error) {
@@ -529,6 +544,7 @@ class ChannelsService {
             }
         } finally {
             await stopTyping();
+            this.approvals?.forgetJob(id);
         }
         if (this.stopping || this.isSuspended()) return;
         job = this.job(id);
@@ -567,7 +583,7 @@ class ChannelsService {
         }
         const warning = this.deliveryWarning(deliveryIssues);
         // Command answers and notices speak for the chat itself, not for a Bot.
-        const speaker = job.bot && !['slash', 'notice'].includes(job.kind) ? await botChannel.speakerPrefix(this, this.bindingFor(job), job.bot) : '';
+        const speaker = job.bot && !['slash', 'notice', 'approval'].includes(job.kind) ? await botChannel.speakerPrefix(this, this.bindingFor(job), job.bot) : '';
         const text = [speaker ? `${speaker}${baseText}` : baseText, mediaSummary, warning].filter(Boolean).join('\n\n');
         const chunks = Array.from(text.matchAll(/[\s\S]{1,1800}/gu), m => m[0]);
         this.updateJob(id, { status: 'sending', sendStarted: true, sentChunks: 0, sentMedia: 0, deliveryIssues });

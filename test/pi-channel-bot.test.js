@@ -234,3 +234,60 @@ test('review fixes: stored job origins are validated', () => {
         jobs: [{ id: 'j', status: 'ready', bot: { profileId: 'not-a-uuid', windowId: null } }] }), { mode: 0o600 });
     assert.throws(() => new ChannelStore(directory), /无效/);
 });
+
+const { ChannelApprovals, parseApproval } = require('../server/channels/bot-approvals');
+const { APPROVAL_TITLE, approvalMessage } = require('../server/bot/bot-guard');
+const approvalEvent = (id, detail = 'rm -rf build') => ({ type: 'extension_ui_request', id, method: 'confirm', title: APPROVAL_TITLE,
+    message: approvalMessage({ kind: 'command', detail, token: '0123456789abcdef' }), timeout: 1800000 });
+
+test('approval answers are recognised only in their exact short form', () => {
+    assert.deepEqual(parseApproval('同意 A3'), { allow: true, code: 'A3' });
+    assert.deepEqual(parseApproval(' 拒绝a12 '), { allow: false, code: 'A12' });
+    assert.deepEqual(parseApproval('approve A1'), { allow: true, code: 'A1' });
+    for (const text of ['同意', '我同意 A3', '同意 A3 吧', '同意 33', '/confirm A3']) assert.equal(parseApproval(text), null, text);
+});
+
+test('an approval code answers once, only from the chat that started the turn, only while pending', () => {
+    const approvals = new ChannelApprovals(), sent = [];
+    const worker = { pendingUi: new Map([['ui-1', {}], ['ui-2', {}]]), send(record) { sent.push(record); const had = this.pendingUi.delete(record.id); return had; } };
+    const job = { id: 'job', accountId: 'acct', peerId: 'owner' };
+    assert.equal(approvals.offer({ event: { ...approvalEvent('x'), title: 'Something else' }, worker, job }), null, 'only Bot approvals');
+    const text = approvals.offer({ event: approvalEvent('ui-1'), worker, job, botName: '小狸' });
+    assert.match(text, /小狸 想运行命令/); assert.match(text, /rm -rf build/); assert.match(text, /同意 A1/);
+    assert.equal(approvals.offer({ event: approvalEvent('ui-1'), worker, job }), null, 'offered once');
+    assert.equal(approvals.answer({ accountId: 'acct', peerId: 'stranger', code: 'A1', allow: true }), 'missing');
+    assert.equal(sent.length, 0, 'another chat neither answers nor uses up the code');
+    assert.equal(approvals.answer({ accountId: 'acct', peerId: 'owner', code: 'A1', allow: false }), 'done');
+    assert.deepEqual(sent, [{ type: 'extension_ui_response', id: 'ui-1', confirmed: false }]);
+    assert.equal(approvals.answer({ accountId: 'acct', peerId: 'owner', code: 'A1', allow: true }), 'missing', 'used up');
+    approvals.offer({ event: approvalEvent('ui-2'), worker, job });
+    worker.pendingUi.delete('ui-2'); // answered on the web, or timed out
+    assert.equal(approvals.answer({ accountId: 'acct', peerId: 'owner', code: 'A2', allow: true }), 'missing');
+    approvals.offer({ event: approvalEvent('ui-3'), worker, job });
+    approvals.forgetJob('job');
+    assert.equal(approvals.pending.size, 0);
+});
+
+test('a WeChat turn waiting for approval is answered from WeChat while it waits', async t => {
+    const { s, db, cwd, turns, sends } = fixture(t, { text: '清理一下构建目录' });
+    let release;
+    const worker = { pendingUi: new Map(), isIdle: () => true, request: async () => ({}), async exclusive(callback) { return callback(this.request.bind(this), {}); },
+        send(record) { const had = this.pendingUi.delete(record.id); if (had) release(record.confirmed); return had; },
+        async channelTurn(input, hooks) {
+            if (!hooks.admit()) return { cancelled: true };
+            turns.push({ sessionId: 'a-main-0', text: input.text }); hooks.accepted();
+            const answered = new Promise(resolve => { release = resolve; });
+            this.pendingUi.set('ui-1', {}); hooks.waiting(approvalEvent('ui-1'));
+            this.answer = await answered;
+            return { status: 'completed' };
+        } };
+    s.supervisor.getWorker = async () => worker;
+    s.pump(); await until(() => sends.some(text => /同意 A1/.test(text)));
+    assert.equal(s.job('job').status, 'running');
+    db.change(v => v.jobs.push({ id: 'answer', accountId: 'acct', peerId: 'owner', bindingId: 'binding', target: { cwd, sessionId: 'a-main-0' }, status: 'queued', text: '同意 A1' }));
+    await until(() => { s.pump(); return s.job('job').status === 'delivered' && s.job('answer').status === 'delivered'; });
+    assert.equal(worker.answer, true);
+    assert.equal(turns.length, 1, 'the answer never became a chat message');
+    assert.ok(sends.includes('✅ 已同意 A1，继续进行。'));
+    assert.equal(s.approvals.pending.size, 0);
+});
