@@ -506,10 +506,10 @@ Body: `{ "cwd": "/workspace/demo" }`。先经过 token/Origin/realpath 根检查
 Body：
 
 ```json
-{ "cwd": "/workspace/demo", "name": "optional" }
+{ "cwd": "/workspace/demo", "name": "optional", "profileId": "optional identity ID or null" }
 ```
 
-创建立即可见的原生空 Pi session，返回单个 session object。HTTP 201。
+创建立即可见的原生空 Pi session，返回单个 session object。HTTP 201。`profileId` 为已启用身份（含 Bot）的 ID 时新会话使用该身份（普通线程，不是 Bot 窗口）；为 null 时无身份；省略时沿用项目默认身份（旧客户端兼容）。
 
 ### `PATCH /sessions/:id`
 

@@ -1035,6 +1035,7 @@ document.addEventListener('DOMContentLoaded', () => {
             state.assistantSupported = status.assistantProjects === true && status.agentProfiles === true;
             state.sessionClassificationSupported = status.sessionClassification === true;
             state.profileLearningSupported = status.profileLearning === true;
+            state.agentProfilesEnabled = status.agentProfiles === true;
             if (status.agentProfiles === true && !state.assistantMode) {
                 void apiFetch('/api/pi/profiles').then(data => {
                     if (Array.isArray(data?.profiles)) { state.profileInventory = data.profiles; syncActualIdentity(); }
@@ -2378,12 +2379,22 @@ document.addEventListener('DOMContentLoaded', () => {
         return createSession(navigation);
     }
 
-    async function createSession(navigation = beginConversationNavigation()) {
+    // M4-6 (D-025): a new ordinary Pi thread in this project that uses a chosen identity.
+    async function createIdentitySession(cwd) {
+        const project = state.projects.find(item => item.cwd === cwd);
+        const profileId = await window.PiIdentityThread.choose({ apiFetch, projectName: project?.name || cwd.split(/[\\/]/).filter(Boolean).pop() || cwd });
+        if (!profileId || state.assistantMode || state.botMode) return;
+        const navigation = beginConversationNavigation();
+        if (!await selectProject(cwd, { navigation }) || !isCurrentNavigation(navigation, cwd)) return;
+        return createSession(navigation, { profileId });
+    }
+
+    async function createSession(navigation = beginConversationNavigation(), { profileId: chosenProfileId = null } = {}) {
         if (!isCurrentNavigation(navigation) || state.creatingSession) return;
         if (state.assistantMode && !state.assistantGroups.some(group => group.id === state.assistantProjectId && !group.unclassified && !group.archived)) return;
         if (!state.cwd) return openProjectDialog();
         const cwd = state.cwd, assistantMode = state.assistantMode, assistantProjectId = assistantMode ? state.assistantProjectId : null;
-        const profileId = state.assistantMode ? state.assistantProfileId : null;
+        const profileId = state.assistantMode ? state.assistantProfileId : chosenProfileId;
         state.creatingSession = true;
         elements.newSession.disabled = true;
         try {
@@ -5169,6 +5180,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ];
             items = [
                 command(translateUi("新聊天"), 'fa-plus', () => createSessionInProject(cwd)),
+                ...(state.agentProfilesEnabled && window.PiIdentityThread ? [command(translateUi("以身份新建…"), 'fa-user-pen', () => createIdentitySession(cwd))] : []),
                 command(translateUi('临时会话（不保存）'), 'fa-bolt', () => createEphemeralSession(cwd)),
                 command(state.pinnedProjects.includes(cwd) ? translateUi("取消置顶") : translateUi("置顶项目"), 'fa-thumbtack', () => toggleProjectPin(cwd), { disabled: state.pinRequests.has(cwd) }),
                 command(translateUi("刷新线程"), 'fa-rotate', () => loadSessions(cwd)),
