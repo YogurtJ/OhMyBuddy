@@ -88,8 +88,17 @@ function protectedPath(raw, cwd, agentDir, resolve = resolvePiPath) {
 // paths must be checked exactly as the shell will use them. Unquoted ~ remains opaque.
 function resolveShellPath(input, cwd) { return path.resolve(cwd, input); }
 function resolvePowerShellPath(input, cwd) { return path.resolve(cwd, input.replaceAll('\\', path.sep)); }
+// Writes here still ask even in Hands-off mode: Pivane's own running releases, state and
+// backups, and locations that start programs automatically at login or on a schedule.
+function criticalPath(target) {
+    const normalized = target.replaceAll('\\', '/').toLowerCase();
+    return /(?:^|\/)\.pivane-runtime(?:\/|$)/.test(normalized)
+        || /(?:^|\/)(?:library\/(?:launchagents|launchdaemons)|\.config\/(?:systemd|launchd|autostart)|start menu\/programs\/startup)(?:\/|$)/.test(normalized)
+        || /^\/(?:etc\/(?:cron[^/]*|systemd|init\.d)|var\/spool\/cron)(?:\/|$)/.test(normalized);
+}
 function systemPath(target) {
     const normalized = target.replaceAll('\\', '/').toLowerCase();
+    if (criticalPath(target)) return true;
     return /(?:^|\/)(?:\.git(?:\/|$)|\.config\/(?:systemd|launchd)(?:\/|$)|\.(?:bashrc|bash_profile|zshrc|profile|gitconfig)$|microsoft\.powershell_profile\.ps1$)/.test(normalized)
         || /^\/(?:etc|usr|bin|sbin|boot|dev|proc|sys|run|var\/lib|var\/run)(?:\/|$)/.test(normalized)
         || /^[a-z]:\/(?:windows|program files(?: \(x86\))?|programdata)(?:\/|$)/.test(normalized);
@@ -100,6 +109,6 @@ function fileOperation({ input, cwd, agentDir }) {
     const value = canonicalTarget(resolvePiPath(raw, cwd));
     let directory = false;
     try { directory = fs.statSync(value).isDirectory(); } catch { /* New files are allowed. */ }
-    return { status: systemPath(value) || directory ? 'risk' : 'safe', value };
+    return { status: systemPath(value) || directory ? 'risk' : 'safe', critical: directory || criticalPath(value), value };
 }
-module.exports = { resolvePiPath, resolveShellPath, resolvePowerShellPath, canonicalTarget, insideWorkspace, privateName, protectedPath, systemPath, fileOperation, within };
+module.exports = { resolvePiPath, resolveShellPath, resolvePowerShellPath, canonicalTarget, insideWorkspace, privateName, protectedPath, systemPath, criticalPath, fileOperation, within };

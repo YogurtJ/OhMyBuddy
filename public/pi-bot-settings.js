@@ -8,7 +8,7 @@
     const button = (className, text) => { const b = el('button', className, text); b.type = 'button'; return b; };
     const LIMITS = { name: 40, avatar: 16, job: 500, soul: 6000 };
     const PRESETS = [
-        ['free', () => translateUi("放手"), () => translateUi("大部分事直接办好。删东西、改系统配置、对外发消息、花钱多的事会先问你。")],
+        ['free', () => translateUi("放手"), () => translateUi("几乎所有事直接办好，相当于完全权限。只有 sudo、递归删除、关机或停服务、git push／重置、发布、发邮件、设定时任务和改 Pivane 自身运行目录时会先问你。")],
         ['balanced', () => translateUi("稳妥"), () => translateUi("查资料、记东西、在工作目录里写文件直接做；运行命令、改工作目录以外的文件、交给别的助手前，会弹出确认等你允许。")],
         ['ask', () => translateUi("每次都问"), () => translateUi("除了看和回答，每一步动手前都会弹出确认，等你允许。")]
     ];
