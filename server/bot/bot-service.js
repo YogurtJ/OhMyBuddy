@@ -192,6 +192,47 @@ class BotService extends EventEmitter {
         });
     }
 
+    // An existing assistant identity becomes a Bot (M4-5b, D-024 step 3): the same profile keeps its
+    // name, face, personality, memory and skills, and gets a private workspace and a main chat. Its
+    // earlier conversations keep their identity and stay in the Pi Agent list; nothing is moved or
+    // deleted. Scheduled tasks aimed at the identity go to the Bot's main chat from now on.
+    fromProfile(input = {}) {
+        return this.profiles.reserve(async () => {
+            if (!object(input) || typeof input.expectedRevision !== 'string') fail('Expected revision is required');
+            const profileId = input.profileId;
+            if (typeof profileId !== 'string' || !UUID.test(profileId)) fail('Invalid identity ID');
+            const language = input.language === 'en' ? 'en' : 'zh-CN';
+            const eligible = profile => {
+                if (!profile || profile.trashedAt !== undefined) fail('Identity not found', 404, 'PROFILE_NOT_FOUND');
+                if (profile.bot !== undefined) fail('This identity is already a Bot', 409, 'PROFILE_ALREADY_BOT');
+                if (profile.enabled !== true) fail('Turn this identity on before making it a Bot', 409, 'PROFILE_DISABLED');
+            };
+            const { state: current } = await this.profiles.state();
+            const profile = current.profiles.find(item => item.id === profileId);
+            eligible(profile);
+            const existingBots = current.profiles.filter(item => settings.readBot(item) && item.trashedAt === undefined);
+            if (existingBots.length >= MAX_BOTS) fail('Bot limit reached', 409);
+            const workspace = this.prepareWorkspace(profileId, profile.name, language);
+            const now = new Date().toISOString();
+            const defaults = settings.defaultBot({ workspace, now, firstBot: existingBots.length === 0,
+                order: existingBots.reduce((max, item) => Math.max(max, settings.readBot(item).order + 1), 0) });
+            // Its name, face and (when written) personality are already settled, and its memory already
+            // knows the user: the first chat only asks what is still open (job, way of working).
+            const steps = { name: 'done', avatar: 'done', known: 'done', ...(String(profile.soul || '').trim() ? { personality: 'done' } : {}) };
+            const bot = settings.normalizeBot({ ...defaults, chosen: { name: true, avatar: true },
+                onboarding: { ...defaults.onboarding, flowVersion: 2, converted: true, steps } });
+            const saved = await this.profiles.mutate(input.expectedRevision, state => {
+                const record = state.profiles.find(item => item.id === profileId);
+                eligible(record);
+                record.bot = bot; record.updatedAt = now;
+                return { profile: record };
+            });
+            this.emit('botChanged', { profileId });
+            const window = await this.createWindowLocked(profileId, 'main');
+            return { ok: true, revision: saved.revision, bot: { id: profileId, name: saved.profile.name, avatar: saved.profile.avatar ?? null, bot: this.publicBot(bot) }, window };
+        });
+    }
+
     createTopic(profileId, input) {
         const fields = topicFields(input, { revision: true });
         return this.profiles.reserve(async () => {

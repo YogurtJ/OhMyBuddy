@@ -894,7 +894,9 @@
                     root.addEventListener('change', event => { if (event.target.matches?.('input[data-known-entry]')) this.knownToggle(event.target); });
                     return root;
                 }
-                bubble.append(el('p', null, bot.bot.onboarding.firstBot
+                bubble.append(el('p', null, bot.bot.onboarding.converted
+                    ? translateUi("我是{0}，现在有了自己的主聊天和工作目录，记得的事都还在。花一两分钟说说想让我主要帮你做什么？随时可以说“先跳过”。", bot.name)
+                    : bot.bot.onboarding.firstBot
                     ? translateUi("嗨，我是你的新伙伴，还没有名字。想花两三分钟认识你，也让你认识我。随时可以说“先跳过”。")
                     : steps.known === 'done' ? translateUi("谢谢，这些我都记下了。我还没有名字，再花两三分钟互相认识一下？随时可以说“先跳过”。")
                         : translateUi("嗨，我是新来的伙伴，还没有名字。花两三分钟互相认识一下？随时可以说“先跳过”。")));
