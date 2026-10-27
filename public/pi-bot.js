@@ -852,8 +852,8 @@
     // a strip of the conversation), the panels share what is left, and only their bodies scroll.
     // With too little room for even the title, the actions and a bit of the body, a panel keeps
     // those and is drawn above the identity (pi-bot.css).
-    const docked = new Set(), dockWatched = new WeakSet();
-    let dockFrame = 0, dockObserver = null;
+    const docked = new Set(), dockWatched = new WeakSet(), liftedDocks = new Map();
+    let dockFrame = 0, dockObserver = null, dockModeObserver = null;
     const DOCK_GAP = 8, DOCK_BODY = 64;
     // Bodies that may shrink and scroll; every other part of a panel keeps its height.
     const DOCK_SCROLLING = '.pi-bot-setup-fields, .pi-bot-approval-detail';
@@ -866,11 +866,22 @@
         if (!docked.size) {
             window.addEventListener('resize', scheduleDock);
             window.visualViewport?.addEventListener('resize', scheduleDock);
+            window.visualViewport?.addEventListener('scroll', scheduleDock);
+            const chat = document.getElementById('chat-tab');
+            if (chat && typeof MutationObserver === 'function') {
+                dockModeObserver = new MutationObserver(scheduleDock);
+                dockModeObserver.observe(chat, { attributes: true, attributeFilter: ['class'] });
+            }
         }
         docked.add(panel); dockWatch(panel);
         scheduleDock();
     }
     function scheduleDock() { if (!dockFrame) dockFrame = requestAnimationFrame(fitDocked); }
+    function liftDock(wrap, height) {
+        wrap.classList.toggle('is-bot-dock-lifted', height > 0);
+        if (height > 0) { liftedDocks.set(wrap, height); wrap.style.setProperty('--pi-bot-dock-lift', `${height}px`); }
+        else { liftedDocks.delete(wrap); wrap.style.removeProperty('--pi-bot-dock-lift'); }
+    }
     // The least a panel needs: its fixed parts, gaps and padding, and a little of its body.
     function dockFloor(panel) {
         const style = getComputedStyle(panel), parts = [...panel.children].filter(child => getComputedStyle(child).display !== 'none');
@@ -885,19 +896,27 @@
         for (const panel of docked) {
             const wrap = panel.isConnected && !panel.hidden ? panel.closest('.pi-composer-wrap') : null;
             const viewport = wrap?.parentElement?.querySelector(':scope > .pi-transcript-viewport');
-            if (!viewport) { panel.style.removeProperty('--pi-bot-card-room'); continue; }
+            if (!viewport || !wrap.closest('#chat-tab.pi-bot-mode')) { panel.style.removeProperty('--pi-bot-card-room'); continue; }
             if (!groups.has(wrap)) groups.set(wrap, { viewport, panels: [] });
             groups.get(wrap).panels.push(panel);
         }
+        for (const wrap of liftedDocks.keys()) if (!groups.has(wrap)) liftDock(wrap, 0);
+        // A phone keyboard can shrink only the visual viewport, leaving the layout unchanged.
+        // Move this Bot's visible dock above it; intentional pinch zoom keeps normal page panning.
+        const view = window.visualViewport, visual = view && Math.abs(view.scale - 1) < 0.01 ? view : null;
         for (const [wrap, { viewport, panels }] of groups) {
             const shell = wrap.parentElement, header = viewport.querySelector(':scope > #pi-bot-header');
+            const bottom = wrap.getBoundingClientRect().bottom + (liftedDocks.get(wrap) || 0);
+            const visibleBottom = visual ? Math.min(shell.getBoundingClientRect().bottom, visual.offsetTop + visual.height - DOCK_GAP) : bottom;
+            const lift = visual ? Math.max(0, Math.ceil(bottom - visibleBottom)) : 0;
+            liftDock(wrap, lift);
             for (const node of [shell, wrap, header]) dockWatch(node);
             for (const panel of panels) for (const area of panel.querySelectorAll('textarea')) fitTextarea(area);
             const box = header && !header.hidden ? header.getBoundingClientRect() : null;
-            const clear = box?.height ? Math.max(0, box.bottom - viewport.getBoundingClientRect().top) : 0;
+            const clear = Math.max(0, Math.max(box?.bottom || 0, visual?.offsetTop || 0) - viewport.getBoundingClientRect().top);
             let others = 0;
             for (const child of shell.children) if (child !== viewport && child !== wrap) others += child.offsetHeight;
-            const height = shell.clientHeight, strip = Math.min(96, Math.max(0, height - 520) / 3);
+            const height = Math.max(0, shell.clientHeight - lift), strip = Math.min(96, Math.max(0, height - 520) / 3);
             const rest = wrap.getBoundingClientRect().height - panels.reduce((sum, panel) => sum + panel.getBoundingClientRect().height, 0);
             const room = Math.floor((height - others - rest - clear - DOCK_GAP - strip) / panels.length);
             for (const panel of panels) panel.style.setProperty('--pi-bot-card-room', `${Math.max(room, dockFloor(panel))}px`);
