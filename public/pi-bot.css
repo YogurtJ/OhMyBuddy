@@ -315,22 +315,7 @@
 .pi-bot-sheet-section { display: grid; gap: 10px; padding: 16px 0; border-bottom: 1px solid var(--line); }
 .pi-bot-sheet-section:last-child { border-bottom: 0; }
 .pi-bot-sheet-section h3 { margin: 0; font-size: .8rem; font-weight: 600; letter-spacing: .02em; color: var(--text-muted); }
-.pi-bot-sheet-row { display: grid; grid-template-columns: 76px 1fr; gap: 12px; }
-/* Face: built-in characters first, with picture upload and a custom emoji input. */
-.pi-bot-sheet-identity { display: grid; gap: 14px; }
-.pi-bot-sheet-avatar { display: flex; gap: 14px; align-items: flex-start; }
-.pi-bot-sheet-avatar-face { flex: none; }
-.pi-bot-sheet-avatar-side { display: grid; gap: 8px; min-width: 0; }
-.pi-bot-sheet-avatar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.pi-bot-sheet .pi-bot-sheet-avatar-actions input.pi-bot-sheet-emoji[type="text"] { width: 64px; }
-.pi-bot-sheet-avatar-actions .pi-bot-chip { margin: 0; min-height: 40px; }
-.pi-bot-sheet-avatar-actions [hidden] { display: none; }
-@media (max-width: 600px) {
-    .pi-bot-sheet-avatar { flex-direction: column; align-items: center; }
-    .pi-bot-sheet-avatar-side { width: 100%; }
-    .pi-bot-sheet-avatar-actions .pi-bot-chip { min-height: 44px; }
-}
-.pi-bot-sheet-row[hidden], .pi-bot-sheet-field[hidden] { display: none; }
+.pi-bot-sheet-field[hidden] { display: none; }
 .pi-bot-sheet-field { display: grid; gap: 6px; min-width: 0; }
 .pi-bot-sheet-label { font-size: .82rem; color: var(--text-muted); }
 .pi-bot-sheet-hint, .pi-bot-sheet-note { margin: 0; font-size: .8rem; line-height: 1.55; color: var(--text-muted); }
@@ -347,14 +332,6 @@
 .pi-bot-sheet input.pi-bot-sheet-emoji[type="text"] { text-align: center; font-size: 1.45rem; padding: 2px 4px; line-height: 1.2; }
 .pi-bot-sheet input:focus-visible, .pi-bot-sheet textarea:focus-visible, .pi-bot-sheet select:focus-visible,
 .pi-bot-sheet-link:focus-visible, .pi-bot-sheet-close:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
-.pi-bot-sheet-presets { display: grid; gap: 8px; }
-.pi-bot-sheet-preset {
-    display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer;
-}
-.pi-bot-sheet-preset:has(input:checked) { border-color: var(--primary, var(--green)); background: var(--surface-1, var(--surface)); }
-.pi-bot-sheet-preset input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--primary, var(--green)); }
-.pi-bot-sheet-preset-copy { display: grid; gap: 2px; font-size: .86rem; line-height: 1.5; color: var(--text-muted); }
-.pi-bot-sheet-preset-copy strong { font-size: .92rem; color: var(--text-main); }
 .pi-bot-sheet-link {
     display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 0 4px; border: 0; border-radius: 10px;
     background: transparent; color: var(--text-main); font: inherit; font-size: .92rem; text-align: left; cursor: pointer;
@@ -541,25 +518,12 @@
 .pi-bot-sheet-link.is-danger, .pi-bot-sheet-link.is-danger > i:first-child { color: var(--danger); }
 .pi-bot-topic-archive > i:first-child { color: var(--text-muted); }
 
-/* ---- "always allow" grants in Bot settings --------------------------------------------- */
-.pi-bot-sheet-rules { display: grid; gap: 8px; margin-top: 4px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
-.pi-bot-sheet-rules h4 { margin: 0; font-size: .86rem; font-weight: 650; color: var(--text-main); }
-.pi-bot-sheet-rule-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.pi-bot-sheet-rule { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: var(--surface-1, var(--surface)); }
-.pi-bot-sheet-rule-copy { flex: 1; min-width: 0; display: grid; gap: 3px; font-size: .82rem; color: var(--text-muted); }
-.pi-bot-sheet-rule-copy strong { color: var(--text-main); font-size: .84rem; font-weight: 600; }
-.pi-bot-sheet-rule-copy code, .pi-bot-approval-rule code {
+/* ---- the exact command or file an "always allow" grant names, on the approval card ------ */
+.pi-bot-approval-rule code {
     display: block; max-height: 6.5em; overflow: auto; padding: 4px 7px; border-radius: 7px; background: var(--surface-2); color: var(--text-main);
     font: .8rem/1.5 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); white-space: pre-wrap; overflow-wrap: anywhere;
 }
-.pi-bot-sheet-rule-copy small { overflow-wrap: anywhere; }
-.pi-bot-sheet-rule.is-revoked .pi-bot-sheet-rule-copy > :not(.pi-bot-sheet-rule-state) { opacity: .55; text-decoration: line-through; }
-.pi-bot-sheet-rule-state { color: var(--danger); font-weight: 600; }
-.pi-bot-sheet-rule .pi-bot-chip { flex: none; margin: 0; min-height: 36px; padding: 0 12px; font-size: .82rem; }
-@media (max-width: 900px) { .pi-bot-sheet-rule .pi-bot-chip { min-height: 44px; } }
 @media (max-width: 600px) {
-    .pi-bot-sheet-rule { flex-wrap: wrap; }
-    .pi-bot-sheet-rule .pi-bot-chip { min-height: 44px; margin-left: auto; }
     .pi-bot-topic-identity { grid-template-columns: 92px minmax(0, 1fr); }
 }
 
@@ -780,30 +744,325 @@
     .pi-bot-window-state .pi-bot-status-dot, .pi-bot-home-state .pi-bot-status-dot { animation: none !important; }
 }
 
-/* ---- messages a Bot starts itself, in Bot settings (M4-3) ------------------------------ */
-.pi-bot-sheet-notify { display: grid; gap: 10px; }
-.pi-bot-sheet-check { display: flex; align-items: center; gap: 10px; min-height: 40px; font-size: .92rem; color: var(--text-main); cursor: pointer; }
-.pi-bot-sheet-check input { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--primary, var(--green)); }
-.pi-bot-sheet-times { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: .86rem; color: var(--text-muted); }
-.pi-bot-sheet-times[hidden], .pi-bot-sheet-notify .pi-bot-sheet-note[hidden] { display: none; }
-.pi-bot-sheet-notify .is-off { opacity: .55; }
-.pi-bot-sheet-followups { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
-.pi-bot-sheet-followups h4 { margin: 0; font-size: .86rem; font-weight: 650; color: var(--text-main); }
-.pi-bot-sheet-followups h4:focus { outline: none; }
-@media (max-width: 900px) { .pi-bot-sheet-check { min-height: 44px; } }
-/* ---- WeChat chats connected to the Bot (M4-4) ------------------------------------------ */
-.pi-bot-sheet-wechat { display: grid; gap: 10px; justify-items: start; }
-.pi-bot-sheet-wechat > .pi-bot-sheet-rule-list, .pi-bot-sheet-wechat > .pi-bot-sheet-note { justify-self: stretch; }
-.pi-bot-sheet-wechat-connect { display: flex; gap: 8px; align-items: center; justify-self: stretch; min-width: 0; }
-.pi-bot-sheet-wechat-connect select { flex: 1 1 auto; min-width: 0; }
-.pi-bot-sheet-wechat-connect .pi-bot-chip, .pi-bot-sheet-wechat > .pi-bot-chip { flex: none; margin: 0; min-height: 40px; padding: 0 14px; }
-@media (max-width: 900px) {
-    .pi-bot-sheet-wechat-connect select, .pi-bot-sheet-wechat-connect .pi-bot-chip, .pi-bot-sheet-wechat > .pi-bot-chip { min-height: 44px; }
+/* Bot settings (public/pi-bot-settings.js): seven sections. Wider screens show a side list beside
+   one section; phones show an overview, then one section full screen. Builds on the shared sheet
+   in pi-bot.css; shared class names are scoped to .pi-bot-settings-sheet here. */
+.pi-bot-settings-sheet {
+    --pv-set-soft: color-mix(in srgb, var(--primary, var(--green)) 10%, transparent);
+    --pv-set-amber: var(--amber, #b7791f);
+    width: min(900px, calc(100vw - 32px)); height: min(88dvh, 760px); max-height: min(88dvh, 760px);
 }
-.pi-bot-sheet-wechat .pi-bot-sheet-rule-copy strong { overflow-wrap: anywhere; }
-/* ---- background learning in Bot settings ----------------------------------------------- */
-.pi-bot-sheet-learning { display: grid; gap: 10px; justify-items: start; }
-.pi-bot-sheet-learning > .pi-bot-sheet-check, .pi-bot-sheet-learning > .pi-bot-sheet-note, .pi-bot-sheet-learning > .pi-bot-sheet-link { justify-self: stretch; }
-.pi-bot-sheet-learning > .pi-bot-chip { flex: none; margin: 0; min-height: 40px; padding: 0 14px; }
-@media (max-width: 900px) { .pi-bot-sheet-learning > .pi-bot-chip { min-height: 44px; } }
+.pi-bot-settings-sheet .pi-bot-sheet-form { height: 100%; }
+.pi-bot-settings-sheet .pi-bot-sheet-head { gap: 12px; padding: 12px 12px 12px 18px; }
+.pi-bot-settings-sheet .pi-bot-sheet-head.is-inside .pi-bot-sheet-face { display: none; }
+.pi-bot-sheet-back {
+    display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; margin-left: -8px; border: 0; border-radius: 10px;
+    background: transparent; color: var(--primary, var(--green)); font-size: 1.05rem; cursor: pointer;
+}
+.pi-bot-sheet-back[hidden] { display: none; }
+.pi-bot-sheet-back:hover { background: var(--pv-nav-hover, var(--surface-3)); }
+.pi-bot-settings-sheet .pi-bot-sheet-body { display: grid; grid-template-columns: 236px minmax(0, 1fr); padding: 0; overflow: hidden; }
+.pi-bot-settings-sheet .pi-bot-sheet-body > .pi-bot-sheet-state { grid-column: 1 / -1; margin: 18px; }
 
+/* ---- side list (desktop) / overview (phones) ------------------------------------------- */
+.pi-bot-sheet-nav {
+    display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+    padding: 12px 10px; border-right: 1px solid var(--line);
+}
+/* One column that never grows past the list: long current values shrink and end in an ellipsis. */
+.pi-bot-sheet-nav-group { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
+.pi-bot-sheet-nav-group:last-child { margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.pi-bot-sheet-hero { display: none; }
+.pi-bot-sheet-nav-item {
+    display: flex; align-items: center; gap: 11px; width: 100%; min-width: 0; min-height: 52px; padding: 8px 10px; border: 0; border-radius: 11px;
+    background: transparent; color: var(--text-main); font: inherit; text-align: left; cursor: pointer; transition: background 120ms ease;
+}
+.pi-bot-sheet-nav-item:hover { background: var(--pv-nav-hover, var(--surface-3)); }
+.pi-bot-sheet-nav-item[aria-current="page"] { background: var(--pv-set-soft); }
+.pi-bot-sheet-nav-item[aria-current="page"] .pi-bot-sheet-tile { background: var(--c); color: #fff; }
+.pi-bot-sheet-nav-item[aria-current="page"] .pi-bot-sheet-nav-label { color: var(--primary, var(--green)); }
+.pi-bot-sheet-nav-item > .fa-chevron-right { display: none; }
+.pi-bot-sheet-nav-item[data-nav="profile"] { --c: #3b82f6; }
+.pi-bot-sheet-nav-item[data-nav="model"] { --c: #8b5cf6; }
+.pi-bot-sheet-nav-item[data-nav="mode"] { --c: #ea7a2a; }
+.pi-bot-sheet-nav-item[data-nav="notify"] { --c: #db4f8e; }
+.pi-bot-sheet-nav-item[data-nav="wechat"] { --c: #16a34a; }
+.pi-bot-sheet-nav-item[data-nav="learning"] { --c: #0f9e8f; }
+.pi-bot-sheet-nav-item[data-nav="more"] { --c: #64748b; }
+.pi-bot-sheet-tile {
+    flex: none; display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 9px;
+    background: color-mix(in srgb, var(--c, var(--text-muted)) 15%, transparent); color: var(--c, var(--text-muted)); font-size: .86rem;
+    transition: background 120ms ease, color 120ms ease;
+}
+.pi-bot-sheet-nav-text { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.pi-bot-sheet-nav-label { font-size: .9rem; font-weight: 600; }
+.pi-bot-sheet-nav-sub { font-size: .76rem; line-height: 1.4; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-bot-sheet-dirty-dot {
+    flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--pv-set-amber);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--pv-set-amber) 20%, transparent);
+}
+.pi-bot-sheet-nav-item:not(.is-dirty) > .pi-bot-sheet-dirty-dot, .pi-bot-sheet-hero:not(.is-dirty) > .pi-bot-sheet-dirty-dot { display: none; }
+.pi-bot-sheet-nav-item:focus-visible, .pi-bot-sheet-hero:focus-visible, .pi-bot-sheet-back:focus-visible {
+    outline: 2px solid var(--primary, var(--green)); outline-offset: -2px;
+}
+
+/* ---- section pages ------------------------------------------------------------------------ */
+.pi-bot-sheet-pages {
+    min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 22px 28px 32px; background: var(--surface-1, var(--surface));
+}
+.pi-bot-sheet-page { display: grid; align-content: start; gap: 18px; max-width: 680px; min-width: 0; }
+.pi-bot-sheet-page[hidden] { display: none; }
+.pi-bot-sheet-page-head h3 { margin: 0 0 4px; font-size: 1.15rem; font-weight: 650; color: var(--text-main); }
+.pi-bot-sheet-page-head p { margin: 0; font-size: .86rem; line-height: 1.6; color: var(--text-muted); }
+.pi-bot-settings-sheet .pi-bot-sheet-page > .pi-bot-sheet-note { margin-top: -8px; padding: 0 4px; }
+.pi-bot-sheet-group { display: grid; gap: 8px; min-width: 0; }
+.pi-bot-sheet-group[hidden] { display: none; }
+.pi-bot-sheet-group-head { display: flex; align-items: center; gap: 8px; min-height: 22px; padding: 0 4px; }
+.pi-bot-sheet-group-title { flex: 1; min-width: 0; margin: 0; font-size: .8rem; font-weight: 600; color: var(--text-muted); }
+.pi-bot-sheet-group-title:focus { outline: none; }
+.pi-bot-sheet-instant {
+    display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 6px; border-radius: 999px; background: var(--surface-3);
+    color: var(--text-muted); font-size: .72rem; font-weight: 500; line-height: 18px; white-space: nowrap;
+}
+.pi-bot-sheet-instant i { font-size: .62rem; color: var(--pv-set-amber); }
+.pi-bot-sheet-card { min-width: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); overflow: hidden; }
+.pi-bot-sheet-card.is-pad { display: grid; gap: 14px; padding: 16px; }
+.pi-bot-sheet-card:not(.is-pad) > * + * { border-top: 1px solid var(--line); }
+.pi-bot-sheet-card:not(.is-pad) > .pi-bot-sheet-note { padding: 12px 16px; }
+.pi-bot-sheet-card.is-danger { border-color: color-mix(in srgb, var(--danger) 32%, var(--line)); }
+.pi-bot-settings-sheet .pi-bot-sheet-note.is-warn { color: var(--pv-set-amber); }
+.pi-bot-settings-sheet .pi-bot-sheet-label { font-size: .84rem; font-weight: 600; color: var(--text-main); }
+
+/* One row: title and short line, control on the right. */
+.pi-bot-sheet-item { display: flex; align-items: center; gap: 14px; min-height: 56px; padding: 12px 16px; }
+.pi-bot-settings-sheet .pi-bot-sheet-item.pi-bot-sheet-field { display: flex; gap: 14px; }
+label.pi-bot-sheet-item { cursor: pointer; }
+.pi-bot-sheet-item-copy { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.pi-bot-sheet-item-copy > strong { font-size: .92rem; font-weight: 600; color: var(--text-main); }
+.pi-bot-sheet-item-desc { font-size: .8rem; line-height: 1.55; color: var(--text-muted); }
+.pi-bot-sheet-item.is-off, .pi-bot-sheet-times.is-off { opacity: .5; }
+.pi-bot-settings-sheet .pi-bot-sheet-item select { flex: none; width: auto; min-width: 108px; }
+.pi-bot-sheet-switch {
+    appearance: none; -webkit-appearance: none; position: relative; flex: none; width: 42px; height: 26px; margin: 0; border-radius: 13px;
+    background: var(--line-strong); cursor: pointer; transition: background 160ms ease;
+}
+.pi-bot-sheet-switch::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff;
+    box-shadow: 0 1px 3px rgb(0 0 0 / .25); transition: transform 160ms ease;
+}
+.pi-bot-sheet-switch:checked { background: var(--primary, var(--green)); }
+.pi-bot-sheet-switch:checked::after { transform: translateX(16px); }
+.pi-bot-sheet-switch:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 2px; }
+.pi-bot-sheet-switch:disabled { opacity: .5; cursor: default; }
+
+/* Rows that open something else. */
+.pi-bot-settings-sheet .pi-bot-sheet-link { gap: 12px; min-height: 58px; padding: 11px 16px; border-radius: 0; }
+.pi-bot-settings-sheet .pi-bot-sheet-link > i:first-child {
+    flex: none; display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--surface-3); font-size: .86rem;
+}
+.pi-bot-settings-sheet .pi-bot-sheet-link > .fa-chevron-right { width: auto; font-size: .76rem; opacity: .75; }
+.pi-bot-settings-sheet .pi-bot-sheet-link:focus-visible { outline-offset: -2px; }
+.pi-bot-settings-sheet .pi-bot-sheet-link.is-danger > i:first-child { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.pi-bot-sheet-link-copy { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.pi-bot-sheet-link-copy strong { font-size: .92rem; font-weight: 600; }
+.pi-bot-sheet-link-copy small { font-size: .78rem; line-height: 1.5; color: var(--text-muted); }
+.pi-bot-sheet-actions-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 16px; }
+.pi-bot-settings-sheet .pi-bot-sheet-actions-row > .pi-bot-sheet-note { flex: 1 1 200px; padding: 0; }
+.pi-bot-sheet-actions-row .pi-bot-chip, .pi-bot-sheet-wechat-connect .pi-bot-chip, .pi-bot-sheet-empty .pi-bot-chip {
+    flex: none; margin: 0; min-height: 40px; padding: 0 16px;
+}
+
+/* ---- 资料 ------------------------------------------------------------------------------------ */
+.pi-bot-sheet-avatar { display: flex; align-items: center; gap: 18px; }
+.pi-bot-sheet-avatar-face { flex: none; }
+.pi-bot-sheet-avatar-side { flex: 1; min-width: 0; display: grid; gap: 10px; }
+.pi-bot-settings-sheet .pi-avatar-presets { grid-template-columns: repeat(3, minmax(0, 88px)); }
+.pi-bot-sheet-avatar-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pi-bot-sheet-avatar-actions .pi-bot-chip { display: inline-flex; align-items: center; gap: 7px; margin: 0; min-height: 36px; padding: 0 14px; font-size: .84rem; }
+.pi-bot-sheet-avatar-actions [hidden] { display: none; }
+.pi-bot-sheet-long-field { display: grid; gap: 6px; }
+.pi-bot-sheet-field-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.pi-bot-sheet-counter { flex: none; font-size: .72rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+
+/* ---- 做事方式 --------------------------------------------------------------------------------- */
+.pi-bot-settings-sheet .pi-bot-sheet-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.pi-bot-settings-sheet .pi-bot-sheet-preset {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "meter radio" "copy copy"; align-items: center; row-gap: 10px;
+    padding: 13px 14px 14px; border: 1.5px solid var(--line); border-radius: 14px; background: var(--surface-2); cursor: pointer;
+    transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+.pi-bot-settings-sheet .pi-bot-sheet-preset:hover { border-color: var(--line-strong); }
+.pi-bot-settings-sheet .pi-bot-sheet-preset:has(input:checked) {
+    border-color: var(--primary, var(--green)); background: color-mix(in srgb, var(--primary, var(--green)) 5%, var(--surface-2));
+    box-shadow: 0 0 0 3px var(--pv-set-soft);
+}
+.pi-bot-settings-sheet .pi-bot-sheet-preset:has(input:focus-visible) { outline: 2px solid var(--primary, var(--green)); outline-offset: 3px; }
+.pi-bot-settings-sheet .pi-bot-sheet-preset input {
+    grid-area: radio; appearance: none; -webkit-appearance: none; flex: none; width: 18px; height: 18px; margin: 0;
+    border: 1.5px solid var(--line-strong); border-radius: 50%; background: var(--surface-2); cursor: pointer; transition: border 150ms ease;
+}
+.pi-bot-settings-sheet .pi-bot-sheet-preset input:checked { border: 5.5px solid var(--primary, var(--green)); }
+.pi-bot-settings-sheet .pi-bot-sheet-preset input:focus-visible { outline: none; }
+.pi-bot-sheet-meter { grid-area: meter; display: flex; gap: 3px; }
+.pi-bot-sheet-meter i { width: 14px; height: 4px; border-radius: 2px; background: var(--line-strong); }
+.pi-bot-sheet-meter i.is-on { background: var(--text-muted); }
+.pi-bot-sheet-preset:has(input:checked) .pi-bot-sheet-meter i.is-on { background: var(--primary, var(--green)); }
+.pi-bot-settings-sheet .pi-bot-sheet-preset-copy { grid-area: copy; display: grid; gap: 4px; font-size: .8rem; line-height: 1.5; color: var(--text-muted); }
+.pi-bot-sheet-preset-name { display: flex; align-items: center; gap: 6px; font-size: .98rem; font-weight: 650; color: var(--text-main); }
+.pi-bot-sheet-tag {
+    padding: 0 6px; border-radius: 6px; background: var(--surface-3); color: var(--text-muted); font-size: .7rem; font-weight: 500; line-height: 18px;
+}
+.pi-bot-sheet-scope { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pi-bot-sheet-scope-col { min-width: 0; padding: 14px 16px 16px; }
+.pi-bot-sheet-scope-col + .pi-bot-sheet-scope-col { border-left: 1px solid var(--line); }
+.pi-bot-sheet-scope-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: .86rem; font-weight: 600; color: var(--text-main); }
+.pi-bot-sheet-scope-icon { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 6px; font-size: .66rem; }
+.is-direct .pi-bot-sheet-scope-icon { background: color-mix(in srgb, var(--success, var(--green)) 16%, transparent); color: var(--success, var(--green)); }
+.is-ask .pi-bot-sheet-scope-icon { background: color-mix(in srgb, var(--pv-set-amber) 18%, transparent); color: var(--pv-set-amber); }
+.pi-bot-sheet-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.pi-bot-sheet-chips li {
+    padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-1, var(--surface));
+    font-size: .8rem; line-height: 1.5; color: var(--text-main);
+}
+.pi-bot-sheet-scope-never {
+    grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; padding: 10px 16px; border-top: 1px solid var(--line);
+    background: color-mix(in srgb, var(--danger) 6%, var(--surface-2)); font-size: .82rem; color: var(--text-muted);
+}
+.pi-bot-sheet-scope-never i { color: var(--danger); }
+.pi-bot-sheet-scope-never strong { color: var(--text-main); font-weight: 600; }
+
+/* Folded details: the safety boundary and "always allow" grants. */
+.pi-bot-sheet-disclosure { min-width: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); overflow: hidden; }
+.pi-bot-sheet-disclosure > summary { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 12px 16px; list-style: none; cursor: pointer; }
+.pi-bot-sheet-disclosure > summary::-webkit-details-marker { display: none; }
+.pi-bot-sheet-disclosure > summary:hover { background: var(--pv-nav-hover, var(--surface-3)); }
+.pi-bot-sheet-disclosure > summary:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: -2px; }
+.pi-bot-sheet-disclosure > summary > .fa-chevron-down { flex: none; font-size: .78rem; color: var(--text-muted); transition: transform 180ms ease; }
+.pi-bot-sheet-disclosure[open] > summary > .fa-chevron-down { transform: rotate(180deg); }
+.pi-bot-sheet-disclosure-icon {
+    flex: none; display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--surface-3);
+    color: var(--text-muted); font-size: .86rem;
+}
+.pi-bot-sheet-disclosure-body { border-top: 1px solid var(--line); }
+.pi-bot-sheet-disclosure-body > * + * { border-top: 1px solid var(--line); }
+.pi-bot-settings-sheet .pi-bot-sheet-disclosure-body > .pi-bot-sheet-note { padding: 12px 16px; }
+.pi-bot-sheet-title-row { display: flex; align-items: center; gap: 8px; }
+.pi-bot-sheet-title-row h4 { margin: 0; font-size: .92rem; font-weight: 600; color: var(--text-main); }
+.pi-bot-sheet-count {
+    display: inline-grid; place-items: center; min-width: 20px; height: 18px; padding: 0 6px; border-radius: 999px; background: var(--surface-3);
+    color: var(--text-muted); font-size: .72rem; font-weight: 600;
+}
+.pi-bot-sheet-bullets { display: grid; gap: 6px; margin: 0; padding: 12px 18px 14px 34px; font-size: .84rem; line-height: 1.6; color: var(--text-muted); }
+
+/* Grants, follow-ups and WeChat chats: one row each with an action on the right. */
+.pi-bot-sheet-rule-list { margin: 0; padding: 0; list-style: none; }
+.pi-bot-sheet-rule { display: flex; align-items: center; gap: 12px; padding: 11px 16px; }
+.pi-bot-sheet-rule + .pi-bot-sheet-rule { border-top: 1px solid var(--line); }
+.pi-bot-sheet-rule-icon {
+    flex: none; display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--surface-3);
+    color: var(--text-muted); font-size: .82rem;
+}
+.pi-bot-sheet-rule-icon.is-wechat { background: color-mix(in srgb, #16a34a 14%, transparent); color: #16a34a; }
+.pi-bot-sheet-rule-copy { flex: 1; min-width: 0; display: grid; gap: 2px; font-size: .8rem; color: var(--text-muted); }
+.pi-bot-sheet-rule-copy strong { font-size: .9rem; font-weight: 600; color: var(--text-main); overflow-wrap: anywhere; }
+.pi-bot-sheet-rule-copy small { font-size: .78rem; line-height: 1.45; overflow-wrap: anywhere; }
+.pi-bot-sheet-rule-copy code {
+    display: block; max-height: 6.5em; overflow: auto; color: var(--text-main);
+    font: .82rem/1.5 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.pi-bot-sheet-rule.is-revoked code { color: var(--text-muted); text-decoration: line-through; }
+.pi-bot-sheet-rule.is-revoked .pi-bot-sheet-rule-icon { opacity: .5; }
+.pi-bot-sheet-rule-copy .pi-bot-sheet-rule-state { color: var(--pv-set-amber); font-weight: 600; }
+.pi-bot-sheet-rule .pi-bot-chip { flex: none; margin: 0; min-height: 34px; padding: 0 12px; font-size: .82rem; }
+
+/* ---- 主动联系 --------------------------------------------------------------------------------- */
+.pi-bot-sheet-notify, .pi-bot-sheet-wechat, .pi-bot-sheet-learning { display: grid; gap: 18px; min-width: 0; }
+.pi-bot-sheet-times { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 16px 14px; font-size: .84rem; color: var(--text-muted); }
+.pi-bot-sheet-times[hidden] { display: none; }
+.pi-bot-sheet-card:not(.is-pad) > .pi-bot-sheet-times { border-top: 0; margin-top: -4px; }
+.pi-bot-settings-sheet .pi-bot-sheet-times input[type="time"] { width: 108px; }
+.pi-bot-sheet-zone { font-size: .78rem; }
+
+/* ---- 微信 ------------------------------------------------------------------------------------ */
+.pi-bot-sheet-wechat-connect { display: flex; align-items: center; gap: 8px; padding: 12px 16px; min-width: 0; }
+.pi-bot-settings-sheet .pi-bot-sheet-wechat-connect select { flex: 1 1 auto; min-width: 0; }
+.pi-bot-sheet-empty { display: grid; justify-items: center; gap: 8px; padding: 28px 20px 24px; text-align: center; }
+.pi-bot-sheet-empty .pi-bot-sheet-tile { --c: #16a34a; width: 46px; height: 46px; border-radius: 14px; font-size: 1.25rem; }
+.pi-bot-sheet-empty h4 { margin: 4px 0 0; font-size: .98rem; color: var(--text-main); }
+.pi-bot-sheet-empty p { margin: 0 0 6px; max-width: 360px; font-size: .84rem; line-height: 1.6; color: var(--text-muted); }
+
+/* ---- footer: a message, or which sections are not saved yet --------------------------------- */
+.pi-bot-sheet-foot-notes { flex: 1; min-width: 0; display: grid; }
+.pi-bot-settings-sheet .pi-bot-sheet-foot-notes > .pi-bot-sheet-status:empty { display: none; }
+.pi-bot-sheet-status:not(:empty) + .pi-bot-sheet-dirty, .pi-bot-sheet-dirty:empty { display: none; }
+.pi-bot-sheet-dirty { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; font-size: .82rem; color: var(--text-muted); }
+.pi-bot-sheet-dirty > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pi-bot-sheet-dirty.is-error { color: var(--danger); }
+
+/* Touch-sized controls on tablets and phones. */
+@media (max-width: 900px) {
+    .pi-bot-sheet-rule .pi-bot-chip, .pi-bot-sheet-actions-row .pi-bot-chip, .pi-bot-sheet-wechat-connect .pi-bot-chip,
+    .pi-bot-sheet-empty .pi-bot-chip, .pi-bot-sheet-avatar-actions .pi-bot-chip { min-height: 44px; }
+    .pi-bot-settings-sheet select { min-height: 44px; }
+}
+@media (max-width: 860px) {
+    .pi-bot-settings-sheet .pi-bot-sheet-presets { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    .pi-bot-settings-sheet .pi-bot-sheet-preset {
+        grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "radio copy meter"; align-items: start; column-gap: 12px; padding: 12px 14px;
+    }
+    .pi-bot-settings-sheet .pi-bot-sheet-preset input { margin-top: 2px; }
+    .pi-bot-sheet-meter { margin-top: 8px; }
+    .pi-bot-settings-sheet .pi-bot-sheet-preset-copy { gap: 2px; }
+}
+@media (max-width: 760px) {
+    .pi-bot-settings-sheet .pi-bot-sheet-body { grid-template-columns: 200px minmax(0, 1fr); }
+    .pi-bot-sheet-pages { padding: 18px 18px 28px; }
+    .pi-bot-sheet-scope { grid-template-columns: minmax(0, 1fr); }
+    .pi-bot-sheet-scope-col + .pi-bot-sheet-scope-col { border-left: 0; border-top: 1px solid var(--line); }
+}
+
+/* Phones: an overview of every section, then one section full screen. */
+@media (max-width: 600px) {
+    .pi-bot-settings-sheet { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; }
+    .pi-bot-settings-sheet .pi-bot-sheet-body { grid-template-columns: minmax(0, 1fr); background: var(--surface-1, var(--surface)); }
+    .pi-bot-settings-sheet[data-view="overview"] .pi-bot-sheet-pages, .pi-bot-settings-sheet[data-view="page"] .pi-bot-sheet-nav { display: none; }
+    .pi-bot-settings-sheet .pi-bot-sheet-head.is-inside { padding-left: 12px; }
+    .pi-bot-sheet-nav { gap: 14px; padding: 16px 16px 28px; border-right: 0; }
+    .pi-bot-sheet-nav-group { gap: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2); overflow: hidden; }
+    .pi-bot-sheet-nav-group:last-child { margin-top: 0; padding-top: 0; border-top: 1px solid var(--line); }
+    .pi-bot-sheet-nav-group:has(> [data-nav="profile"]) { display: none; }
+    .pi-bot-sheet-nav-item { min-height: 54px; padding: 10px 14px; border-radius: 0; }
+    .pi-bot-sheet-nav-item + .pi-bot-sheet-nav-item { border-top: 1px solid var(--line); }
+    .pi-bot-sheet-nav-item[aria-current="page"] { background: transparent; }
+    .pi-bot-sheet-nav-text { display: flex; align-items: center; gap: 10px; }
+    .pi-bot-sheet-nav-label { flex: 1; min-width: 0; font-size: .95rem; }
+    .pi-bot-sheet-nav-sub { max-width: 55%; font-size: .84rem; }
+    .pi-bot-sheet-nav-item > .fa-chevron-right, .pi-bot-sheet-hero > .fa-chevron-right { display: inline; flex: none; font-size: .78rem; color: var(--text-muted); opacity: .75; }
+    .pi-bot-sheet-hero {
+        display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px; border: 1px solid var(--line); border-radius: 16px;
+        background: var(--surface-2); color: var(--text-main); font: inherit; text-align: left; cursor: pointer;
+    }
+    .pi-bot-sheet-hero-face { flex: none; }
+    .pi-bot-sheet-hero-face .pi-bot-face { width: 56px; height: 56px; }
+    .pi-bot-sheet-hero-copy { flex: 1; min-width: 0; display: grid; gap: 3px; }
+    .pi-bot-sheet-hero-copy strong { font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pi-bot-sheet-hero-copy span {
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        font-size: .82rem; line-height: 1.5; color: var(--text-muted); overflow-wrap: anywhere;
+    }
+    .pi-bot-sheet-pages { padding: 16px 16px 28px; }
+    .pi-bot-sheet-page { gap: 16px; }
+    .pi-bot-sheet-page-head h3 { display: none; }
+    .pi-bot-sheet-avatar { flex-direction: column; align-items: center; gap: 14px; }
+    .pi-bot-sheet-avatar-side { width: 100%; justify-items: center; text-align: center; }
+    .pi-bot-settings-sheet .pi-avatar-presets { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .pi-bot-sheet-avatar-actions { justify-content: center; }
+    .pi-bot-sheet-rule { flex-wrap: wrap; }
+    .pi-bot-sheet-rule .pi-bot-chip { margin-left: auto; }
+    .pi-bot-settings-sheet .pi-bot-sheet-item select { min-width: 96px; }
+    /* Nothing to save and nothing to say: the overview and pages use the whole height. */
+    .pi-bot-settings-sheet[data-edited="false"] .pi-bot-sheet-foot:has(.pi-bot-sheet-status:empty) { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .pi-bot-settings-sheet *, .pi-bot-settings-sheet *::after { transition: none !important; }
+}

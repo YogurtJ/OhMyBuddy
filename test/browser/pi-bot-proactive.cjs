@@ -6,7 +6,7 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const { BOT, say, serve, botRecord, botPage, newWorld, layout } = require('./pi-bot-fixture.js');
+const { BOT, say, serve, botRecord, botPage, newWorld, layout, settingsPage } = require('./pi-bot-fixture.js');
 
 const DUE = { id: 'a'.repeat(24), kind: 'due', windowId: '22222222-2222-4222-8222-222222222222', at: Date.parse('2026-10-30T01:00:00Z'), title: '交房租', state: 'pending', noteId: 'n1', due: '2026-10-30' };
 const CHECK = { id: 'b'.repeat(24), kind: 'checkin', windowId: '22222222-2222-4222-8222-222222222222', at: Date.parse('2026-11-02T07:00:00Z'), title: '看看论文进展', state: 'pending' };
@@ -51,8 +51,9 @@ const FOLLOW_UP = { role: 'custom', customType: 'pivane-cron-message', display: 
             const openSettings = async () => {
                 if (phone) { await page.locator('#pi-bot-header .pi-bot-menu').click(); await page.locator('#pi-session-pane.open .pi-bot-settings').waitFor(); }
                 await page.locator('.pi-bot-settings').click();
-                await page.locator('.pi-bot-sheet[open] .pi-bot-sheet-notify').waitFor();
-                return page.locator('.pi-bot-sheet[open]');
+                const sheet = page.locator('.pi-bot-sheet[open]');
+                await settingsPage(sheet, 'notify');
+                return sheet;
             };
             try {
                 await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-status')?.dataset.state === 'connected');
@@ -70,8 +71,16 @@ const FOLLOW_UP = { role: 'custom', customType: 'pivane-cron-message', display: 
                 await box.scrollIntoViewIfNeeded();
                 assert.equal(await box.locator('[data-notify="proactive"]').isChecked(), true);
                 assert.equal(await box.locator('[data-notify="quiet"]').isChecked(), true);
+                for (const control of ['proactive', 'quiet']) {
+                    const toggle = box.locator(`[data-notify="${control}"]`);
+                    assert.equal(await toggle.getAttribute('role'), 'switch');
+                    assert.equal(await toggle.evaluate(node => node.closest('label.pi-bot-sheet-item.pi-bot-sheet-check') !== null), true, 'the row labels its switch');
+                }
                 assert.deepEqual(await box.locator('input[type="time"]').evaluateAll(nodes => nodes.map(node => node.value)), ['23:00', '08:00']);
                 assert.equal(await box.locator('[data-notify="limit"]').inputValue(), '20');
+                assert.equal(await box.locator('[data-notify="limit"] option:checked').textContent(), '20 条');
+                assert.equal(await box.locator('[data-notify="limit"] option[value="none"]').textContent(), '不限');
+                assert.equal(await box.locator('.pi-bot-sheet-followups .pi-bot-sheet-instant').innerText(), '立即生效');
                 assert.deepEqual(await box.locator('.pi-bot-sheet-rule strong').allTextContents(), ['交房租', '看看论文进展']);
                 assert.match(await box.locator('.pi-bot-sheet-followups').innerText(), /到期提醒 ·/);
                 assert.match(await box.locator('.pi-bot-sheet-followups').innerText(), /回来看看 ·/);
@@ -96,11 +105,15 @@ const FOLLOW_UP = { role: 'custom', customType: 'pivane-cron-message', display: 
                 assert.deepEqual(await box.locator('.pi-bot-sheet-rule strong').allTextContents(), ['看看论文进展']);
                 assert.equal(await page.evaluate(() => document.activeElement?.id), 'pi-bot-sheet-followups-title');
                 assert.equal(await sheet.locator('.pi-bot-sheet-save').isDisabled(), true, 'a cancelled follow-up is not a settings edit');
+                assert.equal(await sheet.locator('.pi-bot-sheet-nav .is-dirty').count(), 0);
+                assert.equal(await sheet.locator('.pi-bot-sheet-dirty').textContent(), '');
 
                 // 4. Same start and end saves nothing; then only the changed fields are saved, with the zone.
                 await box.locator('input[type="time"]').nth(1).fill('23:00');
                 await box.locator('input[type="time"]').nth(1).dispatchEvent('input');
                 assert.equal(await sheet.locator('.pi-bot-sheet-save').isDisabled(), true);
+                assert.equal(await sheet.locator('.pi-bot-sheet-dirty').evaluate(node => node.classList.contains('is-error')), true);
+                assert.match(await sheet.locator('.pi-bot-sheet-dirty').innerText(), /安静时段的开始和结束要是两个不同的时间/);
                 await box.locator('input[type="time"]').nth(1).fill('07:30');
                 await box.locator('input[type="time"]').nth(1).dispatchEvent('input');
                 await box.locator('[data-notify="limit"]').selectOption('none');

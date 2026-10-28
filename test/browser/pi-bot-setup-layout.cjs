@@ -11,7 +11,7 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const { BOT, APPROVAL, say, serve, botRecord, botPage, newWorld, layout } = require('./pi-bot-fixture.js');
+const { BOT, APPROVAL, say, serve, botRecord, botPage, newWorld, layout, settingsPage } = require('./pi-bot-fixture.js');
 
 const SELECT = { method: 'select', title: '保存这些设置？ / Save these settings?', options: ['保存 / Save', '先不改 / Not now'] };
 const JOB = '帮助小王制作各类文稿与视觉材料，包括汇报幻灯片、海报、产品介绍页和社交媒体配图；先确认受众、用途和截止时间，再给出结构草稿，'
@@ -282,6 +282,7 @@ const DEDICATED = { name: '', job: ' ', aboutUser: [''], workStyle: 'free' };
                 // 7. Bot settings: the job and personality boxes grow with their text up to a bound, then scroll.
                 await page.locator('#pi-bot-header .pi-bot-identity > .pi-bot-face').click();
                 const sheet = page.locator('.pi-bot-sheet[open]');
+                await settingsPage(sheet, 'profile');
                 const jobBox = sheet.locator('textarea.is-job'), soulBox = sheet.locator('textarea.is-soul');
                 await jobBox.waitFor();
                 const lines = box => box.evaluate(node => {
@@ -293,7 +294,7 @@ const DEDICATED = { name: '', job: ' ', aboutUser: [''], workStyle: 'free' };
                 await jobBox.fill(JOB);
                 const grown = await lines(jobBox);
                 assert.ok(grown.wraps && grown.lines >= (phone ? 3 : 1.9) && grown.lines <= 8.1, `the job box grows (${grown.lines.toFixed(1)} lines)`);
-                await jobBox.fill(JOB + JOB.slice(0, 340));
+                await jobBox.fill(Array(12).fill('确认受众和用途，整理素材并说明修改。').join('\n'));
                 const bounded = await lines(jobBox);
                 assert.ok(bounded.lines <= 8.1 && (bounded.lines < 7.9 || bounded.scrolls), `the job box stops at its bound and scrolls (${bounded.lines.toFixed(1)} lines)`);
                 await shot('bot-settings-long');

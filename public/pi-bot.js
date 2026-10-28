@@ -934,11 +934,13 @@
     const SETUP_TITLE = '保存这些设置？ / Save these settings?', SAVE = '保存 / Save', DECLINE = '先不改 / Not now';
     const SETUP_FIELDS = [['name', () => translateUi("名字"), 40], ['avatar', () => translateUi("头像"), 16],
         ['job', () => translateUi("主要帮你做"), 300], ['personality', () => translateUi("性格"), 6000], ['workStyle', () => translateUi("做事方式"), 0]];
-    // The three ways a Bot works, from most freedom to most careful (same words as Bot settings).
+    // The three ways a Bot works, from most freedom to most careful: the same one-line summaries
+    // as Bot settings (pi-bot-settings.js, whose lists the guard test checks).
+    const workLine = (id, fallback) => () => globalThis.PiBotWorkStyles?.get(id)?.line() || fallback();
     const WORK_STYLES = [
-        ['free', () => translateUi("放手"), () => translateUi("几乎所有事直接办好，相当于完全权限。只有 sudo、递归删除、关机或停服务、git push／重置、发布、发邮件、设定时任务和改 Pivane 自身运行目录时会先问你。")],
-        ['balanced', () => translateUi("稳妥"), () => translateUi("查资料、记东西、在工作目录里写文件直接做；运行命令、改工作目录以外的文件、交给别的助手前，会弹出确认等你允许。")],
-        ['ask', () => translateUi("每次都问"), () => translateUi("除了看和回答，每一步动手前都会弹出确认，等你允许。")]
+        ['free', () => translateUi("放手"), workLine('free', () => translateUi("大多数事直接办，少数高风险操作先问你"))],
+        ['balanced', () => translateUi("稳妥"), workLine('balanced', () => translateUi("工作目录里直接做，运行命令前先问你"))],
+        ['ask', () => translateUi("每次都问"), workLine('ask', () => translateUi("除了看和回答，每一步都先问你"))]
     ];
     const workRank = value => WORK_STYLES.findIndex(([key]) => key === value);
     // Quick personality styles on the card; one click fills the text, which stays editable.
@@ -978,7 +980,7 @@
     // Called once it is in the page and on every input; the scrolling part around it keeps its place.
     function fitTextarea(area) {
         if (!area?.isConnected) return;
-        const scroller = area.closest('.pi-bot-setup-fields, .pi-bot-sheet-body'), top = scroller?.scrollTop, inner = area.scrollTop;
+        const scroller = area.closest('.pi-bot-setup-fields, .pi-bot-sheet-pages, .pi-bot-sheet-body'), top = scroller?.scrollTop, inner = area.scrollTop;
         const style = getComputedStyle(area);
         area.style.height = 'auto';
         area.style.height = `${area.scrollHeight + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth)}px`;

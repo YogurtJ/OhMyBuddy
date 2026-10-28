@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const express = require('express');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const { settingsPage } = require('./pi-bot-fixture.js');
 
 const BOT = '11111111-1111-4111-8111-111111111111', MAIN = '22222222-2222-4222-8222-222222222222';
 const BOT2 = '33333333-3333-4333-8333-333333333333', MAIN2 = '44444444-4444-4444-8444-444444444444';
@@ -487,12 +488,14 @@ const NEW_FACE = { kind: 'preset', id: 'pivane-pebble' };
                     await page.locator('#pi-session-pane.open .pi-bot-settings').waitFor();
                 }
                 await page.locator('.pi-bot-settings').click();
-                await page.locator('.pi-bot-sheet[open] [data-sheet-model-trigger]').waitFor({ timeout: 8000 });
+                await page.locator('.pi-bot-sheet[open] .pi-bot-sheet-nav').waitFor({ timeout: 8000 });
                 const sheet = page.locator('.pi-bot-sheet[open]');
                 assert.equal(await sheet.locator('h2').textContent(), '小狸 的设置');
                 if (evidence) { await page.waitForTimeout(250); await page.screenshot({ path: path.join(evidence, `bot-settings-open-${width}.png`) }); }
+                await settingsPage(sheet, 'profile');
                 assert.equal(await sheet.locator('textarea').nth(1).inputValue(), '温柔耐心，说话简短。');
                 assert.equal(await sheet.locator('.pi-bot-sheet-save').isDisabled(), true, 'nothing to save yet');
+                await settingsPage(sheet, 'model');
                 assert.equal(await sheet.locator('[data-sheet-model-trigger] .pi-model-trigger-label').textContent(), '跟随默认（Small）');
                 await sheet.locator('[data-sheet-model-trigger]').click();
                 const sheetModelDialog = page.locator('#pi-bot-sheet-model-dialog[open]');
@@ -500,13 +503,16 @@ const NEW_FACE = { kind: 'preset', id: 'pivane-pebble' };
                 await sheetModelDialog.locator('.pi-model-all').click();
                 await sheetModelDialog.locator('.pi-model-option').filter({ hasText: 'Large' }).click();
                 await sheet.locator('select').nth(1).selectOption({ label: '高' });
+                await settingsPage(sheet, 'mode');
                 await sheet.locator('.pi-bot-sheet-preset', { hasText: '稳妥' }).click();
                 if (evidence) { await page.waitForTimeout(250); await page.screenshot({ path: path.join(evidence, `bot-settings-${width}.png`) }); }
                 await sheet.locator('.pi-bot-sheet-save').click();
                 await page.waitForFunction(() => /别处改过/.test(document.querySelector('.pi-bot-sheet-status')?.textContent || ''));
                 assert.equal(settingsReads, settingsReadsBeforeConflict + 2, 'the conflict rereads the saved settings');
                 assert.equal(await sheet.locator('.pi-bot-sheet-preset input:checked').evaluate(input => input.value), 'balanced', 'the edits stay');
+                await settingsPage(sheet, 'model');
                 assert.equal(await sheet.locator('[data-sheet-model-trigger] .pi-model-trigger-label').textContent(), 'Large');
+                await settingsPage(sheet, 'profile');
                 assert.equal(await sheet.locator('textarea').nth(1).inputValue(), '活泼一点，多用表情。', 'untouched fields follow the newer saved value');
                 await sheet.locator('.pi-bot-sheet-save').click();
                 await page.locator('.pi-bot-sheet').waitFor({ state: 'detached', timeout: 8000 });

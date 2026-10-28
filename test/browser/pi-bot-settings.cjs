@@ -8,7 +8,7 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const { BOT, BOT2, MAIN2, APPROVAL, say, serve, botRecord, windowRecord, botPage, newWorld, layout } = require('./pi-bot-fixture.js');
+const { BOT, BOT2, MAIN2, APPROVAL, say, serve, botRecord, windowRecord, botPage, newWorld, layout, settingsPage } = require('./pi-bot-fixture.js');
 
 const CWD = '/fixture/PivaneBots/bot-11111111';
 const grant = (id, tool, value) => ({ v: 1, id, tool, value, cwd: CWD });
@@ -23,8 +23,8 @@ const token = digit => digit.repeat(16);
     let browser;
     try {
         browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium' });
-        for (const width of [1440, 393, 320]) {
-            const phone = width < 900;
+        for (const width of [1440, 768, 393, 320]) {
+            const phone = width <= 600;
             let rules = [R1, R2, FUTURE], revision = 's1', trashed = false, patchGate = null, name = '小狸';
             const patchPlan = ['conflict'], trashPlan = ['blocked', 'unavailable'], patches = [], trashes = [];
             const second = botRecord({ id: BOT2, name: '阿豆', avatar: { kind: 'emoji', value: '🐼' }, windows: [windowRecord(MAIN2)] });
@@ -35,11 +35,13 @@ const token = digit => digit.repeat(16);
             Object.defineProperty(world, 'revision', { get: () => revision });
             const api = async ({ pathname, method, body }) => {
                 if (pathname === `/api/pi/bots/${BOT}/settings`) return { json: { revision, bot: { id: BOT, name, avatar: { kind: 'emoji', value: '🦊' }, soul: '',
-                    bot: { ...botRecord().bot, permissions: { preset: 'balanced', rules } } }, models: { defaults: null, models: [] } } };
+                    bot: { ...botRecord().bot, permissions: { preset: 'balanced', rules } } },
+                    // A long default model name: the section summaries must shrink, not widen the phone overview.
+                    models: { defaults: { provider: 'fixture', modelId: 'long' }, models: [{ provider: 'fixture', id: 'long', name: 'Fixture Extended Reasoning Model With A Very Long Name' }] } } };
                 if (pathname === `/api/pi/bots/${BOT}` && method === 'PATCH') {
                     patches.push(body);
                     if (patchGate) { const wait = patchGate; patchGate = null; await wait; }
-                    if (patchPlan.length && patchPlan.shift() === 'conflict') { revision = 's2'; return { status: 409, json: { error: 'Profiles changed' } }; }
+                    if (patchPlan.length && patchPlan.shift() === 'conflict') { revision = patches.length === 1 ? 's2' : `${revision}c`; return { status: 409, json: { error: 'Profiles changed' } }; }
                     assert.equal(body.expectedRevision, revision);
                     if (body.changes.bot?.permissions?.rules) rules = body.changes.bot.permissions.rules;
                     if (body.changes.name) name = body.changes.name;
@@ -63,9 +65,9 @@ const token = digit => digit.repeat(16);
             const resolved = id => world.socket.send(JSON.stringify({ type: 'gateway_ui_resolved', id }));
             const card = page.locator('.pi-bot-approval:not([hidden])');
             const openSettings = async () => {
-                if (phone) { await page.locator('#pi-bot-header .pi-bot-menu').click(); await page.locator('#pi-session-pane.open .pi-bot-settings').waitFor(); }
+                if (width <= 900) { await page.locator('#pi-bot-header .pi-bot-menu').click(); await page.locator('#pi-session-pane.open .pi-bot-settings').waitFor(); }
                 await page.locator('.pi-bot-settings').click();
-                await page.locator('.pi-bot-sheet[open] .pi-bot-sheet-rules h4').waitFor();
+                await page.locator('.pi-bot-sheet[open] .pi-bot-sheet-nav').waitFor();
                 return page.locator('.pi-bot-sheet[open]');
             };
             try {
@@ -132,46 +134,160 @@ const token = digit => digit.repeat(16);
                     await page.waitForFunction(() => document.querySelector('.pi-bot-approval').hidden);
                 }
 
-                // 4. Settings list grants exactly, revoke as a draft, and keep what they do not understand.
+                // 4. The side list and phone overview reach every section; only the chosen page shows.
                 let sheet = await openSettings();
-                const items = sheet.locator('.pi-bot-sheet-rule');
-                assert.equal(await items.count(), 4);
-                assert.deepEqual(await sheet.locator('.pi-bot-sheet-rule code').allTextContents(), ['npm test', '/home/me/notes.md', 'ls -la', '/home/me/plan.md']);
-                assert.match(await sheet.locator('.pi-bot-sheet-rules').innerText(), /另有 1 条这个版本看不懂的规则/);
-                assert.match(await sheet.locator('.pi-bot-sheet-rules').innerText(), /不是系统沙箱/);
+                const sections = ['profile', 'model', 'mode', 'notify', 'wechat', 'learning', 'more'];
+                const labels = ['资料', '模型', '做事方式', '主动联系', '微信', '学习与记忆', '更多'];
+                const nav = sheet.locator('.pi-bot-sheet-nav');
+                assert.equal(await sheet.locator('h2').textContent(), '小狸 的设置');
+                assert.equal(await sheet.getAttribute('data-view'), phone ? 'overview' : 'page');
+                assert.deepEqual(await sheet.locator('.pi-bot-sheet-page:visible').evaluateAll(nodes => nodes.map(node => node.dataset.page)), phone ? [] : ['profile']);
+                assert.equal(await nav.locator('.pi-bot-sheet-nav-item:visible').count(), phone ? 6 : 7);
+                assert.equal(await nav.locator('.pi-bot-sheet-hero').isVisible(), phone);
+                if (!phone) assert.equal(await nav.locator('[data-nav="profile"]').last().getAttribute('aria-current'), 'page');
                 assert.equal(await sheet.locator('.pi-bot-sheet-save').isDisabled(), true);
-                // Touch-sized revoke buttons up to 900px wide (a tablet between the phone and desktop layouts too).
-                if (!phone) await page.setViewportSize({ width: 768, height: 860 });
-                for (const toggle of await sheet.locator('.pi-bot-sheet-rule .pi-bot-chip').all())
-                    assert.ok((await toggle.boundingBox()).height >= 44, 'touch-sized revoke buttons up to 900px');
-                if (!phone) await page.setViewportSize({ width, height: 860 });
-                await sheet.locator(`[data-rule-id="${R1.id}"]`).click();
+                if (phone) assert.equal(await sheet.locator('.pi-bot-sheet-foot').isVisible(), false, 'nothing edited: no footer');
+                const checkLayout = async () => {
+                    assert.equal((await layout(page)).overflow, false, `no horizontal overflow at ${width}`);
+                    const bounds = await sheet.boundingBox();
+                    for (const control of await sheet.locator('input:visible, textarea:visible, select:visible, button:visible').all()) {
+                        const box = await control.boundingBox();
+                        assert.ok(box.x >= bounds.x - 1 && box.x + box.width <= bounds.x + bounds.width + 1, 'controls fit the sheet');
+                    }
+                    if (width <= 900) {
+                        for (const control of await sheet.locator('.pi-bot-sheet-nav-item:visible, .pi-bot-sheet-preset:visible, .pi-bot-sheet-check:visible, .pi-bot-sheet-rule .pi-bot-chip:visible').all())
+                            assert.ok((await control.boundingBox()).height >= 44, 'touch-sized rows and grant controls up to 900px');
+                    }
+                    if (phone) {
+                        for (const input of await sheet.locator('input[type="text"]:visible, input[type="time"]:visible, textarea:visible, select:visible').all())
+                            assert.equal(await input.evaluate(node => getComputedStyle(node).fontSize), '16px', 'no zoom on phone focus');
+                    }
+                };
+                await checkLayout();
+                for (const [index, id] of sections.entries()) {
+                    await settingsPage(sheet, id);
+                    assert.equal(await sheet.getAttribute('data-view'), 'page');
+                    assert.deepEqual(await sheet.locator('.pi-bot-sheet-page:visible').evaluateAll(nodes => nodes.map(node => node.dataset.page)), [id]);
+                    assert.equal(await nav.locator(`.pi-bot-sheet-nav-item[data-nav="${id}"]`).getAttribute('aria-current'), 'page');
+                    assert.equal(await nav.locator('[aria-current="page"]').count(), 1);
+                    assert.equal(await sheet.locator('h2').textContent(), phone ? labels[index] : '小狸 的设置');
+                    await checkLayout();
+                    if (phone) {
+                        await sheet.locator('.pi-bot-sheet-back').click();
+                        assert.equal(await sheet.getAttribute('data-view'), 'overview');
+                        assert.equal(await sheet.locator('.pi-bot-sheet-page:visible').count(), 0);
+                        assert.equal(await sheet.locator('h2').textContent(), '小狸 的设置');
+                        assert.equal(await sheet.locator('.pi-bot-sheet-back').isVisible(), false);
+                        assert.equal(await page.evaluate(() => document.activeElement?.dataset.nav), id, 'back focuses the section that opened the page');
+                    }
+                }
+                // Invalid input shows a problem and submitting from elsewhere returns to its section.
+                await settingsPage(sheet, 'profile');
+                await sheet.locator('input[required]').fill('');
+                assert.equal(await sheet.locator('.pi-bot-sheet-dirty').evaluate(node => node.classList.contains('is-error')), true);
+                assert.equal(await sheet.locator('.pi-bot-sheet-dirty').textContent(), '名字不能为空');
+                await settingsPage(sheet, 'more');
+                await sheet.locator('form').evaluate(form => form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+                await sheet.locator('.pi-bot-sheet-page[data-page="profile"]').waitFor();
+                assert.equal(await sheet.locator('input[required]').evaluate(node => node === document.activeElement), true);
+                assert.equal(await sheet.locator('.pi-bot-sheet-status[data-tone="error"]').textContent(), '名字不能为空');
+                assert.equal(await sheet.locator('.pi-bot-sheet-dirty').isVisible(), false, 'a status message replaces the dirty note');
+                await sheet.locator('input[required]').fill('小狸');
+                assert.equal(await sheet.locator('.pi-bot-sheet-save').isDisabled(), true);
+
+                // Changing the way of working updates its scope and summary, and reverting clears the draft mark.
+                await settingsPage(sheet, 'mode');
+                const modeNav = nav.locator('[data-nav="mode"]');
+                const workScope = sheet.locator('.pi-bot-sheet-scope');
+                assert.ok((await workScope.locator('.is-ask li').allTextContents()).includes('运行任何命令'));
+                assert.ok((await workScope.locator('.is-direct li').allTextContents()).includes('在工作目录里写文件'));
+                assert.match(await workScope.locator('.pi-bot-sheet-scope-never').textContent(), /密码和密钥文件：直接拒绝/);
+                assert.equal(await modeNav.locator('.pi-bot-sheet-nav-sub').textContent(), '稳妥');
+                await sheet.locator('.pi-bot-sheet-preset[data-preset="free"]').click();
+                assert.equal(await workScope.locator('.pi-bot-sheet-scope-never').count(), 0);
+                assert.ok((await workScope.locator('.is-direct li').allTextContents()).includes('运行命令和脚本'));
+                assert.ok((await workScope.locator('.is-ask li').allTextContents()).includes('密码和密钥文件'));
+                assert.equal(await modeNav.locator('.pi-bot-sheet-nav-sub').textContent(), '放手');
+                assert.equal(await modeNav.evaluate(node => node.classList.contains('is-dirty')), true);
+                assert.equal(await sheet.locator('.pi-bot-sheet-dirty').innerText(), '未保存：做事方式');
+                assert.equal(await sheet.locator('.pi-bot-sheet-save').isEnabled(), true);
+                if (phone) {
+                    await sheet.locator('.pi-bot-sheet-back').click();
+                    assert.equal(await modeNav.isVisible(), true);
+                    assert.equal(await modeNav.evaluate(node => node.classList.contains('is-dirty')), true);
+                    await settingsPage(sheet, 'mode');
+                }
+                await sheet.locator('.pi-bot-sheet-preset[data-preset="balanced"]').click();
+                assert.ok((await workScope.locator('.is-ask li').allTextContents()).includes('运行任何命令'));
+                assert.match(await workScope.locator('.pi-bot-sheet-scope-never').textContent(), /密码和密钥文件：直接拒绝/);
+                assert.equal(await modeNav.locator('.pi-bot-sheet-nav-sub').textContent(), '稳妥');
+                assert.equal(await modeNav.evaluate(node => node.classList.contains('is-dirty')), false);
+                assert.equal(await sheet.locator('.pi-bot-sheet-dirty').isVisible(), false);
+                assert.equal(await sheet.locator('.pi-bot-sheet-save').isDisabled(), true);
+
+                // Grants start folded; the count includes unknown grants and excludes draft revocations.
+                const grants = sheet.locator('.pi-bot-sheet-rules');
+                const items = grants.locator('.pi-bot-sheet-rule');
+                assert.equal(await grants.evaluate(node => node.open), false);
+                assert.equal(await grants.locator('.pi-bot-sheet-count').textContent(), '5');
+                assert.equal(await items.first().isVisible(), false);
+                assert.equal(await sheet.locator('details.is-boundary').evaluate(node => node.open), false);
+                assert.match(await sheet.locator('details.is-boundary > summary').textContent(), /安全边界.*不是系统沙箱/);
+                await grants.locator(':scope > summary').click();
+                assert.equal(await items.count(), 4);
+                assert.deepEqual(await grants.locator('.pi-bot-sheet-rule code').allTextContents(), ['npm test', '/home/me/notes.md', 'ls -la', '/home/me/plan.md']);
+                assert.match(await grants.innerText(), /另有 1 条这个版本看不懂的规则/);
+                assert.doesNotMatch(await grants.innerText(), /不是系统沙箱/);
+                await checkLayout();
+                await grants.locator(`[data-rule-id="${R1.id}"]`).click();
                 assert.equal(await items.first().evaluate(node => node.classList.contains('is-revoked')), true);
+                assert.equal(await grants.locator('.pi-bot-sheet-count').textContent(), '4');
                 assert.equal(await page.evaluate(() => document.activeElement?.dataset.ruleId), R1.id, 'focus stays on the toggled grant');
+                await grants.locator(`[data-rule-id="${R1.id}"]`).click();
+                assert.equal(await grants.locator('.pi-bot-sheet-count').textContent(), '5');
+                assert.equal(await modeNav.evaluate(node => node.classList.contains('is-dirty')), false);
+                await grants.locator(`[data-rule-id="${R1.id}"]`).click();
                 await shot('bot-settings-grants');
                 await page.keyboard.press('Escape');
                 await sheet.locator('.pi-bot-sheet-status').filter({ hasText: '还有修改没保存' }).waitFor();
+                patchPlan.push('conflict');
+                await sheet.locator('.pi-bot-sheet-save').click();
+                await sheet.locator('.pi-bot-sheet-status[data-tone="warn"]').filter({ hasText: '别处改过' }).waitFor();
+                assert.equal(await grants.evaluate(node => node.open), true, 'a conflict reread keeps the disclosure open');
+                assert.equal(await sheet.locator('.pi-bot-sheet-page[data-page="mode"]').isVisible(), true, 'a conflict keeps the current section');
+                assert.equal(await grants.locator('.pi-bot-sheet-count').textContent(), '4');
+                assert.equal(await items.first().evaluate(node => node.classList.contains('is-revoked')), true, 'the revocation draft survives');
                 await sheet.locator('.pi-bot-sheet-save').click();
                 await page.locator('.pi-bot-sheet').waitFor({ state: 'detached' });
                 assert.deepEqual(patches.at(-1).changes, { bot: { permissions: { rules: [R2, FUTURE, R3, R4] } } });
 
-                // 5. Trash: unsaved edits are warned about, then an explicit confirmation; a refusal keeps
+                // 5. Trash: one confirmation names unsaved edits; a refusal keeps
                 // the sheet and the edits, and success goes on to the other Bot.
                 sheet = await openSettings();
                 const reviewed = revision;
+                await settingsPage(sheet, 'profile');
                 await sheet.locator('input[required]').fill('小狸二号');
-                await sheet.locator('[data-sheet-action="trash"]').click();
-                await sheet.locator('.pi-bot-sheet-status[data-tone="warn"]').filter({ hasText: '接着移到回收站' }).waitFor();
-                assert.equal(await page.locator('.pi-profile-confirm[open]').count(), 0);
+                await settingsPage(sheet, 'more');
                 await sheet.locator('[data-sheet-action="trash"]').click();
                 const confirm = page.locator('.pi-profile-confirm[open]');
                 await confirm.waitFor();
                 assert.equal(await confirm.locator('h2').textContent(), '把 小狸 移到回收站？');
-                assert.match(await confirm.locator('p').textContent(), /聊天记录.*都会保留.*回收站恢复/);
+                assert.match(await confirm.locator('ul.pi-profile-confirm-list li').first().textContent(), /聊天记录.*都会保留.*回收站恢复/);
+                assert.match(await confirm.locator('.pi-profile-confirm-item.is-warn').textContent(), /还有修改没保存，继续会放弃这些修改/);
+                assert.equal(trashes.length, 0, 'confirmation has not moved anything yet');
+                await confirm.getByRole('button', { name: '保留', exact: true }).click();
+                assert.equal(trashes.length, 0, 'cancelling does not send a request');
+                await settingsPage(sheet, 'profile');
+                assert.equal(await sheet.locator('input[required]').inputValue(), '小狸二号');
+                await settingsPage(sheet, 'more');
+                await sheet.locator('[data-sheet-action="trash"]').click();
+                await confirm.waitFor();
                 await shot('bot-trash-confirm');
                 await confirm.locator('.pi-profile-confirm-discard').click();
                 await sheet.locator('.pi-bot-sheet-status[data-tone="error"]').filter({ hasText: '还有定时任务发给 小狸' }).waitFor();
+                await settingsPage(sheet, 'profile');
                 assert.equal(await sheet.locator('input[required]').inputValue(), '小狸二号', 'the edits survive a refusal');
+                await settingsPage(sheet, 'more');
                 assert.equal(trashed, false);
                 // Checks that are not ready yet are explained in the user's language, not the server's.
                 await sheet.locator('[data-sheet-action="trash"]').click();
