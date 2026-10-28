@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const express = require('express');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const { settingsPage } = require('./pi-bot-fixture.js');
 const root = path.join(__dirname, '../../public');
 const styles = [...fs.readFileSync(path.join(root, 'index.html'), 'utf8').matchAll(/<link rel="stylesheet" href="([^"]+)">/g)].map(m => m[1]);
 const BOT = '11111111-1111-4111-8111-111111111111';
@@ -42,9 +43,13 @@ const BOT = '11111111-1111-4111-8111-111111111111';
                 x.open = () => PiBotSettings.open({ api: x.api, profileId: id, face: PiBot.face, toast() {} });
             }, BOT);
             const sheet = () => page.locator('.pi-bot-sheet[open]');
+            const openSettings = async () => {
+                await page.evaluate(() => x.open());
+                await settingsPage(sheet(), 'profile');
+            };
             // All presets roundtrip through the same avatar field and preview before Save.
             for (const id of ['pivane-pebble', 'pivane-bean', 'pivane-tile']) {
-                await page.evaluate(() => x.open());
+                await openSettings();
                 await sheet().locator(`[data-avatar-preset="${id}"]`).click();
                 assert.equal(await sheet().locator('.pi-bot-sheet-avatar-face .pi-preset-svg').getAttribute('data-preset'), id);
                 assert.equal(await page.evaluate(() => x.profile.avatar.kind), 'preset', 'preview does not save');
@@ -52,18 +57,19 @@ const BOT = '11111111-1111-4111-8111-111111111111';
                 assert.deepEqual(await page.evaluate(() => x.writes.at(-1).changes), { avatar: { kind: 'preset', id } });
             }
             // Refresh reads the persisted choice; an unrelated name change preserves it.
-            await page.evaluate(() => x.open());
+            await openSettings();
             assert.equal(await sheet().locator('[data-avatar-preset="pivane-tile"]').getAttribute('aria-pressed'), 'true');
             await sheet().locator('input[required]').fill('New CC'); await sheet().locator('.pi-bot-sheet-save').click();
             await page.waitForFunction(() => !document.querySelector('.pi-bot-sheet[open]'));
             assert.deepEqual(await page.evaluate(() => x.writes.at(-1).changes), { name: 'New CC' });
             // Cancel warns once, then discards the selected preset.
-            await page.evaluate(() => x.open()); await sheet().locator('[data-avatar-preset="pivane-bean"]').click();
+            await openSettings(); await sheet().locator('[data-avatar-preset="pivane-bean"]').click();
             await sheet().locator('.pi-bot-sheet-close').click(); assert.equal(await sheet().count(), 1);
             await sheet().locator('.pi-bot-sheet-close').click();
             assert.equal(await page.evaluate(() => x.profile.avatar.id), 'pivane-tile');
             // A conflict preserves the one face draft while untouched fields follow the server.
-            await page.evaluate(() => { x.fails = 1; return x.open(); });
+            await page.evaluate(() => { x.fails = 1; });
+            await openSettings();
             await sheet().locator('[data-avatar-preset="pivane-bean"]').click(); await sheet().locator('.pi-bot-sheet-save').click();
             await sheet().locator('.pi-bot-sheet-status').filter({ hasText: '修改还在' }).waitFor();
             assert.equal(await sheet().locator('[data-avatar-preset="pivane-bean"]').getAttribute('aria-pressed'), 'true');
@@ -72,19 +78,19 @@ const BOT = '11111111-1111-4111-8111-111111111111';
             await sheet().locator('.pi-bot-sheet-save').click(); await page.waitForFunction(() => !document.querySelector('.pi-bot-sheet[open]'));
             assert.deepEqual(await page.evaluate(() => x.writes.at(-1).changes), { avatar: { kind: 'preset', id: 'pivane-bean' } });
             // No emoji input is shown; only the three built-in characters and picture upload exist.
-            await page.evaluate(() => x.open());
+            await openSettings();
             assert.equal(await sheet().locator('[data-sheet-emoji]').count(), 0);
             assert.equal(await sheet().locator('.pi-bot-sheet-emoji').count(), 0);
             assert.equal(await sheet().locator('[data-avatar-preset]').count(), 3);
             await sheet().locator('.pi-bot-sheet-close').click();
             const png = Buffer.from(await page.evaluate(() => { const c = document.createElement('canvas'); c.width = c.height = 8; return c.toDataURL().split(',')[1]; }), 'base64');
-            await page.evaluate(() => x.open());
+            await openSettings();
             await sheet().locator('[data-sheet-picture-file]').setInputFiles({ name: 'face.png', mimeType: 'image/png', buffer: png });
             await sheet().locator('.pi-bot-sheet-avatar-face img[src^="data:"]').waitFor();
             await sheet().locator('[data-avatar-preset="pivane-tile"]').click();
             await sheet().locator('.pi-bot-sheet-save').click(); await page.waitForFunction(() => !document.querySelector('.pi-bot-sheet[open]'));
             assert.equal(await page.evaluate(() => x.uploads || 0), 0, 'replacing the local picture with a preset does not upload it');
-            await page.evaluate(() => x.open());
+            await openSettings();
             await sheet().locator('[data-sheet-picture-file]').setInputFiles({ name: 'face.png', mimeType: 'image/png', buffer: png });
             await sheet().locator('.pi-bot-sheet-avatar-face img[src^="data:"]').waitFor();
             await sheet().locator('.pi-bot-sheet-save').click(); await page.waitForFunction(() => !document.querySelector('.pi-bot-sheet[open]'));
@@ -94,8 +100,9 @@ const BOT = '11111111-1111-4111-8111-111111111111';
             await page.evaluate(() => {
                 x.originalBitmap = window.createImageBitmap; x.bitmap = window.createImageBitmap.bind(window);
                 window.createImageBitmap = async file => { if (file.name === 'second.png') await new Promise(resolve => { x.decodeSecond = resolve; }); return x.bitmap(file); };
-                x.fails = 1; return x.open();
+                x.fails = 1;
             });
+            await openSettings();
             await sheet().locator('[data-sheet-picture-file]').setInputFiles({ name: 'first.png', mimeType: 'image/png', buffer: png });
             await sheet().locator('.pi-bot-sheet-avatar-face img[src^="data:"]').waitFor();
             const beforeUploads = await page.evaluate(() => x.uploads);

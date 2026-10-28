@@ -6,7 +6,7 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
-const { BOT, serve, botRecord, botPage, newWorld, layout } = require('./pi-bot-fixture.js');
+const { BOT, serve, botRecord, botPage, newWorld, layout, settingsPage } = require('./pi-bot-fixture.js');
 
 (async () => {
     const { base, close } = await serve();
@@ -67,7 +67,7 @@ const { BOT, serve, botRecord, botPage, newWorld, layout } = require('./pi-bot-f
                 if (phone) { await page.locator('#pi-bot-header .pi-bot-menu').click(); await page.locator('#pi-session-pane.open .pi-bot-settings').waitFor(); }
                 await page.locator('.pi-bot-settings').click();
                 const sheet = page.locator('.pi-bot-sheet[open]');
-                await sheet.locator('.pi-bot-sheet-learning').waitFor();
+                await settingsPage(sheet, 'learning');
                 return sheet;
             };
             try {
@@ -79,6 +79,9 @@ const { BOT, serve, botRecord, botPage, newWorld, layout } = require('./pi-bot-f
                 // 1. Off state is shown with the plain note and daily limit; Save is disabled.
                 const toggle = box.locator('[data-learning-switch]');
                 assert.equal(await toggle.isChecked(), false);
+                assert.equal(await toggle.getAttribute('role'), 'switch');
+                assert.equal(await toggle.evaluate(node => node.closest('label.pi-bot-sheet-check') !== null), true);
+                assert.equal(await box.locator('.pi-bot-sheet-instant').innerText(), '立即生效');
                 const noteText = await box.innerText();
                 assert.match(noteText, /让它从聊天里学习/);
                 assert.match(noteText, /纠正和偏好.*记忆.*技能草稿.*看过才会启用/);
@@ -103,6 +106,9 @@ const { BOT, serve, botRecord, botPage, newWorld, layout } = require('./pi-bot-f
                 assert.deepEqual(puts, [{ expectedRevision: 3, changes: { enabled: true } }]);
                 assert.equal(await box.locator('[data-learning-switch]').isChecked(), true);
                 assert.equal(await sheet.locator('.pi-bot-sheet-save').isDisabled(), true, 'switch is not a sheet edit');
+                assert.equal(await sheet.locator('.pi-bot-sheet-nav [data-nav="learning"].is-dirty').count(), 0);
+                assert.equal(await sheet.locator('.pi-bot-sheet-nav [data-nav="learning"] .pi-bot-sheet-nav-sub').textContent(), '学习已开启');
+                assert.equal(await sheet.locator('.pi-bot-sheet-dirty').textContent(), '');
                 await box.locator('[data-learning-health="needs-model"]').waitFor();
                 assert.match(await box.locator('[data-learning-health="needs-model"]').textContent(), /辅助模型/);
                 const modelBtn = box.locator('[data-learning-models]');

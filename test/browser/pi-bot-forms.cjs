@@ -10,6 +10,8 @@ const path = require('node:path');
 const express = require('express');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
+const { settingsPage } = require('./pi-bot-fixture.js');
+
 const BOT = '11111111-1111-4111-8111-111111111111', MAIN = '22222222-2222-4222-8222-222222222222';
 const PUBLIC = path.join(__dirname, '../../public');
 const styles = [...fs.readFileSync(path.join(PUBLIC, 'index.html'), 'utf8').matchAll(/<link rel="stylesheet" href="([^"]+)">/g)].map(match => match[1]);
@@ -265,13 +267,16 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
             // 4. Every way out of the settings sheet warns once about unsaved edits, valid or not (UAT-11).
             const settings = { revision: 'r1', bot: { id: BOT, name: '小狸', avatar: { kind: 'emoji', value: '🦉' }, soul: '回答简短。',
                 bot: { job: '帮助整理计划', model: null, permissions: { preset: 'free' } } }, models: { defaults: null, models: [] } };
-            const openSettings = () => page.evaluate(async data => {
-                window.s = { memory: 0, restart: 0, writes: 0 };
-                await PiBotSettings.open({ profileId: data.bot.id, api: async (_url, options) => { if (options) s.writes++; return structuredClone(data); },
-                    face: () => document.createElement('span'), toast: () => {}, onMemory: () => { s.memory++; }, onRestart: async () => { s.restart++; } });
-            }, settings);
+            const openSettings = async () => {
+                await page.evaluate(async data => {
+                    window.s = { memory: 0, restart: 0, writes: 0 };
+                    await PiBotSettings.open({ profileId: data.bot.id, api: async (_url, options) => { if (options) s.writes++; return structuredClone(data); },
+                        face: () => document.createElement('span'), toast: () => {}, onMemory: () => { s.memory++; }, onRestart: async () => { s.restart++; } });
+                }, settings);
+                await settingsPage(page.locator('.pi-bot-sheet[open]'), 'profile');
+            };
             const open = () => page.locator('.pi-bot-sheet[open]').count();
-            await load('pi-bot-settings.js');
+            await load('pi-profile-dialog.js', 'pi-bot-settings.js');
             await openSettings();
             await page.locator('.pi-bot-sheet[open] input[required]').fill('');
             await page.locator('.pi-bot-sheet[open] .pi-bot-sheet-close').click();
@@ -281,19 +286,40 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
             assert.equal(await open(), 0, 'the second try leaves');
             await openSettings();
             await page.locator('.pi-bot-sheet[open] .pi-bot-sheet-body textarea').nth(1).fill('这是一段未保存的新性格。');
-            await page.locator('.pi-bot-sheet[open]').getByRole('button', { name: '记忆和关于你' }).click();
+            await settingsPage(page.locator('.pi-bot-sheet[open]'), 'learning');
+            await page.locator('.pi-bot-sheet[open]').getByRole('button', { name: /记忆和关于你/ }).click();
             assert.deepEqual([await open(), await page.evaluate(() => s.memory)], [1, 0]);
             assert.match(await page.locator('.pi-bot-sheet[open] .pi-bot-sheet-status').textContent(), /再点一次就放弃这些修改并离开/);
             await shot('bot-settings-leave');
-            await page.locator('.pi-bot-sheet[open]').getByRole('button', { name: '记忆和关于你' }).click();
+            await page.locator('.pi-bot-sheet[open]').getByRole('button', { name: /记忆和关于你/ }).click();
             assert.deepEqual([await open(), await page.evaluate(() => s.memory)], [0, 1]);
             await openSettings();
             await page.locator('.pi-bot-sheet[open] .pi-bot-sheet-body textarea').nth(0).fill('陪我练英语');
+            await settingsPage(page.locator('.pi-bot-sheet[open]'), 'more');
             const restart = page.locator('.pi-bot-sheet[open] .pi-bot-sheet-link').filter({ hasText: '重新互相认识' });
-            await restart.click(); await page.locator('.pi-bot-sheet[open] .pi-bot-sheet-link').filter({ hasText: '再点一次确认' }).click();
-            assert.deepEqual([await open(), await page.evaluate(() => s.restart)], [1, 0], 'meeting again warns first too');
-            await page.locator('.pi-bot-sheet[open] .pi-bot-sheet-link').filter({ hasText: '再点一次确认' }).click();
-            assert.deepEqual([await open(), await page.evaluate(() => s.restart)], [0, 1]);
+            const confirm = page.locator('.pi-profile-confirm[open]');
+            await restart.click();
+            await confirm.waitFor();
+            assert.equal(await confirm.locator('h2').textContent(), '重新互相认识？');
+            assert.equal(await confirm.locator('.pi-profile-confirm-primary').textContent(), '回到主聊天');
+            assert.match(await confirm.locator('.pi-profile-confirm-item.is-warn').textContent(), /还有修改没保存，继续会放弃这些修改/);
+            await confirm.getByRole('button', { name: '先不了', exact: true }).click();
+            assert.deepEqual([await open(), await page.evaluate(() => s.restart)], [1, 0], 'cancelling keeps the sheet');
+            await settingsPage(page.locator('.pi-bot-sheet[open]'), 'profile');
+            assert.equal(await page.locator('.pi-bot-sheet[open] textarea.is-job').inputValue(), '陪我练英语', 'cancelling keeps the edits');
+            await settingsPage(page.locator('.pi-bot-sheet[open]'), 'more');
+            await restart.click();
+            await confirm.locator('.pi-profile-confirm-primary').click();
+            assert.deepEqual([await open(), await page.evaluate(() => s.restart)], [0, 1], 'confirmation leaves at once without a second warning');
+            assert.equal(await page.evaluate(() => s.writes), 0, 'leaving never saves the draft');
+            await openSettings();
+            await page.locator('.pi-bot-sheet[open] textarea.is-job').fill('还没保存的职责');
+            const cancelSettings = page.locator('.pi-bot-sheet[open] .pi-bot-sheet-foot').getByRole('button', { name: '取消', exact: true });
+            await cancelSettings.click();
+            assert.equal(await open(), 1, 'Cancel warns about unsaved edits');
+            assert.match(await page.locator('.pi-bot-sheet[open] .pi-bot-sheet-status').textContent(), /还有修改没保存/);
+            await cancelSettings.click();
+            assert.equal(await open(), 0, 'a second Cancel leaves');
             await openSettings();
             await page.locator('.pi-bot-sheet[open] .pi-bot-sheet-close').click();
             assert.equal(await open(), 0, 'nothing edited: closes at once');

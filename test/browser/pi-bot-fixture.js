@@ -121,4 +121,14 @@ async function settledShot(page, file) {
     await page.screenshot({ path: file });
 }
 
-module.exports = { BOT, MAIN, BOT2, MAIN2, APPROVAL, say, serve, botRecord, windowRecord, botPage, newWorld, layout, bottomBar, settledShot };
+// Section navigation is shared by the full-page and hand-mounted settings fixtures. Phones
+// return to the overview first; :visible chooses the profile hero or the desktop row.
+async function settingsPage(sheet, id) {
+    await sheet.locator('.pi-bot-sheet-nav').waitFor({ state: 'attached' });
+    const back = sheet.locator('.pi-bot-sheet-back');
+    if (await back.isVisible()) await back.click();
+    await sheet.locator(`[data-nav="${id}"]:visible`).click();
+    await sheet.locator(`.pi-bot-sheet-page[data-page="${id}"]`).waitFor();
+}
+
+module.exports = { BOT, MAIN, BOT2, MAIN2, APPROVAL, say, serve, botRecord, windowRecord, botPage, newWorld, layout, bottomBar, settledShot, settingsPage };
