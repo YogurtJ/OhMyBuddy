@@ -436,6 +436,7 @@ function createPiAgentGateway(options = {}) {
     router.get('/settings/models/advanced', nativeRoute(req => settingsService.getModelAdvanced(req.query)));
     router.put('/settings/models/advanced', nativeRoute(req => settingsService.saveModelAdvanced(req.body), true));
 
+    require('./pi-session-images-routes').mountSessionImages(router, { store });
     router.get('/sessions/search', async (req, res) => {
         res.set('Cache-Control', 'no-store');
         const controller = new AbortController();
@@ -871,6 +872,7 @@ function createPiAgentGateway(options = {}) {
                 // Read messages last. webLive is captured synchronously at the native response boundary.
                 messages = await source.request('get_messages');
                 const live = messages.webLive, boundary = messages.webSnapshot;
+                if (!session.ephemeral) messages = { ...messages, messages: require('./pi-session-images-routes').displayMessages(messages.messages, session.cwd, session.id) };
                 return { session, state: { ...state, ...(live ? { isStreaming: live.running, isCompacting: live.compacting,
                     webCompaction: boundary.webCompaction, webShell: boundary.webShell, webNavigation: boundary.webNavigation } : {}) },
                     messages, stats, models, thinkingLevels, commands, completion,
@@ -1193,7 +1195,8 @@ function createPiAgentGateway(options = {}) {
                     ? replyNotice({ cwd: worker.cwd, id: worker.sessionId }) : null;
                 const data = await worker.request(type, payload, timeout);
                 safeSend(socket, { type: 'response', id, command: type, success: true,
-                    data: type === 'get_messages' ? { ...data, completion } : data });
+                    data: type === 'get_messages' ? { ...data, completion, messages: worker.noSession ? data.messages
+                        : require('./pi-session-images-routes').displayMessages(data.messages, worker.cwd, worker.sessionId) } : data });
             }
 
             socket.on('close', () => {

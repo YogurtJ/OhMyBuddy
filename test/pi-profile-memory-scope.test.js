@@ -61,6 +61,24 @@ test('native session marker and canonical profile root are mandatory', t => {
     assert.equal(scope.parseContext(undefined), null);
 });
 
+test('large image payloads and opaque signatures do not consume the text-index budget', t => {
+    const f = fixture(); t.after(f.cleanup);
+    const own = f.session('session-a', f.profileId), ctx = scope.parseContext(JSON.stringify(f.context));
+    own.lines.push({ type: 'message', id: 'images', message: { role: 'user', content: [
+        { type: 'image', data: 'A'.repeat(12 * 1024 ** 2), mimeType: 'image/png' }, { type: 'text', text: '检索目标，必须保留' }] } });
+    own.lines.push({ type: 'message', id: 'reasoning', message: { role: 'assistant', content: [
+        { type: 'thinking', thinking: 'visible reasoning', thinkingSignature: 'S'.repeat(9 * 1024 ** 2) }] } });
+    const bytes = own.lines.map(line => JSON.stringify(line)).join('\n') + '\n'; fs.writeFileSync(own.file, bytes);
+    const snapshot = scope.snapshot(own.file, ctx);
+    assert.ok(snapshot); assert.ok(snapshot.bytes < 8192); assert.ok(snapshot.rawBytes > 20 * 1024 ** 2);
+    assert.ok(JSON.stringify(snapshot.entries).includes('检索目标，必须保留'));
+    assert.equal(snapshot.fingerprint, require('node:crypto').createHash('sha256').update(bytes).digest('hex'));
+    assert.equal(fs.readFileSync(own.file, 'utf8'), bytes, 'source images and signatures are untouched');
+    own.lines.push({ type: 'message', id: 'too-much-text', message: { role: 'user', content: 'x'.repeat(8 * 1024 ** 2) } });
+    fs.writeFileSync(own.file, own.lines.map(line => JSON.stringify(line)).join('\n') + '\n');
+    assert.equal(scope.snapshot(own.file, ctx), null, 'text still has a finite budget');
+});
+
 test('discovery cursor advances past a 5,000-file page', t => {
     const f = fixture(); t.after(f.cleanup);
     const dir = path.join(f.sessionsRoot, 'project');

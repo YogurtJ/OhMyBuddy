@@ -153,7 +153,7 @@ test('actual RPC navigation: no new worker/history, draft images, native summary
     assert.ok(!one.events.some(e => JSON.stringify(e).includes('PRIVATE_LATE')));
     one.ws.close(); two.ws.close(); await gateway.supervisor.stopSession(session.path);
     const reopened = await gateway.supervisor.getWorker({ cwd: root, sessionId: session.id, sessionPath: session.path });
-    assert.deepEqual((await reopened.request('get_messages')).messages, restored);
+    assert.deepEqual(require('../server/pi-session-images-routes').displayMessages((await reopened.request('get_messages')).messages, root, session.id), restored);
     assert.equal(gateway.supervisor.workers.size, 1);
     entries = (await reopened.request('get_entries')).entries; assert.ok(entries.some(e => e.id === newUser)); assert.ok(entries.some(e => e.id === oldReply));
 });
