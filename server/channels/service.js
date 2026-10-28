@@ -14,6 +14,11 @@ const { ChannelApprovals, parseApproval } = require('./bot-approvals');
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const same = (a, b) => a?.cwd === b?.cwd && a?.sessionId === b?.sessionId;
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
+// Persisted Bot model preferences do not touch a running worker. Reads and these owner
+// settings commands may pass a waiting turn, including one paused for an approval.
+const botControl = (slash, binding) => Boolean(binding?.bot && slash &&
+    (['/model', '/thinking'].includes(slash.command)
+        || ['/bot', '/topic'].includes(slash.command) && (!slash.args || slash.args.toLowerCase() === 'list')));
 const SLASH_COMMANDS = new Set(['/help', '/status', '/stop', '/new', '/reset', '/resume', '/name', '/model', '/thinking', '/compact', '/reload', '/confirm', '/bot', '/topic']);
 // Chinese names for the Bot commands (M4-4).
 const SLASH_ALIASES = new Map([['/切换', '/bot'], ['/话题', '/topic']]);
@@ -274,7 +279,7 @@ class ChannelsService {
                 const slash = !msg.images?.length ? parseSlash(msg.text) : null;
                 // Answers to a waiting Bot approval go ahead of the turn that waits for them.
                 const isApproval = Boolean(!msg.images?.length && parseApproval(msg.text));
-                const isControl = Boolean(slash && ['/stop', '/status', '/help'].includes(slash.command)) || isApproval;
+                const isControl = Boolean(slash && ['/stop', '/status', '/help'].includes(slash.command)) || botControl(slash, binding) || isApproval;
                 const approvalsWaiting = isApproval ? v.jobs.filter(j => pending(j) && j.accountId === accountId && j.peerId === msg.peerId
                     && (j.kind === 'approval' || j.status === 'queued' && parseApproval(j.text))).length : 0;
                 const isStop = slash?.command === '/stop';
@@ -398,7 +403,7 @@ class ChannelsService {
         for (const job of this.db.value.jobs) {
             const slash = job.status === 'queued' && !job.images?.length ? parseSlash(job.text) : null;
             const answer = Boolean(job.status === 'queued' && !job.images?.length && parseApproval(job.text));
-            const control = Boolean(slash && ['/stop', '/status', '/help'].includes(slash.command)) || answer;
+            const control = Boolean(slash && ['/stop', '/status', '/help'].includes(slash.command)) || botControl(slash, this.bindingFor(job)) || answer;
             // An approval answer is applied at once (bot-approvals.js): it always has room, as the turn waits for it.
             if (this.runs.size >= (answer ? 8 : control ? 4 : 3)) continue;
             const recover = job.status === 'uncertain' && !job.sendStarted && job.kind !== 'slash' && (job.recoveryAttempts || 0) < 5;
@@ -641,7 +646,7 @@ class ChannelsService {
             const last = state?.attempts?.at(-1);
             if (!last) {
                 const icon = plan.kind === 'video' ? '🎬' : plan.kind === 'tts' ? '🔊' : '🎨';
-                lines.push(`${icon} 待确认媒体卡片：${plan.summary || plan.modelId}（${plan.modelId}）\n💡 在微信回复 /confirm 即可直接确认生成，或打开 Pivane 网页端修改参数后确认。`);
+                lines.push(`${icon} 待确认媒体卡片：${plan.summary || plan.modelId}（${plan.modelId}）\n💡 在微信回复 /confirm ${plan.id} 确认生成或查询结果。${job.bot ? '工具授权请用对应的同意/拒绝 A编号。' : ''}也可打开 Pivane 网页修改参数后确认。`);
             }
         }
         return lines.join('\n\n');

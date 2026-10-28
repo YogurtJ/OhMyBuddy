@@ -24,7 +24,7 @@ import { promptFromEntry, validateMessage } from './pi-message-payload.js';
 import { navigateSession } from './pi-session-navigation.js';
 import { buildSessionContext, getAgentDir, type ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { registerAgentProfile } from './pi-profile-runtime.js';
-import { registerBotContext, handleBotNotebook } from './bot/bot-context-extension.ts';
+import { registerBotContext, handleBotNotebook, prepareBotModel } from './bot/bot-context-extension.ts';
 import { registerProfileMemory } from './profile-memory/extension.ts';
 import { registerAssistantProject } from './pi-assistant-project-runtime.js';
 import { registerProfileAuthoring } from './pi-profile-authoring-extension.ts';
@@ -44,7 +44,7 @@ function currentSystemPrompt(ctx: any, messages: any[]) {
 
 export default async function (pi: ExtensionAPI) {
     const cron = registerCron(pi);
-    const channelTurn = registerChannelTurns(pi);
+    const channelTurn = registerChannelTurns(pi, { prepareStart: prepareBotModel });
     registerThreadResults(pi);
     const modelSpeed = registerModelSpeed(pi, { agentDir: getAgentDir(), bridge: true });
     registerRequestStats(pi);
@@ -127,7 +127,7 @@ export default async function (pi: ExtensionAPI) {
                 return;
             }
             if (request.mode === 'channel') {
-                try { notify({ success: true, data: channelTurn(ctx, request.input) }); }
+                try { notify({ success: true, data: await channelTurn(ctx, request.input) }); }
                 catch (error) { notify({ success: false, error: error instanceof Error ? error.message : 'Channel delivery failed' }); }
                 return;
             }

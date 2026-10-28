@@ -28,7 +28,7 @@ test('managed Bot gate rereads rules on every call, refuses protected steps befo
         t.after(() => { if (prior === undefined) delete process.env[key]; else process.env[key] = prior; });
     }
     const file = path.join(__dirname, '../server/bot/bot-context-extension.ts');
-    const { registerBotContext, botPermissions, botPreset } = require(process.env.PIVANE_TEST_PI_JITI).createJiti(file)(file);
+    const { registerBotContext, botPermissions, botPreset } = await require(process.env.PIVANE_TEST_PI_JITI).createJiti(file).import(file);
     const handlers = new Map(), asked = [], retired = [];
     let answer = true, agentRoot = agentDir;
     registerBotContext({ on(name, fn) { handlers.set(name, fn); }, registerTool() {}, getAllTools: () => [] }, () => agentRoot);
