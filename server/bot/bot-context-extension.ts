@@ -380,7 +380,9 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
         if (!isBot(ctx)) return;
         const projection = event.context?.contextEntries || [];
         const drafts = [...topicIndexRetirements(projection),
-            ...(event.outcome === 'completed' ? pruneDrafts(projection, ctx.getContextUsage()) : [])];
+            ...(event.outcome === 'completed' ? pruneDrafts(projection, ctx.getContextUsage(), {
+                branch: ctx.sessionManager.getBranch(), sessionId: ctx.sessionManager.getSessionId()
+            }) : [])];
         return drafts.length ? { entries: [...(event.entries || []), ...drafts] } : undefined;
     });
     // S2 (D-030): once the prompt cache has gone cold, a still idle and fairly full window is

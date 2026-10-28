@@ -54,4 +54,30 @@ test('a real Bot worker applies explicit/default vision before the first image a
     await worker.channelTurn(input(3));
     assert.equal(calls.at(-1).model, 'vision'); assert.equal(calls.length, 3);
     assert.equal((await gateway.bots.bot(created.bot.id)).bot.model, null);
+    const globalSettings = JSON.parse(fs.readFileSync(path.join(agentDir, 'settings.json')));
+    delete globalSettings.defaultProvider; delete globalSettings.defaultModel;
+    fs.writeFileSync(path.join(agentDir, 'settings.json'), JSON.stringify(globalSettings));
+    const savedDefaults = fs.readFileSync(path.join(agentDir, 'settings.json'));
+    const callsBeforeValidation = calls.length;
+    const automatic = await gateway.bots.settings(created.bot.id);
+    assert.equal(automatic.models.defaults.provider, undefined); assert.equal(automatic.models.defaults.modelId, undefined);
+    assert.deepEqual(automatic.models.effectiveDefault, { provider: 'fixture', modelId: 'text' });
+    await gateway.bots.update(created.bot.id, { expectedRevision: (await gateway.bots.profiles.state()).revision,
+        changes: { bot: { thinking: 'off' } } });
+    assert.equal((await gateway.bots.bot(created.bot.id)).bot.thinking, 'off');
+    assert.equal((await gateway.bots.bot(created.bot.id)).bot.model, null);
+    assert.equal(calls.length, callsBeforeValidation, 'catalog resolution and independent thinking validation do not send model requests');
+    assert.deepEqual(fs.readFileSync(path.join(agentDir, 'settings.json')), savedDefaults, 'validation never persists an automatic global default');
+    await worker.channelTurn({ ...input(4), text: 'Use the automatic model', images: [] });
+    assert.equal(calls.at(-1).model, automatic.models.effectiveDefault.modelId, 'runtime and public effective default agree');
+    assert.deepEqual(fs.readFileSync(path.join(agentDir, 'settings.json')), savedDefaults);
+    fs.writeFileSync(path.join(agentDir, 'models.json'), JSON.stringify({ providers: {} }));
+    const unavailable = await gateway.bots.settings(created.bot.id);
+    assert.equal(unavailable.models.effectiveDefault, null);
+    const preserved = (await gateway.bots.bot(created.bot.id)).bot;
+    await assert.rejects(gateway.bots.update(created.bot.id, { expectedRevision: (await gateway.bots.profiles.state()).revision,
+        changes: { bot: { thinking: 'low' } } }), { code: 'BOT_MODEL_UNAVAILABLE' });
+    assert.deepEqual((await gateway.bots.bot(created.bot.id)).bot, preserved);
+    assert.equal(calls.length, callsBeforeValidation + 1);
+
 });

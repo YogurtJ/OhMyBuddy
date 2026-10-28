@@ -100,6 +100,32 @@ test('real settings/onboarding/list share thinking; omitted fields preserve it a
     await f.patch({ thinking: null });
 });
 
+test('automatic effective defaults support independent thinking without persisting or guessing a model', async t => {
+    const f = await fixture(t), { resolveEffectiveDefault } = require('../server/bot/bot-model-runtime');
+    f.bots.catalog = async () => ({ models });
+    const before = fs.readFileSync(f.session.path);
+    const snapshot = await f.bots.settings(f.id);
+    assert.equal(snapshot.models.defaults, undefined, 'the saved catalog default remains absent');
+    assert.deepEqual(snapshot.models.effectiveDefault, { provider: 'fixture', modelId: 'text' });
+    await f.patch({ thinking: 'high' });
+    assert.equal((await f.record()).model, null); assert.equal((await f.record()).thinking, 'high');
+    assert.match((await f.send('/thinking')).text, /high/);
+    assert.match((await f.send('/model')).text, /跟随工作区默认（fixture\/text）/);
+    assert.deepEqual(fs.readFileSync(f.session.path), before); assert.deepEqual(f.calls, []);
+    const known = await f.record();
+    f.bots.catalog = async () => ({ models: [] });
+    assert.equal((await f.bots.settings(f.id)).models.effectiveDefault, null);
+    await assert.rejects(f.patch({ thinking: 'low' }), { code: 'BOT_MODEL_UNAVAILABLE' });
+    assert.deepEqual(await f.record(), known);
+    f.bots.catalog = async () => { throw Error('synthetic resolution failure'); };
+    await assert.rejects(f.patch({ thinking: 'low' }), { code: 'BOT_MODEL_UNAVAILABLE' });
+    assert.deepEqual(await f.record(), known); assert.deepEqual(f.calls, []);
+    assert.equal(await resolveEffectiveDefault({ defaults: { provider: 'gone', modelId: 'old' }, models }), null);
+    assert.deepEqual(await resolveEffectiveDefault({ models, effectiveDefault: { provider: 'fixture', modelId: 'vision' } }),
+        { provider: 'fixture', modelId: 'vision' }, 'a caller-provided effective selection is preserved when available');
+    assert.equal(await resolveEffectiveDefault({ models, effectiveDefault: null }), null, 'an unverified selection stays null');
+});
+
 test('WeChat model/thinking persist for the whole Bot without touching a running worker', async t => {
     const f = await fixture(t);
     f.worker.operation = true; f.supervisor.getActiveWorker = () => f.worker;
