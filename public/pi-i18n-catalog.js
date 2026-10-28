@@ -9068,7 +9068,6 @@
         ['小', 'Small'],
         ['大', 'Large'],
         ['超大', 'Extra large'],
-        ['更新 Pivane', 'Update Pivane'],
         ['正在等待会话启动和当前操作结束…', 'Waiting for session startup and current operations to finish…'],
         ['正在准备更新…', 'Preparing the update…'],
         ['正在安装更新…', 'Installing the update…'],
