@@ -10,7 +10,8 @@ const PROFILE_ENTRY = 'pivane-agent-profile';
 const MEMORY_READ_ENTRY = 'pivane-profile-memory-read';
 const SESSION_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/;
 const MAX_LOOKUP_ENTRIES = 20000;
-const MAX_SESSION_BYTES = 8 * 1024 * 1024;
+const MAX_SESSION_BYTES = 256 * 1024 * 1024;
+const MAX_INDEX_BYTES = 8 * 1024 * 1024;
 const MAX_METADATA_BYTES = 256 * 1024;
 // Provenance writes must work on long conversations, so their streaming proof
 // budget sits well above the 8 MiB historical index bound and fails explicitly.
@@ -95,23 +96,28 @@ function snapshot(file, context) {
         fd = io.openReadSync(file);
         const opened = fs.fstatSync(fd, { bigint: true }), identity = io.identity(fd);
         if (!opened.isFile() || stamp(before) !== stamp(opened) || descriptorPathSync(fd) !== file) return null;
-        const bytes = Buffer.alloc(Number(opened.size));
-        let offset = 0;
-        while (offset < bytes.length) {
-            const n = fs.readSync(fd, bytes, offset, bytes.length - offset, offset);
-            if (!n) return null;
-            offset += n;
-        }
+        const entries = []; let indexBytes = 0;
+        const scan = require('../pi-session-scan').scanSession(file, entry => {
+            if (!entry) return;
+            // This is a disposable text index, never a conversation for replay.
+            // Strip binary image payloads and opaque reasoning signatures only.
+            const projected = JSON.parse(JSON.stringify(entry, function (key, value) {
+                return key === 'thinkingSignature' && this.type === 'thinking'
+                    || key === 'data' && this.type === 'image' ? undefined : value;
+            }));
+            indexBytes += Buffer.byteLength(JSON.stringify(projected));
+            if (indexBytes > MAX_INDEX_BYTES) throw new Error('Session text index exceeds budget');
+            entries.push(projected);
+        });
         const after = fs.lstatSync(file, { bigint: true });
         if (stamp(opened) !== stamp(fs.fstatSync(fd, { bigint: true })) || stamp(after) !== stamp(opened)
             || descriptorPathSync(fd) !== file || fs.realpathSync.native(file) !== file
             || !io.sameIdentityAtPath(file, identity)) return null;
-        const entries = new TextDecoder('utf-8', { fatal: true }).decode(bytes).split('\n').filter(Boolean).map(line => JSON.parse(line));
         const header = entries[0];
         if (header?.type !== 'session' || !header.id || !header.timestamp || !path.isAbsolute(header.cwd)
             || fs.realpathSync.native(header.cwd) !== header.cwd
             || binding(entries, header.id)?.profileId !== context.profileId) return null;
-        return { file, header, entries, fingerprint: createHash('sha256').update(bytes).digest('hex'), stamp: stamp(opened), bytes: bytes.length };
+        return { file, header, entries, fingerprint: scan.sha256, stamp: stamp(opened), bytes: indexBytes, rawBytes: scan.bytes };
     } catch { return null; }
     finally { if (fd !== undefined) fs.closeSync(fd); }
 }
@@ -367,4 +373,4 @@ function listEligibleFiles(context, cap = 20) {
 }
 
 module.exports = { parseContext, binding, eligibleManager, eligibleFile, snapshot, sourceProof, verifyNativeSession, sameActiveFile,
-    listSessionFiles, listEligibleFiles, sessionFilesById, profileSession, MAX_SESSION_BYTES, MAX_SOURCE_BYTES, MAX_SOURCE_ENTRIES };
+    listSessionFiles, listEligibleFiles, sessionFilesById, profileSession, MAX_SESSION_BYTES, MAX_INDEX_BYTES, MAX_SOURCE_BYTES, MAX_SOURCE_ENTRIES };

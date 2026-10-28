@@ -4,6 +4,7 @@ import sideTools from './pi-side-tools.js';
 import networkTransport from './workspace-network-transport.js';
 import { registerModelSpeed } from './pi-model-speed-extension.mjs';
 import { installImageCompatibility } from './pi-image-runtime.mjs';
+import imageContext from './pi-session-image-context.js';
 import { writeRawStdout } from '../node_modules/@earendil-works/pi-coding-agent/dist/core/output-guard.js';
 import {
     createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices,
@@ -45,9 +46,9 @@ try {
         });
         const model = services.modelRuntime.getModel(seed.provider, seed.modelId);
         if (!model) throw new Error(`Side model is not registered: ${seed.provider}/${seed.modelId}`);
-        const result = await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent, model,
+        const result = await createAgentSessionFromServices({ services, sessionManager: imageContext.imageSessionManager(sessionManager, agentDir), sessionStartEvent, model,
             thinkingLevel: seed.thinkingLevel, ...(tools.length ? { tools } : { noTools: 'all' }) });
-        installImageCompatibility(result.session, { emit: record => writeRawStdout(JSON.stringify(record) + '\n') });
+        installImageCompatibility(result.session, { agentDir, emit: record => writeRawStdout(JSON.stringify(record) + '\n') });
         const active = result.session.agent.state.tools.map(tool => tool.name).sort();
         if (result.session.sessionFile || tools.length && !gateLoaded || JSON.stringify(active) !== JSON.stringify([...tools].sort())) throw new Error('Side isolation check failed');
         return { ...result, services, diagnostics: services.diagnostics };

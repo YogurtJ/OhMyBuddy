@@ -32,11 +32,12 @@ function activeBranch({ entries, leafId }) {
     return branch.reverse();
 }
 
-function promptFromEntry(entry) {
+function promptFromEntry(entry, { restoreImages = true } = {}) {
     if (entry?.type !== 'message' || entry.message?.role !== 'user') throw new Error('请选择用户消息');
-    const content = entry.message.content;
+    const { SessionImages, isReference } = require('./pi-session-images');
+    const content = restoreImages ? new SessionImages().content(entry.message.content) : entry.message.content;
     return {
-        message: typeof content === 'string' ? content : (content || []).filter(block => block.type === 'text').map(block => block.text).join(''),
+        message: typeof content === 'string' ? content : (content || []).filter(block => block.type === 'text' && !isReference(block)).map(block => block.text).join(''),
         images: Array.isArray(content) ? content.filter(block => block.type === 'image') : []
     };
 }

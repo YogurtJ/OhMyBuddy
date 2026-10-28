@@ -1,12 +1,26 @@
 import { resizeImage } from '@earendil-works/pi-coding-agent';
 import { createHash } from 'node:crypto';
 import images from './pi-image-context.js';
+import sessionImages from './pi-session-images.js';
 
 // Public SDK seams cover every model request, including continuation after tools
 // and a physical model selected by a virtual router. No context-hook exception
 // is used to block a request: Pi deliberately catches those exceptions.
-export function installImageCompatibility(session, { emit } = {}) {
+export function installImageCompatibility(session, { emit, agentDir } = {}) {
     const settings = session.settingsManager;
+    const storedImages = new sessionImages.SessionImages(agentDir);
+    // Exports remain portable native Pi files: references are resolved only in
+    // the export view, never by rewriting the live manager or its file.
+    const exportHtml = session.exportToHtml;
+    if (exportHtml) session.exportToHtml = async (...args) => {
+        const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+        const source = session.sessionManager, budget = { bytes: 0, max: 256 * 1024 ** 2 };
+        const entries = source.getEntries().map(entry => storedImages.entry(entry, 'restore', budget));
+        const manager = SessionManager.inMemory(source.getCwd(), undefined, [source.getHeader(), ...entries]);
+        if (source.getLeafId()) manager.branch(source.getLeafId()); else manager.resetLeaf();
+        manager.getSessionFile = () => source.getSessionFile();
+        return exportHtml.apply(new Proxy(session, { get(target, key) { return key === 'sessionManager' ? manager : Reflect.get(target, key); } }), args);
+    };
     let lastNotice = '', awaitingNewImages = false, cachedBytes = 0;
     const cache = new Map();
     const cachedResize = async (bytes, mimeType, profile) => {
@@ -33,8 +47,12 @@ export function installImageCompatibility(session, { emit } = {}) {
         if (omitted) emit?.({ type: 'extension_ui_request', method: 'notify', notifyType: 'warning',
             message: `当前模型或图片设置不接收图片，本次省略 ${omitted} 张上下文图片；原图已保留，切回支持图片的模型后可再次使用。` });
     };
+    const requestImages = (messages, model) => model?.input?.includes('image') && !settings.getBlockImages()
+        ? storedImages.messages(messages)
+        : messages.map(message => !Array.isArray(message.content) ? message : { ...message, content: message.content.map(block =>
+            sessionImages.isReference(block) ? { ...sessionImages.reference(block).image, data: '' } : block) });
     const project = async (messages, model, report = false) => {
-        const result = await images.projectImages(messages, model, { resizeImage: cachedResize,
+        const result = await images.projectImages(requestImages(messages, model), model, { resizeImage: cachedResize,
             autoResize: settings.getImageAutoResize(), blocked: settings.getBlockImages() });
         if (report) notice(model, settings.getBlockImages() ? images.imageCount(session.sessionManager.buildSessionContext().messages) : result.omitted);
         return result.messages;
@@ -59,7 +77,7 @@ export function installImageCompatibility(session, { emit } = {}) {
         if (ordinary && !session.isStreaming && session.model?.api !== 'pi-virtual') {
             // Admission checks stay synchronous. Async decoding/resizing belongs
             // inside the active native request so abort cannot be followed by a late start.
-            images.inspectImages([...session.sessionManager.buildSessionContext().messages,
+            images.inspectImages([...requestImages(session.sessionManager.buildSessionContext().messages, session.model),
                 { role: 'user', content: [{ type: 'text', text }, ...(options?.images || [])], timestamp: 0 }], session.model,
             { blocked: settings.getBlockImages() });
         }

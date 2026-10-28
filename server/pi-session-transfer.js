@@ -208,7 +208,8 @@ class PiSessionTransfer {
                 } else {
                     const snapshot = await rpc('get_entries');
                     const { SessionManager, AgentSession } = await getSdk();
-                    const manager = SessionManager.inMemory(session.cwd, { id: session.id }, snapshot.entries);
+                    const images = new (require('./pi-session-images').SessionImages)(), budget = { bytes: 0, max: EXPORT_BYTES };
+                    const manager = SessionManager.inMemory(session.cwd, { id: session.id }, snapshot.entries.map(entry => images.entry(entry, 'restore', budget)));
                     if (snapshot.leafId) manager.branch(snapshot.leafId); else manager.resetLeaf();
                     // The public native serializer only needs sessionManager. Bind that dependency
                     // explicitly instead of creating a second agent/runtime or copying its format logic.
@@ -227,6 +228,13 @@ class PiSessionTransfer {
         const cwd = this.store.resolveProject(cwdInput);
         if (!text(requestId) || !/^[a-zA-Z0-9-]{16,80}$/.test(requestId)) fail('导入请求 ID 无效');
         const entries = validateImport(content);
+        // Portable imports must carry bytes, never borrow private blobs by hash.
+        const imageStore = new (require('./pi-session-images').SessionImages)();
+        const assertPortable = entry => {
+            const content = entry.type === 'message' ? entry.message?.content : entry.type === 'custom_message' ? entry.content : entry.replacement?.content;
+            if (Array.isArray(content) && content.some(require('./pi-session-images').isReference)) fail('导入文件缺少图片原件；请从来源 Pivane 导出完整 JSONL');
+        };
+        entries.forEach(assertPortable);
         const hash = createHash('sha256').update(cwd).update('\0').update(content).digest('hex');
         for (const [key, item] of this.imports) if (Date.now() - item.at > 30 * 60000) this.imports.delete(key);
         const previous = this.imports.get(requestId);
@@ -249,7 +257,7 @@ class PiSessionTransfer {
             temporary = fs.mkdtempSync(path.toNamespacedPath(path.join(sessionDir, '.pi-import-')));
             const importDir = fs.realpathSync.native(temporary);
             const source = path.join(importDir, 'source.jsonl');
-            privateFiles.writePrivateFileSync(source, entries.map(entry => JSON.stringify(entry)).join('\n') + '\n');
+            privateFiles.writePrivateFileSync(source, entries.map(entry => JSON.stringify(imageStore.entry(entry, 'save'))).join('\n') + '\n');
             // forkFrom assigns a new native ID and target cwd, retaining every imported tree entry.
             // No runtime is started and no existing session is switched or overwritten.
             const manager = SessionManager.forkFrom(source, targetCwd, importDir);

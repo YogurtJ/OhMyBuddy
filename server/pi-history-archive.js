@@ -44,7 +44,7 @@ function textOf(entry, limit, check) {
     let text = '', count = 0, images = 0, truncated = false;
     for (const block of blocks(content)) {
         check();
-        if (block?.type === 'image') { images++; continue; }
+        if (block?.type === 'image' || require('./pi-session-images').isReference(block)) { images++; continue; }
         if (count > limit) { truncated = true; continue; }
         if (block?.type !== 'text' || typeof block.text !== 'string' || !block.text) continue;
         if (text) { text += '\n'; count++; }

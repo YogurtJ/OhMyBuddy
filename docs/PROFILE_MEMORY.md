@@ -257,7 +257,7 @@ checks, is rejected while same-branch growth is not. The proof retains only
 entry `id`/`parentId` edges, never message bodies, and budgets 64 MiB / 200,000
 entries per session; over-budget sessions fail explicitly with `Native session
 exceeds source proof limits` (413) instead of proving a truncated tree. The
-historical derived index keeps its separate 8 MiB snapshot bound. It writes
+historical derived index keeps its separate 8 MiB projected-content bound, excluding inline image data and opaque thinking signatures. It writes
 only `{sessionId,entryId}` into the item and receipt; no conversation text is
 duplicated.
 For project scope the service derives `projectKey=sha256(canonical cwd)` and
@@ -439,7 +439,7 @@ tool adapter.
   backfill known sessions. Learning reads native sessions up to the 64 MiB
   source-proof bound (`capabilities.maxSourceBytes`), so a long-running single
   thread keeps being learned from; larger sessions are skipped. The derived
-  search index keeps its own 8 MiB bound.
+  search index keeps its own 8 MiB projected-content bound (binary image data and opaque thinking signatures are excluded).
   Pairs before the last `pivane-learning-baseline` custom entry on the branch
   (written when older conversations are imported) are never learned from, in
   any kind or at a boundary; forks keep the baseline.
@@ -576,11 +576,7 @@ including sources beyond the first 20 or 5,000. It never scans raw JSONL
 through the upstream anchor fallback. Tool results report partial coverage while the
 initial sweep is unfinished, a source exceeds the historical byte cap, or a
 verified candidate cannot be indexed. Ineligible foreign/no-profile files do
-not by themselves make coverage partial. At most 8 MiB per historical native session is eligible for the derived index;
-this is not an active-session/tool limit. A search rejects verification beyond
-5,000 tracked rows or 64 MiB read budget
-rather than returning unchecked data. Oversized native histories remain
-unindexed and visibly partial; no full-recall promise is made. Cwd must remain
+not by themselves make coverage partial. The derived index allows 8 MiB per session after removing image data and opaque thinking signatures from its disposable view. Originals and full-byte fingerprints remain unchanged. A bounded line scanner permits raw files up to 256 MiB, records up to 32 MiB, and 200,000 entries; this is not an active-session/tool limit. Search verification rejects more than 5,000 tracked rows, 64 MiB of projected content or 2 GiB of raw reads rather than returning unchecked data. Over-budget histories remain unindexed and visibly partial; no full-recall promise is made. See [session image storage](development/SESSION_IMAGES.md). Cwd must remain
 resolvable. Release and local activation states are recorded separately from this contract.
 
 ## Bundled installation

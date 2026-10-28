@@ -13,6 +13,7 @@ import { installRunStartupAdapter } from './pi-run-startup-adapter.mjs';
 import { initializeNativeThemeValidation } from './pi-theme-validation.mjs';
 import { createAgentSessionWithSelectionPreflight } from './pi-model-selection-preflight.mjs';
 import { installImageCompatibility } from './pi-image-runtime.mjs';
+import imageContext from './pi-session-image-context.js';
 
 let runtime;
 try {
@@ -34,6 +35,7 @@ try {
     const { writeRawStdout } = await import(pathToFileURL(path.join(piRoot, 'dist/core/output-guard.js')).href);
     const sessionManager = parsed.noSession ? SessionManager.inMemory(cwd) : SessionManager.open(parsed.session, undefined, cwd);
     const createRuntime = async ({ cwd, sessionManager, sessionStartEvent }) => {
+        sessionManager = imageContext.imageSessionManager(sessionManager, agentDir);
         navigation.bindSessionNavigation(sessionManager);
         const global = SettingsManager.create(cwd, agentDir, { projectTrusted: false });
         const trusted = parsed.projectTrustOverride ?? new ProjectTrustStore(agentDir).get(cwd) ?? (global.getDefaultProjectTrust() === 'always');
@@ -60,7 +62,7 @@ try {
             thinkingLevel: parsed.thinking ?? selected.thinkingLevel, scopedModels,
             tools: parsed.tools, excludeTools: parsed.excludeTools, noTools: parsed.noTools ? 'all' : parsed.noBuiltinTools ? 'builtin' : undefined });
         if (created.modelFallbackMessage) diagnostics.push({ type: 'warning', message: created.modelFallbackMessage });
-        installImageCompatibility(created.session, { emit: record => writeRawStdout(JSON.stringify(record) + '\n') });
+        installImageCompatibility(created.session, { agentDir, emit: record => writeRawStdout(JSON.stringify(record) + '\n') });
         installQueueAdapter(created.session, { token: process.env.PIVANE_QUEUE_TOKEN,
             sessionPath: parsed.noSession ? null : sessionManager.getSessionFile(), sessionId: sessionManager.getSessionId(),
             emit: record => writeRawStdout(JSON.stringify(record) + '\n') });

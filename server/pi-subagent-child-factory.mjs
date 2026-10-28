@@ -6,6 +6,8 @@ import path from 'node:path';
 import networkTransport from './workspace-network-transport.js';
 import { registerModelSpeed } from './pi-model-speed-extension.mjs';
 import { installImageCompatibility } from './pi-image-runtime.mjs';
+import sessionImages from './pi-session-images.js';
+import imageContext from './pi-session-image-context.js';
 import * as sdk from '@earendil-works/pi-coding-agent';
 import { createPlacementChildSessionFactory } from '../vendor/pi-subagents/src/runs/shared/child-session.js';
 import resources from './pi-bundled-resources.js';
@@ -41,6 +43,7 @@ class ChildResourceLoader {
                     agentsFiles: resolved.agentsFiles.filter(entry => path.dirname(entry.path) === input.agentDir) };
             },
             extensionFactories: [...nativeFactories.filter(entry => !upstreamBuiltin(entry)),
+                pi => sessionImages.registerSessionImages(pi, input.agentDir),
                 pi => registerModelSpeed(pi, { agentDir: input.agentDir, preserveExisting: false }),
                 ...(input.extensionFactories || []).filter(entry => upstreamFactories.has(entry)
                     || (!nativeBuiltins.includes(entry.name) && !nativeFactories.some(native => native.name === entry.name)))] });
@@ -68,8 +71,8 @@ export default function childFactory() {
         const policy = childPolicy;
         return { ...sdk, DefaultResourceLoader: ChildResourceLoader,
             createAgentSession: async options => {
-                const created = await sdk.createAgentSession(options);
-                installImageCompatibility(created.session);
+                const created = await sdk.createAgentSession({ ...options, sessionManager: imageContext.imageSessionManager(options.sessionManager, options.agentDir) });
+                installImageCompatibility(created.session, { agentDir: options.agentDir });
                 return created;
             },
             createMcpExtension: () => pi => {

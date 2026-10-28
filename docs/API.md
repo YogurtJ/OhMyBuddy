@@ -646,6 +646,8 @@ gateway 当前白名单：
 | Session 只读/命名 | `get_entries`, `get_tree`, `get_fork_messages`, `set_session_name` |
 | 资源命令 | `get_commands` |
 
+主连接图片快照使用 `{type:"image",mimeType,pivaneImageUrl}`，URL 为 `GET /api/pi/sessions/:id/images/:sha256?cwd=...`。该接口沿用工作台鉴权，校验指定项目的实际原生会话持有此图片，读取字节后核验哈希、文件身份与格式；返回私有 `no-store` 图片响应，错误为 404。哈希不单独授予访问权。实时消息可含 A2 `text` 引用或运行时 image 投影的 `pivaneImage:{version:1,sha256,bytes,image}`；客户端仅使用受限同源图片路由，不能把空 data 投影当作图片正文。详情见[图片存储](development/SESSION_IMAGES.md)。
+
 主连接 `get_messages`（包括打开会话的 messages 快照）返回原生压缩范围内的原始聊天记录，过滤 system 消息；Pi 0.87 的上下文编辑不替换或隐藏这些原文。内部通过同一 worker 的 `get_entries` 和公开 SDK 同步投影，`webLive` / `webProgress` / controls 的事件边界保持一致。受管 worker 的结果另带 `webAnchors: [[entryId, role, timestamp, toolCallId], ...]`，只含当前上下文中的原生消息条目，供网页把知识回执的来源条目对应到已渲染的消息。原生 Pi RPC 的 `get_messages` 是模型上下文投影，与此网页展示接口不同；完整上下文侧聊使用编辑后投影。`get_entries` 继续保留 `context_edit`、`usage` 和所有分支记录。另从当前 leaf 的原生祖先分支投影 `pivane-media-plan` 为隐藏来源消息，用于恢复生成卡片，包含压缩前来源；不改变既有正文的压缩范围或模型上下文，不读取其他分支。实时来源复用 `entry_appended` 的 runtime/sequence 边界，卡片按 plan.id 去重并优先原生来源。
 
 `get_tree` 保留原生只读透传；新会话树 UI 使用独立有界 `get_session_tree`，导航只走受控 `navigate_history`。原生 `clear_queue` 仍未作为裸命令开放；主会话改由 `stop_and_recover` 先取回再 abort，`take_queue` 仅取回，`ack_recovery` 按组 ID 移除结果。队列文字、恢复摘要、停止状态与扩展文字状态以 controls 快照/修订事件同步；持久恢复的完整文字／图片／文档引用按 `get_recovery_payload` 显式读取，详见 [NATIVE_CONTROLS.md](NATIVE_CONTROLS.md)。Pi 0.85.0 abort 允许取消压缩，runtimeControls 启用后压缩期间显示该入口。
