@@ -249,7 +249,6 @@ function createPiAgentGateway(options = {}) {
         // agentThreads is created just below; the catalog is only read on request.
         catalog: cwd => agentThreads.catalog(cwd) });
     bots.on('windowRotated', event => supervisor.emit('botWindowRotated', event));
-    require('./bot/bot-routes').mountBotRoutes(router, { bots });
     const agentThreads = require('./pi-agent-threads').mountAgentThreads(router, { store, supervisor, settingsService, access,
         isSuspended: () => maintenance.locked || maintenance.referenceLocked || Boolean(store.sessionMoves?.running) });
 
@@ -301,6 +300,8 @@ function createPiAgentGateway(options = {}) {
         mediaLabService: options.mediaLabService, mediaRoot: options.artifactMediaRoot,
         isSuspended: () => maintenance.locked || maintenance.referenceLocked || Boolean(store.sessionMoves?.running),
         ...options.channelsOptions });
+    require('./bot/bot-routes').mountBotRoutes(router, { bots,
+        activity: new (require('./bot/bot-activity').BotActivity)({ bots, cron, proactive, channels }) });
     cron.captureChannelNotify = event => channels.captureScheduledRecipients(event);
     cron.onChannelNotify = event => channels.track(channels.notifyScheduledRun(event));
     channels.canNotifyScheduled = id => {

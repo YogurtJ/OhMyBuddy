@@ -68,6 +68,11 @@ async function setup(t) {
 test('a Bot window opens only its current generation; a rotation moves open pages on', { timeout: 120000 }, async t => {
     const { gateway, rest, connect, createBot } = await setup(t);
     const { botId, windowId, botWindow, session } = await createBot();
+    const activity = await rest('GET', `/bots/${botId}/activity`);
+    assert.equal(activity.profileId, botId);
+    assert.equal(activity.version, 1);
+    assert.deepEqual(activity.sources, { proactive: 'available', scheduler: 'available', channels: 'available' });
+    assert.deepEqual(activity.items, []);
     const first = await session();
     // Missing or wrong window identity is refused before any worker starts.
     const probe = await connect();
