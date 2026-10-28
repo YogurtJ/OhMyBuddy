@@ -1,5 +1,9 @@
 const assert = require('node:assert/strict');
 const path = require('node:path'), http = require('node:http');
+const { createHash } = require('node:crypto');
+const { displayMessages } = require('../../server/pi-session-images-routes');
+const { runtimeMessage } = require('../../server/pi-session-image-context');
+const { MARKER } = require('../../server/pi-session-images');
 const { once } = require('node:events');
 const express = require('express');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -11,7 +15,8 @@ async function run(browser, origin, width) {
     const context = await browser.newContext({ locale: 'zh-CN', viewport: { width, height: 900 }, isMobile: width < 900, hasTouch: width < 900 });
     const page = await context.newPage(), errors = [], imageReads = [];
     page.on('pageerror', error => errors.push(error.message));
-    let socket;
+    let socket, echoMode = 'runtime', heldReply, heldEcho, promptReceived;
+    const prompts = [];
     const messages = [
         { role: 'user', timestamp: 1, content: [{ type: 'text', text: '查看这张图片' }, { type: 'image', mimeType: 'image/png', pivaneImageUrl: imageUrl('a') }] },
         { role: 'assistant', timestamp: 2, content: [{ type: 'toolCall', name: 'read', id: 'image-tool', arguments: { path: 'fixture.png' } }], stopReason: 'toolUse' },
@@ -39,6 +44,27 @@ async function run(browser, origin, width) {
             if (command.type === 'open_session') data = { session, state, messages: { messages }, models: { models: [model] }, stats: {}, thinkingLevels: { levels: ['off'] }, commands: { commands: [] } };
             else if (command.type === 'get_messages') data = { messages };
             else if (command.type === 'get_state') data = state;
+            else if (command.type === 'prompt') {
+                prompts.push(command);
+                // Pi may resize prompt images and append dimension notes before message_start;
+                // message_end then carries runtime references, A2 blocks or display URLs.
+                const inline = { role: 'user', timestamp: 10 + prompts.length,
+                    content: [{ type: 'text', text: command.message + '\n\n[Image: original 2400x1600, displayed at 2000x1333. Multiply coordinates by 1.20 to map to original image.]' },
+                        ...command.images.map(() => ({ type: 'image', mimeType: 'image/png', data: png.toString('base64') }))] };
+                const reference = { ...inline, content: inline.content.map(block => block.type === 'image' ? { type: 'text', text: MARKER,
+                    pivaneImage: { version: 1, sha256: createHash('sha256').update(png).digest('hex'), bytes: png.length,
+                        image: { type: 'image', mimeType: 'image/png' } } } : block) };
+                const message = echoMode === 'runtime' ? runtimeMessage(reference) : echoMode === 'a2' ? reference
+                    : echoMode === 'url' ? displayMessages([reference], cwd, session.id)[0] : inline;
+                heldEcho = () => {
+                    ws.send(JSON.stringify({ type: 'message_start', message: inline }));
+                    for (let i = 0; i < 2; i++) ws.send(JSON.stringify({ type: 'message_end', message }));
+                    messages.push(message);
+                };
+                heldReply = () => ws.send(JSON.stringify({ type: 'response', id: command.id, command: command.type, success: true, data: {} }));
+                promptReceived();
+                return;
+            }
             ws.send(JSON.stringify({ type: 'response', id: command.id, command: command.type, success: true, data }));
         });
     });
@@ -59,6 +85,38 @@ async function run(browser, origin, width) {
         await page.waitForFunction(() => [...document.querySelectorAll('.pi-message.user img')].at(-1)?.naturalWidth > 0);
         assert.ok(imageReads.some(url => url.includes('c'.repeat(64))));
         assert.ok(!await page.locator('#pi-transcript-content').textContent().then(value => value.includes('Pivane 会在看图')));
+        const upload = await page.evaluate(() => {
+            const canvas = document.createElement('canvas'); canvas.width = 2400; canvas.height = 1600;
+            canvas.getContext('2d').fillRect(0, 0, canvas.width, canvas.height);
+            return canvas.toDataURL('image/png').split(',')[1];
+        });
+        const input = page.locator('#pi-input'), text = '文字与两张图片只显示一次';
+        let expected = 0;
+        for (const mode of ['runtime', 'runtime', 'a2', 'url', 'inline']) {
+            echoMode = mode; heldReply = null;
+            const received = new Promise(resolve => { promptReceived = resolve; });
+            await input.fill(text);
+            await page.locator('#pi-file-input').setInputFiles([1, 2].map(index => ({ name: `large-${index}.png`, mimeType: 'image/png', buffer: Buffer.from(upload, 'base64') })));
+            await page.waitForFunction(() => document.querySelectorAll('#pi-attachments .pi-attachment-chip').length === 2 && document.querySelector('#pi-attachments').getAttribute('aria-busy') === 'false');
+            await input.press('Enter'); expected++;
+            await received;
+            await page.waitForFunction(() => document.querySelector('#pi-send-button').disabled);
+            assert.equal(await page.locator('article.user').filter({ hasText: text }).count(), expected - 1, 'image messages wait for the authoritative native echo');
+            assert.equal(await page.locator('#pi-attachments .pi-attachment-chip').count(), 2, 'previews remain while the send is pending');
+            await page.waitForFunction(() => document.querySelector('#pi-transcript-activity .pi-activity-live')?.dataset.phase === 'sending');
+            heldEcho();
+            await page.locator('article.user:not(.optimistic)').filter({ hasText: text }).nth(expected - 1).waitFor();
+            assert.equal(prompts.length, expected, 'one prompt per explicit send');
+            assert.equal(prompts.at(-1).images.length, 2);
+            assert.equal(await page.locator('article.user').filter({ hasText: text }).count(), expected, `${mode}: native echo and pending send share one visible message`);
+            assert.equal(await page.locator('article.user.optimistic').filter({ hasText: text }).count(), 0);
+            assert.equal(await page.locator('article.user').filter({ hasText: text }).last().locator('img').count(), 2);
+            await input.press('Enter');
+            assert.equal(prompts.length, expected, 'submission stays locked while acknowledgement is pending');
+            heldReply();
+            await page.waitForFunction(() => document.querySelector('#pi-input').value === '' && !document.querySelectorAll('#pi-attachments .pi-attachment-chip').length);
+            assert.equal(await page.locator('article.user').filter({ hasText: text }).count(), expected, 'explicitly resending identical content remains a separate message');
+        }
         assert.deepEqual(errors, []);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
         assert.ok(await page.locator('.pi-message-image').evaluateAll(images => images.every(image => image.getBoundingClientRect().width <= innerWidth)));
