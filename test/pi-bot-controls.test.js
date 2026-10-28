@@ -405,3 +405,35 @@ test('native command worker startup holds current-window reservation and release
     await f.patch({ thinking: 'high' }); assert.equal((await f.record()).thinking, 'high');
     finish.resolve(); await pending; assert.equal(f.s.job(id).status, 'delivered');
 });
+
+test('automatic model selection keeps global thinking below per-model and explicit Bot preferences', async t => {
+    const f = await runtimeFixture(t);
+    const align = () => f.api.alignModel(f.pi, f.ctx, null, () => {}, new Set(), (f.savedThinking ?? null), agentDir);
+    f.defaults({ defaultThinkingLevel: 'high' });
+    await align(); assert.equal(f.ctx.model.id, 'text'); assert.equal(f.thinking(), 'high');
+    f.defaults({ defaultThinkingLevel: 'high', modelThinkingLevels: { 'fixture/text': 'low' } });
+    await align(); assert.equal(f.thinking(), 'low');
+    f.savedThinking = 'medium'; await align(); assert.equal(f.thinking(), 'medium');
+    f.savedThinking = null; f.defaults({}); await align(); assert.equal(f.thinking(), 'medium', 'SDK fallback applies only without saved preferences');
+});
+
+test('stale legacy nested thinking never exempts a changed top-level owner or onboarding selection', async t => {
+    const f = await fixture(t);
+    await f.patch({ model: { provider: 'fixture', id: 'text', thinking: 'high' } });
+    await f.patch({ thinking: 'low' });
+    const before = await f.record(); assert.equal(before.model.thinking, 'high'); assert.equal(before.thinking, 'low');
+    let catalogCalls = 0;
+    f.bots.catalog = async () => { catalogCalls++; return { models: [{ provider: 'fixture', modelId: 'text', thinkingLevels: ['low'] }] }; };
+    await assert.rejects(f.patch({ thinking: 'high' }), { status: 409, code: 'BOT_MODEL_UNAVAILABLE' });
+    await assert.rejects(f.bots.onboarding(f.id, { action: 'model-choice', model: { provider: 'fixture', id: 'text' }, thinking: 'high',
+        expectedRevision: (await f.profiles.state()).revision }), { status: 409, code: 'BOT_MODEL_UNAVAILABLE' });
+    assert.equal(catalogCalls, 2); assert.deepEqual(await f.record(), before);
+    await f.patch({ thinking: null });
+    await assert.rejects(f.bots.onboarding(f.id, { action: 'model-choice', model: before.model,
+        expectedRevision: (await f.profiles.state()).revision }), { status: 409, code: 'BOT_MODEL_UNAVAILABLE' });
+    assert.equal(catalogCalls, 3, 'legacy input also validates when it changes an explicit top-level null');
+    assert.equal((await f.record()).thinking, null);
+    f.bots.catalog = async () => { throw Error('unavailable'); };
+    await f.patch({ thinking: null });
+    assert.equal((await f.record()).thinking, null, 'no-change and explicit clearing remain possible without a catalog');
+});

@@ -136,7 +136,7 @@
     const styleOf = id => workStyles().find(style => style.id === id) || null;
     const validLearning = snap => snap?.version === 1 && Number.isSafeInteger(snap.revision) && snap.settings && typeof snap.settings === 'object';
 
-    let dialog = null;
+    let dialog = null, closeDialog = null;
 
     function field(label, control, hint) {
         const wrap = el('label', 'pi-bot-sheet-field');
@@ -208,7 +208,7 @@
     // open({ api, toast, profileId, face, page, onSaved, onMemory, onLearning, onRestart, onTrashed })
     // page: the section to show first (desktop: the first section; phones: the overview).
     async function open(options) {
-        dialog?.close();
+        if (dialog?.open && closeDialog?.() === false) return dialog;
         dialog = el('dialog', 'pi-bot-sheet pi-bot-settings-sheet');
         dialog.setAttribute('aria-labelledby', 'pi-bot-sheet-title');
         const form = el('form', 'pi-bot-sheet-form'); form.method = 'dialog'; form.noValidate = true;
@@ -234,12 +234,17 @@
         const sheet = dialog;
         sheet.dataset.edited = 'false';
         let data = null, controls = null, saving = false, warned = null, initial = null, activitySerial = 0;
-        const onRoute = event => {
-            if (!options.current) return;
+        const onBeforeRoute = event => {
+            if (!sheet.open || !options.current) return;
             const route = event.detail, profileId = route?.params?.get('profileId');
-            if (route?.tab !== 'bot' || profileId && profileId !== options.profileId || !options.current()) sheet.close();
+            if (route?.tab === 'bot' && (!profileId || profileId === options.profileId) && options.current()) return;
+            if (!leave(`route:${route.hash}`)) event.preventDefault();
         };
-        window.addEventListener('workspace:tabchanged', onRoute);
+        window.addEventListener('workspace:beforetabchange', onBeforeRoute);
+        const onUnload = event => {
+            if (saving || decoding || edited()) { event.preventDefault(); event.returnValue = ''; }
+        };
+        window.addEventListener('beforeunload', onUnload);
         // picture: a picture chosen in this sheet (PNG data URL), uploaded when saving;
         // uploaded: the last one this sheet put up, so a retry does not upload it again.
         let picture = null, uploaded = null, faceChoice = null, fileSerial = 0, decoding = false;
@@ -291,7 +296,7 @@
         // Every way out of the sheet (close, Escape, cancel, the memory page, meeting again): with
         // unsaved edits the first try only warns; the same action again leaves without them.
         const leave = (action, then) => {
-            if (saving) return false;
+            if (saving || decoding) return false;
             if (edited() && warned !== action) {
                 warned = action; status.dataset.tone = 'warn';
                 status.textContent = action === 'close' ? translateUi("还有修改没保存。再关一次就放弃这些修改。")
@@ -307,6 +312,7 @@
             return true;
         };
         const tryClose = () => leave('close');
+        closeDialog = tryClose;
         close.addEventListener('click', tryClose);
         cancel.addEventListener('click', tryClose);
         // Phones: back from a section to the overview, onto the row that opened it.
@@ -319,8 +325,10 @@
         sheet.addEventListener('cancel', event => { event.preventDefault(); tryClose(); });
         sheet.addEventListener('close', () => {
             phone.removeEventListener('change', onLayout);
-            activitySerial++; window.removeEventListener('workspace:tabchanged', onRoute);
-            controls?.modelPicker?.dispose?.(); sheet.remove(); if (dialog === sheet) dialog = null;
+            activitySerial++; fileSerial++;
+            window.removeEventListener('workspace:beforetabchange', onBeforeRoute);
+            window.removeEventListener('beforeunload', onUnload);
+            controls?.modelPicker?.dispose?.(); sheet.remove(); if (dialog === sheet) { dialog = null; closeDialog = null; }
         });
         sheet.addEventListener('input', () => { warned = null; status.textContent = ''; delete status.dataset.tone; refreshState(); });
         sheet.addEventListener('change', () => refreshState());
@@ -1152,7 +1160,9 @@
             catch { data.learning = null; }
         }
         async function load() {
-            data = await options.api(`/api/pi/bots/${encodeURIComponent(options.profileId)}/settings`);
+            const snapshot = await options.api(`/api/pi/bots/${encodeURIComponent(options.profileId)}/settings`);
+            if (!sheet.open || dialog !== sheet) return;
+            data = snapshot;
             await Promise.all([loadFollowUps(), loadChannels(), loadLearning(), loadActivity()]);
         }
 

@@ -128,7 +128,8 @@ export default async function (pi: ExtensionAPI) {
             }
             if (request.mode === 'channel') {
                 try { notify({ success: true, data: await channelTurn(ctx, request.input) }); }
-                catch (error) { notify({ success: false, error: error instanceof Error ? error.message : 'Channel delivery failed' }); }
+                catch (error: any) { notify({ success: false, error: error instanceof Error ? error.message : 'Channel delivery failed',
+                    ...(['CHANNEL_MODEL_UNAVAILABLE', 'CHANNEL_IMAGE_UNSUPPORTED'].includes(error?.code) ? { code: error.code } : {}) }); }
                 return;
             }
             if (request.mode === 'cron') {

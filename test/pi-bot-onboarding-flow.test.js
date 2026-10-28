@@ -54,7 +54,10 @@ test('unsupported models, thinking levels, stale revisions and extra fields cann
 });
 test('keeping an unavailable selected model is possible without a catalog, but selecting a different one fails', async t => {
     const f = await fixture(t); const old = { provider: 'gone', id: 'saved', thinking: 'high' };
-    await f.patch(p => { p.bot.model = old; }); f.bots.catalog = async () => { throw new Error('synthetic unavailable'); };
+    // A legacy record has no independent top-level field; explicit null would win over the nested level.
+    await f.patch(p => { p.bot.model = old; delete p.bot.thinking; });
+    assert.equal((await f.bots.bot(f.id)).bot.thinking, 'high');
+    f.bots.catalog = async () => { throw new Error('synthetic unavailable'); };
     await f.change({ action: 'model-choice', model: old }); assert.deepEqual((await f.record()).bot.model, old);
     await assert.rejects(f.change({ action: 'model-choice', model: { provider: 'gone', id: 'other' } }), { code: 'BOT_MODEL_UNAVAILABLE' });
     assert.deepEqual((await f.record()).bot.model, old);
