@@ -175,7 +175,7 @@ flowchart LR
 
 **Does it need a GPU?** No. Models run at your providers or on endpoints you configure.
 
-**How do I upgrade?** **Settings → Versions and updates** shows when a new release is available. It gives you a prompt you can hand to an agent on the host. Back up before switching versions, as described in [installation and recovery](docs/en/INSTALL.md#backups-upgrades-and-recovery).
+**How do I upgrade?** **Settings → Versions and updates** shows available releases. Complete platform bundles with a signed distribution source can confirm an update there; an independent launcher verifies, backs up and switches versions. Source installations and older installs retain the independent Agent prompt. See [updates](docs/UPDATES.md) and [installation and recovery](docs/en/INSTALL.md#backups-upgrades-and-recovery).
 
 **Which languages are supported?** The interface is available in English and Simplified Chinese. Your conversations can be in any language your model supports.
 

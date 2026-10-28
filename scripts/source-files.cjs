@@ -60,7 +60,7 @@ function distributionFiles(root) {
         ...['fa-brands-400', 'fa-regular-400', 'fa-solid-900', 'fa-v4compatibility'].flatMap(name => ['woff2', 'ttf'].map(ext => `public/brand/fontawesome-6.4.0/webfonts/${name}.${ext}`)),
         'public/site.webmanifest', 'public/brand/favicon.ico', 'public/brand/apple-touch-icon.png',
         ...[64, 192, 512, 1024].map(size => `public/brand/logo-${size}.png`),
-        'config/media-lab.json', 'config/tts-providers.json',
+        'config/media-lab.json', 'config/tts-providers.json', 'config/distribution.json',
         'server/profile-memory/upstream-lock.json',
         'test/private-file-helper.cjs', 'test/fixtures/pi-0843-session.jsonl', 'test/fixtures/release-video.mp4',
         'pi-packages/media-workbench/package.json', 'pi-packages/media-workbench/extensions/media-tools.ts'

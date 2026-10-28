@@ -3,7 +3,7 @@
     const groups = Object.freeze({
         settings: {
             styles: ['workspace-network.css', 'pi-usage.css', 'pi-profile-knowledge.css', 'pi-profile-learning.css', 'pi-auxiliary-models.css', 'pi-mcp-settings.css', 'pi-channels.css'],
-            scripts: ['workspace-network.js', 'pi-usage.js', 'pi-native-settings.js', 'pi-system-prompts.js', 'pi-updates.js', 'pi-auxiliary-models.js', 'pi-title-settings.js', 'pi-mcp-settings.js', 'pi-channels.js', 'pi-profile-knowledge.js', 'pi-profile-learning.js', 'pi-identity-templates.js', 'pi-agent-profiles.js', 'settings.js'],
+            scripts: ['workspace-network.js', 'pi-usage.js', 'pi-native-settings.js', 'pi-system-prompts.js', 'pi-application-update.js', 'pi-updates.js', 'pi-auxiliary-models.js', 'pi-title-settings.js', 'pi-mcp-settings.js', 'pi-channels.js', 'pi-profile-knowledge.js', 'pi-profile-learning.js', 'pi-identity-templates.js', 'pi-agent-profiles.js', 'settings.js'],
             start: () => {
                 window.WorkspaceNetwork.start(); window.PiSettings.start();
                 if (pendingReveal) {

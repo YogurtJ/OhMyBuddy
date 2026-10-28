@@ -67,14 +67,14 @@ function npmCli(env = process.env) {
     if (!found) throw new Error('npm CLI unavailable');
     return fs.realpathSync.native(found);
 }
-function runNode(args, { cwd, env, timeout = 20 * 60 * 1000, signal, onOutput = () => {}, secretEnv = env } = {}) {
+function runNode(args, { cwd, env, timeout = 20 * 60 * 1000, signal, onOutput = () => {}, secretEnv = env, executable = process.execPath } = {}) {
     return new Promise((resolve, reject) => {
         const redact = outputRedactor(secretEnv);
         const emit = (stream, text) => onOutput(stream, text);
         const stdout = outputLines('stdout', emit, redact), stderr = outputLines('stderr', emit, redact);
         const display = args[0]?.endsWith('npm-cli.js') ? ['npm', ...args.slice(1)] : ['node', ...args];
         emit('system', redact('$ ' + display.map(value => /\s/.test(value) ? JSON.stringify(value) : value).join(' ')));
-        const child = spawn(process.execPath, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+        const child = spawn(executable, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
         child.stdout.on('data', bytes => stdout.write(bytes)); child.stderr.on('data', bytes => stderr.write(bytes));
         let timedOut = false, spawnError;
         const stop = () => { timedOut = true; emit('system', 'Termination requested; waiting for the command to exit.'); child.kill('SIGTERM'); };

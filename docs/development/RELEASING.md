@@ -35,6 +35,21 @@ package.json的应用版本、Pi依赖版本和快照时间戳是不同概念。
 - 先定向修复再考虑扩大。一次合理的定向验证仍不能解释失败，或再次出现同类失败时，先报告证据缺口、已耗时和下一步预算；未经重新评估不滚动新候选/全量。扩大范围要说明哪些证据失效，不能只说“更稳妥”。
 - 高风险改动可安排一次有明确范围的独立审查；测试等待、文案或记录更新默认不反复委派审查。保持单次执行、隔离、凭据保护和真实退出核验，不以省成本削弱这些边界。
 
+## macOS 完整平台包（预览）
+
+`scripts/package-macos.cjs` 在目标架构的 Mac 上构建自带运行环境的包，与既有源码归档分别命名。输入 JSON 含可选的 `sourceCommit`（40 位源码提交，用于发行回执），以及 `node`、`rg`、`fd`，各项为已下载归档的绝对 `archive` 和上游核对过的 `sha256`；另含 `distribution:{url,channel,keys:[{id,pem}]}`，url 为以 `/` 结束的固定 HTTPS 地址，keys 仅放 Ed25519 公钥。签名私钥必须在发行目录和源码之外。
+
+```sh
+node scripts/package-macos.cjs --inputs /private/build-inputs.json --version VERSION --work /private/new-build --output /private/new-output
+node scripts/publish-platform.cjs --build /private/new-output/build.json --key /private/signing.pem --key-id release-key --channel preview --destination /private/public-output --notes '本次变更'
+```
+
+构建只复制统一 `distributionFiles()` 集合，使用专用 Node 22 和独立 npm 配置安装锁定依赖，保留工具许可证，不使用维护者 node_modules／身份／供应商环境。发布包仅含普通文件，清单绑定字节、SHA256 和执行位，含 Node、Pi、依赖和本地工具；`PIVANE_BUNDLE.json` 与源码包的 `TRIAL_MANIFEST.json` 分开。源归档的私有文件与 node_modules 拒绝规则不放宽。DMG 中的应用仅为不可变安装入口，可写安装与数据在 Application Support；不要求用户运行 npm。预览版未签名和未公证须明确标记。
+
+发布器先验证并复制不可覆盖的版本资产，最后原子更新签名渠道和下载页；初次公开上传前仍须完成对应平台验证。签名清单有效期 30 天，维护者须在到期前重新发布经过签名的清单；客户端到期后显示检查失败。下载服务器只需公开产物和公钥，不放签名私钥、构建凭据或私有验证数据。HTTP 入口用于证书验证和 HTTPS 跳转；非标准 HTTPS 端口需要实际公网入站验证。
+
+初次安装、升级、正常停机与失败恢复必须使用独立身份；无 GitHub/npm 网络的客户端仍应可完成基本安装和应用更新。分别检查启动器与子应用的运行时、固定数据目录、一次性票据、不确定提交和草稿／附件状态。未实际验证的架构、普通用户 Finder 首次打开、系统签名／公证、外部模型和第三方扩展范围分别记录，不冒称全部通过。
+
 ## 候选包
 
 1. 从明确的源码提交准备候选，核对 Git 跟踪清单与未提交改动，冻结随包文档，列清本次执行与复用范围。源码阶段先做受影响专项和必要集成、集中处理已知失败；需要的全量安排一次，不在同一环境的源码和包内机械执行两轮。记录源码提交、实际运行版本和候选之间的差异。
