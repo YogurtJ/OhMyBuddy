@@ -614,6 +614,8 @@
             const profileId = this.profileId;
             if (!profileId || !window.PiBotSettings) { window.PiWorkspaceRoute?.navigate('profiles', { profileId }); return; }
             void window.PiBotSettings.open({ api: this.api, toast: this.toast, profileId, face,
+                current: () => this.active && this.profileId === profileId,
+                onChat: windowId => { if (this.active && this.profileId === profileId) this.go(profileId, windowId); },
                 onSaved: async () => { await this.refresh(); },
                 // Moved to the trash: go on with another Bot, or the welcome page when none is left.
                 onTrashed: async () => {
@@ -864,6 +866,7 @@
                 root.append(face({ avatar: NEW_BOT_FACE }, 'xl'));
                 root.append(el('h2', null, translateUi("认识你的 Bot")));
                 root.append(el('p', null, translateUi("一个一直在的私人助理：记得你说过的话，帮你查、记、写、提醒。先花两三分钟互相认识一下。")));
+                if (globalThis.PiBotOnboarding?.dataNotice) root.append(globalThis.PiBotOnboarding.dataNotice(null));
                 const missing = this.needsModel();
                 if (missing) root.append(...missing);
                 else {
@@ -884,6 +887,7 @@
                 const bubble = el('div', 'pi-bot-greeting');
                 const head = el('div', 'pi-bot-greeting-head'); head.append(face(bot, 'sm'), el('strong', null, bot.name));
                 bubble.append(head);
+                if (globalThis.PiBotOnboarding?.dataNotice) bubble.append(globalThis.PiBotOnboarding.dataNotice(bot));
                 root.append(bubble);
                 root.addEventListener('click', event => this.click(event));
                 const steps = bot.bot.onboarding.steps || {};

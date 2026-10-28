@@ -1066,3 +1066,18 @@ label.pi-bot-sheet-item { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
     .pi-bot-settings-sheet *, .pi-bot-settings-sheet *::after { transition: none !important; }
 }
+
+/* Read-only Bot activity stays inside the existing settings page. */
+.pi-bot-activity-list { display: grid; gap: 0; list-style: none; margin: 0; padding: 0; max-height: 440px; overflow-y: auto; overscroll-behavior: contain; }
+.pi-bot-activity-item { display: grid; gap: 9px; min-width: 0; padding: 14px 16px; border-top: 1px solid var(--line); }
+.pi-bot-activity-item:first-child { border-top: 0; }
+.pi-bot-activity-copy { display: grid; gap: 3px; min-width: 0; font-size: .84rem; line-height: 1.6; overflow-wrap: anywhere; }
+.pi-bot-activity-copy small { color: var(--text-muted); }
+.pi-bot-activity-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.pi-bot-costs .pi-bot-sheet-note { margin-bottom: 10px; }
+.pi-bot-data-notice { font-size: .84rem; text-align: left; width: 100%; min-width: 0; }
+.pi-bot-data-notice .pi-bot-closure-facts { margin: 10px 0 0; padding: 0; }
+.pi-bot-backup-guide { color: var(--primary); text-decoration: underline; }
+@media (max-width: 900px) {
+    .pi-bot-activity-actions .pi-bot-chip { min-height: 44px; }
+}

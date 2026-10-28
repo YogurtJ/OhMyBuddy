@@ -10,6 +10,7 @@
     const icon = name => { const i = el('i', `fa-solid ${name}`); i.setAttribute('aria-hidden', 'true'); return i; };
     const button = (className, text) => { const b = el('button', className, text); b.type = 'button'; return b; };
     const modelKey = model => model ? `${model.provider}\u0000${model.id}` : '';
+    const botThinking = bot => Object.hasOwn(bot, 'thinking') ? bot.thinking || '' : bot.model?.thinking || '';
     const THINKING = { off: () => translateUi("不启用"), minimal: () => translateUi("极简"), low: () => translateUi("低"), medium: () => translateUi("中"),
         high: () => translateUi("高"), xhigh: () => translateUi("极高"), max: () => translateUi("最大") };
     // First things to do: [choice, chip, the message sent when it is clicked]. Chips stay short so
@@ -30,6 +31,26 @@
         balanced: () => translateUi("现在的做事方式是“稳妥”：运行命令、改工作目录以外的文件之前，会弹出确认等你允许。"),
         ask: () => translateUi("现在的做事方式是“每次都问”：除了看和回答，每一步动手前都会弹出确认。")
     };
+
+    function dataNotice(bot, { open = false } = {}) {
+        const record = bot?.bot || {}, preset = record.permissions?.preset || 'free';
+        const style = { free: () => translateUi("放手"), balanced: () => translateUi("稳妥"), ask: () => translateUi("每次都问") };
+        const details = el('details', 'pi-bot-closure-about pi-bot-data-notice'); details.open = open;
+        const summary = el('summary');
+        summary.append(icon('fa-circle-info'), el('span', null, translateUi("当前：{0} · 数据、权限与备份", (style[preset] || style.free)())));
+        const facts = el('ul', 'pi-bot-closure-facts');
+        const fact = (glyph, text) => { const item = el('li'); item.append(icon(glyph), el('span', null, text)); facts.append(item); return item; };
+        fact('fa-house-laptop', translateUi("聊天、记忆和工作文件保存在运行 Pivane 的服务机器上；回复时，相关上下文会发送给已配置的外部模型服务。"));
+        fact('fa-thumbtack', translateUi("关于你的事记在“关于你”，这段聊天定下的事记在“我记着的事”，都能随时查看和修改。"));
+        fact('fa-shield-halved', `${(WORK[preset] || WORK.free)()} ${translateUi("这些确认在 Pivane 的工具层进行，不是系统沙箱；可以在设置里改。")}`);
+        fact('fa-code-branch', translateUi("“以身份新建线程”使用普通 Pi 的工具和权限，不受 Bot 的做事方式限制。"));
+        const backup = fact('fa-box-archive', translateUi("完整备份需要在空闲停机时保存实际 Pi 身份目录、Bot 工作目录及关联媒体/配置；聊天里的 /export 仅导出当前会话范围，不是整个 Bot 的备份。"));
+        const guide = el('a', 'pi-bot-backup-guide', translateUi("查看备份与恢复指南"));
+        guide.href = 'https://github.com/YogurtJ/pivane/blob/main/docs/INSTALL_RECOVERY.md#4-备份范围与一致性'; guide.target = '_blank'; guide.rel = 'noopener noreferrer';
+        backup.lastElementChild.append(' ', guide);
+        details.append(summary, facts);
+        return details;
+    }
 
     // Only Bots whose (new or restarted) interview used flow 2 get the closure; finished older
     // Bots are never asked again. It ends once the first-task step is answered (done or later).
@@ -72,7 +93,7 @@
                 const data = await load(profileId);
                 if (state?.botId !== profileId) return;
                 state.models = data?.models && Array.isArray(data.models.models) ? data.models : null;
-                if (state.pick === undefined) state.pick = { key: modelKey(data?.bot?.bot?.model), thinking: data?.bot?.bot?.model?.thinking || '' };
+                if (state.pick === undefined) state.pick = { key: modelKey(data?.bot?.bot?.model), thinking: botThinking(data?.bot?.bot || {}) };
             } catch { if (state?.botId === profileId) state.models = 'error'; }
             if (state?.botId === profileId) render();
         }
@@ -95,7 +116,7 @@
             // The "draft in the way" note goes once the composer is empty again.
             if (state.draftBlocked && !draft()) { state.draftBlocked = false; state.error = ''; shown = ''; }
             const onboarding = now.bot.bot.onboarding;
-            const key = JSON.stringify([now.bot.id, now.bot.name, now.bot.avatar, onboarding.steps, now.bot.bot.model, now.bot.bot.permissions?.preset]);
+            const key = JSON.stringify([now.bot.id, now.bot.name, now.bot.avatar, onboarding.steps, now.bot.bot.model, now.bot.bot.thinking, now.bot.bot.permissions?.preset]);
             if (key !== shown || panel.hidden) render();
         }
 
@@ -104,9 +125,8 @@
         const selected = current => {
             const list = state.models && typeof state.models === 'object' ? state.models.models : [];
             const item = list.find(entry => modelKey(entry) === state.pick?.key);
-            if (!item) return current && state.pick?.key === modelKey(current) ? { ...current } : null;
-            const levels = item.thinkingLevels || [];
-            return { provider: item.provider, id: item.id, ...(state.pick.thinking && levels.includes(state.pick.thinking) ? { thinking: state.pick.thinking } : {}) };
+            if (!item) return current && state.pick?.key === modelKey(current) ? { provider: current.provider, id: current.id } : null;
+            return { provider: item.provider, id: item.id };
         };
         // The name of the model new chats use by default, when the list says.
         const defaultName = data => {
@@ -134,7 +154,7 @@
                 // What the server's Bot record says now, not what was asked for.
                 const line = el('p', 'pi-bot-closure-saved');
                 line.append(icon('fa-circle-check'), el('span', null, savedLine(bot.bot.model, data)));
-                part.append(line);
+                part.append(line, el('p', 'pi-bot-closure-hint', translateUi("思考程度：{0}", THINKING[botThinking(bot.bot)]?.() || botThinking(bot.bot) || translateUi("跟随默认"))));
                 return part;
             }
             if (state.models === 'loading' || state.models === null && state.pick === undefined) { part.append(el('p', 'pi-bot-closure-hint', translateUi("正在读取模型列表…"))); return part; }
@@ -159,7 +179,7 @@
             const saved = bot.bot.model;
             if (saved && !data.models.some(item => modelKey(item) === modelKey(saved)))
                 select.append(new Option(translateUi("{0}（现在不可用）", saved.id), modelKey(saved)));
-            if (![...select.options].some(option => option.value === state.pick.key)) state.pick = { key: '', thinking: '' };
+            if (![...select.options].some(option => option.value === state.pick.key)) state.pick = { key: '', thinking: state.pick.thinking };
             select.value = state.pick.key;
             row.append(select);
             if (window.PiModelPicker) {
@@ -173,24 +193,24 @@
                 modelPicker = new window.PiModelPicker({
                     button: trigger, select, id: 'pi-bot-closure-model-dialog', defaultLabel,
                     onSelect: chosen => {
-                        state.pick = { key: chosen ? modelKey(chosen) : '', thinking: '' };
+                        state.pick = { key: chosen ? modelKey(chosen) : '', thinking: state.pick.thinking };
                         state.error = ''; render();
                         panel.querySelector('[data-closure-model-trigger],[data-closure-model]')?.focus();
                     }
                 });
                 modelPicker.update(data.models, picked, Boolean(state.saving), defaultLabel, defaultLabel);
             }
-            const levels = data.models.find(item => modelKey(item) === select.value)?.thinkingLevels || [];
-            if (levels.length) {
-                const thinking = el('select'); thinking.dataset.closureThinking = '';
-                thinking.setAttribute('aria-label', translateUi("思考程度"));
-                thinking.append(new Option(translateUi("跟随默认"), ''));
-                for (const level of levels) thinking.append(new Option(THINKING[level]?.() || level, level));
-                thinking.value = levels.includes(state.pick.thinking) ? state.pick.thinking : '';
-                thinking.addEventListener('change', () => { state.pick.thinking = thinking.value; });
-                row.append(thinking);
-            }
-            if (!window.PiModelPicker) select.addEventListener('change', () => { state.pick = { key: select.value, thinking: '' }; state.error = ''; render(); panel.querySelector('[data-closure-model]')?.focus(); });
+            const defaults = data.defaults;
+            const levels = data.models.find(item => select.value ? modelKey(item) === select.value : item.provider === defaults?.provider && item.id === defaults?.modelId)?.thinkingLevels || [];
+            const thinking = el('select'); thinking.dataset.closureThinking = '';
+            thinking.setAttribute('aria-label', translateUi("思考程度"));
+            thinking.append(new Option(translateUi("跟随默认"), ''));
+            for (const level of levels) thinking.append(new Option(THINKING[level]?.() || level, level));
+            if (state.pick.thinking && !levels.includes(state.pick.thinking)) thinking.append(new Option(translateUi("{0}（当前模型未提供）", THINKING[state.pick.thinking]?.() || state.pick.thinking), state.pick.thinking));
+            thinking.value = state.pick.thinking;
+            thinking.addEventListener('change', () => { state.pick.thinking = thinking.value; });
+            row.append(thinking);
+            if (!window.PiModelPicker) select.addEventListener('change', () => { state.pick = { key: select.value, thinking: state.pick.thinking }; state.error = ''; render(); panel.querySelector('[data-closure-model]')?.focus(); });
             const use = button('pi-bot-chip pi-bot-closure-use', state.saving === 'model' ? translateUi("正在保存…") : translateUi("就用这个"));
             use.dataset.closureAction = 'model';
             use.addEventListener('click', () => void chooseModel(bot));
@@ -203,7 +223,7 @@
             if (state.saving) return;
             const mine = state, model = selected(bot.bot.model);
             mine.saving = 'model'; mine.error = ''; render();
-            try { await submit(bot.id, { action: 'model-choice', model }); }
+            try { await submit(bot.id, { action: 'model-choice', model, thinking: mine.pick.thinking || null }); }
             catch (error) { mine.error = modelProblem(error); }
             finally { mine.saving = null; }
             if (state === mine) { render(); sync(); }
@@ -218,7 +238,7 @@
 
         async function chooseTask(bot, choice, message) {
             if (state.saving) return;
-            const mine = state;
+            const mine = state, windowId = target()?.window?.id;
             if (message && draft()) { mine.error = translateUi("输入框里还有草稿，先发送或清空它"); mine.draftBlocked = true; render(); return; }
             mine.saving = 'task'; mine.error = ''; mine.draftBlocked = false; render();
             try { await submit(bot.id, { action: 'first-task', choice }); }
@@ -233,6 +253,7 @@
             // Only now, and only for the suggestion the user clicked, does anything reach the model.
             // The choice is a selection, not the task being done. Text typed into the composer while
             // the choice was saved stays as it is; the suggestion is then not sent, and that is said.
+            if (state !== mine || target()?.bot?.id !== bot.id || target()?.window?.id !== windowId) return;
             if (message) {
                 if (draft() || say(message) === false) notify?.(translateUi("已记下你的选择，但输入框里有草稿，这条建议没有发出；草稿原样保留。"), 8000);
                 else settleFocus();
@@ -260,20 +281,10 @@
             const now = target();
             if (!now || !state || state.botId !== now.bot?.id) { hide(); return; }
             const bot = now.bot, onboarding = bot.bot.onboarding;
-            shown = JSON.stringify([bot.id, bot.name, bot.avatar, onboarding.steps, bot.bot.model, bot.bot.permissions?.preset]);
+            shown = JSON.stringify([bot.id, bot.name, bot.avatar, onboarding.steps, bot.bot.model, bot.bot.thinking, bot.bot.permissions?.preset]);
             const head = el('header', 'pi-bot-setup-head');
             head.append(face(), el('strong', null, translateUi("认识好啦！先说说我平时怎么做事")));
-            const facts = el('ul', 'pi-bot-closure-facts');
-            const fact = (glyph, text) => { const item = el('li'); item.append(icon(glyph), el('span', null, text)); facts.append(item); };
-            fact('fa-house-laptop', translateUi("聊天、记忆和我做的文件都保存在运行 Pivane 的这台电脑上；回复时，需要的内容会发给下面选的模型服务。"));
-            fact('fa-thumbtack', translateUi("关于你的事记在“关于你”，这段聊天定下的事记在“我记着的事”，都能随时查看和修改。"));
-            fact('fa-shield-halved', `${(WORK[bot.bot.permissions?.preset] || WORK.free)()} ${translateUi("这些确认在 Pivane 的工具层进行，不是系统沙箱；可以在设置里改。")}`);
-            // The facts fold away on phones (open on wider screens) and keep the user's own toggle.
-            const about = el('details', 'pi-bot-closure-about');
-            about.open = state.about ?? !matches(COMPACT);
-            const summary = el('summary');
-            summary.append(icon('fa-circle-info'), el('span', null, translateUi("东西存在哪、动手前怎么问你")));
-            about.append(summary, facts);
+            const about = dataNotice(bot, { open: state.about ?? !matches(COMPACT) });
             const mine = state;
             about.addEventListener('toggle', () => { mine.about = about.open; });
             // Only the facts and the model scroll; the choices below always stay in view.
@@ -321,5 +332,5 @@
         return { element: panel, sync, hide, ownMessage, composerChanged };
     }
 
-    window.PiBotOnboarding = Object.freeze({ closure, pending, FIRST_TASKS: Object.freeze(FIRST_TASKS.map(([choice]) => choice)) });
+    window.PiBotOnboarding = Object.freeze({ closure, pending, dataNotice, FIRST_TASKS: Object.freeze(FIRST_TASKS.map(([choice]) => choice)) });
 })();

@@ -26,10 +26,10 @@ const CLOSING = '好，我们算是认识了。';
             const phone = width < 700;
             let onboarding = { version: 1, flowVersion: 2, phase: 'done', firstBot: true, steps: { about: 'done', job: 'done', name: 'done', avatar: 'done' },
                 startedAt: '2026-10-24T00:00:00Z', completedAt: '2026-10-24T00:10:00Z' };
-            let model = null, revision = 'r1', fails = ['server', 'conflict', 'unavailable'], taskGate = null;
+            let model = null, thinking = null, revision = 'r1', fails = ['server', 'conflict', 'unavailable'], taskGate = null;
             const posts = [];
             const world = newWorld({
-                bots: () => [botRecord({ bot: { model, onboarding, permissions: { preset: 'balanced', rules: 0 } } })],
+                bots: () => [botRecord({ bot: { model, thinking, onboarding, permissions: { preset: 'balanced', rules: 0 } } })],
                 messages: () => [say('user', '就这些啦', '2026-10-26T06:00:00Z'), say('assistant', CLOSING, '2026-10-26T06:00:05Z')]
             });
             Object.defineProperty(world, 'revision', { get: () => revision });
@@ -44,7 +44,7 @@ const CLOSING = '好，我们算是认识了。';
                         if (fail === 'server') return { status: 500, json: { error: 'Disk full' } };
                         if (fail === 'conflict') { revision = 'r2'; return { status: 409, json: { error: 'Profiles changed' } }; }
                         if (fail === 'unavailable') return { status: 409, json: { error: 'This model is not available; keep the current choice or choose another', code: 'BOT_MODEL_UNAVAILABLE' } };
-                        model = body.model; onboarding = { ...onboarding, steps: { ...onboarding.steps, model: 'done' } };
+                        model = body.model; thinking = body.thinking; onboarding = { ...onboarding, steps: { ...onboarding.steps, model: 'done' } };
                     } else if (body.action === 'first-task') {
                         if (taskGate) { const wait = taskGate; taskGate = null; await wait; }
                         onboarding = { ...onboarding, firstTaskChoice: body.choice, steps: { ...onboarding.steps, 'first-task': body.choice === 'later' ? 'skipped' : 'done',
@@ -103,7 +103,7 @@ const CLOSING = '好，我们算是认识了。';
                 await closure.waitFor();
                 assert.equal(await closure.locator('header strong').textContent(), '认识好啦！先说说我平时怎么做事');
                 const facts = await closure.locator('.pi-bot-closure-facts').textContent();
-                assert.match(facts, /运行 Pivane 的这台电脑上/);
+                assert.match(facts, /运行 Pivane 的服务机器上/);
                 assert.match(facts, /“稳妥”/);
                 assert.match(facts, /不是系统沙箱/);
                 await closure.locator('[data-closure-model-trigger]').waitFor();
@@ -160,11 +160,11 @@ const CLOSING = '好，我们算是认识了。';
                 assert.equal(await closure.locator('[data-closure-thinking]').inputValue(), 'high');
                 await closure.locator('[data-closure-action="model"]').click();
                 await closure.locator('.pi-bot-closure-saved').filter({ hasText: '用 Large 说话' }).waitFor();
-                assert.deepEqual(posts.map(body => [body.action, body.model, body.expectedRevision]), [
-                    ['model-choice', { provider: 'fixture', id: 'large', thinking: 'high' }, 'r1'],
-                    ['model-choice', { provider: 'fixture', id: 'large', thinking: 'high' }, 'r1'],
-                    ['model-choice', { provider: 'fixture', id: 'large', thinking: 'high' }, 'r2'],
-                    ['model-choice', { provider: 'fixture', id: 'large', thinking: 'high' }, 'r2']], 'each try is the user\'s click, with the reread revision');
+                assert.deepEqual(posts.map(body => [body.action, body.model, body.thinking, body.expectedRevision]), [
+                    ['model-choice', { provider: 'fixture', id: 'large' }, 'high', 'r1'],
+                    ['model-choice', { provider: 'fixture', id: 'large' }, 'high', 'r1'],
+                    ['model-choice', { provider: 'fixture', id: 'large' }, 'high', 'r2'],
+                    ['model-choice', { provider: 'fixture', id: 'large' }, 'high', 'r2']], 'each try is the user\'s click, with the reread revision');
 
                 // 4. A first task is sent only on click and never over a draft; the note about the
                 // draft leaves once the draft is gone.
