@@ -35,7 +35,7 @@ function archive(extra = {}, mutate = () => {}) {
     }
     return gzipSync(Buffer.concat([...blocks, Buffer.alloc(1024)]));
 }
-function directory(t) { const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-bundle-')); t.after(() => fs.rmSync(root, { recursive: true, force: true })); return path.join(root, 'release'); }
+function directory(t) { const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-bundle-'))); t.after(() => fs.rmSync(root, { recursive: true, force: true })); return path.join(root, 'release'); }
 test('signed distribution rejects tampering, expired feeds, channel confusion and invalid platform metadata', () => {
     assert.equal(signedManifest(envelope(payload()), config, { now }).releases[0].version, '1.11.0-rc.2');
     const bad = envelope(payload()); bad.payload = Buffer.from('{}').toString('base64'); assert.throws(() => signedManifest(bad, config, { now }), /signature/);
@@ -54,11 +54,20 @@ test('distribution checks use only the signed origin for both application and pa
     assert.equal(result.channel, 'preview'); assert.equal(result.pivane.status, 'available'); assert.equal(result.pi.status, 'current');
     assert.equal(result.pivane.release.bundle.bytes, 42); assert.deepEqual(calls, [config.url + 'channels/preview.json']);
 });
+test('configured distribution failures keep mirror links and never fall back to GitHub or npm', async () => {
+    const calls = [];
+    const service = new UpdateService({ env: {}, distribution: config, fetch: async url => { calls.push(url); throw Error('Synthetic offline source'); } });
+    assert.equal(service.snapshot().pivane.releasesUrl, config.url);
+    const result = await service.check();
+    assert.equal(result.pivane.status, 'error'); assert.equal(result.pi.status, 'error');
+    assert.equal(result.pivane.releasesUrl, config.url); assert.equal(result.pi.releasesUrl, config.url);
+    assert.deepEqual(calls, [config.url + 'channels/preview.json']);
+});
 test('platform unpack verifies every file before writing, preserves executable tools and rejects wrong architecture/private paths', t => {
     const root = directory(t);
     const manifest = unpackBundle(archive(), { version: '1.11.0-rc.2', platform: 'darwin', arch: 'arm64' }, root);
     assert.equal(manifest.piVersion, '1.4.0'); if (process.platform !== 'win32') assert.equal(fs.statSync(path.join(root, 'runtime/bin/node')).mode & 0o777, 0o700);
-    for (const bytes of [archive({ '.env': 'private' }), archive({ '../escape': 'bad' }), archive({}, m => m.files[0].sha256 = '0'.repeat(64))]) {
+    for (const bytes of [archive({ '.env': 'private' }), archive({ '.git/config': 'private' }), archive({ '.pivane-runtime/state.json': 'private' }), archive({ 'backups/data.json': 'private' }), archive({ '../escape': 'bad' }), archive({}, m => m.files[0].sha256 = '0'.repeat(64))]) {
         const dest = directory(t); assert.throws(() => unpackBundle(bytes, { version: '1.11.0-rc.2', platform: 'darwin', arch: 'arm64' }, dest)); assert.equal(fs.existsSync(dest), false);
     }
     assert.throws(() => unpackBundle(archive(), { version: '1.11.0-rc.2', platform: 'darwin', arch: 'x64' }, directory(t)));

@@ -22,7 +22,8 @@ function verifyManifest(manifest, entries, { version, platform, arch }) {
         listed.add(entry.path);
     }
     for (const name of entries.keys()) if ((/^\.env(?:$|\.)/.test(name) && name !== '.env.example')
-        || /^(?:auth\.json|PIVANE_INSTALLATION\.json|\.git(?:\/|$)|\.pivane-runtime(?:\/|$)|backups(?:\/|$)|PI_.*\.json)$/.test(name)
+        || /^(?:auth\.json|PIVANE_INSTALLATION\.json|PI_.*\.json)$/.test(name)
+        || /^(?:\.git|\.pivane-runtime|backups)(?:\/|$)/.test(name)
         || /^public\/(?:images|videos|audio)\//.test(name)) throw Error('Platform bundle contains user data');
     for (const file of ['runtime/bin/node', 'bin/rg', 'bin/fd', 'server/pi-update-probe.js', 'config/distribution.json']) if (!listed.has(file)) throw Error('Incomplete platform bundle');
     for (const file of ['runtime/bin/node', 'bin/rg', 'bin/fd']) if (entries.get(file).mode !== 0o755) throw Error('Platform tool is not executable');
