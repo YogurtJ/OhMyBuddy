@@ -303,7 +303,7 @@ test('a Bot profile target resolves to its main chat, following rotation', { tim
     const bots = new BotService({ store, profiles, supervisor });
     const cron = new CronService({ store, supervisor, profiles, bots, catalog: async () => ({ models: [] }),
         filename: path.join(root, 'cron-bot.sqlite') });
-    t.after(async () => { await cron.stop?.(); supervisor.dispose(); });
+    t.after(async () => { await cron.dispose(); await supervisor.dispose(); });
     await cron.ready;
     const created = await bots.create({ expectedRevision: (await profiles.state()).revision });
     const botId = created.bot.id, windowId = created.window.id;

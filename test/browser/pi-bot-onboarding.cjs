@@ -115,6 +115,25 @@ const CLOSING = '好，我们算是认识了。';
                 assert.equal((await layout(page)).overflow, false);
                 const first = await readable('first view');
                 if (!phone) assert.equal(first.about, true, 'wider screens show the facts');
+                if (phone) {
+                    const disclosure = await page.evaluate(bot => {
+                        const current = { bot, window: { id: 'disclosure-fixture', kind: 'main' }, idle: true };
+                        const isolated = window.PiBotOnboarding.closure({ target: () => current, load: async () => null,
+                            submit: async () => {}, say: () => false, draft: () => false, face: () => document.createElement('span') });
+                        document.body.append(isolated.element); isolated.sync();
+                        const old = isolated.element.querySelector('.pi-bot-closure-about');
+                        old.open = true; old.dispatchEvent(new Event('toggle'));
+                        old.open = false; // The browser's close toggle is still queued when the Bot starts.
+                        current.idle = false; isolated.sync(); current.idle = true; isolated.sync();
+                        const afterHide = isolated.element.querySelector('.pi-bot-closure-about').open;
+                        isolated.hide(); old.open = true; old.dispatchEvent(new Event('toggle'));
+                        isolated.sync();
+                        const afterDetachedToggle = isolated.element.querySelector('.pi-bot-closure-about').open;
+                        isolated.element.remove();
+                        return { afterHide, afterDetachedToggle };
+                    }, world.bots()[0]);
+                    assert.deepEqual(disclosure, { afterHide: false, afterDetachedToggle: false }, 'queued and detached toggle events keep the last visible disclosure choice');
+                }
                 await shot('bot-closure');
                 if (phone) {
                     // Unfolded on request; the choices still stay in view (the facts scroll instead).

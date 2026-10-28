@@ -274,7 +274,13 @@ async function runtimeFixture(t) {
         isIdle: () => idle, hasPendingMessages: () => false,
         modelRegistry: { find: (provider, id) => provider === 'fixture' ? definitions[id] : undefined, getAvailable: () => Object.values(definitions) },
         ui: { notify: message => notices.push(message) } };
-    const pi = { on(name, handler) { if (!handlers.has(name)) handlers.set(name, handler); }, registerTool() {},
+    const pi = { on(name, handler) {
+        const previous = handlers.get(name);
+        handlers.set(name, !previous ? handler : (...args) => {
+            const result = previous(...args), next = value => value?.block ? value : handler(...args);
+            return result?.then ? result.then(next) : next(result);
+        });
+    }, registerTool() {},
         setModel: async model => { changes.push(['model', model.id]); ctx.model = model; return true; },
         getThinkingLevel: () => thinking, setThinkingLevel: level => { changes.push(['thinking', level]); thinking = level; },
         appendEntry: (type, data) => manager.appendCustomEntry(type, data), sendMessage: message => messages.push(message) };

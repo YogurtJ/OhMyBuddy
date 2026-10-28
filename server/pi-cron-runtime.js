@@ -42,7 +42,7 @@ function registerCron(pi) {
         const state = lastRun(ctx.sessionManager);
         active = state && !['completed', 'silent', 'skipped', 'error', 'stopped'].includes(state.status) ? state : null;
         report(ctx);
-        pi.registerTool({ name: 'cron_silent', label: 'Finish scheduled task silently',
+        pi.registerTool({ name: 'cron_silent', label: 'Finish scheduled task silently', defaultActive: false,
             description: 'During a scheduled task only: finish without a greeting or notification when there is nothing useful to send. Do not output a final reply afterward.',
             parameters: Type.Object({ reason: Type.String({ maxLength: 200 }) }),
             execute: async (_id, params, _signal, _update, context) => {
@@ -50,7 +50,10 @@ function registerCron(pi) {
                 persist(context, { silent: true, reason: params.reason });
                 return { content: [{ type: 'text', text: 'Scheduled task finished silently.' }], details: { silent: true }, terminate: true };
             } });
-        pi.setActiveTools(pi.getActiveTools().filter(name => name !== 'cron_silent'));
+        // Ordinary startup must not replace the loadout while other extensions still
+        // have recorded tools waiting for registration (for example supervisor replies).
+        const tools = pi.getActiveTools();
+        if (tools.includes('cron_silent')) pi.setActiveTools(tools.filter(name => name !== 'cron_silent'));
     });
     pi.on('before_agent_start', (event) => {
         if (!active || active.status !== 'running') return;

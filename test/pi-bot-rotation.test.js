@@ -221,8 +221,14 @@ test('Bot window workers get a verified identity section that follows edits with
     const models = { 'fixture/small': { provider: 'fixture', id: 'small', reasoning: true }, 'fixture/big': { provider: 'fixture', id: 'big', reasoning: true },
         'nokey/x': { provider: 'nokey', id: 'x' } };
     let thinking = 'medium';
-    // Keeps the first handler per event (the Bot context's own; later ones belong to helper modules).
-    const pi = { on(name, fn) { if (!handlers.has(name)) handlers.set(name, fn); }, registerTool() {},
+    // Dispatch every callback in registration order, including receipt cleanup before the Bot hook.
+    const pi = { on(name, handler) {
+        const previous = handlers.get(name);
+        handlers.set(name, !previous ? handler : (...args) => {
+            const result = previous(...args), next = value => value?.block ? value : handler(...args);
+            return result?.then ? result.then(next) : next(result);
+        });
+    }, registerTool() {},
         async setModel(model) { calls.push(['model', model.id]); if (model.provider === 'nokey') return false; ctx.model = model; return true; },
         getThinkingLevel: () => thinking, setThinkingLevel(level) { calls.push(['thinking', level]); thinking = level; } };
     let agentRoot = agentDir;

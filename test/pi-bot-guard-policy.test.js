@@ -5,9 +5,11 @@ const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { approvalFor, ruleFor, normalizeRule, parseRule, approvalMessage, parseApprovalMessage, classifyCommand, BLOCKED, newToken } = require('../server/bot/bot-guard');
+const { systemPath, criticalPath } = require('../server/bot/bot-guard-paths');
 
 const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-bot-guard-policy-')));
 const cwd = path.join(root, 'workspace'), agentDir = path.join(root, 'agent'), outside = path.join(root, 'outside');
+const systemFile = process.platform === 'win32' ? path.join(process.env.SystemRoot || process.env.SYSTEMROOT || 'C:/Windows', 'example.conf') : '/etc/example.conf';
 for (const dir of [cwd, agentDir, outside]) fs.mkdirSync(dir);
 process.env.PI_CODING_AGENT_DIR = agentDir;
 fs.writeFileSync(path.join(cwd, 'notes.txt'), 'synthetic note');
@@ -58,7 +60,7 @@ test('balanced classification still recognises understood commands and asks befo
     }
     const risky = ['rm -rf notes', 'sudo ls', 'systemctl restart example', 'kill 123', 'chmod 777 notes', 'git push origin main', 'git reset --hard',
         'curl https://example.invalid', 'gh release create v1', 'npm publish', 'docker restart example', 'cp notes.txt ../outside/note.txt',
-        `touch ${outside}/new.txt`, "touch '@where/new.txt'", 'sed -i s/a/b/ notes.txt', 'ls && rm -rf notes'];
+        `touch '${outside.replaceAll('\\', '/')}/new.txt'`, "touch '@where/new.txt'", 'sed -i s/a/b/ notes.txt', 'ls && rm -rf notes'];
     const opaque = ['echo ok; date', 'echo ok || pwd', 'echo ok\npwd', 'echo hi > ../outside/note.txt',
         'cat <(echo hi)', 'cat $(echo notes.txt)', 'cat `echo notes.txt`', 'cat *.txt', 'cat "$FILE"',
         "python -c 'print(1)'", 'node -e "console.log(1)"', "bash -c 'date'", "eval 'date'", 'command date',
@@ -146,6 +148,22 @@ test('credentials, private state paths and unverified aliases follow preset poli
     }
 });
 
+test('Darwin canonical system aliases retain system and autostart policy', () => {
+    for (const target of ['/etc/example.conf', '/private/etc/example.conf', '/var/lib/example/state', '/private/var/lib/example/state',
+        '/var/run/example.pid', '/private/var/run/example.pid']) {
+        assert.equal(systemPath(target), true, target);
+        assert.equal(criticalPath(target), false, target);
+    }
+    for (const target of ['/etc/cron.d/example', '/private/etc/cron.d/example', '/var/spool/cron/example', '/private/var/spool/cron/example']) {
+        assert.equal(systemPath(target), true, target);
+        assert.equal(criticalPath(target), true, target);
+    }
+    for (const target of ['/private/etc-not-system/example', '/private/varied/lib/example', '/workspace/private/etc/example']) {
+        assert.equal(systemPath(target), false, target);
+        assert.equal(criticalPath(target), false, target);
+    }
+});
+
 test('file grants are canonical, exact and bound to tool and working directory', () => {
     const input = { path: 'escape/new.txt', content: 'synthetic' };
     assert.equal(check('free', 'write', input), null, 'free allows ordinary file writes outside the Bot workspace');
@@ -167,7 +185,7 @@ test('file grants are canonical, exact and bound to tool and working directory',
     fs.unlinkSync(path.join(cwd, 'notes.txt')); fs.symlinkSync(path.join(cwd, '.env'), path.join(cwd, 'notes.txt'));
     assert.equal(check('ask', 'write', { path: 'notes.txt' }, [ordinary]).block, true, 'retargeted credential paths are blocked');
     fs.unlinkSync(path.join(cwd, 'notes.txt')); fs.writeFileSync(path.join(cwd, 'notes.txt'), 'synthetic note');
-    for (const target of ['/etc/example.conf', '.git/config', '.bashrc', '.config/systemd/test.service']) {
+    for (const target of [systemFile, '.git/config', '.bashrc', '.config/systemd/test.service']) {
         const decision = check('balanced', 'write', { path: target });
         assert.ok(decision);
         assert.equal(decision.rule, undefined, target);
@@ -236,6 +254,6 @@ test('rule parsing rejects broad shapes and approval envelopes keep both formats
         assert.equal(parseRule(bad), null); assert.throws(() => normalizeRule(bad), /Invalid/);
     }
     for (const header of ['{', '{}', JSON.stringify({ ...rule, allow: true })]) assert.equal(parseApprovalMessage(`command #${token}\nrule ${header}\n\nx`), null);
-    for (const target of [cwd, path.join(cwd, '.env'), '/etc/example.conf', path.join(cwd, 'hard.txt')])
+    for (const target of [cwd, path.join(cwd, '.env'), systemFile, path.join(cwd, 'hard.txt')])
         assert.throws(() => normalizeRule({ ...rule, tool: 'write', value: target }), /Invalid/);
 });
