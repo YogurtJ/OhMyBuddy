@@ -69,8 +69,8 @@ class UpdateService {
             managedPi: Boolean(application.pivaneManaged),
             checkedAt: cached?.checkedAt || null,
             cacheUntil: cached ? new Date(cached.expires).toISOString() : null,
-            pivane: cached?.pivane || { status: 'unchecked', releasesUrl: RELEASE_PAGE },
-            pi: pi || { status: 'unchecked', releasesUrl: PI_PAGE }
+            pivane: cached?.pivane || { status: 'unchecked', releasesUrl: this.distribution?.url || RELEASE_PAGE },
+            pi: pi || { status: 'unchecked', releasesUrl: this.distribution?.url || PI_PAGE }
         };
     }
     async json(url) {
@@ -149,8 +149,8 @@ class UpdateService {
             const results = await Promise.allSettled([this.pivane(channel), this.pi()]);
             this.cache.set(channel, {
                 checkedAt: new Date(this.now()).toISOString(), expires: this.now() + TTL,
-                pivane: results[0].status === 'fulfilled' ? results[0].value : { status: 'error', releasesUrl: RELEASE_PAGE },
-                pi: results[1].status === 'fulfilled' ? results[1].value : { status: 'error', releasesUrl: PI_PAGE }
+                pivane: results[0].status === 'fulfilled' ? results[0].value : { status: 'error', releasesUrl: this.distribution?.url || RELEASE_PAGE },
+                pi: results[1].status === 'fulfilled' ? results[1].value : { status: 'error', releasesUrl: this.distribution?.url || PI_PAGE }
             });
             if (results[1].status === 'fulfilled') {
                 try { this.notifications?.recordSuccess(results[1].value); } catch { /* Manual version lookup remains usable if reminder storage is unavailable. */ }

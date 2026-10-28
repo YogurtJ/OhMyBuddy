@@ -54,7 +54,7 @@
                 card.append(versions);
                 if (key === 'pi' && !data.dependencyMatches) card.append(node('p', t('当前 Pi 与发布包配套版本不同。'), { class: 'updates-note' }));
                 const links = node('div', undefined, { class: 'updates-links' });
-                links.append(link(t(key === 'pi' ? 'Pi 官方页面' : 'Pivane 发布页面'), info.releasesUrl, data.distributionUrl));
+                links.append(link(t(key === 'pi' && !data.distributionUrl ? 'Pi 官方页面' : 'Pivane 发布页面'), info.releasesUrl, data.distributionUrl));
                 card.append(links); cards.append(card);
             }
             panel.append(cards, installer.render(data));

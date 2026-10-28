@@ -4,7 +4,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const { createPublicKey } = require('node:crypto');
+const { createPublicKey, randomUUID } = require('node:crypto');
 const { distributionFiles } = require('./source-files.cjs');
 const { privateDir, readSafe, copySafe, hashFileSafe, atomicJson } = require('../server/pi-maintenance-files');
 const { runNode, installEnvironment } = require('../server/pi-update-installer');
@@ -34,13 +34,31 @@ function collect(root) {
             else {
                 if (folded.has(file.toLowerCase()) || stat.size > 128 * 1024 ** 2 || (total += stat.size) > 1024 ** 3 || files.length >= 39999) throw Error('Platform payload budget or case collision');
                 folded.add(file.toLowerCase());
+                if (stat.nlink > 1) {
+                    // esbuild prepares its executable using a hard link. Give
+                    // every payload entry its own inode before tar can turn it
+                    // into a link entry that the update reader correctly rejects.
+                    const temporary = absolute + '.' + randomUUID() + '.materialize';
+                    try {
+                        copySafe(absolute, temporary, { bytes: 0, files: 0, maxBytes: 128 * 1024 ** 2, maxFiles: 1 });
+                        fs.chmodSync(temporary, stat.mode & 0o777); fs.renameSync(temporary, absolute);
+                    } finally { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); }
+                }
                 const proof = hashFileSafe(absolute, 128 * 1024 ** 2), mode = stat.mode & 0o111 ? 0o755 : 0o644;
+                if (proof.bytes !== stat.size) throw Error('Platform payload changed during collection');
                 fs.chmodSync(absolute, mode);
                 files.push({ path: file, ...proof, mode });
             }
         }
     }
     visit(''); fs.chmodSync(root, 0o755); return files;
+}
+function verifyArchive(archive, version, arch) {
+    const { parseArchive } = require('../server/pi-release-archive');
+    const { verifyManifest } = require('../server/pi-platform-bundle');
+    const entries = parseArchive(readSafe(archive, 512 * 1024 ** 2), { prefix: bundleName(version, 'darwin', arch).replace(/\.tar\.gz$/, '') + '/',
+        maxExpanded: 1024 ** 3, maxFile: 128 * 1024 ** 2, maxFiles: 40000 });
+    verifyManifest(JSON.parse(entries.get('PIVANE_BUNDLE.json')?.bytes.toString() || 'null'), entries, { version, platform: 'darwin', arch });
 }
 function wrapper(script) { return '#!/bin/sh\nHERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1\nexec "$HERE/node" "$HERE/../lib/node_modules/npm/bin/' + script + '" "$@"\n'; }
 async function build({ source, inputs, version, output, work, dmg = true }) {
@@ -96,6 +114,7 @@ async function build({ source, inputs, version, output, work, dmg = true }) {
     atomicJson(path.join(payload, 'PIVANE_BUNDLE.json'), manifest); fs.chmodSync(path.join(payload, 'PIVANE_BUNDLE.json'), 0o644);
     const archive = path.join(output, name + '.tar.gz');
     execFileSync('/usr/bin/tar', ['--format', 'ustar', '--uid', '0', '--gid', '0', '--uname', 'root', '--gname', 'root', '-czf', archive, '-C', work, name], { env: { PATH: '/usr/bin:/bin', COPYFILE_DISABLE: '1' }, stdio: 'inherit' });
+    verifyArchive(archive, version, process.arch);
     const proof = hashFileSafe(archive, 512 * 1024 ** 2);
     const receipt = { version, platform: 'darwin', arch: process.arch, nodeVersion: nodeInfo.version, piVersion: manifest.piVersion, sourceCommit: manifest.sourceCommit, inputSha256: manifest.inputSha256, archive: path.basename(archive), ...proof };
     fs.writeFileSync(archive + '.sha256', `${proof.sha256}  ${path.basename(archive)}\n`, { flag: 'wx', mode: 0o644 });
@@ -125,4 +144,4 @@ if (require.main === module) {
     build({ source: fs.realpathSync.native(values['--source'] || path.resolve(__dirname, '..')), inputs: JSON.parse(readSafe(path.resolve(values['--inputs']))),
         version: values['--version'], output: path.resolve(values['--output']), work: path.resolve(values['--work']) }).catch(error => { console.error(error.message); process.exitCode = 1; });
 }
-module.exports = { build, collect };
+module.exports = { build, collect, verifyArchive };
