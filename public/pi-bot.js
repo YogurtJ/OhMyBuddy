@@ -615,7 +615,27 @@
             if (!profileId || !window.PiBotSettings) { window.PiWorkspaceRoute?.navigate('profiles', { profileId }); return; }
             void window.PiBotSettings.open({ api: this.api, toast: this.toast, profileId, face,
                 current: () => this.active && this.profileId === profileId,
-                onChat: windowId => { if (this.active && this.profileId === profileId) this.go(profileId, windowId); },
+                checkChat: async windowId => {
+                    const data = await this.api('/api/pi/bots');
+                    if (!this.active || this.profileId !== profileId) return 'unavailable';
+                    const bot = data.bots?.find(item => item.id === profileId && item.enabled);
+                    const target = bot?.windows?.find(item => item.id === windowId);
+                    if (!target || target.generation === null || !target.sessionId) return 'unavailable';
+                    this.bots = data.bots; this.revision = data.revision;
+                    return target.archivedAt ? 'archived' : 'available';
+                },
+                onChat: windowId => {
+                    const target = this.bot()?.windows.find(item => item.id === windowId);
+                    if (this.active && this.profileId === profileId && target && !target.archivedAt && target.sessionId && target.generation !== null) this.go(profileId, windowId);
+                },
+                onWindows: async () => {
+                    await this.refresh();
+                    if (!this.active || this.profileId !== profileId) return;
+                    this.archivedOpen = true; this.renderPane();
+                    this.pane.closest('#pi-session-pane')?.classList.add('open');
+                    const archived = this.pane.querySelector('.pi-bot-archived > summary');
+                    archived?.scrollIntoView({ block: 'nearest' }); archived?.focus();
+                },
                 onSaved: async () => { await this.refresh(); },
                 // Moved to the trash: go on with another Bot, or the welcome page when none is left.
                 onTrashed: async () => {

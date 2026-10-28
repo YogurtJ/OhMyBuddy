@@ -815,7 +815,27 @@
                         if (item.reason) copy.append(el('small', null, reasonText(item.reason)));
                         const actions = el('div', 'pi-bot-activity-actions');
                         const chat = button('pi-bot-chip', translateUi("打开聊天")); chat.dataset.activityChat = item.windowId;
-                        chat.addEventListener('click', () => leave(`activity-chat-${item.windowId}`, () => options.onChat?.(item.windowId)));
+                        chat.addEventListener('click', async () => {
+                            if (chat.disabled || saving) return;
+                            chat.disabled = true;
+                            let state = 'unavailable';
+                            try { state = options.checkChat ? await options.checkChat(item.windowId) : 'available'; }
+                            catch { /* Keep this sheet and its edits when the destination cannot be checked. */ }
+                            finally { chat.disabled = saving; }
+                            if (!sheet.open || options.current && !options.current()) return;
+                            if (state !== 'available') {
+                                status.dataset.tone = 'warn';
+                                status.textContent = state === 'archived' ? translateUi("这个话题已归档。设置和修改仍保留，请先在聊天列表恢复话题。")
+                                    : translateUi("暂时不能确认这个聊天仍可打开。设置和修改仍保留，请先查看聊天列表。");
+                                if (!actions.querySelector('[data-activity-windows]')) {
+                                    const windows = button('pi-bot-chip', translateUi("查看聊天列表")); windows.dataset.activityWindows = '';
+                                    windows.addEventListener('click', () => leave('activity-windows', () => options.onWindows?.()));
+                                    actions.append(windows);
+                                }
+                                return;
+                            }
+                            leave(`activity-chat-${item.windowId}`, () => options.onChat?.(item.windowId));
+                        });
                         actions.append(chat);
                         if (item.jobId) {
                             const task = button('pi-bot-chip', translateUi("查看任务"));

@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { BOT, BOT2, MAIN, MAIN2, serve, botRecord, windowRecord, botPage, newWorld, layout, settingsPage } = require('./pi-bot-fixture');
-const TOPIC = '55555555-5555-4555-8555-555555555555';
+const TOPIC = '55555555-5555-4555-8555-555555555555', ARCHIVED = '66666666-6666-4666-8666-666666666666', STALE = '77777777-7777-4777-8777-777777777777', UNKNOWN = '99999999-9999-4999-8999-999999999999';
 const MODELS = { defaults: { provider: 'fixture', modelId: 'reasoner', thinkingLevel: 'high' }, models: [
     { provider: 'fixture', id: 'reasoner', name: 'Reasoner', thinkingLevels: ['low', 'high'] },
     { provider: 'fixture', id: 'plain', name: 'Plain', thinkingLevels: [] }
@@ -28,10 +28,10 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     try {
         browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium' });
         for (const width of [1440, 393, 320]) {
-            let revision = 's1', model = null, thinking = 'high', legacy = false, pending = true, failActivity = false, gate = null, firstTask = false, taskGate = null;
+            let revision = 's1', model = null, thinking = 'high', legacy = false, pending = true, failActivity = false, gate = null, firstTask = false, taskGate = null, deleted = false;
             const patches = [], deletes = [];
             const first = () => {
-                const record = botRecord({ bot: { model, thinking }, windows: [windowRecord(MAIN), windowRecord(TOPIC, { kind: 'topic', title: '另一个话题' })] });
+                const record = botRecord({ bot: { model, thinking }, windows: [windowRecord(MAIN), windowRecord(TOPIC, { kind: 'topic', title: '另一个话题' }), windowRecord(ARCHIVED, { kind: 'topic', title: '已归档话题', archivedAt: '2026-10-28T00:00:00Z' }), ...(deleted ? [] : [windowRecord(STALE, { kind: 'topic', title: '稍后删除的话题' })])] });
                 if (firstTask) record.bot.onboarding = { ...record.bot.onboarding, flowVersion: 2, steps: { model: 'done' } };
                 if (legacy) delete record.bot.thinking;
                 return record;
@@ -45,7 +45,9 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
                     if (gate) { const wait = gate; gate = null; await wait; }
                     if (failActivity) return { status: 503, json: { error: 'Unavailable' } };
                     const profileId = pathname.split('/')[4];
-                    return { json: activity(profileId, profileId === BOT ? MAIN : MAIN2) };
+                    const snap = activity(profileId, profileId === BOT ? MAIN : MAIN2);
+                    if (profileId === BOT) for (const [id, windowId] of [['archived', ARCHIVED], ['stale', STALE], ['unknown', UNKNOWN]]) snap.items.push({ ...snap.items[1], id, windowId });
+                    return { json: snap };
                 }
                 if (pathname === `/api/pi/bots/${BOT}/follow-ups`) return { json: { items: pending ? [{ id: 'a'.repeat(24), kind: 'due', windowId: MAIN, at: Date.now(), title: '待办提醒', state: 'pending' }] : [] } };
                 if (pathname.includes('/follow-ups/') && method === 'DELETE') {
@@ -70,7 +72,7 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
             };
             const { page, context, errors } = await botPage(browser, base, world, { width, api });
             const openSettings = async () => {
-                if (width <= 900) await page.locator('#pi-bot-header .pi-bot-menu').click();
+                if (width <= 900 && !await page.locator('#pi-session-pane').evaluate(node => node.classList.contains('open'))) await page.locator('#pi-bot-header .pi-bot-menu').click();
                 await page.locator('.pi-bot-settings').click();
                 const sheet = page.locator('.pi-bot-sheet[open]'); await sheet.locator('.pi-bot-sheet-nav').waitFor(); return sheet;
             };
@@ -126,10 +128,41 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
                 assert.match(await sheet.locator('.pi-bot-backup-guide').getAttribute('href'), /INSTALL_RECOVERY.md/);
                 // Existing dirty-exit warning also covers activity links; no chat draft/attachment is overwritten.
                 await settingsPage(sheet, 'notify');
+                const openedBefore = world.opened.length, hashBefore = await page.evaluate(() => location.hash);
+                await view.locator(`[data-activity-chat="${ARCHIVED}"]`).click();
+                await sheet.locator('.pi-bot-sheet-status').filter({ hasText: '这个话题已归档' }).waitFor();
+                assert.equal(await sheet.getAttribute('data-edited'), 'true');
+                assert.equal(await view.locator('[data-activity-windows]').count(), 1);
+                await view.locator('[data-activity-windows]').click();
+                assert.match(await sheet.locator('.pi-bot-sheet-status').textContent(), /还有修改没保存/);
+                assert.equal(await sheet.getAttribute('open'), '');
+                deleted = true;
+                for (const windowId of [STALE, UNKNOWN]) {
+                    await view.locator(`[data-activity-chat="${windowId}"]`).click();
+                    await sheet.locator('.pi-bot-sheet-status').filter({ hasText: '暂时不能确认这个聊天' }).waitFor();
+                    assert.equal(await sheet.getAttribute('open'), '');
+                }
+                assert.equal(world.opened.length, openedBefore, 'archived, deleted and unknown links never open another session');
+                assert.equal(await page.evaluate(() => location.hash), hashBefore, 'no implicit main-chat navigation');
+                await settingsPage(sheet, 'profile');
+                assert.equal(await sheet.locator('textarea').nth(1).inputValue(), '我还没有保存的性格');
+                await settingsPage(sheet, 'notify');
                 const chat = view.locator('[data-activity-chat]').first();
-                await chat.click(); assert.equal(await sheet.getAttribute('open'), '');
+                await chat.click();
+                await sheet.locator('.pi-bot-sheet-status').filter({ hasText: '还有修改没保存' }).waitFor();
+                assert.equal(await sheet.getAttribute('open'), '');
                 assert.match(await sheet.locator('.pi-bot-sheet-status').textContent(), /还有修改没保存/);
                 await chat.click(); await sheet.waitFor({ state: 'detached' });
+                assert.equal(await page.locator('#pi-input').inputValue(), '保留这份聊天草稿');
+                assert.equal(await page.locator('.pi-attachment-chip').count(), 1);
+                // Explicitly opening the existing archived-topic list leaves the current chat alone.
+                sheet = await openSettings(); await settingsPage(sheet, 'notify');
+                await sheet.locator(`[data-activity-chat="${ARCHIVED}"]`).click();
+                await sheet.locator('.pi-bot-sheet-status').filter({ hasText: '这个话题已归档' }).waitFor();
+                await sheet.locator('[data-activity-windows]').click();
+                await sheet.waitFor({ state: 'detached' });
+                await page.locator('.pi-bot-archived[open]').waitFor();
+                assert.equal(world.opened.length, openedBefore);
                 assert.equal(await page.locator('#pi-input').inputValue(), '保留这份聊天草稿');
                 assert.equal(await page.locator('.pi-attachment-chip').count(), 1);
                 // Thinking alone on the default model never pins that model.

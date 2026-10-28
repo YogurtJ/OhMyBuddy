@@ -10978,5 +10978,10 @@
         ["学习调用上限暂不可用。", "The learning call limit is unavailable."],
         ["只读最近的有限记录（全局最近 {0} 次定时运行、{1} 条渠道记录），最多显示 {2} 项；每个聊天核对最近 {3} 代，链接打开当前一代。", "Reads bounded recent records (the latest {0} scheduled runs and {1} channel records across this identity), showing up to {2} items. Checks the last {3} generations per chat; links open the current generation."]
     );
+    rows.push(
+        ["这个话题已归档。设置和修改仍保留，请先在聊天列表恢复话题。", "This topic is archived. Your settings and edits are kept. Restore the topic from the chat list first."],
+        ["暂时不能确认这个聊天仍可打开。设置和修改仍保留，请先查看聊天列表。", "This chat cannot be confirmed as available. Your settings and edits are kept. Check the chat list first."],
+        ["查看聊天列表", "View chat list"]
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();
