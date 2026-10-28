@@ -26,7 +26,7 @@ const validZone = value => { try { new Intl.DateTimeFormat('en-US', { timeZone: 
 
 function defaultBot({ workspace, order = 0, firstBot = false, now = new Date().toISOString() }) {
     return {
-        version: 1, enabled: true, order, job: '', model: null, workspace,
+        version: 1, enabled: true, order, job: '', model: null, thinking: null, workspace,
         permissions: { preset: 'free', rules: [] },
         notify: { version: 2, proactive: true, quietHours: { start: '23:00', end: '08:00' }, dailyProactiveLimit: DEFAULT_PROACTIVE_LIMIT },
         onboarding: { version: 1, phase: 'greeting', firstBot, steps: {}, startedAt: now, completedAt: null },
@@ -39,6 +39,12 @@ function normalizeModel(model) {
     if (!object(model) || !plainText(model.provider, 200) || !model.provider || !plainText(model.id, 300) || !model.id
         || model.thinking !== undefined && model.thinking !== null && !(typeof model.thinking === 'string' && THINKING.test(model.thinking))) fail('Invalid bot model');
     return { provider: model.provider, id: model.id, ...(model.thinking ? { thinking: model.thinking } : {}) };
+}
+
+function normalizeThinking(value) {
+    if (value === null || value === undefined) return null;
+    if (typeof value !== 'string' || !THINKING.test(value)) fail('Invalid bot thinking level');
+    return value;
 }
 
 function normalizePermissions(permissions, previous) {
@@ -82,7 +88,8 @@ function normalizeBot(bot) {
     if (!plainText(bot.job, 500)) fail('Invalid bot job');
     if (typeof bot.workspace !== 'string' || !path.isAbsolute(bot.workspace) || bot.workspace.length > 4096) fail('Invalid bot workspace');
     if (!iso(bot.createdAt)) fail('Invalid bot creation time');
-    return { ...bot, model: normalizeModel(bot.model), permissions: normalizePermissions(bot.permissions),
+    return { ...bot, model: normalizeModel(bot.model),
+        thinking: normalizeThinking(Object.hasOwn(bot, 'thinking') ? bot.thinking : bot.model?.thinking), permissions: normalizePermissions(bot.permissions),
         notify: normalizeNotify(bot.notify), onboarding: normalizeOnboarding(bot.onboarding), chosen: normalizeChosen(bot.chosen) };
 }
 
@@ -106,12 +113,18 @@ function isBot(profile) {
 }
 
 // User-editable settings. workspace, createdAt and onboarding are server-owned.
-const PATCH_KEYS = Object.freeze(['job', 'model', 'permissions', 'notify', 'order']);
+const PATCH_KEYS = Object.freeze(['job', 'model', 'thinking', 'permissions', 'notify', 'order']);
 function applyBotPatch(previous, patch) {
     if (!object(patch) || Object.keys(patch).some(key => !PATCH_KEYS.includes(key))) fail('Invalid bot settings change');
     const next = { ...previous };
     if (patch.job !== undefined) next.job = typeof patch.job === 'string' ? patch.job.trim() : patch.job;
-    if (patch.model !== undefined) next.model = normalizeModel(patch.model);
+    if (patch.model !== undefined) {
+        next.model = normalizeModel(patch.model);
+        // Legacy clients sent thinking inside model. A model-only change keeps the independent preference.
+        if (!Object.hasOwn(patch, 'thinking') && patch.model && Object.hasOwn(patch.model, 'thinking'))
+            next.thinking = normalizeThinking(patch.model.thinking);
+    }
+    if (Object.hasOwn(patch, 'thinking')) next.thinking = normalizeThinking(patch.thinking);
     if (patch.permissions !== undefined) {
         if (!object(patch.permissions) || Object.keys(patch.permissions).some(key => !['preset', 'rules'].includes(key))) fail('Invalid bot permissions change');
         const permissions = { ...previous.permissions, ...patch.permissions };
@@ -136,4 +149,4 @@ function applyBotPatch(previous, patch) {
     return normalizeBot(next);
 }
 
-module.exports = { PRESETS, ONBOARDING_PHASES, DEFAULT_PROACTIVE_LIMIT, defaultBot, normalizeBot, readBot, isBot, applyBotPatch, normalizeModel };
+module.exports = { PRESETS, ONBOARDING_PHASES, DEFAULT_PROACTIVE_LIMIT, defaultBot, normalizeBot, readBot, isBot, applyBotPatch, normalizeModel, normalizeThinking };

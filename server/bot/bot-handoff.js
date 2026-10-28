@@ -4,6 +4,7 @@
 // notebook when the last compaction fell back), and a bounded verbatim tail of recent text
 // turns. Everything is read from the predecessor's verified native entries; nothing is invented.
 const ledger = require('./bot-ledger');
+const { nativeInputIndex, projectNativeMessage, channelSource } = require('../pi-native-input');
 const { readSections, summaryText } = require('./bot-compaction');
 
 const HANDOFF_MESSAGE = 'pivane-bot-handoff';
@@ -40,33 +41,52 @@ function buildHandoff(manager, { now = new Date().toISOString() } = {}) {
         // A generation that has not compacted yet carries its own seed forward.
         if (entry.type === 'custom_message' && entry.customType === HANDOFF_MESSAGE && !summary) {
             sections = readSections(entry.details?.sections);
-            summary = sections ? '' : textOf(entry.content);
+            summary = sections ? '' : textOf(entry.content).split(TAIL_HEADING)[0].trim();
         }
     }
     const state = ledger.replay(branch);
     if (!ledger.storable(state)) throw Object.assign(new Error('The notebook of this chat cannot be carried over'), { status: 409 });
-    // The model-visible projection after the latest compaction; only plain user/assistant text is carried.
-    // complete: every user/assistant text since the latest summary is in the tail.
+    // Read the model-visible projection, including edits. A carried tail keeps its
+    // original entry, session and age through further manual generation changes.
+    const inputs = nativeInputIndex(branch, manager.getSessionId()), candidates = [];
+    let complete = true;
+    for (const { sourceEntry: entry, messages: projected } of manager.buildSessionProjection().entries) {
+        if (entry.type === 'custom_message' && entry.customType === HANDOFF_MESSAGE) {
+            if (!projected.length) continue;
+            if (entry.details?.complete === false) complete = false;
+            const visible = projected.map(message => textOf(message.content)).join('\n').replace(/\s+/g, ' ').trim();
+            for (const item of Array.isArray(entry.details?.tail) ? entry.details.tail : []) {
+                if (!item || !['user', 'assistant'].includes(item.role) || typeof item.text !== 'string' || !item.text.trim() || !visible.includes(item.text.replace(/\s+/g, ' ').trim())) continue;
+                candidates.push({ role: item.role, text: item.text, entryId: typeof item.entryId === 'string' ? item.entryId : null,
+                    sessionId: typeof item.sessionId === 'string' ? item.sessionId : typeof entry.details?.fromSessionId === 'string' ? entry.details.fromSessionId : null,
+                    ...(Number.isFinite(item.at) ? { at: item.at } : {}), ...channelSource(item.channel === 'weixin' ? item : null) });
+            }
+            continue;
+        }
+        for (const projectedMessage of projected) {
+            const message = projectNativeMessage(entry, projectedMessage, inputs);
+            if (!['user', 'assistant'].includes(message.role)) continue;
+            const text = textOf(message.content).trim();
+            if (!text) continue;
+            const at = Number.isFinite(message.timestamp) ? message.timestamp : Date.parse(entry.timestamp);
+            candidates.push({ role: message.role, text, entryId: entry.id, sessionId: manager.getSessionId(),
+                ...(Number.isFinite(at) ? { at } : {}), ...channelSource(inputs.channels.get(entry.id)) });
+        }
+    }
     const tail = [], messages = [];
-    let used = 0, complete = true;
-    const entries = manager.buildContextEntries();
-    for (let index = entries.length - 1; index >= 0; index--) {
-        const entry = entries[index];
-        if (entry.type !== 'message' || !['user', 'assistant'].includes(entry.message?.role)) continue;
-        const text = textOf(entry.message.content).trim();
-        if (!text) continue;
-        const line = `${entry.message.role === 'user' ? 'User' : 'Assistant'}: ${text}`;
-        const at = Number.isFinite(entry.message.timestamp) ? entry.message.timestamp : Date.parse(entry.timestamp);
+    let used = 0;
+    for (let index = candidates.length - 1; index >= 0; index--) {
+        const item = candidates[index], label = item.role === 'user' ? 'User: ' : 'Assistant: ', line = label + item.text;
         if (tail.length >= MAX_TAIL_MESSAGES || used + line.length > MAX_TAIL_CHARS) {
             if (!tail.length) {
-                tail.unshift(clip(line, MAX_TAIL_CHARS));
-                messages.unshift({ role: entry.message.role, text: clip(text, MAX_TAIL_CHARS), entryId: entry.id, ...(Number.isFinite(at) ? { at } : {}) });
+                const text = clip(item.text, MAX_TAIL_CHARS - label.length);
+                tail.unshift(label + text); messages.unshift({ ...item, text });
             }
             complete = false;
             break;
         }
         tail.unshift(line); used += line.length;
-        messages.unshift({ role: entry.message.role, text, entryId: entry.id, ...(Number.isFinite(at) ? { at } : {}) });
+        messages.unshift(item);
     }
     const sectionsText = [];
     if (sections) sectionsText.push(summaryText(sections, state, now));

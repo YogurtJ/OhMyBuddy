@@ -614,6 +614,28 @@
             const profileId = this.profileId;
             if (!profileId || !window.PiBotSettings) { window.PiWorkspaceRoute?.navigate('profiles', { profileId }); return; }
             void window.PiBotSettings.open({ api: this.api, toast: this.toast, profileId, face,
+                current: () => this.active && this.profileId === profileId,
+                checkChat: async windowId => {
+                    const data = await this.api('/api/pi/bots');
+                    if (!this.active || this.profileId !== profileId) return 'unavailable';
+                    const bot = data.bots?.find(item => item.id === profileId && item.enabled);
+                    const target = bot?.windows?.find(item => item.id === windowId);
+                    if (!target || target.generation === null || !target.sessionId) return 'unavailable';
+                    this.bots = data.bots; this.revision = data.revision;
+                    return target.archivedAt ? 'archived' : 'available';
+                },
+                onChat: windowId => {
+                    const target = this.bot()?.windows.find(item => item.id === windowId);
+                    if (this.active && this.profileId === profileId && target && !target.archivedAt && target.sessionId && target.generation !== null) this.go(profileId, windowId);
+                },
+                onWindows: async () => {
+                    await this.refresh();
+                    if (!this.active || this.profileId !== profileId) return;
+                    this.archivedOpen = true; this.renderPane();
+                    this.pane.closest('#pi-session-pane')?.classList.add('open');
+                    const archived = this.pane.querySelector('.pi-bot-archived > summary');
+                    archived?.scrollIntoView({ block: 'nearest' }); archived?.focus();
+                },
                 onSaved: async () => { await this.refresh(); },
                 // Moved to the trash: go on with another Bot, or the welcome page when none is left.
                 onTrashed: async () => {
@@ -864,6 +886,7 @@
                 root.append(face({ avatar: NEW_BOT_FACE }, 'xl'));
                 root.append(el('h2', null, translateUi("认识你的 Bot")));
                 root.append(el('p', null, translateUi("一个一直在的私人助理：记得你说过的话，帮你查、记、写、提醒。先花两三分钟互相认识一下。")));
+                if (globalThis.PiBotOnboarding?.dataNotice) root.append(globalThis.PiBotOnboarding.dataNotice(null));
                 const missing = this.needsModel();
                 if (missing) root.append(...missing);
                 else {
@@ -884,6 +907,7 @@
                 const bubble = el('div', 'pi-bot-greeting');
                 const head = el('div', 'pi-bot-greeting-head'); head.append(face(bot, 'sm'), el('strong', null, bot.name));
                 bubble.append(head);
+                if (globalThis.PiBotOnboarding?.dataNotice) bubble.append(globalThis.PiBotOnboarding.dataNotice(bot));
                 root.append(bubble);
                 root.addEventListener('click', event => this.click(event));
                 const steps = bot.bot.onboarding.steps || {};

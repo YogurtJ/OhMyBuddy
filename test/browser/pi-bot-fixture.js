@@ -24,7 +24,7 @@ const windowRecord = (id, extra = {}) => ({ id, kind: 'main', title: '主聊天'
 // A Bot as GET /bots lists it; `bot` overrides the bot section.
 function botRecord({ id = BOT, name = '小狸', avatar = { kind: 'emoji', value: '🦊' }, bot = {}, windows = [windowRecord(MAIN)], windowsRevision = 'w1' } = {}) {
     return { id, name, description: '', avatar, enabled: true, profileRevision: 'p', chosen: { name: true, avatar: true },
-        bot: { version: 1, enabled: true, order: 0, job: '帮我安排生活', model: null, permissions: { preset: 'free', rules: 0 },
+        bot: { version: 1, enabled: true, order: 0, job: '帮我安排生活', model: null, thinking: null, permissions: { preset: 'free', rules: 0 },
             notify: { quietHours: { start: '23:00', end: '08:00' }, dailyProactiveLimit: 20 },
             onboarding: { version: 1, phase: 'done', firstBot: true, steps: {}, startedAt: null, completedAt: '2026-10-24T00:10:00Z' },
             createdAt: '2026-10-24T00:00:00Z', ...bot },
@@ -51,6 +51,11 @@ async function botPage(browser, base, world, { width, height = 860, reducedMotio
             projectRoots: ['/fixture'], defaultProject: '/fixture/project' } });
         if (pathname === '/api/pi/bots/readiness') return route.fulfill({ json: { models: 2 } });
         if (pathname === '/api/pi/bots' && method === 'GET') return route.fulfill({ json: { version: 1, revision: world.revision, bots: world.bots() } });
+        const activity = /^\/api\/pi\/bots\/([^/]+)\/activity$/.exec(pathname);
+        if (activity) return route.fulfill({ json: { version: 1, profileId: activity[1], generatedAt: Date.now(),
+            sources: { proactive: 'available', scheduler: 'available', channels: 'available' },
+            limits: { items: 30, schedulerRuns: 100, channelJobs: 60, jobs: 100, generationsPerWindow: 100 }, truncated: false, items: [],
+            quota: { proactivePushes: null, scheduledTasks: null } } });
         const session = /^\/api\/pi\/bots\/([^/]+)\/windows\/([^/]+)\/session$/.exec(pathname);
         if (session) {
             const window = world.bots().find(item => item.id === session[1])?.windows.find(item => item.id === session[2]);

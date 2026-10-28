@@ -116,12 +116,41 @@ class BotService extends EventEmitter {
         return { name: profile.name, ...resolved };
     }
 
+    withChannelWindow(profileId, windowId, session, action) {
+        return this.profiles.reserve(async () => {
+            const { profile } = await this.bot(profileId);
+            if (!settings.isBot(profile)) fail('This Bot is turned off', 409, 'BOT_DISABLED');
+            await this.assertCurrentWindowSession(profileId, windowId, session);
+            return action();
+        });
+    }
+
     // Active windows of a Bot for the WeChat /topic list: main chat first, then topics by recency.
     async channelWindows(profileId) {
         const { profile } = await this.bot(profileId);
         const windows = (await this.windows.read(profileId)).state.windows.filter(item => !item.archivedAt).map(publicWindow);
         windows.sort((a, b) => (a.kind === 'main' ? -1 : b.kind === 'main' ? 1 : 0) || Date.parse(b.updatedAt || 0) - Date.parse(a.updatedAt || 0));
         return { name: profile.name, enabled: settings.isBot(profile), windows };
+    }
+
+    // Media cards remain reachable after a generation moves. Each predecessor is read only,
+    // and only with its registry path plus matching native ownership marker; no worker is opened.
+    async channelMediaPlans(profileId, windowId, session) {
+        const window = await this.assertCurrentWindowSession(profileId, windowId, session);
+        const { readMediaPlans } = require('../channels/native-commands');
+        const plans = new Map();
+        for (const generation of window.generations.slice(-100)) {
+            const source = { cwd: window.cwd, id: generation.sessionId };
+            const found = await readMediaPlans(this.store, source, manager => {
+                const marker = readWindowBinding(manager);
+                if (manager.getSessionFile() !== generation.sessionPath || marker?.profileId !== profileId
+                    || marker.windowId !== windowId || marker.generation !== generation.generation)
+                    fail('Media card source does not match this Bot window', 409);
+            });
+            for (const plan of found) plans.set(plan.id, plan);
+        }
+        await this.assertCurrentWindowSession(profileId, windowId, session);
+        return [...plans.values()].slice(-50);
     }
 
     // Bots in display order, with their windows. Profiles without a valid section are not Bots.
@@ -141,8 +170,8 @@ class BotService extends EventEmitter {
     }
 
     publicBot(bot) {
-        const { version, enabled, order, job, model, permissions, notify, onboarding, createdAt } = bot;
-        return { version, enabled, order, job, model, permissions: { preset: permissions.preset, rules: permissions.rules.length },
+        const { version, enabled, order, job, model, thinking, permissions, notify, onboarding, createdAt } = bot;
+        return { version, enabled, order, job, model, thinking, permissions: { preset: permissions.preset, rules: permissions.rules.length },
             notify, onboarding, createdAt };
     }
 
@@ -273,6 +302,31 @@ class BotService extends EventEmitter {
         });
     }
 
+    // One WeChat request owns one topic ID across restarts. A prepared row/native marker is
+    // recovered by the ordinary creation path; an uncertain channel command is never requeued.
+    createChannelTopic(profileId, { requestId, title, windowId, session, expectedRevision }, beforeCommit) {
+        const fields = topicFields({ title });
+        if (typeof requestId !== 'string' || !requestId || requestId.length > 1000) fail('A stable channel request is required');
+        return this.profiles.reserve(async () => {
+            const { profile } = await this.bot(profileId);
+            if (!settings.isBot(profile)) fail('This Bot is turned off', 409, 'BOT_DISABLED');
+            await this.assertCurrentWindowSession(profileId, windowId, session);
+            const id = topicId(profileId, `wechat:${requestId}`);
+            const snapshot = await this.windows.read(profileId);
+            const existing = snapshot.state.windows.find(item => item.id === id);
+            if (existing) {
+                if (!isDeepStrictEqual(existing.topicSeed, fields)) fail('This request already used another title', 409, 'BOT_TOPIC_CONFLICT');
+                if (existing.archivedAt) fail('This topic is archived', 409, 'BOT_WINDOW_ARCHIVED');
+                beforeCommit();
+                const window = await this.completeWindowLocked(profileId, existing);
+                return { window: publicWindow(window) };
+            }
+            if (snapshot.revision !== expectedRevision) fail('Bot windows changed; reload before creating', 409);
+            const { windowsRevision, ...window } = await this.createWindowLocked(profileId, 'topic', { ...fields, id, expectedRevision, beforeCommit });
+            return { window, windowsRevision };
+        });
+    }
+
     async assertTopicWorker(worker) {
         const { profileId, windowId, generation } = worker.loadedBot;
         const window = await this.assertCurrentWindowSession(profileId, windowId, { id: worker.sessionId, path: worker.sessionPath });
@@ -304,7 +358,7 @@ class BotService extends EventEmitter {
     // its last native marker proves creation completed and carries the original metadata.
     // Topic instructions live in this index only: the marker is immutable creation-time
     // evidence that older readers reject with unknown seed fields, and instructions are edited later.
-    async createWindowLocked(profileId, kind, { title = '', emoji = '', focus = '', instructions = '', expectedRevision, id = randomUUID() } = {}) {
+    async createWindowLocked(profileId, kind, { title = '', emoji = '', focus = '', instructions = '', expectedRevision, id = randomUUID(), beforeCommit = () => {} } = {}) {
         const { bot } = await this.bot(profileId);
         const { revision } = await this.windows.read(profileId);
         const now = new Date().toISOString(), topicSeed = { title, focus, emoji };
@@ -315,6 +369,7 @@ class BotService extends EventEmitter {
             if (kind === 'main' && state.windows.some(window => window.kind === 'main')) fail('Bot already has a main chat', 409);
             if (state.windows.length >= MAX_WINDOWS || kind === 'topic' && state.windows.filter(window => window.kind === 'topic').length >= MAX_TOPICS)
                 fail('Topic limit reached (including archived topics)', 409, 'BOT_TOPIC_LIMIT');
+            beforeCommit();
             state.windows.push(record); return {};
         });
         const completed = await this.completeWindowLocked(profileId, record, { fresh: true });
@@ -347,11 +402,12 @@ class BotService extends EventEmitter {
         return saved.state.windows.find(window => window.id === record.id);
     }
 
-    updateWindow(profileId, windowId, input) {
+    updateWindow(profileId, windowId, input, { beforeCommit = () => {}, source = null } = {}) {
         const fields = topicFields(input, { patch: true, revision: true, withInstructions: true });
         return this.profiles.reserve(() => {
             const update = async () => {
                 const window = await this.windowRecord(profileId, windowId);
+                if (source) await this.assertCurrentWindowSession(profileId, windowId, source);
                 const { revision } = await this.windows.read(profileId);
                 if (revision !== input.expectedRevision) fail('Bot windows changed; reload before saving', 409);
                 if (window.kind !== 'topic') fail('The main chat cannot be renamed or archived', 409, 'BOT_MAIN_WINDOW_FIXED');
@@ -359,6 +415,7 @@ class BotService extends EventEmitter {
                 const save = async () => {
                     const saved = await this.windows.mutate(profileId, input.expectedRevision, state => {
                         const item = state.windows.find(entry => entry.id === windowId);
+                        beforeCommit();
                         if (fields.archived && !window.archivedAt) this.assertWindowQuiescent?.(window);
                         for (const key of ['title', 'focus', 'emoji', 'instructions']) if (Object.hasOwn(fields, key)) item[key] = fields[key];
                         if (Object.hasOwn(fields, 'archived')) item.archivedAt = fields.archived ? item.archivedAt ?? new Date().toISOString() : null;
@@ -1104,7 +1161,7 @@ class BotService extends EventEmitter {
             const current = await this.profiles.state();
             if (current.revision !== input.expectedRevision) fail('Profiles changed; reload before saving', 409);
             const { bot: before } = await this.bot(profileId);
-            const desiredModel = input.action === 'model-choice' ? await onboardingFlow.modelChoice(before, input.model, this.catalog) : undefined;
+            const desiredModel = input.action === 'model-choice' ? await onboardingFlow.modelChoice(before, input.model, this.catalog, input.thinking) : undefined;
             const now = new Date().toISOString();
             const saved = await this.profiles.mutate(input.expectedRevision, state => {
                 const index = state.profiles.findIndex(profile => profile.id === profileId);
@@ -1122,11 +1179,16 @@ class BotService extends EventEmitter {
         });
     }
 
-    update(profileId, input = {}) {
+    update(profileId, input = {}, { beforeCommit = () => {}, source = null } = {}) {
         return this.profiles.reserve(async () => {
             if (!object(input) || typeof input.expectedRevision !== 'string' || !object(input.changes)) fail('Invalid bot change');
             const { name, description, soul, avatar, bot: botPatch, ...rest } = input.changes;
             if (Object.keys(rest).length) fail('Invalid bot change');
+            const { bot: before, profile: beforeProfile } = await this.bot(profileId);
+            if (source && !settings.isBot(beforeProfile)) fail('This Bot is turned off', 409, 'BOT_DISABLED');
+            if (source) await this.assertCurrentWindowSession(profileId, source.windowId, source.session);
+            const desired = botPatch === undefined ? before : settings.applyBotPatch(before, botPatch);
+            await require('./bot-model').validateModelChange(before, desired, this.catalog);
             return this.profiles.mutate(input.expectedRevision, state => {
                 const index = state.profiles.findIndex(profile => profile.id === profileId);
                 const previous = state.profiles[index];
@@ -1150,6 +1212,7 @@ class BotService extends EventEmitter {
                 if (['greeting', 'interview'].includes(onboarding.phase))
                     for (const [step, changed] of Object.entries(answered)) if (changed && onboarding.steps[step] !== 'done' && !settled({ identity: onboarding.steps.identity }, step)) onboarding.steps[step] = 'done';
                 const nextBot = settings.normalizeBot({ ...patched, chosen, onboarding });
+                beforeCommit();
                 const record = { ...previous, ...base, bot: { ...previous.bot, ...nextBot }, updatedAt: new Date().toISOString() };
                 state.profiles[index] = record;
                 return { ok: true, bot: { id: record.id, name: record.name, avatar: record.avatar ?? null, bot: this.publicBot(nextBot) },
@@ -1178,7 +1241,7 @@ class BotService extends EventEmitter {
         if (this.catalog) {
             try {
                 const catalog = await this.catalog(bot.workspace);
-                models = { defaults: catalog.defaults, models: catalog.models.map(model => ({ provider: model.provider, id: model.modelId,
+                models = { defaults: catalog.defaults, effectiveDefault: await require('./bot-model-runtime').resolveEffectiveDefault(catalog), models: catalog.models.map(model => ({ provider: model.provider, id: model.modelId ?? model.id,
                     name: model.name, thinkingLevels: model.thinkingLevels })) };
             } catch (error) { modelsError = error.message; }
         }

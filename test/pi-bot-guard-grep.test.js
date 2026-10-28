@@ -164,7 +164,7 @@ test('verified Bot SDK registration overrides native grep; ordinary Pi sessions 
         t.after(() => { if (prior === undefined) delete process.env[key]; else process.env[key] = prior; });
     }
     const file = path.join(__dirname, '../server/bot/bot-context-extension.ts');
-    const { registerBotContext } = require(process.env.PIVANE_TEST_PI_JITI).createJiti(file)(file);
+    const { registerBotContext } = await require(process.env.PIVANE_TEST_PI_JITI).createJiti(file).import(file);
     const runtime = await sdk.ModelRuntime.create({ authPath: path.join(agentDir, 'auth.json'), modelsPath: null,
         modelsStorePath: path.join(agentDir, 'catalog.json'), allowModelNetwork: false, refreshOnCreate: false });
     const broken = path.join(root, 'unverified-agent');

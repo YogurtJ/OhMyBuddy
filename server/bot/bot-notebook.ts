@@ -5,6 +5,7 @@
 // (whose nested tool results are not kept in the session) or several times in parallel.
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
 import { Type } from 'typebox';
+import { nativeInputIndex, nativeMessage, channelSource, textOf } from '../pi-native-input.js';
 import { LEDGER_ENTRY, KINDS, replay, prepareOps, renderLedger, describeOp, describeItem, ledgerVersion, sourceQuote } from './bot-ledger.js';
 
 export const NOTE_TOOL = 'window_note';
@@ -86,14 +87,13 @@ const PANEL_OPS = ['update', 'status', 'delete'];
 // A note the Bot takes points at the user's message that led to it (the leaf is usually the
 // assistant message holding the tool call, which often has no text of its own).
 function noteSource(manager: any) {
-    const branch = manager.getBranch();
+    const branch = manager.getBranch(), inputs = nativeInputIndex(branch, manager.getSessionId());
     for (let index = branch.length - 1; index >= 0; index--) {
-        const message = branch[index]?.type === 'message' ? branch[index].message : null;
+        const message = nativeMessage(branch[index], inputs);
         if (message?.role !== 'user') continue;
-        const text = typeof message.content === 'string' ? message.content : Array.isArray(message.content)
-            ? message.content.filter((part: any) => part?.type === 'text').map((part: any) => part.text).join(' ') : '';
-        const quote = sourceQuote(text);
-        return quote ? { sessionId: manager.getSessionId(), entryId: branch[index].id, role: 'user', quote }
+        const quote = sourceQuote(textOf(message.content));
+        return quote ? { sessionId: manager.getSessionId(), entryId: branch[index].id, role: 'user', quote,
+            ...channelSource(inputs.channels.get(branch[index].id)) }
             : { sessionId: manager.getSessionId(), entryId: branch[index].id };
     }
     return { sessionId: manager.getSessionId(), entryId: manager.getLeafId() };

@@ -9,6 +9,7 @@
 // drops changes that fail. The summary text itself is assembled here, with the notebook
 // rendered by the program, never written by the model.
 const ledger = require('./bot-ledger');
+const { nativeInputIndex, projectNativeMessage, channelSource } = require('../pi-native-input');
 const { TOPIC_INDEX_MESSAGE } = require('./bot-topic-context');
 
 const SUMMARY_SCHEMA = 1;
@@ -57,8 +58,8 @@ function stamp(entry, message) {
 // The summarized part: projected messages before the kept tail (or all of them, when the
 // generation moves on after this summary), each with the entry that owns it.
 // projection = manager.buildSessionProjection().entries.
-function summarizedEntries(projection, firstKeptEntryId) {
-    const result = [];
+function summarizedEntries(projection, firstKeptEntryId, { branch = projection.map(item => item.sourceEntry).filter(Boolean), sessionId } = {}) {
+    const result = [], inputs = nativeInputIndex(branch, sessionId);
     for (const item of projection) {
         const entry = item.sourceEntry;
         if (!entry || entry.id === firstKeptEntryId) break;
@@ -68,8 +69,8 @@ function summarizedEntries(projection, firstKeptEntryId) {
             for (const message of item.messages || []) result.push(...seedItems(entry, message));
             continue;
         }
-        for (const message of item.messages || []) {
-            const role = message.role;
+        for (const projected of item.messages || []) {
+            const message = projectNativeMessage(entry, projected, inputs), role = message.role;
             if (role === 'user' || role === 'assistant' || role === 'toolResult' || role === 'custom' || role === 'bashExecution')
                 result.push({ entry, message });
         }
@@ -93,9 +94,9 @@ function seedItems(entry, message) {
         if (head) items.push({ entry, message: { role: 'custom', content: head }, whole: true });
     }
     if (Array.isArray(details.tail)) {
-        for (const item of details.tail) if (object(item) && (item.role === 'user' || item.role === 'assistant') && typeof item.text === 'string' && item.text.trim())
-            items.push({ entry, message: { role: item.role, content: item.text, ...(Number.isFinite(item.at) ? { timestamp: item.at } : {}) },
-                origin: { entryId: typeof item.entryId === 'string' ? item.entryId : null, at: Number.isFinite(item.at) ? item.at : null } });
+        for (const item of details.tail) if (object(item) && (item.role === 'user' || item.role === 'assistant') && typeof item.text === 'string' && item.text.trim() && fold(text).includes(fold(item.text)))
+            items.push({ entry, message: { role: item.role, content: item.text, ...(Number.isFinite(item.at) ? { timestamp: item.at } : {}), ...channelSource(item.channel === 'weixin' ? item : null) },
+                origin: { sessionId: typeof item.sessionId === 'string' ? item.sessionId : typeof details.fromSessionId === 'string' ? details.fromSessionId : null, entryId: typeof item.entryId === 'string' ? item.entryId : null, at: Number.isFinite(item.at) ? item.at : null } });
     } else if (cut >= 0) items.push({ entry, message: { role: 'custom', content: text.slice(cut) }, whole: true });
     return items;
 }
@@ -285,7 +286,7 @@ function checkNote(note, state, byShortId, { at }) {
             const said = origin ? (origin.at ?? NaN) : Date.parse(candidate.entry.timestamp);
             const entries = [candidate.entry.id, origin?.entryId].filter(Boolean);
             return state.items.some(item => item.status === 'deleted' && !(said > Date.parse(item.updatedAt)) && (item.hash === hash
-                || item.kind === note.kind && (entries.includes(item.source?.entryId) || Boolean(origin) && !origin.entryId)));
+                || item.kind === note.kind && (entries.includes(item.source?.entryId) || entries.includes(item.source?.origin?.entryId) || Boolean(origin) && !origin.entryId)));
         };
         matching = candidates.find(candidate => !barred(candidate));
         if (!matching) return { rejected: 'deleted by the user' };
@@ -293,7 +294,8 @@ function checkNote(note, state, byShortId, { at }) {
     } else if (note.op === 'update') raw = { op: 'update', id: note.id, text: note.text, due: note.due || undefined };
     else if (note.op === 'done' || note.op === 'cancel') raw = { op: 'status', id: note.id, status: note.op === 'done' ? 'done' : 'cancelled' };
     else return { rejected: 'unknown op' };
-    const source = { sessionId: matching.sessionId, entryId: matching.entry.id, role: matching.message.role, quote };
+    const source = { sessionId: matching.sessionId, entryId: matching.entry.id, role: matching.message.role, quote, ...channelSource(matching.message.channel === 'weixin' ? matching.message : null),
+        ...(matching.origin ? { origin: { sessionId: matching.origin.sessionId ?? null, entryId: matching.origin.entryId ?? null, at: matching.origin.at ?? null } } : {}) };
     try { return { op: ledger.normalizeOp(raw, state, { at, by: 'summary', source }) }; }
     catch (error) { return { rejected: error.message }; }
 }
@@ -338,7 +340,7 @@ function summaryText(sections, state, now) {
 // includeKept: the window moves to a new generation right after this summary (D-033), so the
 // part Pi keeps verbatim is read too; it is reconciled with the notebook here or never.
 async function structuredCompaction({ branch, projection, firstKeptEntryId, previousSummary, sessionId, model, now, complete, signal, reason, includeKept = false }) {
-    const messages = summarizedEntries(projection, includeKept ? null : firstKeptEntryId);
+    const messages = summarizedEntries(projection, includeKept ? null : firstKeptEntryId, { branch, sessionId });
     if (!messages.length) throw new Error('Nothing to summarize');
     if (!branch.some(entry => entry.id === firstKeptEntryId)) throw new Error('The kept part is not on this branch');
     let state = ledger.replay(branch);

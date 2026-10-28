@@ -257,8 +257,8 @@
             moreToggle?.setAttribute('aria-expanded', 'false');
             if (restoreFocus && wasOpen) moreToggle?.focus({ preventScroll: true });
         }
-        function parseRoute() {
-            const match = /^#\/(chat|assistant|bot|cron|artifacts|media|profiles|extensions|settings)(?:\?(.*))?$/.exec(location.hash);
+        function parseRoute(hash = location.hash) {
+            const match = /^#\/(chat|assistant|bot|cron|artifacts|media|profiles|extensions|settings)(?:\?(.*))?$/.exec(hash);
             if (!match) return { tab: 'chat', params: new URLSearchParams() };
             return { tab: match[1], params: new URLSearchParams(match[2] || '') };
         }
@@ -275,13 +275,39 @@
                 params.set('tab', 'providers'); target = `#/settings?${params}`;
             }
             if (!target || target === location.hash) return;
-            history.replaceState(null, '', target);
+            history.replaceState(history.state, '', target);
             window.dispatchEvent(new CustomEvent('workspace:settings-route-normalized', { detail: { from: tab, tab: inner } }));
         }
-        function showRoute(completedRevision) {
-            normalizeLegacySettingsRoute();
-            const { tab, params } = parseRoute();
+        // Index only this page's history entries so a rejected Back/Forward/hash change
+        // returns to the previous entry without overwriting either destination.
+        const historyIndexKey = 'pivaneRouteIndex';
+        const historyIndex = () => Number.isSafeInteger(history.state?.[historyIndexKey]) ? history.state[historyIndexKey] : null;
+        const indexedState = index => ({ ...(history.state && typeof history.state === 'object' ? history.state : {}), [historyIndexKey]: index });
+        let routeIndex = historyIndex() ?? 0, acceptedHash = location.hash, restoringRoute = false;
+        history.replaceState(indexedState(routeIndex), '', location.href);
+        const allowRoute = hash => window.dispatchEvent(new CustomEvent('workspace:beforetabchange', {
+            cancelable: true, detail: { ...parseRoute(hash), hash }
+        }));
+        function showRoute(completedRevision, approved = false) {
+            if (restoringRoute) return false;
             const completion = typeof completedRevision === 'number';
+            if (!completion) {
+                let index = historyIndex();
+                // Direct hash assignments create an entry without a fresh router index.
+                if (index === null || !approved && index === routeIndex && location.hash !== acceptedHash) {
+                    index = routeIndex + 1;
+                    history.replaceState(indexedState(index), '', location.href);
+                }
+                if (!approved && location.hash !== acceptedHash && !allowRoute(location.hash)) {
+                    restoringRoute = true;
+                    history.go(routeIndex - index);
+                    return false;
+                }
+                routeIndex = index;
+            }
+            normalizeLegacySettingsRoute();
+            acceptedHash = location.hash;
+            const { tab, params } = parseRoute();
             const revision = completion ? completedRevision : ++routeRevision;
             window.PiFeatures.routeChanged(revision);
             const routeKey = location.hash;
@@ -332,20 +358,33 @@
             return `#/${tab}${query.size ? `?${query}` : ''}`;
         }
         function navigate(tab, params = {}, replace = false) {
+            if (restoringRoute) return false;
             const hash = routeHash(tab, params);
             if (location.hash === hash) return showRoute();
-            if (replace) history.replaceState(null, '', hash);
-            else history.pushState(null, '', hash);
-            showRoute();
+            if (!allowRoute(hash)) return false;
+            if (replace) history.replaceState(indexedState(routeIndex), '', hash);
+            else history.pushState({ [historyIndexKey]: routeIndex + 1 }, '', hash);
+            showRoute(undefined, true);
+            return true;
         }
         window.PiWorkspaceRoute = Object.freeze({ navigate, current: parseRoute, revision: () => routeRevision,
             rememberConversation(tab, params) { if (tab === 'chat' || tab === 'bot') lastConversation = routeHash(tab, params); },
             returnToConversation: () => {
             const url = ['chat', 'bot'].includes(parseRoute().tab) ? location.hash : lastConversation;
-            history.pushState(null, '', url); showRoute();
+            const target = parseRoute(url);
+            return navigate(target.tab, Object.fromEntries(target.params));
         } });
-        window.addEventListener('popstate', showRoute);
-        window.addEventListener('hashchange', showRoute);
+        const historyChanged = () => {
+            if (restoringRoute) {
+                if (location.hash === acceptedHash) restoringRoute = false;
+                return;
+            }
+            // Browsers may emit both popstate and hashchange for the same move. A
+            // second notification must not count as confirmation to discard a draft.
+            if (location.hash !== acceptedHash) showRoute();
+        };
+        window.addEventListener('popstate', historyChanged);
+        window.addEventListener('hashchange', historyChanged);
         document.querySelectorAll('.nav-btn[data-tab]').forEach(button => {
             button.addEventListener('click', () => navigate(button.dataset.tab));
         });

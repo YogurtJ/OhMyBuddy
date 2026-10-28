@@ -1,7 +1,7 @@
 'use strict';
 // REST surface for Bot Mode. Mounted on the authenticated /api/pi router; every response
 // is no-store. Writes require the caller's last seen revision and never retry silently.
-function mountBotRoutes(router, { bots }) {
+function mountBotRoutes(router, { bots, activity = null }) {
     const route = action => async (req, res) => {
         res.set('Cache-Control', 'no-store');
         try { res.json(await action(req)); }
@@ -12,6 +12,10 @@ function mountBotRoutes(router, { bots }) {
     router.post('/bots', route(req => bots.create(req.body)));
     // An existing assistant identity becomes a Bot (M4-5b).
     router.post('/bots/from-profile', route(req => bots.fromProfile(req.body)));
+    router.get('/bots/:id/activity', route(req => {
+        if (!activity) throw Object.assign(new Error('Bot activity is unavailable'), { status: 503, code: 'BOT_ACTIVITY_UNAVAILABLE' });
+        return activity.snapshot(req.params.id);
+    }));
     router.get('/bots/:id/settings', route(req => bots.settings(req.params.id)));
     router.patch('/bots/:id', route(req => bots.update(req.params.id, req.body)));
     router.post('/bots/:id/trash', route(req => bots.trash(req.params.id, req.body)));

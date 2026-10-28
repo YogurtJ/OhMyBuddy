@@ -49,11 +49,11 @@ const NEW_FACE = { kind: 'preset', id: 'pivane-pebble' };
             let bots = [], revision = 'r0', generation = 0, sessionId = 'gen-0', socket = null, phase = 'greeting', name = '新伙伴', face = NEW_FACE;
             let history = [], prompts = [], responses = [], setupBodies = [], historyReads = [], second = false, known2 = undefined, aboutBodies = [];
             let modelCount = 0, profileList = [], reconnectHistory = null, scheduleDeletes = [];
-            let patchBodies = [], settingsReads = 0, model = null, preset = 'free', quietHours = { start: '23:00', end: '08:00' }, soul = '温柔耐心，说话简短。';
+            let patchBodies = [], settingsReads = 0, model = null, thinking = null, preset = 'free', quietHours = { start: '23:00', end: '08:00' }, soul = '温柔耐心，说话简短。';
             const botOpens = []; let lagging = null;
             const bot = () => ({ id: BOT, name, description: '', avatar: typeof face === 'string' ? { kind: 'emoji', value: face } : face, enabled: true, profileRevision: 'p',
                 chosen: { name: name !== '新伙伴', avatar: face !== NEW_FACE },
-                bot: { version: 1, enabled: true, order: 0, job: '', model, permissions: { preset, rules: 0 },
+                bot: { version: 1, enabled: true, order: 0, job: '', model, thinking, permissions: { preset, rules: 0 },
                     notify: { quietHours, dailyProactiveLimit: 20 },
                     onboarding: { version: 1, phase, firstBot: true, steps: {}, defaultAvatar: NEW_FACE.id, startedAt: null, completedAt: null }, createdAt: '2026-10-24T00:00:00Z' },
                 windowsRevision: 'w', windows: [{ id: MAIN, kind: 'main', title: '主聊天', emoji: '💬', focus: '', createdAt: '2026-10-24T00:00:00Z',
@@ -124,7 +124,8 @@ const NEW_FACE = { kind: 'preset', id: 'pivane-pebble' };
                     // The first save meets a change made elsewhere: another device changed the personality.
                     if (patchBodies.length === 1) { revision = `r${Date.now()}`; soul = '活泼一点，多用表情。'; return route.fulfill({ status: 409, json: { error: 'Profiles changed' } }); }
                     assert.equal(body.expectedRevision, revision);
-                    model = body.changes.bot?.model ?? model; preset = body.changes.bot?.permissions?.preset ?? preset;
+                    if (Object.hasOwn(body.changes.bot || {}, 'model')) model = body.changes.bot.model;
+                    if (Object.hasOwn(body.changes.bot || {}, 'thinking')) thinking = body.changes.bot.thinking; preset = body.changes.bot?.permissions?.preset ?? preset;
                     if (body.changes.bot?.notify) quietHours = body.changes.bot.notify.quietHours;
                     revision = `r${Date.now()}`; bots = list();
                     return route.fulfill({ json: { ok: true, revision, bot: { id: BOT, name, avatar: bots[0].avatar, bot: bots[0].bot } } });
@@ -516,7 +517,7 @@ const NEW_FACE = { kind: 'preset', id: 'pivane-pebble' };
                 assert.equal(await sheet.locator('textarea').nth(1).inputValue(), '活泼一点，多用表情。', 'untouched fields follow the newer saved value');
                 await sheet.locator('.pi-bot-sheet-save').click();
                 await page.locator('.pi-bot-sheet').waitFor({ state: 'detached', timeout: 8000 });
-                const expected = { bot: { model: { provider: 'fixture', id: 'large', thinking: 'high' }, permissions: { preset: 'balanced' } } };
+                const expected = { bot: { model: { provider: 'fixture', id: 'large' }, thinking: 'high', permissions: { preset: 'balanced' } } };
                 assert.deepEqual(patchBodies.map(body => body.changes), [expected, expected]);
                 assert.equal(preset, 'balanced');
 
