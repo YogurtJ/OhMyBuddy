@@ -58,5 +58,12 @@
 .pi-update-card button:disabled { cursor: wait; opacity: .55; }
 .pi-update-card .pi-update-feedback { margin: 0; font-size: 12px; color: var(--text-muted); }
 .pi-update-card .pi-update-feedback:not(:empty) { margin-top: 6px; padding-bottom: 6px; }
+.updates-application { margin: 16px 0; padding: 18px; min-width: 0; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-1); }
+.updates-application[hidden] { display: none; }
+.updates-application h4 { margin: 0 0 10px; }
+.updates-application p, .updates-application summary { color: var(--text-muted); font-size: 13px; line-height: 1.6; }
+.updates-application .maintenance-check { display: flex; align-items: flex-start; gap: 10px; margin: 12px 0; font-size: 13px; line-height: 1.6; }
+.updates-application input { width: 18px; height: 18px; flex: 0 0 18px; accent-color: var(--accent); }
+.updates-operation-output { max-width: 100%; max-height: 260px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; }
 @media (max-width: 700px) { .updates-cards { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .updates-header, .updates-card { padding: 15px; } .updates-header button { min-height: 42px; } #updates-agent-prompt { font-size: 16px; } }

@@ -2,6 +2,18 @@
 
 Pivane 在 macOS 上原生运行，原生组件同时包含 Apple Silicon 与 Intel 架构，使用 Node 22.x 并通过浏览器访问。各版本实际验收过的系统、硬件与浏览器见[验证范围](RELEASE_INSTALL_VALIDATION.md)；在其他环境遇到问题，欢迎通过 [Issues](https://github.com/YogurtJ/pivane/issues) 反馈。
 
+## macOS 完整平台包（预览）
+
+新的平台包构建入口可生成自带 Node 22、锁定 Pi／依赖及 rg、fd 的 DMG；该能力仍在预览，正式发行与实机范围另行记录，不代表已有正式包已经切换。
+
+从可信下载站取得对应 Apple Silicon／Intel 包和校验信息，打开 DMG，将 Pivane 拖到“应用程序”，再打开 Pivane。首次启动会校验并复制运行文件到 `~/Library/Application Support/Pivane/desktop`，生成固定数据配置并注册当前用户 LaunchAgent，随后打开浏览器。已有 Pi 身份按原生规则识别复用；只有新身份需要首次配置模型。安装不修改系统 Node 或全局 Pi。端口 11408 或安装目录被已有未知实例占用时停止并报告，不覆盖已有安装。
+
+预览包暂未做 Developer ID 签名与 Apple 公证，下载后可能被 macOS 拦截；只在核对来源后通过“系统设置 → 隐私与安全性”确认打开，不关闭系统保护。Intel 包须单独构建和实机验证；Apple Silicon 通过不代表 Intel 已验收。
+
+配置了签名分发源的平台包可在“设置 → 版本与更新”确认更新。独立启动器完成下载校验、隔离验证、正常停机备份和切换；网页断开不取消更新。失败或结果不确定时查看状态，不重复提交。备份与外部写入边界见[版本与更新](UPDATES.md)。模型服务、第三方扩展和项目命令仍需要各自的账户或环境。
+
+以下是继续保留的**源码归档安装方式**，需要自行准备 Node 与依赖。
+
 ## 安装前提
 
 当前源码的 `node scripts/install.cjs` 统一准备内置 pi-subagents 与 pi-hermes-memory，不再向共享 Pi 身份另行安装包；准备失败会返回安装错误。这个入口也避免 npm 对 SQLite 的无谓编译。下文以 1.6.0 为例（安装其他版本时替换版本号），使用统一安装入口；旧归档没有此脚本时仍使用 `npm ci`。默认启用、旧配置兼容和平台依赖见[内置能力包](BUNDLED_CAPABILITIES.md)。

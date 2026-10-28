@@ -47,10 +47,14 @@ class UpdateService {
         this.piVersion = options.piVersion || installedPi;
         this.bundledPiVersion = application.pivaneManaged?.baselinePi || application.dependencies['@earendil-works/pi-coding-agent'];
         this.platform = options.platform || process.platform;
+        this.arch = options.arch || process.arch;
+        this.distribution = options.distribution === undefined ? require('./pi-distribution').configuration(this.env) : options.distribution;
+        this.feedRequests = new Map();
         this.cache = new Map();
         this.inflight = new Map();
     }
-    snapshot(channel = 'preview') {
+    snapshot(channel) {
+        channel ||= this.distribution?.channel || 'preview';
         if (!['stable', 'preview'].includes(channel)) throw Object.assign(new Error('Invalid update channel'), { status: 400 });
         const cached = this.cache.get(channel);
         const automatic = this.notifications?.cachedPi();
@@ -58,7 +62,8 @@ class UpdateService {
             ? { version: automatic.version, status: relation(this.piVersion, automatic.version), releasesUrl: PI_PAGE }
             : cached?.pi;
         return {
-            channel, platform: this.platform, installMode: 'manual',
+            channel, platform: this.platform, installMode: this.distribution && application.pivaneBundle ? 'managed-bundle' : 'manual',
+            distributionUrl: this.distribution?.url || null,
             appVersion: this.appVersion, piVersion: this.piVersion, bundledPiVersion: this.bundledPiVersion,
             dependencyMatches: this.piVersion === (application.pivaneManaged?.piVersion || this.bundledPiVersion),
             managedPi: Boolean(application.pivaneManaged),
@@ -82,7 +87,28 @@ class UpdateService {
             return await response.json();
         } finally { clearTimeout(timer); agent?.destroy(); }
     }
+    feed(channel) {
+        if (this.feedRequests.has(channel)) return this.feedRequests.get(channel);
+        const pending = this.json(new URL(`channels/${channel}.json`, this.distribution.url).href)
+            .then(envelope => {
+                const data = require('./pi-distribution').signedManifest(envelope, this.distribution, { now: this.now() });
+                if (data.channel !== channel) throw Error('Release channel mismatch');
+                return data;
+            }).finally(() => this.feedRequests.delete(channel));
+        this.feedRequests.set(channel, pending);
+        return pending;
+    }
     async pivane(channel) {
+        if (this.distribution) {
+            const data = await this.feed(channel);
+            const release = [...data.releases].sort((a, b) => compareVersions(b.version, a.version)).find(item => item.bundles[`${this.platform}-${this.arch}`]);
+            if (!release) return { status: 'no-release', releasesUrl: this.distribution.url };
+            const bundle = release.bundles[`${this.platform}-${this.arch}`];
+            return { version: release.version, piVersion: release.piVersion, notes: release.notes, prerelease: release.version.includes('-'),
+                status: relation(this.appVersion, release.version), releasesUrl: this.distribution.url,
+                downloadUrl: require('./pi-distribution').assetUrl(this.distribution, release.version, this.platform, this.arch),
+                release: { version: release.version, sha256: bundle.sha256, bundle: { platform: this.platform, arch: this.arch, bytes: bundle.bytes } } };
+        }
         const releases = await this.json(RELEASES);
         if (!Array.isArray(releases) || releases.length > 100) throw new Error('Invalid release list');
         const candidates = releases.flatMap(release => {
@@ -104,13 +130,18 @@ class UpdateService {
         return { ...latest, status: relation(this.appVersion, latest.version) };
     }
     async pi() {
+        if (this.distribution) {
+            const latest = await this.pivane(this.distribution.channel || 'stable');
+            return latest.piVersion ? { version: latest.piVersion, status: relation(this.piVersion, latest.piVersion), releasesUrl: this.distribution.url }
+                : { status: 'no-release', releasesUrl: this.distribution.url };
+        }
         const data = await this.json(PI_LATEST);
         if (data?.name !== '@earendil-works/pi-coding-agent' || !versionParts(data.version) || versionParts(data.version).pre.length) throw new Error('Invalid package version');
         return { status: relation(this.piVersion, data.version), version: data.version, releasesUrl: PI_PAGE };
     }
     check(channel) {
         this.snapshot(channel); // Validate before any network access.
-        channel ||= 'preview';
+        channel ||= this.distribution?.channel || 'preview';
         if (this.inflight.has(channel)) return this.inflight.get(channel);
         if (this.cache.get(channel)?.expires > this.now()) return Promise.resolve(this.snapshot(channel));
         // Reserve synchronously, before network requests; callers share one check per channel.
@@ -148,7 +179,7 @@ function mountUpdateRoutes(router, service = new UpdateService(), hooks = {}) {
     router.get('/settings/updates/notifications', notificationRoute('read'));
     router.post('/settings/updates/notifications', notificationRoute('change'));
     router.post('/settings/updates/automatic', notificationRoute('check'));
-    router.get('/settings/updates/maintenance', (_req, res) => res.set('Cache-Control', 'no-store').json(maintenance.status()));
+    router.get('/settings/updates/maintenance', (_req, res) => res.set('Cache-Control', 'no-store').json({ ...maintenance.status(), idle: !maintenance.active && idle() }));
     router.post('/settings/updates/review', async (req, res) => {
         res.set('Cache-Control', 'no-store');
         try {
@@ -159,14 +190,18 @@ function mountUpdateRoutes(router, service = new UpdateService(), hooks = {}) {
             maintenance.assertAvailable(action, idle);
             let version, release;
             if (action === 'application') {
-                const channel = req.body.channel || (service.appVersion.includes('-') ? 'preview' : 'stable');
+                const channel = req.body.channel || service.distribution?.channel || (service.appVersion.includes('-') ? 'preview' : 'stable');
                 service.snapshot(channel);
                 const candidate = await service.pivane(channel);
-                if (candidate.status !== 'available' || !candidate.downloadUrl || !candidate.checksumUrl) throw Object.assign(new Error('此渠道没有可安装的 Pivane 新版本'), { status: 409 });
-                const bytes = await require('./pi-application-installer').download(candidate.checksumUrl, { env: service.env, maxBytes: 1024 });
-                const match = /^([a-f0-9]{64})  (pivane-[^\r\n]+\.tar\.gz)\r?\n?$/.exec(bytes.toString());
-                if (!match || match[2] !== `pivane-${candidate.version}.tar.gz`) throw Error('Invalid release checksum');
-                version = candidate.version; release = { version, sha256: match[1] };
+                if (candidate.status !== 'available' || !candidate.downloadUrl || !candidate.release && !candidate.checksumUrl) throw Object.assign(new Error('此渠道没有可安装的 Pivane 新版本'), { status: 409 });
+                version = candidate.version;
+                if (candidate.release) release = candidate.release;
+                else {
+                    const bytes = await require('./pi-application-installer').download(candidate.checksumUrl, { env: service.env, maxBytes: 1024 });
+                    const match = /^([a-f0-9]{64})  (pivane-[^\r\n]+\.tar\.gz)\r?\n?$/.exec(bytes.toString());
+                    if (!match || match[2] !== `pivane-${candidate.version}.tar.gz`) throw Error('Invalid release checksum');
+                    release = { version, sha256: match[1] };
+                }
             }
             if (action === 'update') {
                 if (require('../package.json').pivaneCompatibility?.piVersion) throw Object.assign(new Error('当前 Pivane 与已验证 Pi 版本绑定，请一起更新 Pivane 及原生适配，不单独升级 Pi'), { status: 409 });

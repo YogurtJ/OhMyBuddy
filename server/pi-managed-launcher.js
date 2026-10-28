@@ -109,10 +109,14 @@ class ManagedLauncher {
     boot(release) {
         if (this.closed) throw new Error('Launcher is stopping');
         const root = this.releasePath(release);
+        const markerFile = path.join(root, 'PI_INSTALL_COMPLETE.json');
+        const marker = fs.existsSync(markerFile) ? JSON.parse(readSafe(markerFile)) : null;
+        const executable = require('./pi-platform-bundle').runtimeNode(root, marker);
+        const privatePath = marker?.runtimeNodeSha256 ? [path.join(root, 'bin'), path.join(root, 'runtime/bin'), this.env.PATH || ''].join(path.delimiter) : this.env.PATH;
         return new Promise((resolve, reject) => {
             const child = this.forkServer(path.join(root, 'server.js'), [], {
-                cwd: this.root, execPath: process.execPath, execArgv: [],
-                env: { ...this.env, PI_MANAGED_LAUNCHER: this.nonce, PI_MANAGED_BASE: this.root,
+                cwd: this.root, execPath: executable, execArgv: [],
+                env: { ...this.env, ...(privatePath ? { PATH: privatePath } : {}), PI_MANAGED_LAUNCHER: this.nonce, PI_MANAGED_BASE: this.root,
                     PI_CODING_AGENT_DIR: this.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.pi/agent'),
                     PI_MEDIA_DATA_DIR: this.env.PI_MEDIA_DATA_DIR || this.root },
                 stdio: ['inherit', 'inherit', 'inherit', 'ipc'], windowsHide: true
@@ -184,7 +188,7 @@ class ManagedLauncher {
                 const releases = privateDir(path.join(this.directory, 'releases'));
                 const destination = path.join(releases, message.id);
                 if (fs.existsSync(destination)) throw new Error('Release directory already exists');
-                await (message.action === 'application' ? this.stageApp : this.stage)({ root: this.releasePath(previous), directory: destination, version: message.version, release: message.release, env: this.networkEnvironment, signal: controller.signal,
+                await (message.action === 'application' ? this.stageApp : this.stage)({ root: message.action === 'application' ? this.root : this.releasePath(previous), directory: destination, version: message.version, release: message.release, env: this.networkEnvironment, signal: controller.signal,
                     progress: phase => { job.phase = phase; this.save(); },
                     onOutput: (stream, text) => this.log(job, stream, text) });
                 next = message.id;

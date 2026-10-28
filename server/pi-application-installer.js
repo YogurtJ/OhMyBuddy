@@ -10,19 +10,22 @@ function validApplicationVersion(version) {
     return typeof version === 'string' && version.length < 80 && VERSION.test(version);
 }
 function validRelease(release) {
-    return release && validApplicationVersion(release.version) && /^[a-f0-9]{64}$/.test(release.sha256);
+    return release && validApplicationVersion(release.version) && /^[a-f0-9]{64}$/.test(release.sha256)
+        && (release.bundle === undefined || require('./pi-platform-bundle').validBundle(release));
 }
-async function download(url, { env, signal, request = fetch, maxBytes = MAX_ARCHIVE } = {}) {
+async function download(url, { env, signal, request = fetch, maxBytes = MAX_ARCHIVE, distributionOrigin } = {}) {
     const { proxyFor } = require('./pi-update-service');
     const controller = new AbortController();
     const abort = () => controller.abort();
     signal?.addEventListener('abort', abort, { once: true });
     if (signal?.aborted) abort();
-    const timer = setTimeout(abort, 120000);
+    const timer = setTimeout(abort, distributionOrigin ? 30 * 60 * 1000 : 120000);
     try {
         for (let redirects = 0; redirects < 4; redirects++) {
             const target = new URL(url);
-            if (target.protocol !== 'https:' || target.username || target.password || target.port || !['github.com', 'release-assets.githubusercontent.com'].includes(target.hostname)) throw Error('Untrusted release download origin');
+            const trusted = distributionOrigin ? target.origin === distributionOrigin
+                : !target.port && ['github.com', 'release-assets.githubusercontent.com'].includes(target.hostname);
+            if (target.protocol !== 'https:' || target.username || target.password || !trusted) throw Error('Untrusted release download origin');
             const agent = proxyFor(url, env || process.env);
             try {
                 const response = await request(url, { redirect: 'manual', size: maxBytes, signal: controller.signal, agent, headers: { 'User-Agent': 'Pivane-Application-Update' } });
@@ -74,8 +77,9 @@ function unpack(bytes, version, directory) {
     for (const [name, body] of files) { const destination = path.join(directory, name); privateDir(path.dirname(destination)); fs.writeFileSync(destination, body, { flag: 'wx', mode: 0o600 }); }
     return manifest;
 }
-async function stageApplication({ directory, release, env = process.env, signal, run = runNode, get = download, progress = () => {}, onOutput = () => {} }) {
+async function stageApplication({ root, directory, release, env = process.env, signal, run = runNode, get = download, progress = () => {}, onOutput = () => {} }) {
     if (!validRelease(release)) throw Error('Invalid application release identity');
+    if (release.bundle) return require('./pi-platform-bundle').stageBundle({ root, directory, release, env, signal, run, get, progress, onOutput });
     progress('downloading');
     const url = `https://github.com/YogurtJ/pivane/releases/download/v${release.version}/pivane-${release.version}.tar.gz`;
     const bytes = await get(url, { env, signal });

@@ -6,11 +6,12 @@
         for (const [key, value] of Object.entries(attrs)) element.setAttribute(key, value);
         return element;
     };
-    const link = (text, href) => {
+    const link = (text, href, distributionUrl) => {
         const element = node('a', text, { target: '_blank', rel: 'noopener noreferrer', referrerpolicy: 'no-referrer' });
         try {
             const url = new URL(href);
-            if (url.protocol === 'https:' && !url.username && !url.password && !url.port && ['github.com', 'www.npmjs.com'].includes(url.hostname)) element.href = url.href;
+            const configured = distributionUrl && new URL(distributionUrl).origin === url.origin;
+            if (url.protocol === 'https:' && !url.username && !url.password && (configured || !url.port && ['github.com', 'www.npmjs.com'].includes(url.hostname))) element.href = url.href;
         } catch {}
         return element;
     };
@@ -22,6 +23,7 @@
     function create({ apiFetch }) {
         const panel = document.getElementById('settings-updates-panel');
         const notifications = window.PiUpdateNotifications.start({ apiFetch });
+        const installer = window.PiApplicationUpdate.create({ apiFetch });
         let epoch = 0, snapshot, requested = false;
         const active = n => n === epoch && panel.classList.contains('active') && !document.getElementById('workspace-settings-dialog').classList.contains('hidden');
         function render(data, busy = false, checking = false) {
@@ -52,10 +54,10 @@
                 card.append(versions);
                 if (key === 'pi' && !data.dependencyMatches) card.append(node('p', t('当前 Pi 与发布包配套版本不同。'), { class: 'updates-note' }));
                 const links = node('div', undefined, { class: 'updates-links' });
-                links.append(link(t(key === 'pi' ? 'Pi 官方页面' : 'Pivane 发布页面'), info.releasesUrl));
+                links.append(link(t(key === 'pi' ? 'Pi 官方页面' : 'Pivane 发布页面'), info.releasesUrl, data.distributionUrl));
                 card.append(links); cards.append(card);
             }
-            panel.append(cards);
+            panel.append(cards, installer.render(data));
             const feedback = node('p', data.checkedAt ? t('上次检查：{0}', new Date(data.checkedAt).toLocaleString(globalThis.PiI18n?.locale || undefined)) : t('尚未手动检查。Pi 可能显示自动检查的结果。'), { id: 'updates-feedback', role: 'status', 'aria-live': 'polite' });
             panel.append(feedback);
             const networkLink = node('a', t('网络代理设置'), { href: '#/settings?tab=access&section=proxy', class: 'network-settings-link' });
@@ -103,9 +105,9 @@
                 }
             }
         }
-        window.addEventListener('workspace:access-locked', () => { epoch++; snapshot = null; requested = false; });
+        window.addEventListener('workspace:access-locked', () => { epoch++; snapshot = null; requested = false; installer.close(); });
         window.addEventListener('workspace:access-ready', () => { epoch++; snapshot = null; requested = false; if (active(epoch)) void load(false); });
-        return { open() { void load(false); }, close() { epoch++; } };
+        return { open() { void load(false); }, close() { epoch++; installer.close(); } };
     }
     window.PiUpdates = { create };
 })();

@@ -5,7 +5,7 @@ const base = { root: '/tmp/Pivane space & name', home: '/tmp/user', node: '/opt/
 test('resident service plans bind the original managed launcher without embedding credentials', () => {
     for (const platform of ['linux', 'darwin', 'win32']) {
         const value = plan({ ...base, platform });
-        assert.match(value.runnerText, /startManaged/); assert.match(value.runnerText, /process.env.PATH/);
+        assert.match(value.runnerText, /pi-launcher-bootstrap\.js/); assert.match(value.runnerText, /\.start\(/); assert.match(value.runnerText, /process.env.PATH/);
         assert.ok(value.files.every(f => !f.content.includes('API_KEY')));
         assert.equal(value.id, plan({ ...base, platform }).id);
         if (platform === 'linux') { assert.match(value.files[0].content, /Restart=on-failure/); assert.match(value.files[0].content, /TimeoutStopSec=infinity/); }

@@ -89,7 +89,7 @@ class MaintenanceClient {
         this.assertAvailable(action, idle);
         for (const [id, ticket] of this.tickets) if (ticket.expiresAt <= Date.now()) this.tickets.delete(id);
         if (this.tickets.size >= 16) throw fail('待确认维护操作过多，请稍后再试', 429);
-        const ticket = { id: randomUUID(), action, version: version || null, ...(release ? { release: { ...release } } : {}), generation: this.generation, expiresAt: Date.now() + 10 * 60 * 1000 };
+        const ticket = { id: randomUUID(), action, version: version || null, ...(release ? { release: { version: release.version, sha256: release.sha256, ...(release.bundle ? { bundle: { ...release.bundle } } : {}) } } : {}), generation: this.generation, expiresAt: Date.now() + 10 * 60 * 1000 };
         this.tickets.set(ticket.id, ticket); return { ...ticket, storage: this.state.storage, backupScope: this.state.backupScope };
     }
     execute(input, { idle, pause }) {

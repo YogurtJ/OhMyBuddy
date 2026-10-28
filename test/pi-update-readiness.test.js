@@ -1,0 +1,20 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const express = require('express');
+const { once } = require('node:events');
+const { UpdateService, mountUpdateRoutes } = require('../server/pi-update-service');
+const { MaintenanceClient } = require('../server/pi-maintenance-client');
+test('maintenance readiness waits for both global work and outstanding requests without changing admission', async t => {
+    let idle = false;
+    const maintenance = new MaintenanceClient({ managed: false });
+    const app = express(), router = express.Router();
+    mountUpdateRoutes(router, new UpdateService({ env: {}, distribution: null }), { maintenance, idle: () => idle }); app.use(router);
+    const server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
+    t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
+    const status = async () => (await fetch(`http://127.0.0.1:${server.address().port}/settings/updates/maintenance`)).json();
+    assert.equal((await status()).idle, false);
+    idle = true; assert.equal((await status()).idle, true);
+    const leave = maintenance.enter(); assert.equal((await status()).idle, false);
+    leave(); assert.equal((await status()).idle, true);
+    assert.throws(() => maintenance.assertAvailable('application', () => true), /启动器/, 'readiness never grants unsupported maintenance');
+});
