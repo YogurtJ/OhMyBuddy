@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const path = require('node:path');
+const path = require('node:path'), os = require('node:os');
+const screenshotPath = name => path.join(os.tmpdir(), name);
 const { once } = require('node:events');
 const express = require('express');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -112,6 +113,7 @@ async function check(browser, base, width, language) {
     });
     await page.waitForFunction(() => document.querySelector('#pi-task-results').hidden);
     await page.reload();
+    await transcriptResult.waitFor();
     assert.equal(await transcriptResult.count(), 1, 'native history reload keeps exactly one delivered receipt');
     assert.ok(await page.locator('#pi-task-results').isHidden(), 'chip stays hidden when all results are read and no tasks are active');
     read = false; busy = true;
@@ -121,7 +123,7 @@ async function check(browser, base, width, language) {
     const markAllBtn = page.getByRole('button', { name: language === 'en' ? 'Mark all read' : '全部标为已读', exact: true });
     assert.equal(await markReadBtn.isDisabled(), false, 'mark read stays available while the thread is streaming');
     assert.equal(await markAllBtn.isDisabled(), false, 'mark all read stays available while the thread is streaming');
-    await page.screenshot({ path: `/tmp/pivane-task-results-${width}-${language}.png` });
+    await page.screenshot({ path: screenshotPath(`pivane-task-results-${width}-${language}.png`) });
     await markReadBtn.click();
     await page.waitForFunction(() => document.querySelector('#pi-task-results').hidden);
     read = false; busy = false;
@@ -199,7 +201,7 @@ async function checkList(browser, base, width, language) {
     assert.equal(reads.length, 1, 'expanding in place does not mark read');
     const overflow = await page.locator('.pi-results-body, .pi-task-result, .pi-task-result-row, .pi-task-result-main').evaluateAll(nodes => nodes.filter(n => n.scrollWidth > n.clientWidth + 2 || n.getBoundingClientRect().right > innerWidth + 1).map(n => n.className));
     assert.deepEqual(overflow, []);
-    await page.screenshot({ path: `/tmp/pivane-task-results-list-${width}-${language}.png` });
+    await page.screenshot({ path: screenshotPath(`pivane-task-results-list-${width}-${language}.png`) });
     await page.getByRole('button', { name: language === 'en' ? 'Mark all read' : '全部标为已读', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('#pi-task-results > summary').textContent.match(/^\D*1 (active|进行中)/));
     assert.deepEqual(reads.sort(), ['b'.repeat(64), 'c'.repeat(64)]);
@@ -212,9 +214,11 @@ async function checkList(browser, base, width, language) {
     for (const [url, folder] of [['marked', 'marked/lib'], ['dompurify', 'dompurify/dist'], ['highlight', '@highlightjs/cdn-assets']]) app.use(`/vendor/${url}`, express.static(path.join(root, 'node_modules', folder)));
     app.use(express.static(path.join(root, 'public')));
     const server = http.createServer(app); server.listen(0, '127.0.0.1'); await once(server, 'listening');
-    const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
-    try { for (const width of [1440, 393, 320]) for (const language of ['zh-CN', 'en']) await check(browser, `http://127.0.0.1:${server.address().port}`, width, language);
+    let browser;
+    try {
+        browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
+        for (const width of [1440, 393, 320]) for (const language of ['zh-CN', 'en']) await check(browser, `http://127.0.0.1:${server.address().port}`, width, language);
         for (const width of [1440, 393, 320]) for (const language of ['zh-CN', 'en']) await checkList(browser, `http://127.0.0.1:${server.address().port}`, width, language);
         console.log('Task result inbox: six desktop/mobile/language scenarios and six list scenarios passed');
-    } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
+    } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
