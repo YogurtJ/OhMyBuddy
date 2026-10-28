@@ -209,7 +209,7 @@ async function workerTool(t, f) {
         t.after(() => { if (prior === undefined) delete process.env[key]; else process.env[key] = prior; });
     }
     const file = path.join(__dirname, '../server/bot/bot-context-extension.ts');
-    const { registerBotContext } = require(process.env.PIVANE_TEST_PI_JITI).createJiti(file)(file);
+    const { registerBotContext } = await require(process.env.PIVANE_TEST_PI_JITI).createJiti(file).import(file);
     const handlers = new Map(), tools = new Map();
     const pi = { on(name, handler) { handlers.set(name, handler); }, registerTool(tool) { tools.set(tool.name, tool); }, getAllTools: () => [...tools.values()] };
     registerBotContext(pi, () => agentDir);

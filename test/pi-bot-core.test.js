@@ -57,6 +57,7 @@ test('bot settings normalize, tolerate invalid reads and accept only user-editab
 test('bots are profiles with a private workspace and a native-marked main window', { timeout: 30000 }, async t => {
     const access = new WorkspaceAccessService({ envToken: () => 'synthetic-test-token' });
     const gateway = createPiAgentGateway({ accessService: access, deferredFilePath: process.env.PI_WEB_DEFERRED_FILE });
+    gateway.bots.catalog = async () => ({ models: [{ provider: 'fixture', modelId: 'small', thinkingLevels: ['off', 'low', 'high'] }] });
     const express = require('express'), app = express(); app.use(express.json()); gateway.mount(app);
     const server = http.createServer(app); server.listen(0, '127.0.0.1'); await once(server, 'listening');
     t.after(async () => { await gateway.dispose(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });

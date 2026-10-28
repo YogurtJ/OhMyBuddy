@@ -350,7 +350,7 @@ async function workerTool(t, f, session = f.main, windowId = f.mainId) {
         t.after(() => { if (prior === undefined) delete process.env[key]; else process.env[key] = prior; });
     }
     const file = path.join(__dirname, '../server/bot/bot-context-extension.ts');
-    const { registerBotContext } = require(process.env.PIVANE_TEST_PI_JITI).createJiti(file)(file);
+    const { registerBotContext } = await require(process.env.PIVANE_TEST_PI_JITI).createJiti(file).import(file);
     const handlers = new Map(), tools = new Map(), confirmations = [], notifications = [], nextTurn = [];
     const pi = { on(name, handler) { handlers.set(name, handler); }, registerTool(tool) { tools.set(tool.name, tool); }, getAllTools: () => [...tools.values()],
         sendMessage(message, options) { assert.deepEqual(options, { deliverAs: 'nextTurn' }); nextTurn.push(message); } };

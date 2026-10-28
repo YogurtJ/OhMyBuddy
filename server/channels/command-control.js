@@ -4,7 +4,9 @@ const cancelled = () => Object.assign(new Error('渠道权限、绑定或任务�
 // operation remains the source of truth; unknown outcomes are never replayed.
 function commandControl(service, job, run = {}) {
     const check = () => {
-        if (!service.canAdmit(service.job(job.id))) throw cancelled();
+        const current = service.job(job.id);
+        if (!service.canAdmit(current)) throw cancelled();
+        if (current.bot && service.bots?.sessionMoved(current.target.sessionId)) throw cancelled();
     };
     const submit = () => {
         check();
@@ -17,21 +19,35 @@ function commandControl(service, job, run = {}) {
         const current = service.job(job.id);
         const session = await service.store.getSession(current.target.cwd, current.target.sessionId);
         check();
-        const worker = await service.supervisor.getWorker({ cwd: session.cwd, sessionPath: session.path, sessionId: session.id });
-        check();
-        run.worker = worker;
-        if (!worker.isIdle()) throw Object.assign(new Error('会话尚未空闲'), { code: 'SESSION_BUSY' });
-        return worker.exclusive(async (rpc, state) => {
+        const bot = service.bindingFor(service.job(job.id))?.bot;
+        const execute = worker => {
             check();
-            worker.channelCommandId = job.id;
-            const guardedRpc = (type, payload = {}, timeout, prepared) => rpc(type, payload,
-                type.startsWith('get_') ? timeout : null, () => {
-                    (type.startsWith('get_') ? check : submit)();
-                    prepared?.();
-                });
-            try { return await callback(worker, guardedRpc, state, session); }
-            finally { worker.channelCommandId = null; }
-        });
+            run.worker = worker;
+            if (!worker.isIdle()) throw Object.assign(new Error('会话尚未空闲'), { code: 'SESSION_BUSY' });
+            // exclusive reserves synchronously. For Bots this happens under the profile/window
+            // gate, which can then be released before a long native operation runs.
+            return worker.exclusive(async (rpc, state) => {
+                check();
+                if (bot) await service.bots.assertCurrentWindowSession(bot.profileId, bot.windowId, session);
+                check();
+                worker.channelCommandId = job.id;
+                const guardedRpc = (type, payload = {}, timeout, prepared) => rpc(type, payload,
+                    type.startsWith('get_') ? timeout : null, () => {
+                        (type.startsWith('get_') ? check : submit)();
+                        prepared?.();
+                    });
+                try { return await callback(worker, guardedRpc, state, session); }
+                finally { worker.channelCommandId = null; }
+            });
+        };
+        const open = async () => {
+            check();
+            const worker = await service.supervisor.getWorker({ cwd: session.cwd, sessionPath: session.path, sessionId: session.id });
+            check();
+            return { operation: execute(worker) };
+        };
+        const reserved = bot ? await service.bots.withChannelWindow(bot.profileId, bot.windowId, session, open) : await open();
+        return reserved.operation;
     };
     return { check, submit, withWorker };
 }

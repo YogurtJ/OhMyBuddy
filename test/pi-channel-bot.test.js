@@ -46,6 +46,8 @@ function fixture(t, { text = 'hello', binding: bindingOverride } = {}) {
             if (w.archived) throw Object.assign(Error('archived'), { status: 409, code: 'BOT_WINDOW_ARCHIVED' });
             return { name: bot.name, window: publicWindow(w), session: sessions.get(w.current) };
         },
+        async withChannelWindow(profileId, windowId, session, action) { await this.assertCurrentWindowSession(profileId, windowId, session); return action(); },
+        async settings() { return { bot: { bot: { model: null, thinking: null, permissions: { preset: 'free' } } } }; },
         async channelWindows(profileId) {
             const bot = windows[profileId];
             return { name: bot.name, enabled: bot.enabled, windows: bot.windows.filter(w => !w.archived).map(publicWindow) };
@@ -138,7 +140,7 @@ test('an archived topic sends the chat back to the main chat with an explanation
     assert.deepEqual([db.value.bindings[0].bot.windowId, db.value.bindings[0].sessionId], [MAIN_A, 'a-main-0']);
 });
 
-test('/切换 and /话题 move the chat; thread commands are not available', async t => {
+test('/切换 and /话题 move the chat; native reset commands explain Bot topics', async t => {
     const { s, db, sends } = fixture(t, { text: '/切换' });
     s.pump(); await until(() => s.job('job').status === 'delivered');
     assert.match(sends[0], /\[1\] 小狸（当前）/); assert.match(sends[0], /\[2\] 阿木/);
@@ -153,7 +155,7 @@ test('/切换 and /话题 move the chat; thread commands are not available', asy
     assert.match(await send('back', '/切换 小狸'), /现在和 小狸 聊/);
     assert.match(await send('topic', '/话题 旅行'), /进入「旅行」/);
     assert.deepEqual([db.value.bindings[0].bot.windowId, db.value.bindings[0].sessionId], [TOPIC_A, 'a-topic-0']);
-    assert.match(await send('new', '/new'), /不能用 \/new/);
+    assert.match(await send('reset', '/reset'), /Bot 不支持 \/reset/);
     assert.match(await send('status', '/status'), /小狸 聊 · 旅行/);
 });
 
