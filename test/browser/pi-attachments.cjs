@@ -206,7 +206,7 @@ async function run(browser, viewport, transcriptActivity = true) {
     assert.equal(await input.inputValue(), 'network draft'); await count(1);
     page.once('dialog', dialog => dialog.accept()); mode = 'accept'; await input.press('Enter');
     await page.waitForFunction(() => document.querySelector('#pi-input').value === ''); await count(0);
-    // Image acknowledgement replaces its optimistic card; repeated events don't duplicate it.
+    // Native image echoes appear once; repeated events don't duplicate them.
     // An intentional second send with identical content must remain a separate user message.
     mode = 'echo';
     const echoStart = prompts.length;

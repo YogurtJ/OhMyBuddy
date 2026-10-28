@@ -4511,7 +4511,10 @@ document.addEventListener('DOMContentLoaded', () => {
         autoResizeInput(); workflows.update();
         composer.hide();
         if (command === 'prompt' && !selectedCommand && !state.streaming) transcriptActivity?.sending();
-        const optimistic = selectedCommand ? null : appendOptimisticUser(hasQuotes || state.attachmentFiles.some(file => file.kind === 'document') ? attachments.payload(text, state.attachmentFiles.filter(file => ['quote', 'document'].includes(file.kind))).message : text || textAttachments.map(file => translateUi("附件：{0}", file.name)).join(', '), images, message);
+        // Pi can resize images and append notes before the native echo, then externalize
+        // their bytes. Use submission feedback until that echo instead of guessing which
+        // optimistic image message to replace from its original text or image content.
+        const optimistic = selectedCommand || images.length ? null : appendOptimisticUser(hasQuotes || state.attachmentFiles.some(file => file.kind === 'document') ? attachments.payload(text, state.attachmentFiles.filter(file => ['quote', 'document'].includes(file.kind))).message : text || textAttachments.map(file => translateUi("附件：{0}", file.name)).join(', '), images, message);
         try {
             await requestRpc(command, { message, images }, 60000);
             if (key === state.composerSessionKey) transcriptActivity?.accepted();
