@@ -4,6 +4,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const assert = require('node:assert/strict');
+const { X509Certificate } = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { once } = require('node:events');
 const net = require('node:net');
@@ -12,7 +13,7 @@ const { readSafe, hashFileSafe } = require('../../server/pi-maintenance-files');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function main() {
     const args = process.argv.slice(2), values = {};
-    for (let i = 0; i < args.length; i += 2) { if (!['--payload', '--output', '--expected', '--playwright', '--resume'].includes(args[i]) || !args[i + 1] || values[args[i]]) throw Error('Invalid isolated macOS trial arguments'); values[args[i]] = args[i + 1]; }
+    for (let i = 0; i < args.length; i += 2) { if (!['--payload', '--output', '--expected', '--playwright', '--resume', '--tls-ca'].includes(args[i]) || !args[i + 1] || values[args[i]]) throw Error('Invalid isolated macOS trial arguments'); values[args[i]] = args[i + 1]; }
     if (process.platform !== 'darwin' || !['--payload', '--output', '--expected', '--playwright'].every(key => values[key])) throw Error('Use --payload --output NEW_DIR --expected VERSION --playwright MODULE on macOS');
     const output = path.resolve(values['--output']);
     if (values['--resume'] === 'true') assert.equal(readSafe(path.join(output, 'isolated-trial')).toString(), 'Pivane macOS platform update\n');
@@ -27,6 +28,12 @@ async function main() {
     socket.listen(requestedPort, '127.0.0.1'); await once(socket, 'listening'); const port = socket.address().port; await new Promise(resolve => socket.close(resolve));
     const env = { HOME: home, PATH: '/usr/bin:/bin:/usr/sbin:/sbin', HOST: '127.0.0.1', PORT: String(port),
         PI_CODING_AGENT_DIR: agent, PI_PROJECT_ROOTS: project, PI_WEB_TOKEN: 'pivane-platform-trial-only', PI_OFFLINE: '1', PI_TELEMETRY: '0', PI_SKIP_VERSION_CHECK: '1' };
+    if (values['--tls-ca']) {
+        assert.ok(path.isAbsolute(values['--tls-ca']), 'Test TLS CA path must be absolute');
+        const ca = fs.realpathSync.native(values['--tls-ca']);
+        assert.equal(new X509Certificate(readSafe(ca, 64 * 1024)).ca, true, 'Test TLS certificate must be a CA');
+        env.NODE_EXTRA_CA_CERTS = ca;
+    }
     await prepareInstallation({ source: fs.realpathSync.native(values['--payload']), root: installation, agentDir: agent, port, env, run: require('../../server/pi-update-installer').runNode });
     const initial = JSON.parse(readSafe(path.join(installation, 'package.json'))).version;
     const node = path.join(installation, 'runtime/bin/node'), logFile = fs.openSync(path.join(output, values['--resume'] ? 'service-resume.log' : 'service.log'), values['--resume'] ? 'a' : 'wx', 0o600);

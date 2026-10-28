@@ -80,9 +80,10 @@
         // Bots whose user wrote their own message instead of choosing: the panel stays away on this
         // page (nothing is saved; it comes back after a reload while the step is still open).
         const dismissed = new Set();
-        let modelPicker = null;
+        let modelPicker = null, rememberAbout = null;
 
         function hide() {
+            rememberAbout?.(); rememberAbout = null;
             modelPicker?.dispose?.(); modelPicker = null;
             if (panel.hidden) return;
             panel.hidden = true; panel.replaceChildren(); shown = ''; changed?.();
@@ -278,6 +279,9 @@
         }
 
         function render() {
+            // A details toggle event can arrive after the node is replaced or hidden.
+            // Capture the current DOM choice before either operation, bound to its owner.
+            rememberAbout?.();
             modelPicker?.dispose?.(); modelPicker = null;
             const now = target();
             if (!now || !state || state.botId !== now.bot?.id) { hide(); return; }
@@ -287,7 +291,8 @@
             head.append(face(), el('strong', null, translateUi("认识好啦！先说说我平时怎么做事")));
             const about = dataNotice(bot, { open: state.about ?? !matches(COMPACT) });
             const mine = state;
-            about.addEventListener('toggle', () => { mine.about = about.open; });
+            rememberAbout = () => { mine.about = about.open; };
+            about.addEventListener('toggle', () => { if (panel.contains(about)) mine.about = about.open; });
             // Only the facts and the model scroll; the choices below always stay in view.
             const body = el('div', 'pi-bot-setup-fields pi-bot-closure-body');
             body.append(about, modelPart(bot));

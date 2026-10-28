@@ -38,7 +38,7 @@ test.before(async () => {
 });
 test.after(async () => { provider.closeAllConnections(); await new Promise(resolve => provider.close(resolve)); fs.rmSync(root, { recursive: true, force: true }); });
 async function open(manager, extra = {}) {
-    const { factories = [], entry = wrapper, eventBus, ...sessionOptions } = extra;
+    const { factories = [], entry = wrapper, eventBus, bindMode = 'print', ...sessionOptions } = extra;
     const settings = sdk.SettingsManager.create(cwd, agentDir);
     const paths = [entry];
     const loader = new sdk.DefaultResourceLoader({ cwd, agentDir, settingsManager: settings, noExtensions: true, noSkills: true, noThemes: true, noPromptTemplates: true, noContextFiles: true, additionalExtensionPaths: paths, extensionFactories: factories, eventBus });
@@ -48,7 +48,7 @@ async function open(manager, extra = {}) {
     session.subscribe(event => { if (event.type === 'tool_execution_start') executions.push(event.toolName); });
     const before = manager.getSessionFile() && fs.existsSync(manager.getSessionFile()) ? fs.readFileSync(manager.getSessionFile()) : null;
     const count = requests.length, effects = executions.length;
-    await session.bindExtensions({ mode: 'print', onError: error => errors.push(String(error.error)) });
+    await session.bindExtensions({ mode: bindMode, onError: error => errors.push(String(error.error)) });
     assert.equal(requests.length, count, 'binding makes no provider request');
     assert.equal(executions.length, effects, 'binding executes no tools');
     if (before) assert.deepEqual(fs.readFileSync(manager.getSessionFile()), before, 'binding preserves existing native bytes');
@@ -388,6 +388,31 @@ test('recorded supervisor selection remains usable across eager reopen and reloa
         assert.deepEqual(sorted(current.session), expected);
         assert.deepEqual(fs.readFileSync(fixture.manager.getSessionFile()), original);
     } finally { await current.close(); fs.rmSync(modeConfiguration, { force: true }); }
+});
+
+test('managed cron startup preserves a recorded supervisor tool registered later in session_start', async () => {
+    const fixture = await modeFixture('dynamic', 'active', 'cron-selected-supervisor');
+    fixture.session.setActiveToolsByName(['read', ...directDelegation, 'subagent_supervisor']);
+    await fixture.session.prompt('Persist explicit supervisor selection before managed reopen.');
+    const original = fs.readFileSync(fixture.manager.getSessionFile());
+    await fixture.close(); configureMode('eager');
+    const { pathToFileURL } = require('node:url');
+    const entry = path.join(root, 'cron-before-subagents.mjs');
+    fs.writeFileSync(entry, `import bundled from ${JSON.stringify(pathToFileURL(wrapper).href)};\nimport cron from ${JSON.stringify(pathToFileURL(require.resolve('../server/pi-cron-runtime')).href)};\nexport default pi => { cron.registerCron(pi); return bundled(pi); }\n`);
+    const prior = process.env.PI_WEB_NAVIGATION_TOKEN;
+    process.env.PI_WEB_NAVIGATION_TOKEN = 'synthetic-navigation';
+    let current;
+    try {
+        current = await open(sdk.SessionManager.open(fixture.manager.getSessionFile()), { entry, bindMode: 'rpc' });
+        const expected = ['read', ...directDelegation, 'subagent_supervisor'].sort();
+        assert.deepEqual(sorted(current.session), expected, 'ordinary startup must not discard pending native tool restoration');
+        await current.session.prompt('Continue without changing the recorded tools.');
+        assert.deepEqual(sorted(current.session), expected);
+        assert.ok(fs.readFileSync(fixture.manager.getSessionFile()).subarray(0, original.length).equals(original));
+    } finally {
+        await current?.close(); fs.rmSync(modeConfiguration, { force: true });
+        if (prior === undefined) delete process.env.PI_WEB_NAVIGATION_TOKEN; else process.env.PI_WEB_NAVIGATION_TOKEN = prior;
+    }
 });
 
 test('notice markers affect only model context and coexist with prompt sections and Agent messages', async () => {

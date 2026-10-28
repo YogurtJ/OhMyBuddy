@@ -10932,6 +10932,7 @@
         ["使用工具 · {0}","Use tool · {0}"],
         ["没有执行（你没有允许）","Did not run (not allowed)"],
         ["更新了设置 · {0}","Updated settings · {0}"],
+        ["查看","View"],
         ["记在“我记着的事” · {0} 件","Noted in “Things I’m keeping in mind” · {0}"],
         ["新增关于你","Added to About you"],
         ["更新了关于你","Updated About you"],

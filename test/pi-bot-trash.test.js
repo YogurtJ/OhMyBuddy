@@ -80,7 +80,7 @@ test('profile reservation and session gates cover asynchronous startup until the
 test('production blocker check catches enabled profile/thread schedules, deferred states and profile learning without modifying them', () => {
     const cron = { db: { jobs: () => jobs, activeRuns: () => runs }, busy: false, mutating: null }, deferred = { jobs: [], assertHealthy() {} }, learning = { active: new Map() };
     const store = { resolveProject: cwd => path.resolve(cwd) };
-    let jobs = [], runs = []; const check = createTrashBlockers({ cron, deferred, learning, store }), target = { profileId: 'bot-a', sessionRefs: [{ cwd: '/fixture', sessionId: 's' }] };
+    let jobs = [], runs = []; const check = createTrashBlockers({ cron, deferred, learning, store }), target = { profileId: 'bot-a', sessionRefs: [{ cwd: path.resolve('/fixture'), sessionId: 's' }] };
     assert.deepEqual(check(target), []);
     jobs = [{ enabled: true, target: { kind: 'profile', profileId: 'bot-a' } }]; assert.equal(check(target)[0].code, 'BOT_HAS_SCHEDULES');
     jobs[0].enabled = false; assert.deepEqual(check(target), []);

@@ -110,16 +110,18 @@ function protectedPath(raw, cwd, agentDir, resolve = resolvePiPath) {
 // paths must be checked exactly as the shell will use them. Unquoted ~ remains opaque.
 function resolveShellPath(input, cwd) { return path.resolve(cwd, input); }
 function resolvePowerShellPath(input, cwd) { return path.resolve(cwd, input.replaceAll('\\', path.sep)); }
+// Darwin's /etc and /var resolve under /private; classify both spellings alike.
+const systemLocation = target => target.replaceAll('\\', '/').toLowerCase().replace(/^\/private\/(?=(?:etc|var)(?:\/|$))/, '/');
 // Writes here still ask even in Hands-off mode: Pivane's own running releases, state and
 // backups, and locations that start programs automatically at login or on a schedule.
 function criticalPath(target) {
-    const normalized = target.replaceAll('\\', '/').toLowerCase();
+    const normalized = systemLocation(target);
     return /(?:^|\/)\.pivane-runtime(?:\/|$)/.test(normalized)
         || /(?:^|\/)(?:library\/(?:launchagents|launchdaemons)|\.config\/(?:systemd|launchd|autostart)|start menu\/programs\/startup)(?:\/|$)/.test(normalized)
         || /^\/(?:etc\/(?:cron[^/]*|systemd|init\.d)|var\/spool\/cron)(?:\/|$)/.test(normalized);
 }
 function systemPath(target) {
-    const normalized = target.replaceAll('\\', '/').toLowerCase();
+    const normalized = systemLocation(target);
     if (criticalPath(target)) return true;
     return /(?:^|\/)(?:\.git(?:\/|$)|\.config\/(?:systemd|launchd)(?:\/|$)|\.(?:bashrc|bash_profile|zshrc|profile|gitconfig)$|microsoft\.powershell_profile\.ps1$)/.test(normalized)
         || /^\/(?:etc|usr|bin|sbin|boot|dev|proc|sys|run|var\/lib|var\/run)(?:\/|$)/.test(normalized)

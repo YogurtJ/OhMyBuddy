@@ -27,7 +27,15 @@ test('paths resolve exactly like the Pi write and edit tools', async () => {
     const { resolveToCwd } = await import(pathToFileURL(paths).href);
     const inputs = ['plan.md', './a/../b.md', '@plan.md', '@@x.md', ' plan.md ', '~', '~/notes.md', '~\\notes.md', 'file:///tmp/outside/note.md',
         `file://${outside}/a.md`, 'out\u00a0dir/a.md', 'a\u3000b.md', '/abs/path.md', '../up.md', 'C:\\x.md', '/mnt/c/x.md', ''];
-    for (const input of inputs) assert.equal(resolvePiPath(input, workspace), resolveToCwd(input, workspace), JSON.stringify(input));
+    for (const input of inputs) {
+        let expected;
+        try { expected = resolveToCwd(input, workspace); }
+        catch (error) {
+            assert.throws(() => resolvePiPath(input, workspace), { name: error.name, code: error.code }, JSON.stringify(input));
+            continue;
+        }
+        assert.equal(resolvePiPath(input, workspace), expected, JSON.stringify(input));
+    }
 });
 
 test('outside writes are recognised through URLs, spaces, symlinks and hard links', () => {
@@ -45,7 +53,7 @@ test('careful presets decide which steps ask first', () => {
     assert.equal(ask('balanced', 'powershell', { command: 'Get-ChildItem' }).rule.value, 'Get-ChildItem');
     assert.deepEqual(ask('balanced', 'agent_thread', { message: 'Do it' }), { kind: 'delegate', detail: 'Do it' });
     assert.equal(ask('balanced', 'write', { path: 'link/a.md' }).kind, 'outside');
-    assert.equal(ask('balanced', 'write', { path: 'file:///tmp/outside/note.md' }).kind, 'outside');
+    assert.equal(ask('balanced', 'write', { path: pathToFileURL(path.join(outside, 'note.md')).href }).kind, 'outside');
     assert.equal(ask('balanced', 'edit', { path: 'plan.md' }), null);
     for (const tool of ['memory_add', 'deliver_files', 'get_attachment', 'mcp_tool']) assert.equal(ask('balanced', tool, { content: 'x' }), null, tool);
     assert.deepEqual(ask('balanced', 'mcp_tool', {}, { destructiveHint: true }), { kind: 'action', detail: 'mcp_tool' });

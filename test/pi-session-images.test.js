@@ -76,7 +76,7 @@ test('migration retains every branch, labels, unknown fields and unchanged raw l
     const oldLines = before.toString().split('\n'), nextLines = fs.readFileSync(file, 'utf8').split('\n');
     oldLines.forEach((line, i) => { if (!line.includes(png)) assert.equal(nextLines[i], line); });
     assert.equal(fs.readdirSync(images.root).length, 1);
-    await assert.rejects(migrate(plan, options), /EEXIST/);
+    await assert.rejects(migrate(plan, options), { code: 'EEXIST' });
     const changedPlan = { ...plan, files: [{ ...plan.files[0], sha256: '0'.repeat(64) }] };
     await assert.rejects(migrate(changedPlan, { ...options, directory: path.join(dir, 'changed') }), /changed/);
     const migrated = fs.readFileSync(file); fs.appendFileSync(file, '\n');

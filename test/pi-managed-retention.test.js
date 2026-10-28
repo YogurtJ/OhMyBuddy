@@ -426,7 +426,7 @@ test('backups are verified newest first, each within its own budget; a spent rou
     for (const id of old) assert.ok(!plan.removeBackups.includes(id) && !plan.keepBackups.includes(id));
     // A backup larger than its own budget is incomplete (kept on disk); without restore points nothing is removed.
     const tight = retention.planRetention(f.runtime, state, { releases: 2, backups: 2 }, { budgets: { backup: { bytes: 1024 ** 3, entries: 1 }, round: smallBudgets.round } });
-    assert.equal(tight.skipped, 'missing-current-or-previous-restore-backup');
+    assert.equal(tight.skipped, unskipped ?? 'missing-current-or-previous-restore-backup');
     assert.deepEqual(tight.removeBackups, []);
 });
 
