@@ -8,6 +8,7 @@ const { readSafe } = require('../pi-maintenance-files');
 const { privateDirectory, writePrivateFileSync, privateFileMode } = require('../pi-private-files');
 const { replaceFileSync } = require('../pi-win32-native');
 const scope = require('./scope');
+const { nativeInputIndex, nativeMessage, textOf } = require('../pi-native-input');
 const { skillBody } = require('./tool-mutations');
 const compare = require('./knowledge-compare');
 const { decision, PROMPT: COMPARISON_PROMPT } = require('./learning-decision');
@@ -68,16 +69,6 @@ const boundedSource = file => {
 const fail = (message, status = 400) => { throw Object.assign(new Error(message), { status }); };
 const hash = value => createHash('sha256').update(value).digest('hex');
 const clean = value => typeof value === 'string' ? value.replace(/[\u0000-\u001f\u007f]/g, ' ').trim() : '';
-const text = entry => {
-    const content = entry?.message?.content;
-    return clean(typeof content === 'string' ? content : Array.isArray(content)
-        ? content.filter(part => part?.type === 'text').map(part => part.text).join(' ') : '');
-};
-const effectiveText = (edits, entry) => {
-    const edit = edits.get(entry?.id);
-    const content = edit ? edit.replacement === null ? null : edit.replacement?.content : entry?.message?.content;
-    return content === null ? '' : text({ message: { content } });
-};
 const history = require('./learning-history');
 const MAX_COVERED_PAIRS = 2048;
 const triggers = require('./learning-triggers');
@@ -89,20 +80,24 @@ const preference = (value, phrases) => triggers.preference(value, phrases);
 // conversations are imported) is kept for reading and continuing, never learned
 // from. Any baseline on the branch counts, so a fork does not re-open old history.
 const LEARNING_BASELINE = 'pivane-learning-baseline';
-const pairs = branch => {
-    const edits = new Map();
-    for (const entry of branch) if (entry.type === 'context_edit') edits.set(entry.targetId, entry);
+const CONTEXT_NOTICES = new Set(['pivane-bot-notebook', 'pivane-bot-topic-index']);
+const pairs = (branch, sessionId) => {
+    const inputs = nativeInputIndex(branch, sessionId);
     let result = [];
     let user;
     for (const entry of branch) {
         if (entry.type === 'custom' && entry.customType === LEARNING_BASELINE) { result = []; user = null; continue; }
-        if (entry.type === 'custom_message' && entry.customType === 'pivane-cron-message') { user = null; continue; }
-        if (entry.type !== 'message') continue;
-        if (entry.message?.role === 'user') user = entry;
-        if (entry.message?.role === 'assistant' && user && entry.message.stopReason === 'stop') {
-            const assistantText = effectiveText(edits, entry);
+        const message = nativeMessage(entry, inputs);
+        if (entry.type === 'custom_message' && !inputs.channels.has(entry.id)) {
+            if (!CONTEXT_NOTICES.has(entry.customType)) user = null;
+            continue;
+        }
+        if (message?.role === 'system') continue;
+        if (entry.type === 'message' && entry.message?.role === 'user' || inputs.channels.has(entry.id)) user = entry;
+        if (message?.role === 'assistant' && user && message.stopReason === 'stop') {
+            const assistantText = clean(textOf(message.content));
             if (!assistantText) continue;
-            result.push({ user, assistant: entry, userText: effectiveText(edits, user), assistantText });
+            result.push({ user, assistant: entry, userText: clean(textOf(nativeMessage(user, inputs)?.content)), assistantText });
             user = null;
         }
     }
@@ -654,7 +649,7 @@ class ProfileLearningService {
             const manager = SessionManager.open(session.path);
             const context = await this.profiles.context(manager, session.cwd);
             if (!context?.memory.enabled || !scope.verifyNativeSession(context, manager)) return;
-            const branch = manager.getBranch(), completed = pairs(branch);
+            const branch = manager.getBranch(), completed = pairs(branch, manager.getSessionId());
             const stateBefore = this.read(await this.location(context.profileId));
             const nativeKey = history.sessionKey(manager);
             const fork = history.forkBoundary(manager, context, stateBefore.forks?.[nativeKey]);
@@ -853,7 +848,7 @@ class ProfileLearningService {
         const manager = SessionManager.open(session.path);
         const context = await this.profiles.context(manager, session.cwd);
         if (context?.profileId !== id || !scope.verifyNativeSession(context, manager)) return null;
-        const branch = manager.getBranch(), completed = pairs(branch);
+        const branch = manager.getBranch(), completed = pairs(branch, manager.getSessionId());
         const state = this.read(await this.location(id));
         const fork = history.forkBoundary(manager, context, state.forks?.[history.sessionKey(manager)]);
         const row = completed.find(pair => pair.user.id === job.userId && pair.assistant.id === job.assistantId);
@@ -1103,7 +1098,7 @@ class ProfileLearningService {
                     const fork = history.forkBoundary(manager, context, state.forks?.[history.sessionKey(manager)]);
                     proof = { manager, fork, ids: history.inheritedIds(manager, fork) }; managers.set(run.sessionPath, proof);
                 }
-                const row = pairs(proof.manager.getBranch()).find(row => row.user.id === run.userId && row.assistant.id === run.assistantId);
+                const row = pairs(proof.manager.getBranch(), proof.manager.getSessionId()).find(row => row.user.id === run.userId && row.assistant.id === run.assistantId);
                 if (!row || !history.inheritedPair(row, proof.ids)
                     || run.sourceIdentity !== hash(JSON.stringify([run.sessionPath, row.user.id, row.assistant.id, row.userText, row.assistantText])))
                     fail('Run is not proven inherited history', 409);

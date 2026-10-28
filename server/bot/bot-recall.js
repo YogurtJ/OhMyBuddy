@@ -6,6 +6,7 @@
 // within byte, count and time budgets; results say which generations were covered.
 // Pi's session parsing is passed in by the worker extension (this module stays CommonJS).
 const fs = require('node:fs');
+const { nativeInputIndex, nativeMessage, channelSource } = require('../pi-native-input');
 const path = require('node:path');
 const io = require('../pi-file-io');
 const { descriptorPathSync } = require('../pi-file-descriptor');
@@ -95,14 +96,13 @@ function windowGenerations({ agentDir, context, current, pi, only = null, now = 
 }
 
 function messagesOf(generation) {
-    const rows = [];
+    const rows = [], inputs = nativeInputIndex(generation.branch, generation.sessionId);
     for (const entry of generation.branch) {
-        if (entry.type !== 'message') continue;
-        const message = entry.message, role = message?.role;
+        const message = nativeMessage(entry, inputs), role = message?.role;
         if (role !== 'user' && role !== 'assistant' && role !== 'toolResult') continue;
         const text = textOf(message.content).trim();
         if (!text) continue;
-        rows.push({ generation: generation.generation, entry, role, tool: role === 'toolResult' ? message.toolName : null, text });
+        rows.push({ generation: generation.generation, entry, role, tool: role === 'toolResult' ? message.toolName : null, text, ...channelSource(inputs.channels.get(entry.id)) });
     }
     return rows;
 }
@@ -179,7 +179,7 @@ function recall(found, query, { limit = 6 } = {}) {
     kept.forEach((row, index) => lines.push(`${index + 1}. [part ${row.generation} · entry ${row.entry.id.slice(0, 8)} · ${stamp(row.entry)} · ${row.tool ? `tool ${row.tool}` : row.role}] ${excerpt(row.text, Math.max(0, row.first))}`));
     if (kept.length) lines.push('Use window_read with the part and entry to see the full messages around a result.');
     return { text: lines.join('\n'), details: { pivaneRecall: { query: String(query).slice(0, 200), coverage: cover,
-        results: kept.map(row => ({ generation: row.generation, entryId: row.entry.id, role: row.role, at: row.entry.timestamp ?? null })) } } };
+        results: kept.map(row => ({ generation: row.generation, entryId: row.entry.id, role: row.role, at: row.entry.timestamp ?? null, ...channelSource(row.channel === 'weixin' ? row : null) })) } } };
 }
 
 // window_read: messages around one entry (8+ characters of its id), verbatim within a budget.
@@ -200,7 +200,7 @@ function readAround(found, { entry, before = 3, after = 3 }) {
             used += body.length;
             lines.push(`[entry ${row.entry.id.slice(0, 8)} · ${stamp(row.entry)} · ${row.tool ? `tool ${row.tool}` : row.role}${row === rows[index] ? ' · this one' : ''}]\n${body}`);
         }
-        return { text: lines.join('\n\n'), details: { pivaneRecall: { read: { generation: generation.generation, entryId: rows[index].entry.id } } } };
+        return { text: lines.join('\n\n'), details: { pivaneRecall: { read: { generation: generation.generation, entryId: rows[index].entry.id, role: rows[index].role, ...channelSource(rows[index].channel === 'weixin' ? rows[index] : null) } } } };
     }
     const cover = coverage(found);
     throw new Error(`No message with entry ${prefix.slice(0, 8)} found. ${coverageLine(cover)}`);

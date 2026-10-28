@@ -1,5 +1,6 @@
 // Read-only projections of the native branch prefix omitted by the latest compaction.
 const { createHash } = require('node:crypto');
+const { nativeInputIndex, projectNativeMessage, channelSource } = require('./pi-native-input');
 const error = (message, code = 'HISTORY_INVALID') => Object.assign(new Error(message), { code });
 const integer = value => Number.isSafeInteger(value) && value >= 0;
 function validateArchiveRequest(input = {}) {
@@ -15,9 +16,9 @@ function validateArchiveRequest(input = {}) {
     return { view, offset, revision, ...(view === 'process' ? { index: input.index } : {}) };
 }
 const timestamp = entry => entry.message?.timestamp ?? entry.timestamp;
-function startKind(entry) {
+function startKind(entry, inputs) {
     if (entry.type === 'compaction' || entry.type === 'branch_summary') return 'summary';
-    if (entry.type === 'custom_message' && entry.display !== false) return 'agent';
+    if (entry.type === 'custom_message' && entry.display !== false) return inputs?.channels.has(entry.id) ? 'user' : 'agent';
     if (entry.type === 'message' && entry.message?.role === 'user') return 'user';
     if (entry.type === 'message' && entry.message?.role === 'custom' && entry.message.display === true) return 'agent';
     return null;
@@ -38,8 +39,9 @@ function clip(value, limit, singleLine = false) {
     }
     return { text: singleLine ? text.trimEnd() : text, truncated: false };
 }
-function textOf(entry, limit, check) {
-    const content = entry.type === 'compaction' || entry.type === 'branch_summary' ? entry.summary : entry.type === 'custom_message' ? entry.content : entry.message?.content;
+function textOf(entry, limit, check, inputs) {
+    let content = entry.type === 'compaction' || entry.type === 'branch_summary' ? entry.summary : entry.type === 'custom_message' ? entry.content : entry.message?.content;
+    if (inputs && entry.type === 'custom_message') content = projectNativeMessage(entry, { content }, inputs).content;
     if (typeof content === 'string') return clip(content, limit);
     let text = '', count = 0, images = 0, truncated = false;
     for (const block of blocks(content)) {
@@ -77,7 +79,7 @@ function historyArchive(manager, raw, { whole = false } = {}) {
     const began = Date.now(), check = () => { if (Date.now() - began > 1500) throw error('压缩前记录查询超过时间预算', 'HISTORY_LIMIT'); };
     const input = validateArchiveRequest(raw), entries = manager.getEntries();
     if (entries.length > 50000) throw error('会话超过 50000 条原生记录', 'HISTORY_LIMIT');
-    const path = manager.getBranch(); check();
+    const path = manager.getBranch(), inputs = nativeInputIndex(path, manager.getSessionId()); check();
     let ci = -1;
     for (let i = 0; i < path.length; i++) { check(); if (path[i].type === 'compaction') ci = i; }
     const compaction = whole ? null : path[ci];
@@ -88,7 +90,7 @@ function historyArchive(manager, raw, { whole = false } = {}) {
     if (input.revision !== undefined && input.revision !== revision) throw error('压缩前记录已变化，请重新加载', 'HISTORY_STALE');
     const turns = []; let current = null, orphans = 0;
     for (let i = 0; i < cut; i++) {
-        check(); const entry = path[i], kind = startKind(entry);
+        check(); const entry = path[i], kind = startKind(entry, inputs);
         if (kind) {
             const turn = { entry, kind, entries: [], tools: 0, errors: 0, texts: 0, bashes: 0, lastText: null, lastAssistant: null, endedAt: timestamp(entry) };
             turns.push(turn); if (kind !== 'summary') current = turn;
@@ -105,21 +107,21 @@ function historyArchive(manager, raw, { whole = false } = {}) {
         } else if (role === 'bashExecution') { current.bashes++; if (bashError(entry.message)) current.errors++; }
         else if (entry.message.isError) current.errors++;
     }
-    const continues = Boolean(compaction && !startKind(path[cut]) && current);
+    const continues = Boolean(compaction && !startKind(path[cut], inputs) && current);
     if (continues) current.continues = true;
     const replyOf = turn => turn.continues ? null : turn.lastText || (turn.lastAssistant && failed(turn.lastAssistant.message) ? turn.lastAssistant : null);
-    const metadata = (turn, index) => ({ index, kind: turn.kind, entryId: turn.entry.id, timestamp: timestamp(turn.entry),
+    const metadata = (turn, index) => ({ index, kind: turn.kind, entryId: turn.entry.id, ...channelSource(inputs.channels.get(turn.entry.id)), timestamp: timestamp(turn.entry),
         ...(turn.kind === 'agent' ? { customType: clip(turn.entry.customType ?? turn.entry.message?.customType, 64).text } : {}),
         ...(turn.kind === 'summary' ? { summaryType: turn.entry.type, ...(turn.entry.type === 'compaction' ? { tokensBefore: turn.entry.tokensBefore } : {}) } : {}),
         ...(turn.continues ? { continues: true } : {}) });
     const indexTurn = (turn, index) => {
-        const question = textOf(turn.entry, 12000, check), reply = replyOf(turn);
+        const question = textOf(turn.entry, 12000, check, inputs), reply = replyOf(turn);
         const source = turn.kind === 'agent' ? question.text.split(/\r?\n/, 1)[0] : question.text;
         return { ...metadata(turn, index), title: turn.kind === 'summary' ? '' : clip(source, 160, true).text, images: question.images || 0, tools: turn.tools,
             reply: reply ? { entryId: reply.id, excerpt: textOf(reply, 600, check).text, ...(reply.message.stopReason !== undefined ? { stopReason: clip(reply.message.stopReason, 80).text } : {}), ...(failed(reply.message) ? { failed: true } : {}) } : null };
     };
     const fullTurn = (turn, index) => {
-        const question = textOf(turn.entry, 12000, check), reply = replyOf(turn), message = reply?.message, text = reply && textOf(reply, 20000, check);
+        const question = textOf(turn.entry, 12000, check, inputs), reply = replyOf(turn), message = reply?.message, text = reply && textOf(reply, 20000, check);
         return { ...metadata(turn, index), text: question.text, textTruncated: question.truncated, images: question.images || 0,
             reply: reply ? { entryId: reply.id, timestamp: timestamp(reply), model: clip(message.model, 120).text, stopReason: clip(message.stopReason, 80).text,
                 errorMessage: clip(message.errorMessage, 1000).text, text: text.text, truncated: text.truncated } : null,
