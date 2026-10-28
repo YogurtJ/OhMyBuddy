@@ -2823,7 +2823,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function messageText(content) {
         if (typeof content === 'string') return content;
         if (!Array.isArray(content)) return '';
-        return content.filter(block => block.type === 'text').map(block => block.text).join('\n');
+        return content.filter(block => block.type === 'text' && !block.pivaneImage).map(block => block.text).join('\n');
     }
 
     // One identity at the top of a Bot conversation; per-message author markup stays
@@ -3010,7 +3010,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const content = Array.isArray(message.content) ? message.content : [{ type: 'text', text: message.content || '' }];
         let strippedChannelHeader = false;
         for (const block of content) {
-            if (block.type === 'text') {
+            if (block.type === 'text' && !block.pivaneImage) {
                 const blockText = isChannelTurn && !strippedChannelHeader ? (strippedChannelHeader = true, cleanChannelText(block.text)) : (block.text || '');
                 const text = document.createElement('div');
                 text.className = 'pi-markdown';
@@ -3026,10 +3026,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 body.appendChild(createThinkingBlock(block.thinking));
             } else if (block.type === 'toolCall') {
                 body.appendChild(createToolCallBlock(block, lazyTools));
-            } else if (block.type === 'image') {
+            } else if (block.type === 'image' || block.pivaneImage) {
                 const image = document.createElement('img');
                 image.className = 'pi-message-image';
-                image.src = `data:${block.mimeType};base64,${block.data}`;
+                loadMessageImage(image, block);
                 image.alt = translateUi("消息附件");
                 body.appendChild(image);
             }
@@ -3147,11 +3147,46 @@ document.addEventListener('DOMContentLoaded', () => {
         if (row.querySelector('.pi-tool-detail')) renderToolOutput(row, result);
     }
 
+    const lazyImageLoads = new Map();
+    const imageObserver = new IntersectionObserver(entries => {
+        for (const item of entries) if (item.isIntersecting) {
+            imageObserver.unobserve(item.target);
+            lazyImageLoads.get(item.target)?.load();
+        }
+    }, { rootMargin: '200px' });
+    new MutationObserver(() => {
+        for (const [image, pending] of lazyImageLoads) if (!image.isConnected) {
+            imageObserver.unobserve(image); pending.abort(); lazyImageLoads.delete(image);
+        }
+    }).observe(document.body, { childList: true, subtree: true });
+    function loadMessageImage(image, block) {
+        image.loading = 'lazy'; image.decoding = 'async';
+        let url = block.pivaneImageUrl;
+        if (!url && block.pivaneImage?.version === 1 && /^[a-f0-9]{64}$/.test(block.pivaneImage.sha256) && state.session?.id)
+            url = '/api/pi/sessions/' + encodeURIComponent(state.session.id) + '/images/' + block.pivaneImage.sha256 + '?' + new URLSearchParams({ cwd: state.cwd });
+        if (!url) { image.src = 'data:' + block.mimeType + ';base64,' + block.data; return; }
+        if (!/^\/api\/pi\/sessions\/[^/]+\/images\/[a-f0-9]{64}\?cwd=/.test(url)) return;
+        const controller = new AbortController(); let objectUrl;
+        const release = () => { if (objectUrl) URL.revokeObjectURL(objectUrl); objectUrl = null; };
+        const pending = { abort: () => { controller.abort(); release(); }, load: async () => {
+            try {
+                const response = await (window.WorkspaceAccess?.fetch || fetch)(url, { headers: apiHeaders(), signal: controller.signal });
+                if (!response.ok) throw new Error('Image unavailable');
+                const blob = await response.blob();
+                if (!image.isConnected || controller.signal.aborted) return;
+                objectUrl = URL.createObjectURL(blob);
+                image.onload = image.onerror = release; image.src = objectUrl;
+            } catch { if (!controller.signal.aborted) image.alt = translateUi('图片暂时无法读取'); }
+        } };
+        lazyImageLoads.set(image, pending);
+        queueMicrotask(() => { if (image.isConnected) imageObserver.observe(image); else { pending.abort(); lazyImageLoads.delete(image); } });
+    }
+
     function renderToolOutput(row, result) {
         row.querySelector('.pi-tool-output').textContent = contentToPlainText(result.content);
         window.PiToolDiff.render(row, result, copyTextToClipboard, toast);
         let images = row.querySelector('.pi-tool-images');
-        const blocks = Array.isArray(result.content) ? result.content.filter(block => block.type === 'image') : [];
+        const blocks = Array.isArray(result.content) ? result.content.filter(block => block.type === 'image' || block.pivaneImage) : [];
         if (!blocks.length && !images) return;
         if (!images) {
             images = document.createElement('div');
@@ -3160,11 +3195,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         images.replaceChildren();
         for (const block of blocks) {
-            if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(block.mimeType)) continue;
+            if (!['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(block.pivaneImage?.image?.mimeType || block.mimeType)) continue;
             const image = document.createElement('img');
             image.className = 'pi-message-image';
             image.alt = translateUi("工具输出图片");
-            image.src = `data:${block.mimeType};base64,${block.data}`;
+            loadMessageImage(image, block);
             images.appendChild(image);
         }
     }
@@ -3208,7 +3243,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function contentToPlainText(content) {
         if (typeof content === 'string') return content;
         if (!Array.isArray(content)) return '';
-        return content.map(block => block.type === 'text' ? block.text : block.type === 'image' ? '[image]' : '').filter(Boolean).join('\n');
+        return content.map(block => block.type === 'image' || block.pivaneImage ? '[image]' : block.type === 'text' ? block.text : '').filter(Boolean).join('\n');
     }
 
     function finalReplyIndices(messages, tailIsRunning) {
@@ -3697,6 +3732,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function startLiveMessage(message) {
+        if (message?.role === 'user') {
+            const images = Array.isArray(message.content) ? message.content.filter(block => block.type === 'image') : [];
+            const optimistic = [...elements.transcript.querySelectorAll('.optimistic')].find(element => element._piExpectedText === messageText(message.content) && element._piExpectedImages === imageIdentity(images));
+            if (optimistic) optimistic._piNativeUserTimestamp = message.timestamp;
+        }
         if (!message || message.role !== 'assistant') return;
         flushLiveMessage();
         const readingPosition = transcriptScroll.capture({ details: false });
@@ -3832,7 +3872,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const duplicate = [...elements.transcript.querySelectorAll(`[data-message-key="${CSS.escape(key)}"]`)].some(element => JSON.stringify(element._piUserMessage?.content) === JSON.stringify(message.content));
             if (duplicate) return;
             const images = Array.isArray(message.content) ? message.content.filter(block => block.type === 'image') : [];
-            const optimistic = [...elements.transcript.querySelectorAll('.optimistic')].find(element => element._piExpectedText === messageText(message.content) && element._piExpectedImages === imageIdentity(images));
+            const optimistic = [...elements.transcript.querySelectorAll('.optimistic')].find(element => element._piNativeUserTimestamp === message.timestamp
+                || element._piExpectedText === messageText(message.content) && element._piExpectedImages === imageIdentity(images));
             const element = createMessageElement(message);
             elements.transcript.querySelector('.pi-empty-state')?.remove();
             if (optimistic) optimistic.replaceWith(element);

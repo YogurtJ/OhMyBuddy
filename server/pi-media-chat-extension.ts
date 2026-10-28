@@ -3,6 +3,7 @@ import { StringEnum } from '@earendil-works/pi-ai';
 import { Type } from 'typebox';
 import path from 'node:path';
 import { realpath } from 'node:fs/promises';
+import { SessionImages } from './pi-session-images.js';
 import { readVerifiedFile } from './pi-file-bytes.js';
 import { fileScope } from './pi-file-scope.js';
 import { MEDIA_PLAN_ENTRY, branchPlans as plansFromBranch, mediaPlanRecord } from './pi-media-plan-format.js';
@@ -62,7 +63,7 @@ async function resolveReferences(parameters: Record<string, unknown>, definition
         let resolved: string;
         if ((match = /^chat-image:(-?\d+)$/.exec(value))) {
             chatImages ||= branch().filter(entry => entry.type === 'message' && entry.message?.role === 'user' && Array.isArray(entry.message.content))
-                .flatMap(entry => entry.message.content.filter((block: any) => block?.type === 'image' && typeof block.data === 'string')
+                .flatMap(entry => new SessionImages().content(entry.message.content).filter((block: any) => block?.type === 'image' && typeof block.data === 'string')
                     .map((block: any) => ({ data: block.data, mimeType: block.mimeType, timestamp: entry.timestamp })));
             const image = pick(chatImages, Number(match[1]), 'attached image');
             if (!['image/png', 'image/jpeg', 'image/webp'].includes(image.mimeType)) throw new Error(`${name}: ${image.mimeType} cannot be used as a reference; ask the user for PNG, JPEG or WebP`);

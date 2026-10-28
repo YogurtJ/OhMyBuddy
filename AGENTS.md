@@ -12,7 +12,7 @@
 
 ## 正确性边界
 
-1. **会话与 worker**：Pi SessionManager 和原生 JSONL 是唯一对话事实来源。每个 native realpath 会话文件只能有一个受 Supervisor 管理的 RPC worker。不可另建聊天副本或绕开管理器启动同文件 worker。
+1. **会话与 worker**：Pi SessionManager 和原生 JSONL 是唯一对话事实来源；图片字节由条目引用的不可变私有对象保存，完整恢复必须同时保留两者。每个 native realpath 会话文件只能有一个受 Supervisor 管理的 RPC worker。不可另建聊天副本或绕开管理器启动同文件 worker。
 2. **协议与状态**：stdout 严格按 LF 分帧。迟到/未知的私有响应也要截获。异步变更在 await 前预占互斥；超时不表示取消或空闲。保留 runtime、revision、socket generation 与草稿版本检查。新增 worker 工作类型同时维护生命周期投影。
 3. **文件与身份**：保留 realpath、项目范围、系统权限、已打开描述符的内核路径/完整身份/类型/预算/前后变化校验。Linux /proc、macOS F_GETPATH、Windows HANDLE 不得退化为请求路径或低精度 inode。原生源码、二进制和 manifest 一起更新。
 4. **凭据与执行**：凭据使用公开 ModelRuntime.login/logout，私密文件保留 POSIX 权限或实际 Windows DACL、原子保存和未知字段。不要输出 .env、auth.json、Cookie、Key、Token 或私钥。媒体规划与执行票据分离，执行只用用户确认的服务器票据，不自动重放失败或不确定请求。

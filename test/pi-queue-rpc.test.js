@@ -307,7 +307,10 @@ test('managed synthetic RPC: image/document/template queue recovery, durable ack
     assert.equal(worker.controls.recoveries.length, 0, 'proven physical native entries retire delivered intentions');
     const entries = (await worker.request('get_entries')).entries.filter(entry => entry.message?.role === 'user' && entry.message.content?.some(block => block.text === 'exact duplicate'));
     assert.equal(entries.length, 2);
-    assert.notDeepEqual(entries[0].message.content.filter(block => block.type === 'image'), entries[1].message.content.filter(block => block.type === 'image'));
+    const imageStore = new (require('../server/pi-session-images').SessionImages)();
+    const deliveredImages = entries.map(entry => imageStore.content(entry.message.content).filter(block => block.type === 'image'));
+    assert.notDeepEqual(deliveredImages[0], deliveredImages[1]);
+    assert.deepEqual(deliveredImages.map(images => images[0].data).sort(), [image.data, otherImage.data].sort());
     // Both public queue modes are restored; a batch drained before start is not claimed as recovered.
     hold = true;
     await worker.setQueueMode('set_steering_mode', { mode: 'all', runtimeId: worker.shell.runtimeId, revision: worker.queueModeRevision });

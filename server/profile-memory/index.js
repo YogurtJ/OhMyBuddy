@@ -23,7 +23,7 @@ function createIndex(dbManager, upstream, context) {
         db.prepare("INSERT INTO pivane_progress (key, value) VALUES ('incomplete', 1) ON CONFLICT(key) DO UPDATE SET value = 1").run();
     };
     const overBudget = file => {
-        try { return fs.statSync(file, { bigint: true }).size > BigInt(scope.MAX_SESSION_BYTES); }
+        try { return fs.statSync(file, { bigint: true }).size > BigInt(scope.MAX_INDEX_BYTES); }
         catch { return false; }
     };
     const coverage = () => ({
@@ -62,8 +62,10 @@ function createIndex(dbManager, upstream, context) {
         let changed = false;
         const rows = db.prepare('SELECT session_id, path, fingerprint FROM pivane_sources ORDER BY session_id LIMIT ?').all(MAX_RECHECK_ROWS + 1);
         if (rows.length > MAX_RECHECK_ROWS) throw new Error('Profile session index coverage exceeds verification budget');
-        let bytes = 0;
+        let bytes = 0, rawBytes = 0;
         for (const row of rows) {
+            try { rawBytes += Number(fs.statSync(row.path).size); } catch { /* Missing rows are reconciled below. */ }
+            if (rawBytes > 2 * 1024 ** 3) throw new Error('Profile session raw source verification budget exceeded');
             const candidate = scope.snapshot(row.path, context);
             bytes += candidate?.bytes || 0;
             if (bytes > MAX_RECHECK_BYTES) throw new Error('Profile session source verification budget exceeded');
@@ -93,7 +95,7 @@ function createIndex(dbManager, upstream, context) {
             if (!candidate) {
                 // A source over the historical byte cap may be bound; other invalid files are ineligible.
                 let skippedUnknown = false;
-                try { skippedUnknown = fs.statSync(file, { bigint: true }).size > BigInt(scope.MAX_SESSION_BYTES); }
+                try { skippedUnknown = fs.statSync(file, { bigint: true }).size > BigInt(scope.MAX_INDEX_BYTES); }
                 catch { skippedUnknown = true; }
                 if (skippedUnknown) markIncomplete();
                 continue;

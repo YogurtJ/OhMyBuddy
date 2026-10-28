@@ -20,13 +20,13 @@ test.before(async () => {
         if (mode !== 'reply' && step++ === 0) {
             send({ role: 'assistant', tool_calls: [{ index: 0, id: 'fixture-call', type: 'function', function: mode === 'attachment'
                 ? { name: 'get_attachment', arguments: JSON.stringify({ id: reference.id }) }
-                : { name: 'fixture_image', arguments: '{}' } }] }); send({}, 'tool_calls');
+                : { name: 'fixture_image', arguments: JSON.stringify({ valid: mode === 'good-tool' }) } }] }); send({}, 'tool_calls');
         } else { send({ role: 'assistant', content: 'Fixture complete' }); send({}, 'stop'); }
         res.end('data: [DONE]\n\n');
     });
     provider.listen(0, '127.0.0.1'); await once(provider, 'listening');
     const extension = path.join(agent, 'fixture-image.ts');
-    fs.writeFileSync(extension, `export default function(pi) { pi.registerTool({name:'fixture_image',label:'Fixture',description:'Fixture image',parameters:{type:'object',properties:{}},execute:async()=>({content:[{type:'image',mimeType:'image/png',data:'AAAA'}]})}); }`);
+    fs.writeFileSync(extension, `export default function(pi) { pi.registerTool({name:'fixture_image',label:'Fixture',description:'Fixture image',parameters:{type:'object',properties:{valid:{type:'boolean'}}},execute:async(_id,args)=>({content:[{type:'image',mimeType:'image/png',data:args.valid?'${png}':'AAAA'}]})}); }`);
     fs.writeFileSync(path.join(agent, 'settings.json'), JSON.stringify({ defaultProvider: 'fixture', defaultModel: 'text', defaultProjectTrust: 'never', enableInstallTelemetry: false, extensions: [extension], retry: { enabled: false } }));
     fs.writeFileSync(path.join(agent, 'models.json'), JSON.stringify({ providers: { fixture: { baseUrl: `http://127.0.0.1:${provider.address().port}/v1`, api: 'openai-completions', apiKey: 'synthetic', models: [
         { id: 'text', input: ['text'], contextWindow: 32000, maxTokens: 1000 }, { id: 'vision', input: ['text', 'image'], contextWindow: 32000, maxTokens: 1000 }
@@ -76,6 +76,51 @@ test('managed request drops historical user/tool images for text and restores or
         await assert.rejects(worker.request('prompt', { message: 'New unsupported image', images: [{ ...image, mimeType: 'image/png' }] }), /不接收图片/);
         assert.equal(requests.length, count);
     } finally { off(); }
+});
+
+test('new user images are externalized, remain model-identical after resume, and are session-scoped for display', { timeout: 30000 }, async () => {
+    const { SessionImages, isReference } = require('../server/pi-session-images');
+    const session = await gateway.store.createSession(cwd, 'Stored images');
+    let worker = await gateway.supervisor.getWorker({ cwd, sessionPath: session.path, sessionId: session.id });
+    await worker.request('set_model', { provider: 'fixture', modelId: 'vision' });
+    let off;
+    const settled = new Promise(resolve => { off = worker.subscribe(event => { if (event.type === 'agent_settled') resolve(); }); });
+    await worker.request('prompt', { message: 'Inspect this image', images: [{ type: 'image', mimeType: 'image/png', data: png }] });
+    await settled; off();
+    assert.match(JSON.stringify(requests.at(-1)), new RegExp(png.slice(0, 30)));
+    const entries = (await worker.request('get_entries')).entries;
+    const block = entries.flatMap(entry => entry.message?.content || []).find(isReference);
+    assert.ok(block, 'managed message_end persists an A2 reference');
+    assert.ok(!fs.readFileSync(session.path, 'utf8').includes(png));
+    assert.equal(new SessionImages(agent).restore(block).data, png);
+    const url = `${origin}/api/pi/sessions/${session.id}/images/${block.pivaneImage.sha256}?${new URLSearchParams({ cwd })}`;
+    assert.equal((await fetch(url)).status, 401);
+    const response = await fetch(url, { headers: { Authorization: 'Bearer synthetic-image-token' } });
+    assert.equal(response.status, 200); assert.deepEqual(Buffer.from(await response.arrayBuffer()), Buffer.from(png, 'base64'));
+    const unrelated = await gateway.store.createSession(cwd, 'Unrelated');
+    assert.equal((await fetch(url.replace(session.id, unrelated.id), { headers: { Authorization: 'Bearer synthetic-image-token' } })).status, 404);
+    await worker.dispose();
+    worker = await gateway.supervisor.getWorker({ cwd, sessionPath: session.path, sessionId: session.id });
+    await prompt(worker, 'Inspect it again');
+    assert.match(JSON.stringify(requests.at(-1)), new RegExp(png.slice(0, 30)));
+    const exported = await fetch(`${origin}/api/pi/sessions/${session.id}/export`, { method: 'POST', headers: { Authorization: 'Bearer synthetic-image-token', 'Content-Type': 'application/json' }, body: JSON.stringify({ cwd, format: 'jsonl' }) });
+    assert.equal(exported.status, 200);
+    const exportedText = await exported.text(); assert.ok(exportedText.includes(png)); assert.ok(!exportedText.includes('pivaneImage'));
+    const html = path.join(root, 'images.html'); await worker.request('export_html', { outputPath: html });
+    const encoded = /<script id="session-data" type="application\/json">([^<]+)<\/script>/.exec(fs.readFileSync(html, 'utf8'))?.[1];
+    assert.ok(encoded); assert.ok(Buffer.from(encoded, 'base64').toString('utf8').includes(png));
+});
+
+test('tool-produced images retain their bytes in the continuation while the native result stores a reference', { timeout: 30000 }, async () => {
+    const session = await gateway.store.createSession(cwd, 'Tool image');
+    const worker = await gateway.supervisor.getWorker({ cwd, sessionPath: session.path, sessionId: session.id });
+    await worker.request('set_model', { provider: 'fixture', modelId: 'vision' });
+    mode = 'good-tool'; step = 0;
+    try { await prompt(worker, 'Call fixture_image'); } finally { mode = 'reply'; }
+    assert.ok(JSON.stringify(requests.at(-1)).includes(png));
+    const result = (await worker.request('get_entries')).entries.find(entry => entry.message?.toolName === 'fixture_image');
+    assert.ok(result.message.content.some(require('../server/pi-session-images').isReference));
+    assert.ok(!fs.readFileSync(session.path, 'utf8').includes(png));
 });
 
 test('bad historic images reject before prompt admission; bad new tool images stop before another provider call', { timeout: 30000 }, async () => {
