@@ -54,6 +54,7 @@ async function main() {
         const context = await browser.newContext({ viewport: { width, height: width < 900 ? 852 : 920 }, locale,
             isMobile: width < 900, hasTouch: width < 900 });
         await context.addInitScript(({ cwd, locale, theme }) => {
+            if (!/^https?:$/.test(location.protocol) || window !== window.top) return;
             localStorage.setItem('pi.web.cwd', cwd);
             localStorage.setItem('pi.workspace.language', locale);
             localStorage.setItem('pi.workspace.theme', theme);

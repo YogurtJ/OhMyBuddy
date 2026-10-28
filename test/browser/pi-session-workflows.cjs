@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+const path = require('node:path'), os = require('node:os');
+const screenshotPath = name => path.join(os.tmpdir(), name);
 const { openInspector } = require('./pi-mobile-view-helper.cjs');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const baseUrl = process.env.PI_WORKFLOWS_TEST_URL || 'http://127.0.0.1:3101';
@@ -122,7 +124,7 @@ async function run(browser, viewport, historyEnabled = true) {
             await page.waitForFunction(() => document.querySelector('#pi-workflow-dialog').open);
             assert.equal(writes.length, before + 1, 'pending action must submit exactly once');
             assert.equal(await page.locator('#pi-workflow-dialog').evaluate(n => n.scrollWidth > n.clientWidth + 1), false);
-            await page.screenshot({ path: `/tmp/pi-workflows-${viewport.width}-pending-${confirm ? 'confirm' : 'pause'}.png` });
+            await page.screenshot({ path: screenshotPath(`pi-workflows-${viewport.width}-pending-${confirm ? 'confirm' : 'pause'}.png`) });
         } finally { releaseWrite(); writeGate = null; writeStarted = null; }
     };
     const inspector = async () => {
@@ -148,7 +150,7 @@ async function run(browser, viewport, historyEnabled = true) {
     assert.equal(await page.locator('#pi-compact-button').isVisible(), true);
     for (const theme of ['daylight', 'mint', 'dark']) {
         await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
-        await page.screenshot({ path: `/tmp/pi-inspector-slim-${viewport.width}-${theme}.png` });
+        await page.screenshot({ path: screenshotPath(`pi-inspector-slim-${viewport.width}-${theme}.png`) });
         assert.equal(await page.locator('#pi-inspector-details').evaluate(n => n.scrollWidth > n.clientWidth), false);
         if (!historyEnabled) continue;
         await openInspector(page, 'history');
@@ -158,7 +160,7 @@ async function run(browser, viewport, historyEnabled = true) {
         const menu = await page.locator('.pi-thread-menu:not(.hidden)').boundingBox();
         assert.ok(menu.x >= 0 && menu.x + menu.width <= viewport.width && menu.height < 130);
         assert.deepEqual(await page.locator('#pi-history-browse').boundingBox(), before, 'menu must not shrink history');
-        await page.screenshot({ path: `/tmp/pi-history-slim-${viewport.width}-${theme}.png` });
+        await page.screenshot({ path: screenshotPath(`pi-history-slim-${viewport.width}-${theme}.png`) });
         await page.keyboard.press('Escape');
         assert.equal(await page.locator('#pi-history-more').evaluate(n => n === document.activeElement), true);
         await page.locator('#pi-history-more').click();
@@ -179,7 +181,7 @@ async function run(browser, viewport, historyEnabled = true) {
     await page.locator('[data-remove-image="1"]').click();
     assert.equal(await page.locator('#pi-workflow-images img').count(), 1);
     await overflow();
-    await page.screenshot({ path: `/tmp/pi-workflows-${viewport.width}-retry.png` });
+    await page.screenshot({ path: screenshotPath(`pi-workflows-${viewport.width}-retry.png`) });
     await page.locator('#pi-workflow-message').fill('取消编辑的内容');
     await close();
     assert.equal(writes.length, 0);
@@ -236,7 +238,7 @@ async function run(browser, viewport, historyEnabled = true) {
     await page.locator('#pi-deferred-open').click();
     await pendingWrite('[data-workflow-action="pause"]', '正在暂停…', false);
     await page.waitForFunction(() => document.querySelector('#pi-workflow-content').textContent.includes('已暂停'));
-    await overflow(); await page.screenshot({ path: `/tmp/pi-workflows-${viewport.width}-deferred.png` });
+    await overflow(); await page.screenshot({ path: screenshotPath(`pi-workflows-${viewport.width}-deferred.png`) });
     await close();
     await page.locator('[data-message-workflow="retry"]').click();
     await page.locator('#pi-workflow-message').fill('新的提示词');
@@ -299,7 +301,7 @@ async function run(browser, viewport, historyEnabled = true) {
     await page.waitForFunction(() => !document.querySelector('#pi-workflow-dialog').open);
     assert.equal(jobs[1].status, 'cancelled');
     await inspector(); await historyAction('从历史问题分叉');
-    await overflow(); await page.screenshot({ path: `/tmp/pi-workflows-${viewport.width}-history.png` });
+    await overflow(); await page.screenshot({ path: screenshotPath(`pi-workflows-${viewport.width}-history.png`) });
     await page.locator('#pi-workflow-dialog').press('Escape');
     await closeInspector();
     const openClone = async () => {
@@ -338,12 +340,12 @@ async function run(browser, viewport, historyEnabled = true) {
     await page.locator('[data-workflow-action="reset-fork"]').waitFor();
     assert.equal(writes.length, writesBeforeQuery);
     assert.equal(sessions.length, countBeforeLoss + 2);
-    await overflow(); await page.screenshot({ path: `/tmp/pi-workflows-${viewport.width}-fork-recovery.png` });
+    await overflow(); await page.screenshot({ path: screenshotPath(`pi-workflows-${viewport.width}-fork-recovery.png`) });
     await page.locator('[data-workflow-action="reset-fork"]').click();
     await page.waitForFunction(() => !document.querySelector('#pi-workflow-dialog').open);
     assert.equal(writes.length, writesBeforeQuery, 'acknowledgement does not create');
     await page.waitForFunction(() => document.querySelectorAll('#pi-toast-region .pi-toast').length === 0);
-    await page.screenshot({ path: `/tmp/pi-workflows-${viewport.width}-main.png` });
+    await page.screenshot({ path: screenshotPath(`pi-workflows-${viewport.width}-main.png`) });
     assert.deepEqual(errors, []);
     assert.equal(rpc.some(command => ['prompt', 'steer', 'follow_up'].includes(command.type)), false);
     assert.equal(writes.some(write => !write.endpoint.startsWith('/api/pi/sessions/')), false);
@@ -352,7 +354,7 @@ async function run(browser, viewport, historyEnabled = true) {
 }
 
 (async () => {
-    const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
+    const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
     try {
         for (const viewport of [{ width: 1440, height: 1000 }, { width: 393, height: 852 }, { width: 412, height: 915 }, { width: 320, height: 740 }]) await run(browser, viewport);
         await run(browser, { width: 393, height: 852 }, false);
