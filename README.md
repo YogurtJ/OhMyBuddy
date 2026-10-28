@@ -68,7 +68,16 @@ Describe a task once: the agent reads the code, edits it, adds tests and runs th
 - A side chat lets you ask a quick question without derailing the main task. It can read files and, with your approval for that reply, make small edits.
 - Scheduled tasks can be cron-based or one-time. They support time zones, previews of upcoming runs, budgets and run history.
 
-### Assistants with memory
+### Personal Bot conversations
+
+<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/bot-en.png" alt="A personal Bot conversation with topics, a compact process summary and a visible memory receipt" width="100%">
+
+- Give a Bot a name, personality and working folder. Its main chat and topics keep their own conversations and notebooks, with shared memory and skills within that Bot.
+- Model and thinking preferences are saved independently. Web settings and WeChat use the same preferences.
+- A compact process line keeps the conversation readable, while memory, skill and settings changes remain visible and reviewable.
+- Review permissions, proactive activity and learning budgets in the Bot settings. Tool permissions are not an operating-system sandbox. See the [Bot guide](docs/BOT_MODE.md).
+
+### Profiles and memory
 
 - Assistant profiles each have their own persona, notes about you and long-term memory, powered by [pi-hermes-memory](https://pi.dev/packages/pi-hermes-memory?name=memory). Overview, Settings, Memories, Skills and Learning have separate pages for reviewing changes and budgets.
 - Optional background learning picks up your corrections and preferences. It runs within daily budgets, and every memory and learned skill can be reviewed, edited or undone.
