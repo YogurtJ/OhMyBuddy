@@ -57,6 +57,17 @@
 #chat-tab.pi-bot-mode .pi-bot-schedule-card footer { margin-left: 17px; }
 #chat-tab.pi-bot-mode .pi-bot-schedule-card .pi-bot-chip { flex: none; border: 0; background: transparent; color: var(--text-muted); min-height: 40px; font-size: .75rem; }
 #chat-tab.pi-bot-mode .pi-bot-schedule-cancel { min-height: 40px; font-size: .75rem; }
+/* Pointer screens: a compact list whose chevrons stay next to their text instead of the far edge. */
+@media (min-width: 681px) and (hover: hover) and (pointer: fine) {
+    #chat-tab.pi-bot-mode :is(.pi-tool-row, .pi-thinking-block, .pi-bash-message) > summary { min-height: 32px; }
+    #chat-tab.pi-bot-mode :is(.pi-tool-row, .pi-thinking-block) > summary > .fa-chevron-right { margin-left: 0; opacity: 0; transition: opacity 120ms ease, transform 120ms ease; }
+    #chat-tab.pi-bot-mode :is(.pi-tool-row, .pi-thinking-block) > summary:is(:hover, :focus-visible) > .fa-chevron-right,
+    #chat-tab.pi-bot-mode :is(.pi-tool-row, .pi-thinking-block)[open] > summary > .fa-chevron-right { opacity: .6; }
+    #chat-tab.pi-bot-mode .pi-bot-process-message .pi-markdown { padding-block: 3px; }
+    #chat-tab.pi-bot-mode .pi-bot-change-receipt { min-height: 36px; }
+    #chat-tab.pi-bot-mode :is(.pi-bot-receipt-action, .pi-memory-hint-action) { min-height: 30px; }
+    #chat-tab.pi-bot-mode .pi-memory-hint-text { min-height: 30px; }
+}
 @keyframes pi-bot-process-pulse { 50% { opacity: .3; } }
 @media (max-width: 680px) {
     #chat-tab.pi-bot-mode .pi-memory-hint { grid-template-columns: 16px minmax(0,1fr); }
