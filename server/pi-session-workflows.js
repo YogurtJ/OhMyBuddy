@@ -24,7 +24,7 @@ function workflowSnapshot(snapshot) {
     };
     const lastUser = lastUserAt(snapshot.leafId);
     const users = snapshot.entries.filter(entry => entry.type === 'message' && entry.message?.role === 'user');
-    const previews = new Map(users.map(entry => [entry.id, promptFromEntry(entry).message.slice(0, 180)]));
+    const previews = new Map(users.map(entry => [entry.id, promptFromEntry(entry, { restoreImages: false }).message.slice(0, 180)]));
     const versions = [];
     const seen = new Set();
     for (const entry of snapshot.entries) {

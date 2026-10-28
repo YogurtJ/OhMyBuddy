@@ -40,7 +40,8 @@ test('native JSONL import creates independent identities and cwd, retains tree/l
     assert.notEqual(a.session.id, original.id); assert.notEqual(a.session.id, b.session.id);
     assert.equal(a.session.cwd, target); assert.equal(a.session.name, '导入名称');
     const imported = SessionManager.open(a.session.path);
-    assert.deepEqual(imported.getEntries(), JSON.parse(JSON.stringify(sm.getEntries()))); assert.equal(imported.getLabel(first), 'bookmark');
+    const imageStore = new (require('../server/pi-session-images').SessionImages)();
+    assert.deepEqual(imported.getEntries().map(entry => imageStore.entry(entry)), JSON.parse(JSON.stringify(sm.getEntries()))); assert.equal(imported.getLabel(first), 'bookmark');
     assert.equal(imported.getHeader().cwd, target); assert.equal(fs.existsSync(imported.getHeader().parentSession), false, 'uploaded source is cleaned'); require('./private-file-helper.cjs').assertPrivateFile(a.session.path);
     assert.equal(fs.readFileSync(original.path, 'utf8'), content);
     assert.equal((await store.listSessions(target)).length, 2);

@@ -46,7 +46,7 @@ function pruneDrafts(projection, usage, options = {}) {
     for (const item of projection.slice(0, boundary)) {
         const entry = item.sourceEntry, message = (item.messages || [])[0];
         if (entry?.type !== 'message' || !message || message.role !== 'toolResult' || KEEP_TOOLS.has(message.toolName)) continue;
-        if ((message.content || []).some?.(part => part?.type === 'image')) continue;
+        if ((message.content || []).some?.(part => part?.type === 'image' || require('../pi-session-images').isReference(part))) continue;
         const text = toolText(message);
         if (text.length < rules.minChars || text.startsWith(STUB_PREFIX)) continue;
         const stub = stubFor(message, entry.id);
@@ -68,7 +68,7 @@ function messageChars(message) {
     if (!message || ['compactionSummary', 'branchSummary'].includes(message.role)) return 0;
     if (typeof message.content === 'string') return message.content.length;
     if (!Array.isArray(message.content)) return 0;
-    return message.content.reduce((total, part) => total + (part?.type === 'text' ? part.text.length : part?.type === 'thinking' ? String(part.thinking ?? '').length
+    return message.content.reduce((total, part) => total + (require('../pi-session-images').isReference(part) ? 4800 : part?.type === 'text' ? part.text.length : part?.type === 'thinking' ? String(part.thinking ?? '').length
         : part?.type === 'toolCall' ? JSON.stringify(part.arguments ?? {}).length : part?.type === 'image' ? 4800 : 0), 0);
 }
 

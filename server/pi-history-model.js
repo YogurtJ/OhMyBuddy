@@ -73,16 +73,16 @@ function documentOf(entry, view = 'record') {
         const content = entry.content;
         if (typeof content === 'string') add(content);
         else if (Array.isArray(content)) for (const block of content) {
-            if (block?.type === 'text') add(block.text);
-            else if (block?.type === 'image') images++;
+            if (require('./pi-session-images').isReference(block) || block?.type === 'image') images++;
+            else if (block?.type === 'text') add(block.text);
         }
     } else {
         const m = entry.message;
         if (m.role === 'bashExecution') { add(m.command); add(m.output); }
         else if (typeof m.content === 'string') add(m.content);
         else if (Array.isArray(m.content)) for (const block of m.content) {
-            if (block.type === 'text') add(block.text);
-            else if (block.type === 'image') images++;
+            if (require('./pi-session-images').isReference(block) || block.type === 'image') images++;
+            else if (block.type === 'text') add(block.text);
             else if (block.type === 'toolCall') { hasTools = true; if (view === 'record') { add(`工具：${block.name || 'tool'}`); args(block.arguments); } }
             // Thinking, signatures and hidden custom metadata are not searched or sent to the browser.
         }

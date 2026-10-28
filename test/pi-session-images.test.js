@@ -1,0 +1,86 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+const { SessionImages, isReference } = require('../server/pi-session-images');
+const { inventory, migrate, rollback } = require('../server/pi-session-image-migration');
+const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==';
+const image = { type: 'image', data: png, mimeType: 'image/png', custom: { retained: true } };
+function fixture(t) { const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-image-store-'))); t.after(() => fs.rmSync(dir, { recursive: true, force: true })); return dir; }
+test('immutable image store deduplicates and restores exact blocks; corrupt and symlinked objects fail closed', t => {
+    const dir = fixture(t), images = new SessionImages(dir), block = images.save(image);
+    assert.ok(isReference(block)); assert.deepEqual(images.restore(block), image);
+    assert.deepEqual(images.save(image), block);
+    assert.equal(fs.readdirSync(images.root).length, 1);
+    const file = path.join(images.root, block.pivaneImage.sha256);
+    if (process.platform !== 'win32') assert.equal(fs.statSync(file).mode & 0o777, 0o600);
+    fs.writeFileSync(file, 'corrupt'); assert.throws(() => images.restore(block), /校验/);
+    fs.unlinkSync(file); fs.writeFileSync(path.join(dir, 'other'), Buffer.from(png, 'base64')); fs.symlinkSync(path.join(dir, 'other'), file);
+    assert.throws(() => images.restore(block));
+    assert.throws(() => images.restore({ ...block, pivaneImage: { ...block.pivaneImage, sha256: '../other' } }), /引用无效/);
+    assert.deepEqual(images.save({ ...image, data: 'invalid image' }), { ...image, data: 'invalid image' });
+});
+test('unavailable object storage falls back to native inline persistence without losing the image', async t => {
+    const dir = fixture(t), sdk = await import('@earendil-works/pi-coding-agent');
+    const { imageSessionManager } = require('../server/pi-session-image-context');
+    fs.writeFileSync(path.join(dir, 'pivane-session-images'), 'not a directory');
+    const manager = sdk.SessionManager.create(dir, path.join(dir, 'sessions')), view = imageSessionManager(manager, dir);
+    const message = { role: 'user', content: [image], timestamp: 1 };
+    view.appendMessage(message);
+    assert.deepEqual(manager.getEntries()[0].message, message);
+    assert.ok(fs.readFileSync(manager.getSessionFile(), 'utf8').includes(png));
+});
+
+test('runtime projection preserves native image estimates and compaction boundaries without persisting empty images', async t => {
+    const dir = fixture(t), sdk = await import('@earendil-works/pi-coding-agent');
+    const { imageSessionManager } = require('../server/pi-session-image-context');
+    const { prepareCompaction } = await import('../node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/compaction.js');
+    const images = new SessionImages(dir), manager = sdk.SessionManager.create(dir, path.join(dir, 'sessions'));
+    for (let i = 0; i < 15; i++) manager.appendMessage({ role: 'user', content: [images.save(image), { type: 'text', text: 'question ' + i }], timestamp: i });
+    const view = imageSessionManager(manager, dir);
+    const original = manager.getBranch().map(entry => images.entry(entry));
+    const stored = view.getEntries();
+    const settings = { enabled: true, reserveTokens: 1000, keepRecentTokens: 4000 };
+    const expected = prepareCompaction(original, settings), actual = prepareCompaction(view.getBranch(), settings);
+    assert.equal(actual.tokensBefore, expected.tokensBefore); assert.equal(actual.firstKeptEntryId, expected.firstKeptEntryId);
+    assert.equal(sdk.serializeConversation(actual.messagesToSummarize), sdk.serializeConversation(expected.messagesToSummarize));
+    assert.equal(sdk.estimateTokens(view.buildSessionContext().messages[0]), sdk.estimateTokens(images.message(stored[0].message)));
+    assert.ok(view.getBranch()[0].message.content[0].type === 'image');
+    assert.ok(isReference(view.getEntries()[0].message.content[0]));
+    view.appendContextEdit(stored[0].id, { content: view.getBranch()[0].message.content });
+    assert.equal(view.getEntries().at(-1).replacement.content[0].type, 'text');
+    const file = manager.getSessionFile();
+    view.createBranchedSession(stored[0].id);
+    assert.notEqual(manager.getSessionFile(), file);
+    assert.ok(!fs.readFileSync(manager.getSessionFile(), 'utf8').includes('"data":""'));
+    assert.ok(fs.readFileSync(manager.getSessionFile(), 'utf8').includes('pivaneImage'));
+});
+
+test('migration retains every branch, labels, unknown fields and unchanged raw lines, with a single-use receipt and original bytes', async t => {
+    const dir = fixture(t), agent = path.join(dir, 'agent'), cwd = path.join(dir, 'project'); fs.mkdirSync(agent); fs.mkdirSync(cwd);
+    const sdk = await import('@earendil-works/pi-coding-agent');
+    const sessionDir = path.join(agent, 'sessions', 'project'); fs.mkdirSync(sessionDir, { recursive: true });
+    const manager = sdk.SessionManager.create(cwd, sessionDir);
+    const first = manager.appendMessage({ role: 'user', content: [{ type: 'text', text: 'source' }, image], timestamp: 1 });
+    manager.appendMessage({ role: 'user', content: [image], timestamp: 2 });
+    manager.branch(first); manager.appendMessage({ role: 'user', content: [image], timestamp: 3 });
+    manager.appendLabelChange(first, 'bookmark');
+    const file = manager.getSessionFile(), before = fs.readFileSync(file);
+    const plan = inventory(path.join(agent, 'sessions')); assert.equal(plan.files.length, 1); assert.equal(plan.files[0].images, 3);
+    let offlineChecks = 0;
+    const options = { agentDir: agent, directory: path.join(dir, 'migration'), assertOffline: async () => { offlineChecks++; }, sdk };
+    const result = await migrate(plan, options); assert.equal(result.status, 'succeeded'); assert.ok(offlineChecks >= 3);
+    assert.deepEqual(fs.readFileSync(result.files[0].backup), before);
+    const after = sdk.SessionManager.open(file), images = new SessionImages(agent);
+    assert.deepEqual(after.getHeader(), JSON.parse(JSON.stringify(manager.getHeader())));
+    assert.deepEqual(after.getEntries().map(entry => images.entry(entry)), manager.getEntries());
+    const oldLines = before.toString().split('\n'), nextLines = fs.readFileSync(file, 'utf8').split('\n');
+    oldLines.forEach((line, i) => { if (!line.includes(png)) assert.equal(nextLines[i], line); });
+    assert.equal(fs.readdirSync(images.root).length, 1);
+    await assert.rejects(migrate(plan, options), /EEXIST/);
+    const changedPlan = { ...plan, files: [{ ...plan.files[0], sha256: '0'.repeat(64) }] };
+    await assert.rejects(migrate(changedPlan, { ...options, directory: path.join(dir, 'changed') }), /changed/);
+    const migrated = fs.readFileSync(file); fs.appendFileSync(file, '\n');
+    await assert.rejects(rollback(plan, result, options), /changed after migration/);
+    fs.writeFileSync(file, migrated);
+    await rollback(plan, result, options); assert.deepEqual(fs.readFileSync(file), before);
+});

@@ -34,7 +34,7 @@ flowchart TD
 
 ## 会话与运行时
 
-**Pi SessionManager 和原生 JSONL 是唯一会话事实来源。** 项目经 native realpath、配置范围和系统权限解析，持久 worker 按规范 sessionPath 唯一索引；多个浏览器订阅同一 worker，外部 CLI 不能同时写该文件。会话 ID、项目 cwd、文件路径和分支树是不同身份，不能从文件名或正文猜测归属。
+**Pi SessionManager 和原生 JSONL 是唯一会话事实来源，外置图片由原生引用指向不可变私有对象。** 图片存储、模型还原与历史迁移见[原生会话图片存储](SESSION_IMAGES.md)。 项目经 native realpath、配置范围和系统权限解析，持久 worker 按规范 sessionPath 唯一索引；多个浏览器订阅同一 worker，外部 CLI 不能同时写该文件。会话 ID、项目 cwd、文件路径和分支树是不同身份，不能从文件名或正文猜测归属。
 
 RPC 使用 StringDecoder 和严格 LF 分帧，未知或迟到私有响应也要截获。超时、浏览器断线与 `agent_settled` 不代表外部操作或后台任务已经停止；实际 Promise/进程退出才释放对应所有权。界面忙碌、回合空闲、回收与维护空闲由各自投影决定。
 

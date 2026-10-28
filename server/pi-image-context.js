@@ -1,5 +1,6 @@
 // Request-only image projection. Native messages and tool results remain authoritative.
 const { dimensions } = require('./pi-file-types');
+const { isReference } = require('./pi-session-images');
 const MAX_IMAGE_BYTES = 32 * 1024 * 1024;
 const MAX_CONTEXT_IMAGE_BYTES = 128 * 1024 * 1024;
 function imageError(location, reason) {
@@ -17,7 +18,7 @@ function decodeImage(block, location) {
     return { bytes, type };
 }
 function imageCount(messages) {
-    return messages.reduce((count, message) => count + (Array.isArray(message.content) ? message.content.filter(block => block?.type === 'image').length : 0), 0);
+    return messages.reduce((count, message) => count + (Array.isArray(message.content) ? message.content.filter(block => block?.type === 'image' || isReference(block)).length : 0), 0);
 }
 function inspectImages(messages, model, { blocked = false } = {}) {
     if (blocked || !model?.input?.includes('image')) return;

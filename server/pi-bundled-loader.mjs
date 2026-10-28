@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import * as sdk from '@earendil-works/pi-coding-agent';
 import bundled from './pi-bundled-resources.js';
 import { nativeExtensionFactories, selectedNativeBuiltins } from './pi-native-mcp.mjs';
+import sessionImages from './pi-session-images.js';
 
 // Match the pinned package's declared entry before loading it. Keep the legacy
 // root entry for explicit paths; both must share the wrapper's unbundled factory.
@@ -25,7 +26,7 @@ export async function managedLoaderOptions({ cwd, agentDir, settings, parsed }) 
         ? fileURLToPath(new URL('./pi-bundled-subagents.mjs', import.meta.url)) : file;
     return { settingsView, options: {
         noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true,
-        extensionFactories: await nativeExtensionFactories(parsed),
+        extensionFactories: [...await nativeExtensionFactories(parsed), pi => sessionImages.registerSessionImages(pi, agentDir)],
         disabledBuiltinExtensions: parsed.noMcp ? ['mcp'] : undefined,
         noContextFiles: parsed.noContextFiles, systemPrompt: parsed.systemPrompt, appendSystemPrompt: parsed.appendSystemPrompt,
         additionalExtensionPaths: [...new Set([...selectedNativeBuiltins(settingsView, parsed), ...explicit(parsed.extensions), ...(parsed.noExtensions ? [] : paths('extensions'))])].map(extensionPath),
