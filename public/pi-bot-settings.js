@@ -87,9 +87,10 @@
         high: () => translateUi("高"), xhigh: () => translateUi("极高"), max: () => translateUi("最大") };
     const modelKey = model => model ? `${model.provider}\u0000${model.id}` : '';
     const botThinking = bot => Object.hasOwn(bot, 'thinking') ? bot.thinking || '' : bot.model?.thinking || '';
+    const defaultSelection = models => models && Object.hasOwn(models, 'effectiveDefault') ? models.effectiveDefault : models?.defaults;
     const modelLevels = (models, key) => {
-        const defaults = models?.defaults;
-        return models?.models?.find(item => key ? modelKey(item) === key : item.provider === defaults?.provider && item.id === defaults?.modelId)?.thinkingLevels || [];
+        const defaults = defaultSelection(models);
+        return models?.models?.find(item => key ? modelKey(item) === key : item.provider === defaults?.provider && item.id === (defaults?.modelId ?? defaults?.id))?.thinkingLevels || [];
     };
     const CLOCK = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
     const browserZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } };
@@ -553,7 +554,7 @@
 
             // ---- 模型 --------------------------------------------------------------------------
             const model = el('select');
-            const defaults = data.models?.defaults, defaultModel = defaults && data.models.models.find(item => item.provider === defaults.provider && item.id === defaults.modelId);
+            const defaults = defaultSelection(data.models), defaultModel = defaults && data.models.models.find(item => item.provider === defaults.provider && item.id === (defaults.modelId ?? defaults.id));
             const defaultLabel = defaultModel ? translateUi("跟随默认（{0}）", defaultModel.name || defaultModel.id) : translateUi("跟随默认");
             model.append(new Option(defaultLabel, ''));
             const groups = new Map();
