@@ -10,6 +10,7 @@
     const icon = name => { const i = el('i', `fa-solid ${name}`); i.setAttribute('aria-hidden', 'true'); return i; };
     const button = (className, text) => { const b = el('button', className, text); b.type = 'button'; return b; };
     const modelKey = model => model ? `${model.provider}\u0000${model.id}` : '';
+    const defaultSelection = models => models && Object.hasOwn(models, 'effectiveDefault') ? models.effectiveDefault : models?.defaults;
     const botThinking = bot => Object.hasOwn(bot, 'thinking') ? bot.thinking || '' : bot.model?.thinking || '';
     const THINKING = { off: () => translateUi("不启用"), minimal: () => translateUi("极简"), low: () => translateUi("低"), medium: () => translateUi("中"),
         high: () => translateUi("高"), xhigh: () => translateUi("极高"), max: () => translateUi("最大") };
@@ -130,7 +131,7 @@
         };
         // The name of the model new chats use by default, when the list says.
         const defaultName = data => {
-            const defaults = data?.defaults, item = defaults && data.models.find(entry => entry.provider === defaults.provider && entry.id === defaults.modelId);
+            const defaults = defaultSelection(data), item = defaults && data.models.find(entry => entry.provider === defaults.provider && entry.id === (defaults.modelId ?? defaults.id));
             return item ? item.name || item.id : '';
         };
         const modelName = (model, data) => {
@@ -200,8 +201,8 @@
                 });
                 modelPicker.update(data.models, picked, Boolean(state.saving), defaultLabel, defaultLabel);
             }
-            const defaults = data.defaults;
-            const levels = data.models.find(item => select.value ? modelKey(item) === select.value : item.provider === defaults?.provider && item.id === defaults?.modelId)?.thinkingLevels || [];
+            const defaults = defaultSelection(data);
+            const levels = data.models.find(item => select.value ? modelKey(item) === select.value : item.provider === defaults?.provider && item.id === (defaults?.modelId ?? defaults?.id))?.thinkingLevels || [];
             const thinking = el('select'); thinking.dataset.closureThinking = '';
             thinking.setAttribute('aria-label', translateUi("思考程度"));
             thinking.append(new Option(translateUi("跟随默认"), ''));
