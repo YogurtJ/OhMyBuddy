@@ -288,7 +288,7 @@ const NEW_FACE = { kind: 'preset', id: 'pivane-pebble' };
                 assert.equal(await page.locator('#pi-request-dialog[open]').count(), 0, 'no generic dialog for an approval');
                 assert.equal(await page.locator('.pi-bot-approval header strong').textContent(), '小狸 想运行一条命令');
                 assert.equal(await page.locator('.pi-bot-approval .pi-bot-approval-detail').textContent(), 'ls -la');
-                await page.waitForFunction(() => document.querySelector('#pi-transcript-activity .pi-activity-label')?.textContent === '等你确认');
+                await page.waitForFunction(() => document.querySelector('.pi-bot-process-line.is-running .pi-turn-label')?.textContent.startsWith('等你确认'));
                 if (evidence) { await page.waitForTimeout(300); await page.screenshot({ path: path.join(evidence, `bot-approval-${width}.png`) }); }
                 await page.locator('.pi-bot-approval-allow').click();
                 assert.deepEqual(responses.at(-1), { type: 'extension_ui_response', id: 'ui-2', confirmed: true });

@@ -238,6 +238,8 @@
             region.nodes = this.regionNodes(boundary);
             this.refreshTurnGroups(region);
             this.refreshVisibility(region);
+            if (this.tailActive && this.plain()) this.botTimer ||= setInterval(() => this.schedule(), 1000);
+            else { clearInterval(this.botTimer); this.botTimer = null; }
         }
 
         nodeKey(node) {
@@ -278,6 +280,7 @@
         }
 
         refreshTurnGroups(region) {
+            if (region.nodes.length && this.plain() && window.PiBotTurns) return window.PiBotTurns.refresh(this, region);
             const segments = [];
             let current = null;
             for (const child of region.nodes) {
@@ -377,7 +380,7 @@
         // closed process group folding it (or, for a tool-only reply, its own rows).
         reveal(node) {
             const group = node?.dataset?.turnKey ? this.turnGroups.get(node.dataset.turnKey) : null;
-            if (group && this.mode === 'compact' && !group.element.open) { group.element.open = true; this.refreshVisibility(group.region); }
+            if (group && (this.plain() || this.mode === 'compact') && !group.element.open) { group.element.open = true; this.refreshVisibility(group.region); }
             if (node?.hidden && this.mode !== 'full') {
                 const keys = new Set([node.dataset.processKey, ...[...node.querySelectorAll('[data-process-key]')].map(item => item.dataset.processKey)]);
                 for (const key of keys) {
@@ -390,6 +393,7 @@
 
         refreshVisibility(region) {
             if (!region) { for (const item of this.regions.values()) this.refreshVisibility(item); return; }
+            if (region.nodes.length && this.plain() && window.PiBotTurns) return window.PiBotTurns.visibility(region);
             const collapseProcess = this.mode !== 'full';
             const collapseTurns = this.mode === 'compact';
             // Undo only hiding that turn folding applied, so leaving compact mode or

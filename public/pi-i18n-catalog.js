@@ -10910,5 +10910,37 @@
         ["设置分区","Settings sections"],
         ["有没保存的修改","Has unsaved changes"]
     );
+    // Bot process lines and state-change receipts.
+    rows.push(
+        ["本轮更新","Updates this turn"],
+        ["想了想","Thought it through"],
+        ["连接不太顺，正在重试","Connection is patchy, retrying"],
+        ["运行命令 · {0}","Run command · {0}"],
+        ["读取 {0}","Read {0}"],
+        ["写入 {0}","Write {0}"],
+        ["修改 {0}","Edit {0}"],
+        ["搜索“{0}”","Search “{0}”"],
+        ["查看文件夹 {0}","Look in folder {0}"],
+        ["上网搜索 · {0}","Search the web · {0}"],
+        ["打开网页 · {0}","Open webpage · {0}"],
+        ["记到“关于你”","Note in “About you”"],
+        ["记到长期记忆","Note in long-term memory"],
+        ["删掉一条记忆","Remove a memory"],
+        ["整理技能 · {0}","Manage skill · {0}"],
+        ["定时任务 · {0}","Scheduled task · {0}"],
+        ["运行一段脚本","Run a script"],
+        ["使用工具 · {0}","Use tool · {0}"],
+        ["没有执行（你没有允许）","Did not run (not allowed)"],
+        ["更新了设置 · {0}","Updated settings · {0}"],
+        ["记在“我记着的事” · {0} 件","Noted in “Things I’m keeping in mind” · {0}"],
+        ["新增关于你","Added to About you"],
+        ["更新了关于你","Updated About you"],
+        ["删掉了关于你","Removed from About you"],
+        ["新增长期记忆","Added long-term memory"],
+        ["更新了长期记忆","Updated long-term memory"],
+        ["删掉了长期记忆","Removed long-term memory"],
+        ["删掉技能","Removed skill"],
+        ["改了设置","Changed settings"]
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();
