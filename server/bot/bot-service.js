@@ -1241,7 +1241,7 @@ class BotService extends EventEmitter {
         if (this.catalog) {
             try {
                 const catalog = await this.catalog(bot.workspace);
-                models = { defaults: catalog.defaults, models: catalog.models.map(model => ({ provider: model.provider, id: model.modelId ?? model.id,
+                models = { defaults: catalog.defaults, effectiveDefault: await require('./bot-model-runtime').resolveEffectiveDefault(catalog), models: catalog.models.map(model => ({ provider: model.provider, id: model.modelId ?? model.id,
                     name: model.name, thinkingLevels: model.thinkingLevels })) };
             } catch (error) { modelsError = error.message; }
         }

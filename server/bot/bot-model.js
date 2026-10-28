@@ -5,8 +5,13 @@ const fail = message => { throw Object.assign(new Error(message), { status: 409,
 const modelId = model => model?.id ?? model?.modelId;
 const sameModel = (a, b) => a?.provider === b?.provider && modelId(a) === modelId(b);
 function effectiveModel(bot, catalog) {
-    return bot.model ?? (catalog?.defaults?.provider && (catalog.defaults.modelId ?? catalog.defaults.id)
-        ? { provider: catalog.defaults.provider, id: catalog.defaults.modelId ?? catalog.defaults.id } : null);
+    if (bot.model) return bot.model;
+    if (catalog && Object.hasOwn(catalog, 'effectiveDefault')) {
+        const model = catalog.effectiveDefault;
+        return model ? { provider: model.provider, id: model.modelId ?? model.id } : null;
+    }
+    return catalog?.defaults?.provider && (catalog.defaults.modelId ?? catalog.defaults.id)
+        ? { provider: catalog.defaults.provider, id: catalog.defaults.modelId ?? catalog.defaults.id } : null;
 }
 async function validateModelChange(previous, next, catalog) {
     const modelChanged = !sameModel(previous.model, next.model);
@@ -18,7 +23,8 @@ async function validateModelChange(previous, next, catalog) {
     if (modelChanged && next.model === null && !thinkingChanged) return;
     let available;
     try { available = await catalog?.(next.workspace); } catch { /* explicit failure below */ }
-    const desired = effectiveModel(next, available);
+    const effectiveDefault = await require('./bot-model-runtime').resolveEffectiveDefault(available);
+    const desired = effectiveModel(next, { ...available, effectiveDefault });
     const found = desired && available?.models?.find(model => sameModel(model, desired));
     if (!found) fail('This model is not available; keep the current choice or choose another');
     if (next.thinking && !(found.thinkingLevels || []).includes(next.thinking)
