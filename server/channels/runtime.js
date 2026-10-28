@@ -35,8 +35,8 @@ function registerChannelTurns(pi, { prepareStart } = {}) {
             // target and readiness before committing a turn; a timeout never proves readiness.
             if (input.sessionId !== ctx.sessionManager.getSessionId() || active || !ctx.isIdle() || ctx.hasPendingMessages())
                 throw new Error('Channel target changed or is busy');
-            if (!ctx.model) throw new Error('当前聊天没有可用模型，请用 /model 选择模型或检查工作区默认模型');
-            if (images.length && !ctx.model.input?.includes('image')) throw new Error('当前聊天模型不支持图片输入，请用 /model 选择支持视觉的模型后重新发送图片');
+            if (!ctx.model) throw Object.assign(new Error('当前聊天没有可用模型，请用 /model 选择模型或检查工作区默认模型'), { code: 'CHANNEL_MODEL_UNAVAILABLE' });
+            if (images.length && !ctx.model.input?.includes('image')) throw Object.assign(new Error('当前聊天模型不支持图片输入，请用 /model 选择支持视觉的模型后重新发送图片'), { code: 'CHANNEL_IMAGE_UNSUPPORTED' });
             active = { version: 1, id: input.id, sessionId: input.sessionId, status: 'running', startedAt: Date.now() };
             pi.appendEntry(STATE, active);
             const approvalHint = readWindowBinding(ctx.sessionManager) ? '工具授权只通过对应的同意/拒绝 A编号回答，不能用 /confirm 代替。' : '';

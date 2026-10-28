@@ -41,7 +41,7 @@ async function resolveRuntimeModel(ctx, desired, thinking, agentDir) {
         else {
             const initial = await automaticModel(ctx.modelRegistry?.getAvailable?.() || []);
             selection = initial.model;
-            defaultLevel = initial.thinkingLevel;
+            defaultLevel ??= initial.thinkingLevel;
         }
     }
     if (!selection) return null;

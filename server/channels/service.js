@@ -19,6 +19,12 @@ const fail = (message, status = 400) => Object.assign(new Error(message), { stat
 const botControl = (slash, binding) => Boolean(binding?.bot && slash &&
     (['/model', '/thinking'].includes(slash.command)
         || ['/bot', '/topic'].includes(slash.command) && (!slash.args || slash.args.toLowerCase() === 'list')));
+// Older workers lack preflight codes. Match only their exact rejection messages; other
+// RPC failures and timeouts can follow execution and must keep the uncertain boundary.
+const LEGACY_MODEL_REJECTIONS = new Set(['请先为线程配置可用模型',
+    '当前线程模型不支持图片输入，请用 /model 切换到支持视觉的模型',
+    '当前聊天没有可用模型，请用 /model 选择模型或检查工作区默认模型',
+    '当前聊天模型不支持图片输入，请用 /model 选择支持视觉的模型后重新发送图片']);
 const SLASH_COMMANDS = new Set(['/help', '/status', '/stop', '/new', '/reset', '/resume', '/name', '/model', '/thinking', '/compact', '/reload', '/confirm', '/bot', '/topic']);
 // Chinese names for the Bot commands (M4-4).
 const SLASH_ALIASES = new Map([['/切换', '/bot'], ['/话题', '/topic']]);
@@ -575,7 +581,8 @@ class ChannelsService {
                             });
                         } catch (error) {
                             if (error.code === 'SESSION_BUSY') { this.updateJob(id, { status: 'queued' }); return; }
-                            if (/不支持图片输入|配置可用模型/.test(error.message || '')) {
+                            if (['CHANNEL_MODEL_UNAVAILABLE', 'CHANNEL_IMAGE_UNSUPPORTED'].includes(error.code)
+                                || !error.code && LEGACY_MODEL_REJECTIONS.has(error.message)) {
                                 this.updateJob(id, { status: 'ready', directReply: `⚠️ ${error.message}`, text: undefined, images: undefined, waiting: false });
                                 result = null;
                             } else throw error;

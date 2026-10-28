@@ -16,7 +16,7 @@ function effectiveModel(bot, catalog) {
 async function validateModelChange(previous, next, catalog) {
     const modelChanged = !sameModel(previous.model, next.model);
     const thinkingChanged = previous.thinking !== next.thinking;
-    if (!modelChanged && (next.thinking === null || next.thinking === previous.model?.thinking)) return;
+    if (!modelChanged && next.thinking === null) return;
     if (!modelChanged && !thinkingChanged || next.model === null && next.thinking === null) return;
     // Following defaults is always allowed. A retained independent preference is kept even if a
     // later workspace default cannot support it; the runtime reports its native effective level.

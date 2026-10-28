@@ -310,3 +310,52 @@ test('review fixes: an approval answer works after the chat moved on, and answer
     s.receive('acct', { msgs: [1, 2, 3, 4, 5].map(n => ({ peerId: 'owner', messageId: `m${n}`, text: `同意 A${n}`, contextToken: 'fixture' })) });
     assert.deepEqual(db.value.jobs.slice(-5).map(j => [j.status, j.reason]), [['queued', null], ['queued', null], ['queued', null], ['ignored', 'queue-full'], ['ignored', 'queue-full']]);
 });
+
+for (const bot of [false, true]) test(`known channel model preflight rejections explain without blocking later input (${bot ? 'Bot' : 'Pi'})`, async t => {
+    const f = fixture(t, { text: null, ...(bot ? {} : { binding: { sessionId: 'plain', bot: undefined, bots: undefined } }) });
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+    const manager = SessionManager.inMemory(f.cwd), handlers = new Map();
+    const turn = require('../server/channels/runtime').registerChannelTurns({ on: (name, handler) => handlers.set(name, handler),
+        appendEntry: (kind, data) => manager.appendCustomEntry(kind, data),
+        sendMessage: value => manager.appendCustomMessageEntry(value.customType, value.content, value.display, value.details) });
+    const worker = await f.s.supervisor.getWorker({ sessionId: bot ? 'a-main-0' : 'plain' });
+    let model = null, attempts = 0;
+    worker.channelTurn = async (input, hooks) => {
+        if (!hooks.admit()) return { cancelled: true };
+        attempts++;
+        const ctx = { sessionManager: manager, isIdle: () => true, hasPendingMessages: () => false, model };
+        await turn(ctx, { ...input, action: 'start', id: require('node:crypto').createHash('sha256').update(input.id).digest('hex'), sessionId: manager.getSessionId() });
+        hooks.accepted();
+        manager.appendMessage({ role: 'assistant', content: [{ type: 'text', text: 'recovered reply' }], stopReason: 'stop', timestamp: Date.now() });
+        handlers.get('agent_settled')({}, ctx); return { status: 'completed' };
+    };
+    f.s.startTyping = async () => async () => {};
+    f.s.adapter.downloadImage = async () => ({ type: 'image', mimeType: 'image/png', data: 'aGVsbG8=' });
+    const enqueue = (id, images) => f.db.change(v => v.jobs.push({ id, accountId: 'acct', peerId: 'owner', bindingId: 'binding',
+        target: { cwd: f.cwd, sessionId: bot ? 'a-main-0' : 'plain' }, status: 'queued', text: 'synthetic input', ...(images ? { images: [{}] } : {}) }));
+    const pump = async id => { f.s.pump(); await f.s.runs.get(id).promise; };
+    enqueue('no-model'); await pump('no-model');
+    assert.equal(manager.getEntries().length, 0); assert.equal(f.s.job('no-model').status, 'delivered');
+    assert.match(f.sends.at(-1), /没有可用模型.*\/model/);
+    model = { input: ['text'] };
+    enqueue('no-vision', true); await pump('no-vision');
+    assert.equal(manager.getEntries().length, 0); assert.equal(f.s.job('no-vision').status, 'delivered');
+    assert.match(f.sends.at(-1), /不支持图片输入/);
+    enqueue('next'); await pump('next'); assert.equal(f.s.job('next').status, 'delivered');
+    f.s.pump(); assert.equal(attempts, 3, 'fixed model admits only the new input; rejected jobs never replay');
+    assert.equal(manager.getEntries().filter(entry => entry.customType === 'pivane-channel-message').length, 1);
+});
+
+test('channel preflight compatibility is exact and never converts timeouts or arbitrary errors into a safe rejection', async t => {
+    for (const [id, error, expected] of [
+        ['legacy', Error('请先为线程配置可用模型'), 'delivered'],
+        ['current-legacy', Error('当前聊天没有可用模型，请用 /model 选择模型或检查工作区默认模型'), 'delivered'],
+        ['timeout', Object.assign(Error('请先为线程配置可用模型'), { code: 'RPC_TIMEOUT' }), 'uncertain'],
+        ['arbitrary', Error('语音结果提到配置可用模型，但执行结果未知'), 'uncertain']
+    ]) {
+        const f = fixture(t), worker = await f.s.supervisor.getWorker({ sessionId: 'a-main-0' });
+        worker.channelTurn = async () => { throw error; }; f.s.startTyping = async () => async () => {};
+        f.s.pump(); await f.s.runs.get('job').promise;
+        assert.equal(f.s.job('job').status, expected, id);
+    }
+});

@@ -40,6 +40,9 @@ test('a real Bot worker applies explicit/default vision before the first image a
         changes: { bot: { model } } });
     const input = n => ({ id: createHash('sha256').update(String(n)).digest('hex'), peerId: 'owner', text: 'Read the attached image',
         images: [{ type: 'image', mimeType: 'image/png', data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAX+XDSwAAAABJRU5ErkJggg==' }] });
+    const beforeRejectedImage = (await worker.request('get_entries')).entries.length;
+    await assert.rejects(worker.channelTurn(input(0)), { code: 'CHANNEL_IMAGE_UNSUPPORTED' });
+    assert.equal((await worker.request('get_entries')).entries.length, beforeRejectedImage, 'coded image preflight adds no native entry');
     await patch({ provider: 'fixture', id: 'vision' });
     await worker.channelTurn(input(1));
     assert.equal(calls.at(-1).model, 'vision');
@@ -80,4 +83,28 @@ test('a real Bot worker applies explicit/default vision before the first image a
     assert.deepEqual((await gateway.bots.bot(created.bot.id)).bot, preserved);
     assert.equal(calls.length, callsBeforeValidation + 1);
 
+});
+
+test('a real Bot worker follows saved global thinking with an automatic model, without requests or saved-model side effects', { timeout: 120000 }, async t => {
+    const calls = [];
+    const provider = http.createServer(async (req, res) => { calls.push(req.url); res.writeHead(500); res.end(); });
+    provider.listen(0, '127.0.0.1'); await once(provider, 'listening');
+    const settingsFile = path.join(agentDir, 'settings.json'), modelsFile = path.join(agentDir, 'models.json');
+    fs.writeFileSync(settingsFile, JSON.stringify({ defaultThinkingLevel: 'high', defaultProjectTrust: 'never', enableInstallTelemetry: false }));
+    fs.writeFileSync(modelsFile, JSON.stringify({ providers: { fixture: { baseUrl: `http://127.0.0.1:${provider.address().port}/v1`,
+        api: 'openai-completions', apiKey: 'synthetic', models: [{ id: 'reasoner', reasoning: true, input: ['text'], contextWindow: 32000, maxTokens: 1000 }] } } }));
+    const { WorkspaceAccessService } = require('../server/workspace-access-service');
+    const gateway = require('../server/pi-agent-routes').createPiAgentGateway({
+        accessService: new WorkspaceAccessService({ envToken: () => 'synthetic' }), deferredFilePath: process.env.PI_WEB_DEFERRED_FILE });
+    t.after(async () => { await gateway.dispose(); provider.closeAllConnections(); await new Promise(resolve => provider.close(resolve)); });
+    const created = await gateway.bots.create({ expectedRevision: (await gateway.bots.profiles.state()).revision });
+    const { session } = await gateway.bots.resolve(created.bot.id, created.window.id);
+    const open = () => gateway.supervisor.getWorker({ cwd: session.cwd, sessionPath: session.path, sessionId: session.id });
+    const saved = fs.readFileSync(settingsFile);
+    const settings = await gateway.bots.settings(created.bot.id);
+    assert.deepEqual(settings.models.effectiveDefault, { provider: 'fixture', modelId: 'reasoner' });
+    assert.equal(settings.bot.bot.model, null); assert.equal(settings.bot.bot.thinking, null);
+    const worker = await open(), state = await worker.request('get_state');
+    assert.equal(state.model.id, 'reasoner'); assert.equal(state.thinkingLevel, 'high');
+    assert.deepEqual(fs.readFileSync(settingsFile), saved); assert.deepEqual(calls, [], 'catalog resolution and opening send no provider request');
 });

@@ -10943,7 +10943,7 @@
         ["打开聊天", "Open chat"],
         ["查看任务", "View task"],
         ["查看渠道", "View channels"],
-        ["只读最近的有限记录（全局最近 {0} 次定时运行、{1} 条渠道记录），最多显示 {2} 项；聊天打开当前一代。", "Reads bounded recent records (the latest {0} scheduled runs and {1} channel records across this identity), showing up to {2} items. Chat links open the current generation."],
+        ["只读最近的有限记录（全局最近 {0} 次定时运行、{1} 条渠道记录），最多显示 {2} 项；聊天打开当前一代。", "Reads the latest {0} scheduled runs and {1} channel records globally; only matching Bot records are shown, up to {2} items. This is a bounded view, not the full history. Chat links open the current generation."],
         ["此 Bot 今日主动推送：{0} / {1}（{2}，{3}）；安静时段暂存 {4} 条。", "This Bot's proactive pushes today: {0} / {1} ({2}, {3}); {4} messages held during quiet hours."],
         ["全部用户定时任务今日共用额度（UTC）：运行 {0}/{1}，tokens {2}/{3}。不含 Bot 主动跟进和后台学习。", "Today's shared allowance for all user scheduled tasks (UTC): runs {0}/{1}, tokens {2}/{3}. Excludes Bot follow-ups and background learning."],
         ["定时任务费用估算未知。", "Scheduled-task cost estimate is unknown."],
@@ -10976,7 +10976,7 @@
         ["用户正在聊天，已跳过这次任务", "The user is chatting; this run was skipped"],
         ["执行实例已退出，结果待核对", "The worker exited; check the outcome"],
         ["学习调用上限暂不可用。", "The learning call limit is unavailable."],
-        ["只读最近的有限记录（全局最近 {0} 次定时运行、{1} 条渠道记录），最多显示 {2} 项；每个聊天核对最近 {3} 代，链接打开当前一代。", "Reads bounded recent records (the latest {0} scheduled runs and {1} channel records across this identity), showing up to {2} items. Checks the last {3} generations per chat; links open the current generation."]
+        ["只读最近的有限记录（全局最近 {0} 次定时运行、{1} 条渠道记录），最多显示 {2} 项；每个聊天核对最近 {3} 代，链接打开当前一代。", "Reads the latest {0} scheduled runs and {1} channel records globally; only matching Bot records are shown, up to {2} items. This is a bounded view, not the full history. Checks the last {3} generations per chat; links open the current generation."]
     );
     rows.push(
         ["这个话题已归档。设置和修改仍保留，请先在聊天列表恢复话题。", "This topic is archived. Your settings and edits are kept. Restore the topic from the chat list first."],
