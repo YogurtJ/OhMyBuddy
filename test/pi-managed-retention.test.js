@@ -68,7 +68,10 @@ function slots(f, kind) { return fs.readdirSync(f.trash).filter(n => !kind || n.
 linuxTest('verified Linux pruning removes only genuine eligible releases/backups and unlinks nested links without following them', async t => {
     if (process.platform !== 'linux') return t.skip('Linux destructive boundary');
     const f = removable(t), outside = path.join(f.root, 'outside'); fs.writeFileSync(outside, 'keep');
-    fs.symlinkSync(outside, path.join(f.runtime, 'releases', f.plan.removeReleases[0], 'link'));
+    const targetRel = path.join(f.runtime, 'releases', f.plan.removeReleases[0]);
+    fs.symlinkSync(outside, path.join(targetRel, 'link'));
+    fs.writeFileSync(path.join(targetRel, 'hard-a'), 'hardlinked binary');
+    fs.linkSync(path.join(targetRel, 'hard-a'), path.join(targetRel, 'hard-b'));
     f.plan = retention.planRetention(f.runtime, f.currentState, f.limits);
     const moved = retention.moveToTrash(f.runtime, f.plan, f.currentState);
     assert.equal(moved.releases.length, 2); assert.equal(moved.backups.length, 3);

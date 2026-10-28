@@ -56,6 +56,7 @@ async function removeTree(handle, guard, signal, expectedTree) {
     const rows = snapshotTree(handle);
     if (!equal(rows, expectedTree)) throw new Error('Retention quarantine contents changed');
     const directories = new Map([['', handle]]);
+    const unlinkedInodes = new Set();
     try {
         for (const row of rows.filter(r => r.type === 'directory')) {
             const dir = pin(path.join(handle.directory, row.path), identityFromStamp(row.stamp), false); directories.set(row.path, dir);
@@ -67,14 +68,19 @@ async function removeTree(handle, guard, signal, expectedTree) {
             const parent = directories.get(path.posix.dirname(row.path) === '.' ? '' : path.posix.dirname(row.path));
             check(parent);
             const target = parent.at(path.posix.basename(row.path)), actual = fs.lstatSync(target, { bigint: true });
-            // Directory times change as this traversal removes their children.
-            if (!equal(row.type === 'directory' ? identity(actual) : stamp(actual), row.type === 'directory' ? identityFromStamp(row.stamp) : row.stamp)) throw new Error('Retention object changed');
+            // Directory times change as this traversal removes their children;
+            // unlinking an earlier hardlink in this same tree updates shared inode ctimeNs.
+            const skipCtime = row.type !== 'directory' && unlinkedInodes.has(`${row.stamp.dev}:${row.stamp.ino}`);
+            if (!equal(row.type === 'directory' ? identity(actual) : (skipCtime ? stampWithoutCtime(actual) : stamp(actual)),
+                row.type === 'directory' ? identityFromStamp(row.stamp) : (skipCtime ? stampWithoutCtimeFromStamp(row.stamp) : row.stamp))) throw new Error('Retention object changed');
             if (row.type === 'directory') { const own = directories.get(row.path); check(own); own.close(); directories.delete(row.path); fs.rmdirSync(target); }
-            else fs.unlinkSync(target);
+            else { fs.unlinkSync(target); unlinkedInodes.add(`${row.stamp.dev}:${row.stamp.ino}`); }
             if (++count % 64 === 0) await new Promise(resolve => setImmediate(resolve));
         }
         guard(); check(handle);
     } finally { for (const [name, dir] of directories) if (name) dir.close(); }
 }
 function identityFromStamp(value) { return Object.fromEntries(['dev', 'ino', 'birthtimeNs', 'mode', 'uid', 'gid'].map(k => [k, value[k]])); }
+function stampWithoutCtime(stat) { return { ...identity(stat), size: String(stat.size), mtimeNs: String(stat.mtimeNs) }; }
+function stampWithoutCtimeFromStamp(value) { return Object.fromEntries(['dev', 'ino', 'birthtimeNs', 'mode', 'uid', 'gid', 'size', 'mtimeNs'].map(k => [k, value[k]])); }
 module.exports = { supported, pin, check, identity, stamp, equal, stateProof, directoryIdentity, snapshotTree, removeTree, MAX_ENTRIES };
