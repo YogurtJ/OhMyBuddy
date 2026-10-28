@@ -65,6 +65,31 @@
             title = ({ install: t('安装扩展包'), update: t('更新扩展包'), remove: t('移除扩展包') })[args.action] || t('管理扩展包');
             if (text(args.source, 1000)) title += ' · ' + args.source;
         }
+        if (document.getElementById('chat-tab')?.classList.contains('pi-bot-mode')) {
+            const line = value => typeof value === 'string' ? value.trim().split(/\r?\n/)[0].slice(0, 160) : '';
+            const file = parts.at(-1) || line(args.path);
+            if (name === 'bash') title = t('运行命令 · {0}', line(args.command));
+            else if (name === 'read') title = t('读取 {0}', file);
+            else if (name === 'write') title = t('写入 {0}', file);
+            else if (name === 'edit') title = t('修改 {0}', file);
+            else if (name === 'grep') title = t('搜索“{0}”', line(args.pattern));
+            else if (['find', 'ls'].includes(name)) title = t('查看文件夹 {0}', file || '.');
+            else if (name === 'web_search') title = t('上网搜索 · {0}', line(args.query));
+            else if (name === 'fetch_content') {
+                let host = ''; try { host = new URL(args.url).hostname; } catch {}
+                title = t('打开网页 · {0}', host);
+            } else if (name === 'memory_add') title = t(args.target === 'user' ? '记到“关于你”' : '记到长期记忆');
+            else if (name === 'memory_replace') title = t('更新记忆');
+            else if (name === 'memory_remove') title = t('删掉一条记忆');
+            else if (name === 'skill_manage') title = t('整理技能 · {0}', line(args.name));
+            else if (name === 'bot_schedule') title = t('定时任务 · {0}', t(({ create: '创建', cancel: '取消', list: '查看' })[args.action] || '查看'));
+            else if (name === 'codemode') title = t('运行一段脚本');
+            else if (title === name) title = t('使用工具 · {0}', name);
+            const output = Array.isArray(result?.content) ? result.content.filter(item => item.type === 'text').map(item => item.text).join('\n') : '';
+            const denied = /The user did not approve this step|This step could access credentials or private application state|This step needs the user's approval in the current mode/.test(output);
+            if (denied) { row.dataset.botDenied = '1'; title = t('没有执行（你没有允许）') + ' · ' + title; }
+            else delete row.dataset.botDenied;
+        }
         if (source) {
             origin = source.origin === 'package' ? t('来自 {0}', source.source.replace(/^npm:/, '')) : t('扩展工具');
             info = t('调用时注册的来源：{0}', source.source) + '\n' + source.path;

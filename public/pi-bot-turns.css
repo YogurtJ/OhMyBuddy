@@ -1,0 +1,69 @@
+/* One quiet process line and compact receipts; native Pi Agent presentation is unchanged. */
+#chat-tab.pi-bot-mode :is(#pi-transcript-modes, #pi-transcript-mode-hint) { display: none; }
+#chat-tab.pi-bot-mode .pi-bot-process-line { margin: -7px 0 9px; max-width: 800px; font-size: .78rem; color: var(--text-muted); }
+#chat-tab.pi-bot-mode .pi-bot-process-line > summary { min-height: 40px; flex-wrap: nowrap; gap: 9px; padding: 0 4px; margin: 0; background: transparent; }
+#chat-tab.pi-bot-mode .pi-bot-process-line .pi-turn-label { font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#chat-tab.pi-bot-mode .pi-bot-process-line .pi-turn-status { flex: none; }
+#chat-tab.pi-bot-mode .pi-bot-process-line.is-running > summary > i { font-size: 0; width: 6px; height: 6px; margin-inline: 2px; border-radius: 50%; background: currentColor; animation: pi-bot-process-pulse 1.4s ease-in-out infinite; }
+#chat-tab.pi-bot-mode .pi-transcript-content.pi-bot-process-active ~ #pi-transcript-activity .pi-activity-live { display: none; }
+#chat-tab.pi-bot-mode .pi-transcript-content.pi-bot-process-active ~ #pi-transcript-activity:has(.pi-activity-notice[hidden]) { display: none; }
+#chat-tab.pi-bot-mode .pi-message.assistant.pi-bot-process-message { margin: 0 0 3px; }
+#chat-tab.pi-bot-mode .pi-message.assistant.pi-bot-process-message > .pi-message-body,
+#chat-tab.pi-bot-mode .pi-message.assistant.pi-bot-final-with-thinking > .pi-message-body { padding: 0; width: 100%; max-width: 100%; border: 0; border-radius: 0; background: transparent; }
+#chat-tab.pi-bot-mode .pi-bot-process-message .pi-message-actions { display: none; }
+#chat-tab.pi-bot-mode .pi-bot-process-message .pi-markdown { color: var(--text-muted); font-size: .8rem; padding: 6px 0 6px 25px; }
+#chat-tab.pi-bot-mode .pi-bot-process-message .pi-markdown p { margin: 0; }
+#chat-tab.pi-bot-mode .pi-bot-final-with-thinking > .pi-message-body > .pi-markdown { width: fit-content; max-width: 100%; padding: 14px 18px; border-radius: 20px 20px 20px 6px; background: color-mix(in srgb,var(--text-muted) 9%,var(--surface-transcript)); }
+#chat-tab.pi-bot-mode :is(.pi-tool-row, .pi-thinking-block, .pi-bash-message) { margin: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+#chat-tab.pi-bot-mode :is(.pi-tool-row, .pi-thinking-block, .pi-bash-message) > summary { min-height: 40px; padding: 0 4px; gap: 10px; font-size: .78rem; }
+#chat-tab.pi-bot-mode .pi-tool-row > summary > strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: inherit; font-weight: 400; color: var(--text-muted); }
+#chat-tab.pi-bot-mode .pi-tool-row > summary::before { content: '·'; flex: none; width: 12px; text-align: center; color: var(--text-muted); }
+#chat-tab.pi-bot-mode .pi-tool-row[data-bot-outcome="done"] > summary::before { content: '✓'; }
+#chat-tab.pi-bot-mode .pi-tool-row[data-bot-outcome="continued"] > summary::before { content: '↻'; }
+#chat-tab.pi-bot-mode .pi-tool-row[data-bot-outcome="denied"] > summary::before { content: '−'; }
+#chat-tab.pi-bot-mode .pi-tool-row[data-bot-outcome="failed"] > summary::before { content: '✕'; color: var(--danger); }
+#chat-tab.pi-bot-mode .pi-tool-row[data-bot-outcome="running"] > summary::before { animation: pi-bot-process-pulse 1.4s ease-in-out infinite; }
+#chat-tab.pi-bot-mode .pi-tool-row > summary :is(.pi-tool-icon, .pi-tool-status, .pi-tool-source, .pi-tool-duration) { display: none; }
+#chat-tab.pi-bot-mode .pi-thinking-block > summary > i:first-child { width: 12px; font-size: .65rem; }
+#chat-tab.pi-bot-mode :is(.pi-tool-detail, .pi-thinking-content) { margin: 0 0 8px 26px; border: 0; border-left: 1px solid var(--line); background: transparent; }
+#chat-tab.pi-bot-mode :is(.pi-tool-detail pre, .pi-thinking-content, .pi-bash-message pre) { padding: 8px 12px; border-top: 0; background: transparent; font-size: .75rem; overflow-wrap: anywhere; }
+#chat-tab.pi-bot-mode .pi-tool-provenance { color: var(--text-muted); font-size: .72rem; }
+#chat-tab.pi-bot-mode .pi-runtime-notice { margin: 4px 0; padding: 6px 4px; border: 0; background: transparent; color: var(--text-muted); font-size: .78rem; }
+#chat-tab.pi-bot-mode .pi-bot-turn-receipts { display: grid; gap: 2px; max-width: 800px; margin: -5px 0 20px; padding: 3px 10px; border-radius: 13px; background: color-mix(in srgb,var(--text-muted) 5%,var(--surface-transcript)); }
+#chat-tab.pi-bot-mode .pi-bot-turn-receipts:empty { display: none; }
+#chat-tab.pi-bot-mode .pi-bot-change-receipt { display: grid; grid-template-columns: 16px minmax(0,1fr) auto; align-items: center; gap: 9px; min-height: 44px; color: var(--text-muted); font-size: .78rem; }
+#chat-tab.pi-bot-mode .pi-bot-change-receipt > i { font-size: .75rem; text-align: center; }
+#chat-tab.pi-bot-mode .pi-bot-receipt-copy { overflow-wrap: anywhere; line-height: 1.5; }
+#chat-tab.pi-bot-mode :is(.pi-bot-receipt-action, .pi-memory-hint-action) { min-height: 40px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: var(--text-muted); font: inherit; font-size: .75rem; cursor: pointer; }
+#chat-tab.pi-bot-mode :is(.pi-bot-receipt-action, .pi-memory-hint-action):hover { color: var(--text-main); background: var(--surface-2); }
+#chat-tab.pi-bot-mode :is(.pi-bot-receipt-action, .pi-memory-hint-action):focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+#chat-tab.pi-bot-mode .pi-memory-hints { margin: 0; border: 0; border-radius: 0; background: transparent; }
+#chat-tab.pi-bot-mode .pi-memory-hint { padding: 3px 0; grid-template-columns: 16px minmax(0,1fr) auto; gap: 9px; align-items: center; }
+#chat-tab.pi-bot-mode .pi-memory-hint + .pi-memory-hint { border: 0; }
+#chat-tab.pi-bot-mode .pi-memory-hint-icon { color: var(--text-muted); margin: 0; grid-row: 1; }
+#chat-tab.pi-bot-mode .pi-memory-hint-label { color: var(--text-muted); font-weight: 400; }
+#chat-tab.pi-bot-mode .pi-memory-hint-tag { display: none; }
+#chat-tab.pi-bot-mode .pi-memory-hint-text { min-height: 40px; display: flex; align-items: center; }
+#chat-tab.pi-bot-mode .pi-memory-hint-actions { opacity: 1; margin: 0; }
+#chat-tab.pi-bot-mode :is(.pi-bot-schedule-receipt, .pi-bot-topic-receipt, .pi-delivery-receipt) { margin: 5px 0 16px; max-width: 800px; }
+#chat-tab.pi-bot-mode :is(.pi-bot-schedule-card, .pi-bot-topic-receipt, .pi-delivery-receipt) { border: 0; border-radius: 13px; box-shadow: none; background: color-mix(in srgb,var(--text-muted) 5%,var(--surface-transcript)); }
+#chat-tab.pi-bot-mode .pi-bot-schedule-card { padding: 8px 12px; gap: 2px; }
+#chat-tab.pi-bot-mode .pi-bot-schedule-card > header { gap: 9px; }
+#chat-tab.pi-bot-mode .pi-bot-schedule-card > header > i { width: 16px; height: auto; background: none; font-size: .8rem; color: var(--text-muted); }
+#chat-tab.pi-bot-mode .pi-bot-schedule-card > header > div { display: flex; flex-wrap: wrap; gap: 5px 10px; align-items: baseline; }
+#chat-tab.pi-bot-mode .pi-bot-schedule-card strong { font-size: .82rem; font-weight: 500; }
+#chat-tab.pi-bot-mode .pi-bot-schedule-card > p { font-size: .78rem; color: var(--text-muted); margin-left: 25px; }
+#chat-tab.pi-bot-mode .pi-bot-schedule-zone { margin-left: 25px; font-size: .72rem; }
+#chat-tab.pi-bot-mode .pi-bot-schedule-card footer { margin-left: 17px; }
+#chat-tab.pi-bot-mode .pi-bot-schedule-card .pi-bot-chip { flex: none; border: 0; background: transparent; color: var(--text-muted); min-height: 40px; font-size: .75rem; }
+#chat-tab.pi-bot-mode .pi-bot-schedule-cancel { min-height: 40px; font-size: .75rem; }
+@keyframes pi-bot-process-pulse { 50% { opacity: .3; } }
+@media (max-width: 680px) {
+    #chat-tab.pi-bot-mode .pi-memory-hint { grid-template-columns: 16px minmax(0,1fr); }
+    #chat-tab.pi-bot-mode .pi-memory-hint-actions { grid-column: 2; margin: -5px 0 0 -8px; }
+    #chat-tab.pi-bot-mode .pi-bot-turn-receipts { padding-inline: 9px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    #chat-tab.pi-bot-mode .pi-bot-process-line.is-running > summary > i,
+    #chat-tab.pi-bot-mode .pi-tool-row[data-bot-outcome="running"] > summary::before { animation: none; }
+}

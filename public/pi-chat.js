@@ -117,14 +117,15 @@ document.addEventListener('DOMContentLoaded', () => {
         content: elements.transcript,
         controls: $('pi-transcript-modes'),
         scroll: transcriptScroll,
-        plain: () => state.botMode
+        plain: () => $('chat-tab').classList.contains('pi-bot-mode')
     });
 
     // What Pi is doing before visible output arrives, and the last compaction result, at the tail.
     const activityRoot = $('pi-transcript-activity');
     const transcriptActivity = activityRoot && window.PiTranscriptActivity?.create({ root: activityRoot, content: elements.transcript,
-        onChange: () => transcriptScroll.update(), locateSummary: () => locateCompactionSummary(),
+        onChange: () => { transcriptScroll.update(); if (state.botMode) transcriptView.schedule(); }, locateSummary: () => locateCompactionSummary(),
         plain: () => state.botMode, waiting: () => state.pendingUi.size > 0 }) || null;
+    transcriptView.botActivity = () => transcriptActivity;
     if (activityRoot) transcriptScroll.resizeObserver?.observe(activityRoot);
     function locateCompactionSummary() {
         const notice = [...elements.transcript.querySelectorAll(':scope > .pi-summary-notice.compactionSummary')].at(-1);
@@ -583,7 +584,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Topics the Bot opened: a receipt with an explicit way in; it never switches chats by itself.
     const topicCards = window.PiBotTopics?.receipts({ api: apiFetch, notify: toast,
         context: () => JSON.stringify([state.cwd, state.session?.id]), generation: () => state.socketGeneration });
-    const resultCards = message => [deliveryCards.render(message), questionReceipts.render(message), scheduleCards.render(message), topicCards?.render(message)].filter(Boolean);
+    const botTurnReceipts = window.PiBotTurns.createReceipts({ enabled: () => state.botMode,
+        context: () => JSON.stringify([state.cwd, state.session?.id]), profileId: () => state.bot?.profileId,
+        args: id => state.toolRows.get(id)?._piToolArgs, notebook: () => botUi?.openNotebook(), settings: () => botUi?.openSettings() });
+    const resultCards = message => [botTurnReceipts.render(message), deliveryCards.render(message), questionReceipts.render(message), scheduleCards.render(message), topicCards?.render(message)].filter(Boolean);
     const turnEdits = new window.PiTurnEdits({
         transcript: elements.transcript, showPane: () => filesPanel.showHistory(), copy: copyTextToClipboard, notify: toast,
         viewer: filesPanel.viewer, context: () => ({ cwd: state.cwd, key: JSON.stringify([state.cwd, state.session?.id]), generation: state.socketGeneration })
@@ -3315,6 +3319,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if ([...records.slice(keep), ...previous.slice(keep)].some(record => ['compactionSummary', 'branchSummary'].includes(record.role))) keep = 0;
         let retained = null;
         for (let i = keep - 1; i >= 0 && !retained; i--) retained = previous[i].nodes.at(-1);
+        // Bot receipts sit after the answer even when their native result precedes it.
+        // Keep that turn's trailing presentation nodes when appending the next user turn.
+        if (state.botMode && retained) while (retained.nextElementSibling && !retained.nextElementSibling.matches('.pi-message.user, .pi-agent-turn-start')) retained = retained.nextElementSibling;
         const removed = [];
         for (let node = retained ? retained.nextElementSibling : elements.transcript.firstElementChild; node; node = node.nextElementSibling) removed.push(node);
         const readingPosition = transcriptScroll.capture({ details: removed.length > 0, roots: removed });
@@ -3341,7 +3348,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         state.renderedTranscript = { context, records };
-        if (removed.length) { mediaRequests?.prune(); deliveryCards.prune(); questionReceipts.prune(); scheduleCards.prune(); topicCards?.prune(); }
+        if (removed.length) { mediaRequests?.prune(); deliveryCards.prune(); questionReceipts.prune(); scheduleCards.prune(); topicCards?.prune(); botTurnReceipts.prune(); }
         mediaRequests?.refresh(messages);
         state.dirtyTranscriptIndex = Infinity;
         state.lastAssistantText = '';
@@ -3448,7 +3455,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function clearSessionView() {
         mediaRequests?.reset();
-        deliveryCards.reset(); scheduleCards.reset(); topicCards?.reset();
+        deliveryCards.reset(); scheduleCards.reset(); topicCards?.reset(); botTurnReceipts.reset();
         questionReceipts.reset();
         state.recoveryNotice = null;
         transcriptActivity?.reset();

@@ -140,8 +140,8 @@
             for (const receipt of [...hintReceipts()].reverse()) {
                 const anchorKey = anchorKeys?.get(receipt.source.entryId);
                 let target = anchorKey && host ? [...host.querySelectorAll('[data-message-key]')].find(node => node.dataset.messageKey === anchorKey) : null;
-                // Hints sit under the turn's user message: process messages (tool calls) fold away in
-                // compact views, while the user message of every turn stays visible.
+                // Resolve the owning user turn before placing its receipts. Pi Agent keeps them
+                // under that message; Bot groups them after the final reply so process folding cannot hide them.
                 while (target && target.parentElement && target.parentElement !== host) target = target.parentElement;
                 while (target && !target.matches('.pi-message.user') && target.previousElementSibling) target = target.previousElementSibling;
                 if (target && !target.matches('.pi-message.user')) target = null;
@@ -151,7 +151,9 @@
                 if (!group) {
                     group = el('div', undefined, 'pi-memory-hints');
                     group.setAttribute('role', 'group'); group.setAttribute('aria-label', t('本轮记忆更新'));
-                    target.after(group); groups.set(target, group);
+                    if (document.getElementById('chat-tab')?.classList.contains('pi-bot-mode')) window.PiBotTurns.receiptGroup(target).append(group);
+                    else target.after(group);
+                    groups.set(target, group);
                 }
                 group.append(hintBlock(receipt));
             }
