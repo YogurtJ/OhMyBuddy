@@ -19,6 +19,7 @@ import { botPreamble } from './bot-prompt.js';
 import { SETUP_TOOL, SETUP_TITLE, SAVE, DECLINE, STEP_OF, normalizeProposal } from './bot-setup.js';
 import { APPROVAL_TITLE, BLOCKED, PRESETS, approvalFor, approvalMessage, newToken } from './bot-guard.js';
 import { createBotGrepExecutor } from './bot-guard-grep.js';
+import { registerBotChangeReceipts } from './bot-change-receipts.js';
 import { safeFile as readDocument } from '../profile-memory/management.js';
 import { registerNotebook, notebookNotice, editNotebook } from './bot-notebook.ts';
 import { registerRecall } from './bot-recall-tools.ts';
@@ -212,6 +213,10 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
     const context = parseBotContext(process.env.PIVANE_BOT_CONTEXT);
     if (!context) return;
     const managed = (ctx: any) => ctx.mode === 'rpc' && Boolean(process.env.PI_WEB_NAVIGATION_TOKEN);
+    registerBotChangeReceipts(pi, (ctx: any) => {
+        const agentDir = getAgentDir();
+        return managed(ctx) && botSection(context, ctx.sessionManager, ctx.cwd, agentDir) ? { agentDir, profileId: context.profileId } : null;
+    });
     const reported = new Set<string>();
     // Private bridge record: the Supervisor consumes it and never shows it as a notification.
     const notifier = (ctx: any) => (value: any) => ctx.ui.notify(JSON.stringify({ pivaneBot: value, sessionId: ctx.sessionManager.getSessionId() }));
