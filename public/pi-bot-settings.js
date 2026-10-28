@@ -86,6 +86,12 @@
     const THINKING = { off: () => translateUi("不启用"), minimal: () => translateUi("极简"), low: () => translateUi("低"), medium: () => translateUi("中"),
         high: () => translateUi("高"), xhigh: () => translateUi("极高"), max: () => translateUi("最大") };
     const modelKey = model => model ? `${model.provider}\u0000${model.id}` : '';
+    const botThinking = bot => Object.hasOwn(bot, 'thinking') ? bot.thinking || '' : bot.model?.thinking || '';
+    const defaultSelection = models => models && Object.hasOwn(models, 'effectiveDefault') ? models.effectiveDefault : models?.defaults;
+    const modelLevels = (models, key) => {
+        const defaults = defaultSelection(models);
+        return models?.models?.find(item => key ? modelKey(item) === key : item.provider === defaults?.provider && item.id === (defaults?.modelId ?? defaults?.id))?.thinkingLevels || [];
+    };
     const CLOCK = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
     const browserZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } };
     const when = at => new Date(at).toLocaleString(globalThis.PiI18n?.locale || 'zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -130,7 +136,7 @@
     const styleOf = id => workStyles().find(style => style.id === id) || null;
     const validLearning = snap => snap?.version === 1 && Number.isSafeInteger(snap.revision) && snap.settings && typeof snap.settings === 'object';
 
-    let dialog = null;
+    let dialog = null, closeDialog = null;
 
     function field(label, control, hint) {
         const wrap = el('label', 'pi-bot-sheet-field');
@@ -202,7 +208,7 @@
     // open({ api, toast, profileId, face, page, onSaved, onMemory, onLearning, onRestart, onTrashed })
     // page: the section to show first (desktop: the first section; phones: the overview).
     async function open(options) {
-        dialog?.close();
+        if (dialog?.open && closeDialog?.() === false) return dialog;
         dialog = el('dialog', 'pi-bot-sheet pi-bot-settings-sheet');
         dialog.setAttribute('aria-labelledby', 'pi-bot-sheet-title');
         const form = el('form', 'pi-bot-sheet-form'); form.method = 'dialog'; form.noValidate = true;
@@ -227,7 +233,18 @@
         document.body.append(dialog);
         const sheet = dialog;
         sheet.dataset.edited = 'false';
-        let data = null, controls = null, saving = false, warned = null, initial = null;
+        let data = null, controls = null, saving = false, warned = null, initial = null, activitySerial = 0;
+        const onBeforeRoute = event => {
+            if (!sheet.open || !options.current) return;
+            const route = event.detail, profileId = route?.params?.get('profileId');
+            if (route?.tab === 'bot' && (!profileId || profileId === options.profileId) && options.current()) return;
+            if (!leave(`route:${route.hash}`)) event.preventDefault();
+        };
+        window.addEventListener('workspace:beforetabchange', onBeforeRoute);
+        const onUnload = event => {
+            if (saving || decoding || edited()) { event.preventDefault(); event.returnValue = ''; }
+        };
+        window.addEventListener('beforeunload', onUnload);
         // picture: a picture chosen in this sheet (PNG data URL), uploaded when saving;
         // uploaded: the last one this sheet put up, so a retry does not upload it again.
         let picture = null, uploaded = null, faceChoice = null, fileSerial = 0, decoding = false;
@@ -242,7 +259,7 @@
         // The avatar and picture are one draft value, so rebasing never combines two sources.
         const formValues = () => controls ? { name: controls.name.value,
             faceDraft: JSON.stringify({ avatar: faceChoice, picture }), job: controls.job.value, soul: controls.soul.value,
-            model: controls.model.value, thinking: controls.thinkingWrap.hidden ? '' : controls.thinking.value,
+            model: controls.model.value, thinking: controls.thinking.value,
             preset: controls.presets.find(input => input.checked)?.value || '', revoked: [...revoked].sort().join('\n'),
             proactive: String(controls.proactive.checked), quietOn: String(controls.quietOn.checked), quietStart: controls.quietStart.value,
             quietEnd: controls.quietEnd.value, limit: controls.limit.value } : null;
@@ -257,9 +274,7 @@
                 controls.model.value = values.model;
                 controls.syncModelPicker?.();
             }
-            const levels = data.models?.models.find(item => modelKey(item) === controls.model.value)?.thinkingLevels || [];
-            controls.thinkingWrap.hidden = !levels.length;
-            if (levels.length) fillThinking(levels, values.thinking ?? controls.thinking.value);
+            fillThinking(modelLevels(data.models, controls.model.value), values.thinking ?? controls.thinking.value);
             if (values.preset !== undefined) for (const input of controls.presets) input.checked = input.value === values.preset;
             controls.showScope();
             if (values.proactive !== undefined) controls.proactive.checked = values.proactive === 'true';
@@ -281,7 +296,7 @@
         // Every way out of the sheet (close, Escape, cancel, the memory page, meeting again): with
         // unsaved edits the first try only warns; the same action again leaves without them.
         const leave = (action, then) => {
-            if (saving) return false;
+            if (saving || decoding) return false;
             if (edited() && warned !== action) {
                 warned = action; status.dataset.tone = 'warn';
                 status.textContent = action === 'close' ? translateUi("还有修改没保存。再关一次就放弃这些修改。")
@@ -297,6 +312,7 @@
             return true;
         };
         const tryClose = () => leave('close');
+        closeDialog = tryClose;
         close.addEventListener('click', tryClose);
         cancel.addEventListener('click', tryClose);
         // Phones: back from a section to the overview, onto the row that opened it.
@@ -309,7 +325,10 @@
         sheet.addEventListener('cancel', event => { event.preventDefault(); tryClose(); });
         sheet.addEventListener('close', () => {
             phone.removeEventListener('change', onLayout);
-            controls?.modelPicker?.dispose?.(); sheet.remove(); if (dialog === sheet) dialog = null;
+            activitySerial++; fileSerial++;
+            window.removeEventListener('workspace:beforetabchange', onBeforeRoute);
+            window.removeEventListener('beforeunload', onUnload);
+            controls?.modelPicker?.dispose?.(); sheet.remove(); if (dialog === sheet) { dialog = null; closeDialog = null; }
         });
         sheet.addEventListener('input', () => { warned = null; status.textContent = ''; delete status.dataset.tone; refreshState(); });
         sheet.addEventListener('change', () => refreshState());
@@ -389,10 +408,7 @@
             for (const control of body.querySelectorAll('input,textarea,select,button')) control.disabled = saving;
             controls.modelPicker?.setDisabled(saving);
             controls.syncLearning?.();
-            const model = controls.model.value ? data.models?.models.find(item => modelKey(item) === controls.model.value) : null;
-            const levels = model?.thinkingLevels || [];
-            controls.thinkingWrap.hidden = !levels.length;
-            if (levels.length && controls.thinking.dataset.for !== controls.model.value) fillThinking(levels, controls.thinking.value);
+            if (controls.thinking.dataset.for !== controls.model.value) fillThinking(modelLevels(data.models, controls.model.value), controls.thinking.value);
             updateNav();
         }
 
@@ -400,7 +416,11 @@
             const select = controls.thinking;
             select.replaceChildren(new Option(translateUi("跟随默认"), ''));
             for (const level of levels) select.append(new Option(THINKING[level]?.() || level, level));
-            select.value = levels.includes(selected) ? selected : '';
+            if (selected && !levels.includes(selected)) select.append(new Option(translateUi("{0}（当前模型未提供）", THINKING[selected]?.() || selected), selected));
+            select.value = selected;
+            controls.thinkingWrap.querySelector('.pi-bot-sheet-hint').textContent = selected && !levels.includes(selected)
+                ? translateUi("当前模型未提供这个思考等级；保存前请选择支持的等级或跟随默认。")
+                : translateUi("独立于模型保存；跟随默认模型时也能选择。越高通常越慢。");
             select.dataset.for = controls.model.value;
         }
 
@@ -423,11 +443,11 @@
             let model = null;
             // A current model that is not listed right now stays exactly as saved.
             if (selected && !item) model = selected === modelKey(current.model) ? { ...current.model } : null;
-            else if (item) {
-                model = { provider: item.provider, id: item.id };
-                if (!controls.thinkingWrap.hidden && controls.thinking.value) model.thinking = controls.thinking.value;
-            }
-            if (JSON.stringify(model) !== JSON.stringify(current.model ?? null)) patch.model = model;
+            else if (item) model = { provider: item.provider, id: item.id };
+            const modelChanged = selected !== modelKey(current.model);
+            if (modelChanged) patch.model = model;
+            const thinking = controls.thinking.value;
+            if (thinking !== botThinking(current) || modelChanged && !Object.hasOwn(current, 'thinking') && botThinking(current)) patch.thinking = thinking || null;
             const permissions = {}, preset = controls.presets.find(input => input.checked)?.value;
             if (preset && preset !== current.permissions.preset) permissions.preset = preset;
             // Revoking sends the whole list without those grants; unknown grants are always kept.
@@ -542,7 +562,7 @@
 
             // ---- 模型 --------------------------------------------------------------------------
             const model = el('select');
-            const defaults = data.models?.defaults, defaultModel = defaults && data.models.models.find(item => item.provider === defaults.provider && item.id === defaults.modelId);
+            const defaults = defaultSelection(data.models), defaultModel = defaults && data.models.models.find(item => item.provider === defaults.provider && item.id === (defaults.modelId ?? defaults.id));
             const defaultLabel = defaultModel ? translateUi("跟随默认（{0}）", defaultModel.name || defaultModel.id) : translateUi("跟随默认");
             model.append(new Option(defaultLabel, ''));
             const groups = new Map();
@@ -582,11 +602,11 @@
             }
             const thinking = el('select');
             const thinkingWrap = field(translateUi("思考程度"), thinking, translateUi("越高越仔细，也越慢。"));
-            const modelHint = data.models ? translateUi("只影响 {0}，不改其他 Bot 和 Pi Agent。", bot.name)
+            const modelHint = data.models ? translateUi("用于 {0} 后续的回复；进行中的回复和已开始的定时任务保持原选择。", bot.name)
                 : translateUi("暂时读不到模型列表，现在的选择会保留。");
             makePage('model', translateUi("{0} 用哪个模型思考和回答。", bot.name),
                 group(null, card([field(translateUi("模型"), modelBox, modelHint), thinkingWrap], { pad: true })),
-                el('p', 'pi-bot-sheet-note', translateUi("所选模型暂时不可用时，设置会保留，并继续使用现在的模型。")));
+                el('p', 'pi-bot-sheet-note', translateUi("模型和思考程度分别跟随默认。微信里的 /model 和 /thinking 也会更新这里。")));
 
             // ---- 做事方式: three ways, what each does, the boundary and "always allow" grants ---
             const presets = [];
@@ -743,10 +763,11 @@
                                 if (!sheet.open) return;
                                 data.followUps = data.followUps.filter(other => other.id !== entry.id);
                                 showFollowUps(); followTitle.focus?.();
+                                await loadActivity(); if (sheet.open) showActivity();
                                 options.toast?.(translateUi("已取消这次跟进"), 'success');
                             } catch (error) {
                                 if (!sheet.open) return;
-                                if (error.status === 404 || error.status === 409) { await loadFollowUps(); showFollowUps(); }
+                                if (error.status === 404 || error.status === 409) { await loadFollowUps(); if (!sheet.open) return; showFollowUps(); await loadActivity(); if (!sheet.open) return; showActivity(); }
                                 status.dataset.tone = 'error'; status.textContent = translateUi("没有取消：{0}", error.message || translateUi("保存失败"));
                             } finally { drop.disabled = false; }
                         });
@@ -756,6 +777,119 @@
                 }
             };
             showFollowUps();
+            // Read-only facts from the scheduler, follow-ups and channel delivery owners.
+            // Refresh replaces this view alone, keeping every unsaved settings field in place.
+            const activityCard = card([]), activityQuota = el('div');
+            const activityLabels = {
+                pending: () => translateUi("等待中"), running: () => translateUi("进行中"), completed: () => translateUi("已完成"),
+                silent: () => translateUi("已完成，静默"), skipped: () => translateUi("已跳过"), stopped: () => translateUi("已停止"),
+                failed: () => translateUi("失败"), uncertain: () => translateUi("结果不确定"), unknown: () => translateUi("状态未提供"),
+                none: () => translateUi("无需投递"), held: () => translateUi("安静时段暂存"), sending: () => translateUi("正在投递"),
+                delivered: () => translateUi("已投递"), partial: () => translateUi("部分投递"), reviewed: () => translateUi("已人工核对")
+            };
+            const reasonText = code => {
+                if (['cancelled', 'stop-request', 'dropped', 'target-deleted', 'reviewed-uncertain'].includes(code)) return translateUi("用户已取消或停止");
+                if (['off', 'proactive-off'].includes(code)) return translateUi("主动联系已关闭");
+                if (['chat-gone', 'bot-unavailable', 'binding-changed', 'notification-revoked', 'delivery-revoked'].includes(code)) return translateUi("聊天或连接已变化");
+                if (['late', 'expired', 'offline'].includes(code)) return translateUi("已错过执行时间");
+                if (['run-limit', 'time-limit'].includes(code)) return translateUi("已达到本次运行的用量或时间限制");
+                if (code === 'user-active') return translateUi("用户正在聊天，已跳过这次任务");
+                if (code === 'worker-exited') return translateUi("执行实例已退出，结果待核对");
+                if (code === 'reply-context-missing') return translateUi("微信回复条件不足，请先在微信发消息");
+                if (code === 'wechat-login-expired') return translateUi("微信登录已过期");
+                if (code === 'wechat-rate-limited' || code === 'delivery-retrying') return translateUi("微信限流，等待渠道处理");
+                if (['delivery-unconfirmed', 'execution-or-delivery-uncertain', 'restart'].includes(code)) return translateUi("结果未确认，请先核对，勿重复发送");
+                if (code === 'attachments-incomplete') return translateUi("部分附件未能送达");
+                return translateUi("未完成，打开相关页面核对");
+            };
+            const activityName = kind => kind === 'scheduled' ? translateUi("定时任务") : kind === 'channel' ? translateUi("微信消息") : translateUi("主动跟进");
+            const showActivity = () => {
+                const snap = data.activity;
+                if (!snap) {
+                    activityCard.replaceChildren(el('p', 'pi-bot-sheet-note', translateUi("暂时读不到活动，不能据此判断没有任务。")));
+                    activityQuota.replaceChildren(el('p', 'pi-bot-sheet-note', translateUi("今日主动推送用量未知。")));
+                    return;
+                }
+                const nodes = [];
+                if (Object.values(snap.sources).some(value => value !== 'available')) nodes.push(el('p', 'pi-bot-sheet-note is-warn', translateUi("部分来源暂不可用，下面只显示已知活动。")));
+                if (!snap.items.length) nodes.push(el('p', 'pi-bot-sheet-note', translateUi("这次有限范围内没有活动记录；这不是完整历史。")));
+                else {
+                    const list = el('ul', 'pi-bot-activity-list');
+                    for (const item of snap.items) {
+                        const entry = el('li', 'pi-bot-activity-item'); entry.dataset.activityId = item.id;
+                        const copy = el('div', 'pi-bot-activity-copy');
+                        copy.append(el('strong', null, activityName(item.kind)), el('small', null, Number.isFinite(item.at) ? when(item.at) : translateUi("时间未知")));
+                        const label = value => activityLabels[value]?.() || activityLabels.unknown();
+                        copy.append(el('span', null, translateUi("执行：{0} · 通知/投递：{1}", label(item.execution), label(item.delivery))));
+                        if (item.reason) copy.append(el('small', null, reasonText(item.reason)));
+                        const actions = el('div', 'pi-bot-activity-actions');
+                        const chat = button('pi-bot-chip', translateUi("打开聊天")); chat.dataset.activityChat = item.windowId;
+                        chat.addEventListener('click', async () => {
+                            if (chat.disabled || saving) return;
+                            chat.disabled = true;
+                            let state = 'unavailable';
+                            try { state = options.checkChat ? await options.checkChat(item.windowId) : 'available'; }
+                            catch { /* Keep this sheet and its edits when the destination cannot be checked. */ }
+                            finally { chat.disabled = saving; }
+                            if (!sheet.open || options.current && !options.current()) return;
+                            if (state !== 'available') {
+                                status.dataset.tone = 'warn';
+                                status.textContent = state === 'archived' ? translateUi("这个话题已归档。设置和修改仍保留，请先在聊天列表恢复话题。")
+                                    : translateUi("暂时不能确认这个聊天仍可打开。设置和修改仍保留，请先查看聊天列表。");
+                                if (!actions.querySelector('[data-activity-windows]')) {
+                                    const windows = button('pi-bot-chip', translateUi("查看聊天列表")); windows.dataset.activityWindows = '';
+                                    windows.addEventListener('click', () => leave('activity-windows', () => options.onWindows?.()));
+                                    actions.append(windows);
+                                }
+                                return;
+                            }
+                            leave(`activity-chat-${item.windowId}`, () => options.onChat?.(item.windowId));
+                        });
+                        actions.append(chat);
+                        if (item.jobId) {
+                            const task = button('pi-bot-chip', translateUi("查看任务"));
+                            task.addEventListener('click', () => leave(`activity-task-${item.jobId}`, () => window.PiWorkspaceRoute?.navigate('cron', { jobId: item.jobId })));
+                            actions.append(task);
+                        }
+                        if (item.kind === 'channel' || ['failed', 'uncertain', 'partial'].includes(item.delivery)) {
+                            const channel = button('pi-bot-chip', translateUi("查看渠道"));
+                            channel.addEventListener('click', () => leave('activity-channels', () => window.dispatchEvent(new CustomEvent('workspace:open-settings', { detail: { tab: 'channels' } }))));
+                            actions.append(channel);
+                        }
+                        entry.append(copy, actions); list.append(entry);
+                    }
+                    nodes.push(list);
+                }
+                nodes.push(el('p', 'pi-bot-sheet-note', translateUi("只读最近的有限记录（全局最近 {0} 次定时运行、{1} 条渠道记录），最多显示 {2} 项；每个聊天核对最近 {3} 代，链接打开当前一代。", snap.limits.schedulerRuns, snap.limits.channelJobs, snap.limits.items, snap.limits.generationsPerWindow)));
+                activityCard.replaceChildren(...nodes);
+                const push = snap.quota?.proactivePushes, schedule = snap.quota?.scheduledTasks;
+                const quotaNodes = [el('p', 'pi-bot-sheet-note', push ? translateUi("此 Bot 今日主动推送：{0} / {1}（{2}，{3}）；安静时段暂存 {4} 条。", push.used ?? translateUi("未知"), push.limit ?? translateUi("不限"), push.day, push.timeZone, push.held) : translateUi("今日主动推送用量未知。"))];
+                if (schedule) {
+                    quotaNodes.push(el('p', 'pi-bot-sheet-note', translateUi("全部用户定时任务今日共用额度（UTC）：运行 {0}/{1}，tokens {2}/{3}。不含 Bot 主动跟进和后台学习。", schedule.runs ?? translateUi("未知"), schedule.maxRuns ?? translateUi("未知"), schedule.tokens ?? translateUi("未知"), schedule.maxTokens ?? translateUi("未知"))));
+                    quotaNodes.push(el('p', 'pi-bot-sheet-note', schedule.estimatedCost === null ? translateUi("定时任务费用估算未知。") : translateUi("定时任务费用估算：${0}；费用上限：{1}。", schedule.estimatedCost.toFixed(3), schedule.maxCost === null ? translateUi("未设置") : `$${schedule.maxCost}`)));
+                } else quotaNodes.push(el('p', 'pi-bot-sheet-note', translateUi("定时任务共用额度暂不可用。")));
+                activityQuota.replaceChildren(...quotaNodes);
+            };
+            showActivity();
+            const refreshActivity = button('pi-bot-chip', translateUi("刷新活动")); refreshActivity.dataset.activityRefresh = '';
+            refreshActivity.addEventListener('click', async () => {
+                if (refreshActivity.disabled) return;
+                refreshActivity.disabled = true;
+                await loadActivity();
+                if (sheet.open) { showActivity(); refreshActivity.disabled = saving; }
+            });
+            const activityHead = el('div', 'pi-bot-sheet-actions-row'); activityHead.append(refreshActivity);
+            const activity = group(translateUi("最近活动与结果"), card([activityHead, activityCard])); activity.dataset.botActivity = '';
+            const costs = disclosure('pi-bot-costs', 'fa-coins', el('strong', null, translateUi("模型调用与费用")), translateUi("推送条数不是费用上限"));
+            remember(costs.details, 'costs');
+            for (const text of [translateUi("聊天和定时任务使用对话模型；空闲整理摘要也会调用这个 Bot 的模型，可能收费。"),
+                translateUi("后台学习另外调用辅助模型；关闭学习只暂停学习，不会停止聊天、空闲摘要或定时任务。"),
+                translateUi("关闭主动联系会暂停 Bot 自己的跟进和推送；你设置的定时任务仍按计划执行。安静时段和推送上限只控制通知，不限制模型花费。")]) costs.content.append(el('p', 'pi-bot-sheet-note', text));
+            const schedules = linkRow('fa-clock', translateUi("管理定时任务"), translateUi("查看运行预算，暂停或取消你设置的任务"));
+            schedules.addEventListener('click', () => leave('schedules', () => window.PiWorkspaceRoute?.navigate('cron')));
+            const usage = linkRow('fa-chart-simple', translateUi("查看用量统计"), translateUi("按现有统计范围查看模型用量；未报告的费用仍未知"));
+            usage.addEventListener('click', () => leave('usage', () => window.dispatchEvent(new CustomEvent('workspace:open-settings', { detail: { tab: 'usage' } }))));
+            costs.content.append(activityQuota, schedules, usage);
             const showNotify = () => {
                 quietTimes.hidden = !quietOn.checked;
                 for (const node of [quietRow, quietTimes, limitField]) node.classList.toggle('is-off', !proactive.checked);
@@ -763,7 +897,7 @@
             proactive.addEventListener('change', showNotify); quietOn.addEventListener('change', showNotify);
             showNotify();
             const notifyBox = el('div', 'pi-bot-sheet-notify');
-            notifyBox.append(group(null, card([proactiveRow])), group(translateUi("打扰程度"), card([quietRow, quietTimes, limitField])), followUps);
+            notifyBox.append(group(null, card([proactiveRow])), group(translateUi("打扰程度"), card([quietRow, quietTimes, limitField])), followUps, activity, costs.details);
             makePage('notify', translateUi("{0} 自己发起的消息：到期提醒、问问进展、过几天回来看看。它只发消息，不会因此自己动手。", bot.name), notifyBox);
 
             // ---- 微信 (M4-4): chats connected to this Bot. Connecting and disconnecting act at
@@ -893,8 +1027,8 @@
                 const snap = data.learning;
                 const more = linkRow('fa-seedling', translateUi("更多学习设置"), translateUi("复盘、技能草稿和学习用的辅助模型")); more.dataset.learningMore = '';
                 more.addEventListener('click', () => leave('learning', () => options.onLearning ? options.onLearning() : options.onMemory?.('learning')));
-                const maxRuns = Number.isSafeInteger(snap?.settings?.maxRunsPerDay) ? snap.settings.maxRunsPerDay : 20;
-                const noteText = `${translateUi("聊完以后，它会用辅助模型把你的纠正和偏好记到记忆里；复盘和技能草稿可在“更多学习设置”里打开，技能草稿要你看过才会启用。")}${globalThis.PiI18n?.locale?.startsWith('zh') === false ? ' ' : ''}${translateUi("会额外调用模型（每天最多 {0} 次）。", maxRuns)}`;
+                const maxRuns = Number.isSafeInteger(snap?.settings?.maxRunsPerDay) ? snap.settings.maxRunsPerDay : null;
+                const noteText = `${translateUi("聊完以后，它会用辅助模型把你的纠正和偏好记到记忆里；复盘和技能草稿可在“更多学习设置”里打开，技能草稿要你看过才会启用。")}${globalThis.PiI18n?.locale?.startsWith('zh') === false ? ' ' : ''}${(maxRuns === null ? translateUi("学习调用上限暂不可用。") : translateUi("会额外调用模型（每天最多 {0} 次）。", maxRuns))}`;
                 if (!validLearning(snap) || snap.status !== 'ready' || snap.capabilities?.installed === false || snap.capabilities?.settingsWrite === false) {
                     return [group(translateUi("自己学习"), card([el('p', 'pi-bot-sheet-note', translateUi("暂时不能用学习功能。可以先打开“记忆和关于你”开启长期记忆。")),
                         el('p', 'pi-bot-sheet-note', noteText), more]))];
@@ -926,6 +1060,9 @@
                     hint.dataset.learningHealth = 'failing';
                     rows.push(hint);
                 }
+                const today = snap.health?.today;
+                rows.push(el('p', 'pi-bot-sheet-note', today ? translateUi("此身份今日学习（UTC）：运行 {0}/{1}，预留 tokens {2}/{3}；实际 tokens：{4}。", today.runs ?? translateUi("未知"), today.maxRuns ?? translateUi("未知"), today.reservedTokens ?? translateUi("未知"), today.maxTokens ?? translateUi("未知"), today.usedTokens ?? translateUi("暂无报告")) : translateUi("今日学习用量未知。")));
+                rows.push(el('p', 'pi-bot-sheet-note', translateUi("关闭学习只暂停辅助模型的后台学习；聊天、空闲摘要和定时任务继续。次数与预留 tokens 额度不是整个 Bot 的费用上限。")));
                 rows.push(more);
                 return [group(translateUi("自己学习"), card(rows), { instant: true })];
             };
@@ -959,6 +1096,7 @@
             trash.dataset.sheetAction = 'trash';
             trash.addEventListener('click', () => void moveToTrash());
             makePage('more', translateUi("不常用、但需要时找得到的操作。"),
+                ...(window.PiBotOnboarding?.dataNotice ? [window.PiBotOnboarding.dataNotice(bot)] : []),
                 group(translateUi("重新开始"), card([restart])), group(translateUi("移除"), card([trash], { className: 'is-danger' })));
 
             // ---- the side list (desktop) or overview (phones) ---------------------------------
@@ -994,14 +1132,21 @@
                 syncCounts: () => { for (const sync of counts) sync(); } };
             showFace(); showScope(); showWechat(); showLearning();
             body.replaceChildren(nav, scroller);
-            const levels = data.models?.models.find(item => modelKey(item) === model.value)?.thinkingLevels || [];
-            thinkingWrap.hidden = !levels.length;
-            if (levels.length) fillThinking(levels, current.model?.thinking || '');
+            fillThinking(modelLevels(data.models, model.value), botThinking(current));
             initial = formValues();
             showPage();
             refreshState();
         }
 
+        async function loadActivity() {
+            const serial = ++activitySerial;
+            let snap = null;
+            try {
+                const value = await options.api(`/api/pi/bots/${encodeURIComponent(options.profileId)}/activity`);
+                if (value?.version === 1 && value.profileId === options.profileId && Array.isArray(value.items) && value.sources && value.limits) snap = value;
+            } catch { /* Activity is optional, never an empty-success fallback. */ }
+            if (sheet.open && serial === activitySerial && data) data.activity = snap;
+        }
         async function loadFollowUps() {
             try { data.followUps = (await options.api(`/api/pi/bots/${encodeURIComponent(options.profileId)}/follow-ups`)).items; }
             catch { data.followUps = null; }
@@ -1015,8 +1160,10 @@
             catch { data.learning = null; }
         }
         async function load() {
-            data = await options.api(`/api/pi/bots/${encodeURIComponent(options.profileId)}/settings`);
-            await Promise.all([loadFollowUps(), loadChannels(), loadLearning()]);
+            const snapshot = await options.api(`/api/pi/bots/${encodeURIComponent(options.profileId)}/settings`);
+            if (!sheet.open || dialog !== sheet) return;
+            data = snapshot;
+            await Promise.all([loadFollowUps(), loadChannels(), loadLearning(), loadActivity()]);
         }
 
         // The edits made in this sheet, to put back after rereading (only fields the user touched).

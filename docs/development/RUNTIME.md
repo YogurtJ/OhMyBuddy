@@ -80,11 +80,17 @@ PiRpcClient 使用 StringDecoder 并严格按 LF 分帧，不能使用会拆分 
 
 `channels/service` 在服务端维护一个账号一个轮询连接，与 `channels/store` 的私有配置、游标、待发送意图及回执配合；消息正文在进入原生会话后移除，不建立平行聊天历史。`channels/weixin-component` 仅在用户安装时获取锁定哈希的上游归档，在有界内存解析后装配审查过的模块；账户、私密日志和受限网络边界由 Pivane 提供，上游原件与许可保留。默认用户不创建渠道数据或周期任务。
 
-`channels/turn-results` 从原生分支证明任务开始、输入、最终回复和结算边界，共用微信和定时结果收集；只识别已有生产者的非新输入通知，不扫描后续轮次。`channels/thread-results` 为全部受管轮次追加原生起止标记，通过带 worker nonce 的私有结算事件让渠道同步固定接收绑定及持久原生引用；普通网页结果不复制正文，延迟发送和恢复重读原生边界。原微信发送者沿用原 job，定时结果沿用 cron 的持久通知，其他全部结果绑定各自去重。绑定记录生效时间与最近完成轮次，包含当前未结束任务而不补发历史。`channels/commands` 与 `command-control` 管理指令的持久占位、提交前权限重验及原生互斥；worker 的可选 `beforeSend` 在最后同步 RPC 边界检查准入。`channels/typing` 管理本次运行票据和单飞心跳，诊断为有界内存投影。
+`channels/turn-results` 从原生分支证明任务开始、输入、最终回复和结算边界，共用微信和定时结果收集；只识别已有生产者的非新输入通知，不扫描后续轮次。`channels/thread-results` 为全部受管轮次追加原生起止标记，通过带 worker nonce 的私有结算事件让渠道同步固定接收绑定及持久原生引用；普通网页结果不复制正文，延迟发送和恢复重读原生边界。原微信发送者沿用原 job，定时结果沿用 cron 的持久通知，其他全部结果绑定各自去重。绑定记录生效时间与最近完成轮次，包含当前未结束任务而不补发历史。`channels/commands`、`bot-commands` 与 `command-control` 管理普通 Pi／Bot 各自的命令语义、持久占位、提交前权限重验及原生互斥，原生压缩／重载／媒体确认共用 `native-commands`；worker 的可选 `beforeSend` 在最后同步 RPC 边界检查准入。`channels/typing` 管理本次运行票据和单飞心跳，诊断为有界内存投影。
+
+Bot 模型／思考命令只改档案设置，可通过正在等待的渠道回合；worker 在打开、后续回合与渠道新 start 准入时重读。`channels/runtime` 在验证新鲜输入、当前 session、空闲与去重后同步预占 preparing，再 await 注入的 `prepareBotModel`，之后复核目标和就绪状态；查询、重复、非法或忙碌请求不准备模型。`bot-model-runtime` 读取原生全局／模型思考默认与 SDK `findInitialModel`，有效默认既供运行也供 settings 和新选择验证；独立偏好不支持时保存不丢、运行按原生等级并警告。`scheduledRunActive` 将已准入定时任务的模型保持到结算／复核结束。思考等级按显式 Bot 偏好、已选模型偏好、工作区全局默认、SDK 回退依次解析；自动选模型不覆盖已保存的全局思考等级。
+
+Bot 原生操作在档案／当前窗口预占内打开唯一 worker，并在预占释放前取得同步 exclusive 槽；长压缩等不占全局档案锁，原生独占保持到真正结束。设置、命名、新话题和切换在最终 CAS／RPC 边界重验渠道授权、来源与当前代。`/new` 用 account/peer/job 的稳定身份派生 topic ID，先 CAS 预备窗口行、再按原生标记恢复完成；不自动重放不确定 slash。媒体确认只读核实最近 100 代的原生所有权，最多返回 50 张卡；原生单次提交与不确定不重放仍由媒体服务拥有。A 编号只回答原来的工具授权，不代替媒体卡确认。
+
+`pi-native-input` 在 native ancestor chain 中匹配渠道 start 与输入 metadata，允许 SDK 在两者间写模型／系统／压缩记录，其他对话输入消耗待匹配 start；任意 custom 不升级为用户。完整读取索引最后的 context_edit，投影读取尊重已有 edits／omissions；正文剥离只作用于读副本，原生 ID、tree 和 metadata 不变。Bot 回忆、结构化摘要、笔记、交接、S1、历史与学习共用此含义。交接 tail 保留原 session/entry/time/channel，摘要引文的 origin 参与删除墓碑核对；学习在入队和执行前均重建当前分支来源，不学习种子、定时或子任务通知，notebook/topic 隐藏上下文提示不切断真实问答对。
 
 cron 将终态和固定收件绑定的通知意图原子保存在同一 run 行，单飞重试本地入队并使用稳定 runId；渠道层原子去重、读取原生结果并重新验证固定绑定。未收到 cron 入队确认的回执不被常规渠道历史裁剪；网络不确定记录仍只允许核对。
 
-`worker.channelTurn` 使用已有 exclusive 槽，保留至原生 settled 或实际进程退出；`message-channel` 投影参加生命周期。私有 channel 命令通过已有导航 nonce 管道启动原生 custom message，`channels/runtime` 将运行身份和回复 entry 引用写入原生记录。回复发送前重新核对绑定、允许用户与当前原生分支；发送中和执行中的重启记录标为不确定，不重放。操作与登录参加维护空闲，长轮询在正常停机中取消；组件卸载不删除线程。界面、限额与恢复规则见[消息渠道](../MESSAGE_CHANNELS.md)。
+`worker.channelTurn` 使用已有 exclusive 槽，保留至原生 settled 或实际进程退出；`message-channel` 投影参加生命周期。私有 channel 命令通过已有导航 nonce 管道启动原生 custom message，`channels/runtime` 将运行身份和回复 entry 引用写入原生记录。已确认没有写入原生回合的无模型／不支持图片预检以私有 `CHANNEL_MODEL_UNAVAILABLE`／`CHANNEL_IMAGE_UNSUPPORTED` 返回，渠道发送操作说明后允许后续新输入；兼容旧 worker 仅精确识别原拒绝文案，任意错误与 RPC 超时仍保持不确定且不重放。回复发送前重新核对绑定、允许用户与当前原生分支；发送中和执行中的重启记录标为不确定，不重放。操作与登录参加维护空闲，长轮询在正常停机中取消；组件卸载不删除线程。界面、限额与恢复规则见[消息渠道](../MESSAGE_CHANNELS.md)。
 
 ## 实例网络
 
@@ -148,7 +154,11 @@ POSIX 私密权限和目录刷盘、Windows 受保护 DACL 和写透替换分别
 
 `pi-transcript-scroll.js` 在节点保留时直接复用阅读锚点，只为被替换部分保存和恢复详情状态；恢复展开的历史工具时先同步创建详情，再测量位置。历史工具行持有已接收的原始数据，首次展开才创建参数、输出、图片和差异；已展开行继续按原事件更新。`pi-turn-edits.js` 继续从完整权威消息派生文件记录，但只为重建部分创建正文卡片。此优化不做历史窗口化；折叠工具首次展开前，其详情不进入浏览器页内查找。
 
-`workspace-ui.js` 中的页面路由协调 Pi Agent、助手对话、多媒体与完整管理页面的地址、前进后退和选中导航；`settings.js` 继续拥有设置组件的打开／关闭与异步请求生命周期，设置分类只保留配置型页面，身份与扩展属于独立管理页（旧地址在路由层归一化）。`pi-extensions.js` 拥有扩展中心外壳：子导航、发现页和安装入口；已安装包与技能的渲染、统一资源行和安装窗口在 `pi-native-settings.js`。助手档案页面由 `pi-agent-profiles.js` 负责修订、安全草稿导入及文档／检索状态，并管理身份搜索、手机列表／详情切换和保存反馈；`pi-profile-dialog.js` 提供两种编辑器共用的异步确认窗口与焦点恢复。学习技能与正文展示在身份页内。
+`workspace-ui.js` 中的页面路由协调 Pi Agent、Bot、多媒体与完整管理页面（旧助手对话地址转到对应 Bot／原生线程）的地址、前进后退和选中导航；`settings.js` 继续拥有设置组件的打开／关闭与异步请求生命周期，设置分类只保留配置型页面，身份与扩展属于独立管理页（旧地址在路由层归一化）。`pi-extensions.js` 拥有扩展中心外壳：子导航、发现页和安装入口；已安装包与技能的渲染、统一资源行和安装窗口在 `pi-native-settings.js`。助手档案页面由 `pi-agent-profiles.js` 负责修订、安全草稿导入及文档／检索状态，并管理身份搜索、手机列表／详情切换和保存反馈；`pi-profile-dialog.js` 提供两种编辑器共用的异步确认窗口与焦点恢复。学习技能与正文展示在身份页内。
+
+路由在更新页面与启动懒加载前发出可取消的 `workspace:beforetabchange`，Bot 设置沿用同一 leave 脏草稿确认；保存或头像解码中拒绝离开。取消浏览器 Back／Forward／hash 导航时回到原历史位置，保留两边目标，合并同一次 history 的 popstate/hashchange 通知，不让加载完成或重复事件充当第二次放弃。已关闭设置的迟到加载不进入新 Bot 的表单，完整页面离开使用 beforeunload 提醒；外部打开聊天也遵守路由取消结果。
+
+`pi-bot-settings` 在现有主动联系分区展示 `bot-activity` 的独立只读投影，刷新和错误只替换活动视图，不重建未保存表单；来源不可用不冒充空列表。离开去任务／渠道／用量／聊天沿用脏草稿保护，聊天预检再读 Bot 列表，归档／缺失目标保留设置并提供现有话题列表。`pi-bot-onboarding` 的本地收尾与设置提交顶层独立 thinking，默认模型标签和等级取服务端 effectiveDefault，旧服务无此字段时才读 defaults。第一件事建议的异步保存同时绑定 Bot 和窗口，切话题后不把迟到建议发入新目标。欢迎／问候／收尾／更多复用可折叠数据权限说明，不新增强制模型调用或权限系统。
 
 `pi-files-panel.js` 拥有文件打开入口、项目／本轮模式、阅读布局与共享查看器；`pi-file-browser.js` 拥有目录缓存、文件名搜索、键盘导航和请求取消。`pi-turn-edits.js` 只从原生消息派生轮次记录并通过共享查看器展示，不再管理项目文件链接。`pi-file-roots` 前后端模块分别负责服务器目录选择／文件解析／关联导航偏好和根选择／管理弹窗；按主项目保存的关联根复用私有 workspace preferences 的原子写与修订，不写原生会话。浏览根独立于会话 cwd，打开文件携带自己的根；展开偏好按根保留在本页内存。内容、目录数据、确认弹窗与请求在切线程时清空，迟到结果继续检查请求、上下文与连接代次。单文件外部预览不枚举父目录，关联根不作为权限或OS沙箱。浏览不会改变草稿或模型上下文。
 

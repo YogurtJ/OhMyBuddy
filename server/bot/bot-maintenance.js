@@ -7,6 +7,7 @@
 //   S3 Pi's native threshold/overflow compaction (summarized by the same Bot logic)
 //   S4 move the window to a new generation when the file gets large, long or old
 const { estimateTokens } = require('./bot-compaction');
+const { nativeInputIndex, projectNativeMessage } = require('../pi-native-input');
 
 const STUB_PREFIX = '[Earlier output of ';
 const PRUNE = Object.freeze({ keepUserTurns: 3, minChars: 4000, minPercent: 35, minSaveTokens: 10000, minSaveShare: 0.2 });
@@ -33,9 +34,11 @@ function stubFor(message, entryId) {
 function pruneDrafts(projection, usage, options = {}) {
     const rules = { ...PRUNE, ...options };
     if (!usage || !Number.isFinite(usage.tokens) || !Number.isFinite(usage.percent) || usage.percent < rules.minPercent) return [];
+    const inputs = nativeInputIndex(options.branch || projection.map(item => item.sourceEntry).filter(Boolean), options.sessionId);
     let users = 0, boundary = projection.length;
     for (let index = projection.length - 1; index >= 0; index--) {
-        if ((projection[index].messages || []).some(message => message.role === 'user')) {
+        const item = projection[index];
+        if ((item.messages || []).some(message => projectNativeMessage(item.sourceEntry, message, inputs).role === 'user')) {
             users++;
             if (users === rules.keepUserTurns) { boundary = index; break; }
         }

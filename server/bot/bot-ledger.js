@@ -60,6 +60,18 @@ function validSource(value) {
         if (!SOURCE_ROLES.includes(value.role) || !quote || quote.length > MAX_QUOTE) return undefined;
         source.role = value.role; source.quote = quote;
     }
+    if (value.channel !== undefined) {
+        if (value.channel !== 'weixin' || typeof value.peerId !== 'string' || value.peerId.length > 256
+            || typeof value.messageId !== 'string' || !/^[a-f0-9]{64}$/.test(value.messageId)) return undefined;
+        source.channel = value.channel; source.peerId = value.peerId; source.messageId = value.messageId;
+    }
+    if (value.origin !== undefined) {
+        const origin = value.origin;
+        if (!object(origin) || origin.sessionId !== null && (typeof origin.sessionId !== 'string' || origin.sessionId.length > 80)
+            || origin.entryId !== null && (typeof origin.entryId !== 'string' || origin.entryId.length > 80)
+            || origin.at !== null && !Number.isFinite(origin.at)) return undefined;
+        source.origin = { sessionId: origin.sessionId, entryId: origin.entryId, at: origin.at };
+    }
     return source;
 }
 
@@ -79,7 +91,7 @@ function validTime(value) {
 }
 
 function cloneItem(item) {
-    return { ...item, ...(item.source ? { source: { ...item.source } } : {}) };
+    return { ...item, ...(item.source ? { source: { ...item.source, ...(item.source.origin ? { origin: { ...item.source.origin } } : {}) } } : {}) };
 }
 
 function cloneLedger(state) {

@@ -1,5 +1,6 @@
 // Bounded projections of the current native SessionManager. No files, caches or parallel history.
 const { createHash } = require('node:crypto');
+const { nativeInputIndex, projectNativeMessage, channelSource } = require('./pi-native-input');
 const MAX_TEXT = 8 * 1024 * 1024;
 const PAGE_TEXT = 16000;
 const error = (message, code = 'HISTORY_INVALID') => Object.assign(new Error(message), { code });
@@ -31,10 +32,10 @@ function validateHistoryRequest(kind, input = {}) {
     }
     throw error('不支持的历史操作');
 }
-function kindOf(entry) {
+function kindOf(entry, inputs) {
     if (['compaction', 'branch_summary'].includes(entry.type)) return 'summary';
     // Native extension messages (scheduled tasks, agent messages) shown in the conversation.
-    if (entry.type === 'custom_message') return entry.display === false ? null : 'assistant';
+    if (entry.type === 'custom_message') return entry.display === false ? null : inputs?.channels.has(entry.id) ? 'user' : 'assistant';
     if (entry.type !== 'message' || !entry.message) return null;
     const message = entry.message;
     if (message.role === 'custom' && message.display !== true) return null;
@@ -50,8 +51,8 @@ function kindOf(entry) {
     if (message.role === 'custom') return 'assistant';
     return null;
 }
-function documentOf(entry, view = 'record') {
-    const kind = kindOf(entry); if (!kind) return null;
+function documentOf(entry, view = 'record', inputs) {
+    const kind = kindOf(entry, inputs); if (!kind) return null;
     const parts = []; let size = 0, images = 0, hasTools = kind === 'tool';
     const add = value => {
         if (typeof value !== 'string' || !value) return;
@@ -70,7 +71,7 @@ function documentOf(entry, view = 'record') {
     };
     if (kind === 'summary') add(entry.summary);
     else if (entry.type === 'custom_message') {
-        const content = entry.content;
+        const content = inputs ? projectNativeMessage(entry, { content: entry.content }, inputs).content : entry.content;
         if (typeof content === 'string') add(content);
         else if (Array.isArray(content)) for (const block of content) {
             if (require('./pi-session-images').isReference(block) || block?.type === 'image') images++;
@@ -100,11 +101,11 @@ function snapshot(manager, presentation) {
     const revision = createHash('sha256').update(JSON.stringify([manager.getSessionId(), manager.getLeafId(), entries.length, entries.at(-1)?.id])).digest('hex');
     const branch = manager.getBranch();
     const stages = presentation ? require('./pi-session-tree').replyStages(entries, branch, presentation.settled === true) : null;
-    return { entries, revision, labelVersions, stages, branch: new Set(branch.map(e => e.id)), canBookmark: entries.some(e => e.type === 'message' && e.message?.role === 'assistant') };
+    return { entries, revision, labelVersions, stages, inputs: nativeInputIndex(entries, manager.getSessionId()), branch: new Set(branch.map(e => e.id)), canBookmark: entries.some(e => e.type === 'message' && e.message?.role === 'assistant') };
 }
 function metadata(manager, view, entry, doc) {
     const label = manager.getLabel(entry.id) || '';
-    return { entryId: entry.id, kind: doc.kind, hasTools: doc.hasTools, images: doc.images, timestamp: entry.message?.timestamp ?? entry.timestamp,
+    return { entryId: entry.id, kind: doc.kind, ...channelSource(view.inputs.channels.get(entry.id)), hasTools: doc.hasTools, images: doc.images, timestamp: entry.message?.timestamp ?? entry.timestamp,
         replyStage: doc.kind === 'assistant' ? view.stages?.get(entry.id) || 'unknown' : undefined,
         summaryType: doc.kind === 'summary' ? entry.type : undefined,
         toolName: String(entry.message?.toolName || '').slice(0, 200), inCurrentBranch: view.branch.has(entry.id),
@@ -117,7 +118,7 @@ function searchHistory(manager, raw, { settled = false } = {}) {
     const results = []; let total = 0, scanned = 0;
     for (let i = view.entries.length - 1; i >= 0; i--) {
         if (Date.now() - start > 1500) throw error('本次历史搜索超过时间预算，请缩小范围或仅查看书签', 'HISTORY_LIMIT');
-        const entry = view.entries[i], kind = kindOf(entry);
+        const entry = view.entries[i], kind = kindOf(entry, view.inputs);
         if (!kind || input.scope === 'branch' && !view.branch.has(entry.id)) continue;
         const label = manager.getLabel(entry.id) || '';
         if (input.bookmarked && !label) continue;
@@ -125,7 +126,7 @@ function searchHistory(manager, raw, { settled = false } = {}) {
         if (input.filter === 'conversation' && kind === 'tool') continue;
         if (!['all', 'conversation'].includes(input.filter) && input.filter !== kind && !(input.filter === 'tool' && hasTools)) continue;
         const presentation = ['assistant', 'conversation'].includes(input.filter) ? 'body' : 'record';
-        const doc = documentOf(entry, presentation);
+        const doc = documentOf(entry, presentation, view.inputs);
         scanned += Buffer.byteLength(doc.text, 'utf8') + Buffer.byteLength(label, 'utf8');
         if (scanned > 64 * 1024 * 1024) throw error('检索文本超过 64 MiB，请缩小分支或记录类型范围', 'HISTORY_LIMIT');
         const match = needle?.exec(doc.text), labelMatch = needle?.test(label);
@@ -138,8 +139,8 @@ function searchHistory(manager, raw, { settled = false } = {}) {
 }
 function previewHistory(manager, raw, { settled = false } = {}) {
     const input = validateHistoryRequest('preview', raw), view = snapshot(manager, { settled }), entry = manager.getEntry(input.entryId);
-    const presentation = input.view === 'record' || kindOf(entry || {}) === 'tool' ? 'record' : 'body';
-    const doc = entry && documentOf(entry, presentation);
+    const presentation = input.view === 'record' || kindOf(entry || {}, view.inputs) === 'tool' ? 'record' : 'body';
+    const doc = entry && documentOf(entry, presentation, view.inputs);
     if (!doc) throw error('记录不存在或不属于可见历史', 'HISTORY_NOT_FOUND');
     const boundary = index => index > 0 && index < doc.text.length && /[\uD800-\uDBFF]/.test(doc.text[index - 1]) && /[\uDC00-\uDFFF]/.test(doc.text[index]) ? index - 1 : index;
     const offset = boundary(Math.min(input.offset, Math.max(0, doc.text.length - 1))), end = boundary(Math.min(doc.text.length, offset + PAGE_TEXT));
@@ -149,7 +150,7 @@ function previewHistory(manager, raw, { settled = false } = {}) {
 }
 function setHistoryBookmark(manager, raw, setLabel) {
     const input = validateHistoryRequest('bookmark', raw), view = snapshot(manager), entry = manager.getEntry(input.entryId);
-    if (!entry || !kindOf(entry)) throw error('记录不存在或不可设置书签', 'HISTORY_NOT_FOUND');
+    if (!entry || !kindOf(entry, view.inputs)) throw error('记录不存在或不可设置书签', 'HISTORY_NOT_FOUND');
     if (!view.canBookmark) throw error('请等首条回复保存后再添加书签');
     if ((view.labelVersions.get(entry.id) || 'none') !== input.expectedBookmarkRevision) throw error('书签已被其他页面或终端修改，请重新读取记录', 'BOOKMARK_CONFLICT');
     if ((manager.getLabel(entry.id) || '') !== input.label) setLabel(entry.id, input.label || undefined);

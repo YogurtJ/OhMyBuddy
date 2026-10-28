@@ -169,7 +169,7 @@ test('the setup tool reports only what the Bot page actually saved', { timeout: 
     process.env.PIVANE_BOT_CONTEXT = JSON.stringify(context);
     process.env.PI_WEB_NAVIGATION_TOKEN = 'synthetic-navigation';
     const file = path.join(__dirname, '../server/bot/bot-context-extension.ts');
-    const { registerBotContext } = require(jitiPath).createJiti(file)(file);
+    const { registerBotContext } = await require(jitiPath).createJiti(file).import(file);
     const handlers = new Map(), tools = new Map();
     registerBotContext({ on(name, fn) { handlers.set(name, fn); }, registerTool(tool) { tools.set(tool.name, tool); } }, () => agentDir);
     let answer = null, onSelect = null;

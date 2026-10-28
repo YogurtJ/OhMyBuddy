@@ -440,6 +440,13 @@ tool adapter.
   source-proof bound (`capabilities.maxSourceBytes`), so a long-running single
   thread keeps being learned from; larger sessions are skipped. The derived
   search index keeps its own 8 MiB projected-content bound (binary image data and opaque thinking signatures are excluded).
+  Verified WeChat `pivane-channel-message` entries also count as user input:
+  the shared read-only native input adapter checks runtime-start ancestry,
+  session ID, channel/body metadata and image count, strips delivery instructions
+  and respects the latest native context edit. Enrollment and each source recheck
+  use the same interpretation and original native source entry. Arbitrary custom,
+  scheduled, subagent and carried handoff messages never become fresh user input;
+  hidden Bot notebook/topic context notices do not break a real user/assistant pair.
   Pairs before the last `pivane-learning-baseline` custom entry on the branch
   (written when older conversations are imported) are never learned from, in
   any kind or at a boundary; forks keep the baseline.

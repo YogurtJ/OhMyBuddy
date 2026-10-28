@@ -10942,5 +10942,78 @@
         ["删掉技能","Removed skill"],
         ["改了设置","Changed settings"]
     );
+    rows.push(
+        ["{0}（当前模型未提供）", "{0} (not offered by the current model)"],
+        ["当前模型未提供这个思考等级；保存前请选择支持的等级或跟随默认。", "The current model does not offer this thinking level. Choose a supported level or follow the default before saving."],
+        ["独立于模型保存；跟随默认模型时也能选择。越高通常越慢。", "Saved independently of the model, including when following the default model. Higher is usually slower."],
+        ["用于 {0} 后续的回复；进行中的回复和已开始的定时任务保持原选择。", "Used for future replies from {0}. Active replies and admitted scheduled runs keep their original selection."],
+        ["模型和思考程度分别跟随默认。微信里的 /model 和 /thinking 也会更新这里。", "Model and thinking each follow their own default. /model and /thinking in WeChat update these settings too."],
+        ["已完成，静默", "Completed silently"],
+        ["状态未提供", "State not provided"],
+        ["无需投递", "No delivery needed"],
+        ["安静时段暂存", "Held during quiet hours"],
+        ["正在投递", "Sending"],
+        ["部分投递", "Partially delivered"],
+        ["已人工核对", "Reviewed by user"],
+        ["用户已取消或停止", "Cancelled or stopped by the user"],
+        ["主动联系已关闭", "Proactive messages are off"],
+        ["聊天或连接已变化", "The chat or connection has changed"],
+        ["已错过执行时间", "The execution window was missed"],
+        ["微信回复条件不足，请先在微信发消息", "WeChat reply context is missing. Send a message in WeChat first."],
+        ["微信登录已过期", "WeChat login has expired"],
+        ["微信限流，等待渠道处理", "WeChat rate limit reached; waiting for channel handling"],
+        ["结果未确认，请先核对，勿重复发送", "Result unconfirmed. Check it before sending again."],
+        ["部分附件未能送达", "Some attachments did not arrive"],
+        ["未完成，打开相关页面核对", "Unfinished. Open the related page to check."],
+        ["微信消息", "WeChat message"],
+        ["暂时读不到活动，不能据此判断没有任务。", "Activity is unavailable. This does not mean there are no tasks."],
+        ["今日主动推送用量未知。", "Today's proactive push usage is unknown."],
+        ["部分来源暂不可用，下面只显示已知活动。", "Some sources are unavailable. Only known activity is shown below."],
+        ["这次有限范围内没有活动记录；这不是完整历史。", "No activity found in this bounded view. This is not the full history."],
+        ["时间未知", "Time unknown"],
+        ["执行：{0} · 通知/投递：{1}", "Execution: {0} · Notification/delivery: {1}"],
+        ["打开聊天", "Open chat"],
+        ["查看任务", "View task"],
+        ["查看渠道", "View channels"],
+        ["只读最近的有限记录（全局最近 {0} 次定时运行、{1} 条渠道记录），最多显示 {2} 项；聊天打开当前一代。", "Reads the latest {0} scheduled runs and {1} channel records globally; only matching Bot records are shown, up to {2} items. This is a bounded view, not the full history. Chat links open the current generation."],
+        ["此 Bot 今日主动推送：{0} / {1}（{2}，{3}）；安静时段暂存 {4} 条。", "This Bot's proactive pushes today: {0} / {1} ({2}, {3}); {4} messages held during quiet hours."],
+        ["全部用户定时任务今日共用额度（UTC）：运行 {0}/{1}，tokens {2}/{3}。不含 Bot 主动跟进和后台学习。", "Today's shared allowance for all user scheduled tasks (UTC): runs {0}/{1}, tokens {2}/{3}. Excludes Bot follow-ups and background learning."],
+        ["定时任务费用估算未知。", "Scheduled-task cost estimate is unknown."],
+        ["定时任务费用估算：${0}；费用上限：{1}。", "Scheduled-task cost estimate: ${0}; cost limit: {1}."],
+        ["未设置", "Not set"],
+        ["定时任务共用额度暂不可用。", "The shared scheduled-task allowance is unavailable."],
+        ["刷新活动", "Refresh activity"],
+        ["最近活动与结果", "Recent activity & results"],
+        ["模型调用与费用", "Model calls & costs"],
+        ["推送条数不是费用上限", "Push counts are not spending limits"],
+        ["聊天和定时任务使用对话模型；空闲整理摘要也会调用这个 Bot 的模型，可能收费。", "Chat and scheduled tasks use the conversation model. Idle summaries also call this Bot's model and may incur charges."],
+        ["后台学习另外调用辅助模型；关闭学习只暂停学习，不会停止聊天、空闲摘要或定时任务。", "Background learning separately calls an auxiliary model. Turning learning off only pauses learning; chat, idle summaries and scheduled tasks continue."],
+        ["关闭主动联系会暂停 Bot 自己的跟进和推送；你设置的定时任务仍按计划执行。安静时段和推送上限只控制通知，不限制模型花费。", "Turning proactive messages off pauses the Bot's own follow-ups and pushes. Tasks you scheduled still run. Quiet hours and push limits only control notifications, not model spending."],
+        ["查看运行预算，暂停或取消你设置的任务", "See execution budgets, pause or cancel tasks you scheduled"],
+        ["查看用量统计", "View usage statistics"],
+        ["按现有统计范围查看模型用量；未报告的费用仍未知", "View model usage within the existing statistics scope. Unreported costs remain unknown."],
+        ["此身份今日学习（UTC）：运行 {0}/{1}，预留 tokens {2}/{3}；实际 tokens：{4}。", "Today's learning for this identity (UTC): runs {0}/{1}, reserved tokens {2}/{3}; actual tokens: {4}."],
+        ["暂无报告", "Not reported"],
+        ["今日学习用量未知。", "Today's learning usage is unknown."],
+        ["关闭学习只暂停辅助模型的后台学习；聊天、空闲摘要和定时任务继续。次数与预留 tokens 额度不是整个 Bot 的费用上限。", "Turning learning off only pauses background learning by the auxiliary model; chat, idle summaries and scheduled tasks continue. Run and reserved-token allowances are not a spending limit for the whole Bot."],
+        ["当前：{0} · 数据、权限与备份", "Current: {0} · Data, permissions & backup"],
+        ["“以身份新建线程”使用普通 Pi 的工具和权限，不受 Bot 的做事方式限制。", "“New thread as identity” uses ordinary Pi tools and permissions, outside Bot work-style limits."],
+        ["完整备份需要在空闲停机时保存实际 Pi 身份目录、Bot 工作目录及关联媒体/配置；聊天里的 /export 仅导出当前会话范围，不是整个 Bot 的备份。", "A full backup needs the actual Pi identity directory, Bot working directories and associated media/configuration, saved while idle and stopped. /export in chat only exports the current session scope, not the whole Bot."],
+        ["查看备份与恢复指南", "Read the backup & recovery guide"]
+    );
+    rows.push(["聊天、记忆和工作文件保存在运行 Pivane 的服务机器上；回复时，相关上下文会发送给已配置的外部模型服务。", "Chats, memory and work files are stored on the machine running Pivane. Relevant context is sent to the configured external model service when replying."]);
+    rows.push(
+        ["思考程度：{0}", "Thinking level: {0}"],
+        ["已达到本次运行的用量或时间限制", "This run reached its usage or time limit"],
+        ["用户正在聊天，已跳过这次任务", "The user is chatting; this run was skipped"],
+        ["执行实例已退出，结果待核对", "The worker exited; check the outcome"],
+        ["学习调用上限暂不可用。", "The learning call limit is unavailable."],
+        ["只读最近的有限记录（全局最近 {0} 次定时运行、{1} 条渠道记录），最多显示 {2} 项；每个聊天核对最近 {3} 代，链接打开当前一代。", "Reads the latest {0} scheduled runs and {1} channel records globally; only matching Bot records are shown, up to {2} items. This is a bounded view, not the full history. Checks the last {3} generations per chat; links open the current generation."]
+    );
+    rows.push(
+        ["这个话题已归档。设置和修改仍保留，请先在聊天列表恢复话题。", "This topic is archived. Your settings and edits are kept. Restore the topic from the chat list first."],
+        ["暂时不能确认这个聊天仍可打开。设置和修改仍保留，请先查看聊天列表。", "This chat cannot be confirmed as available. Your settings and edits are kept. Check the chat list first."],
+        ["查看聊天列表", "View chat list"]
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

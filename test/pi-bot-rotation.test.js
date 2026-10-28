@@ -25,7 +25,7 @@ function services() {
     const profiles = new PiProfileRegistry(store);
     store.profiles = profiles;
     const supervisor = new PiAgentSupervisor();
-    const bots = new BotService({ store, profiles, supervisor });
+    const bots = new BotService({ store, profiles, supervisor, catalog: async () => ({ models: [{ provider: 'fixture', modelId: 'big', thinkingLevels: ['low', 'medium', 'high'] }] }) });
     return { store, profiles, supervisor, bots };
 }
 
@@ -209,7 +209,7 @@ test('Bot window workers get a verified identity section that follows edits with
     const jitiPath = process.env.PIVANE_TEST_PI_JITI;
     if (!jitiPath) return;
     const file = path.join(__dirname, '../server/bot/bot-context-extension.ts');
-    const { botSection, botPreset, registerBotContext, alignModel, BOT_SECTION } = require(jitiPath).createJiti(file)(file);
+    const { botSection, botPreset, registerBotContext, alignModel, BOT_SECTION } = await require(jitiPath).createJiti(file).import(file);
     const prior = { context: process.env.PIVANE_BOT_CONTEXT, token: process.env.PI_WEB_NAVIGATION_TOKEN };
     t.after(() => {
         for (const [key, name] of [['context', 'PIVANE_BOT_CONTEXT'], ['token', 'PI_WEB_NAVIGATION_TOKEN']])
@@ -218,7 +218,7 @@ test('Bot window workers get a verified identity section that follows edits with
     process.env.PIVANE_BOT_CONTEXT = JSON.stringify(context);
     process.env.PI_WEB_NAVIGATION_TOKEN = 'synthetic-navigation';
     const handlers = new Map(), notices = [], calls = [];
-    const models = { 'fixture/small': { provider: 'fixture', id: 'small' }, 'fixture/big': { provider: 'fixture', id: 'big' },
+    const models = { 'fixture/small': { provider: 'fixture', id: 'small', reasoning: true }, 'fixture/big': { provider: 'fixture', id: 'big', reasoning: true },
         'nokey/x': { provider: 'nokey', id: 'x' } };
     let thinking = 'medium';
     // Keeps the first handler per event (the Bot context's own; later ones belong to helper modules).
@@ -231,7 +231,7 @@ test('Bot window workers get a verified identity section that follows edits with
         modelRegistry: { find: (provider, id) => models[`${provider}/${id}`] }, ui: { notify: text => notices.push(JSON.parse(text)) } };
     await handlers.get('session_start')({}, ctx);
     assert.deepEqual(notices[0], { pivaneBot: { event: 'loaded', profileId: botId, windowId, generation: 0 }, sessionId: session.id });
-    assert.deepEqual(calls, [], 'no model is chosen for the Bot: the session keeps its model');
+    assert.deepEqual(calls, [], 'no configured default or synthetic automatic candidate: opening writes no change');
     const run = async () => {
         const event = { systemPromptOptions: { sections: { assistant_profile_soul: 'stale personality' } } };
         await handlers.get('before_agent_start')(event, ctx);
@@ -241,7 +241,7 @@ test('Bot window workers get a verified identity section that follows edits with
     assert.match(sections[BOT_SECTION], /You are 新伙伴|You are New buddy/);
     assert.match(sections[BOT_SECTION], /main chat/);
     assert.match(sections[BOT_SECTION], /Hands-off mode/);
-    assert.match(sections[BOT_SECTION], /Never read, reveal or send passwords/);
+    assert.match(sections[BOT_SECTION], /Never reveal or send passwords, keys, tokens or private keys, or read them without explicit user approval/);
     assert.equal(sections.assistant_profile_soul, undefined, 'an empty personality removes the stale one');
     await bots.update(botId, { expectedRevision: (await profiles.state()).revision, changes: { name: 'Momo', soul: 'Warm and playful.',
         bot: { job: 'Plan my week', permissions: { preset: 'ask' }, model: { provider: 'fixture', id: 'big', thinking: 'high' } } } });

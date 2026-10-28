@@ -28,6 +28,7 @@ import { topicIndexContext, topicIndexRetirements } from './bot-topic-context.js
 import { structuredCompaction, summaryReasoning } from './bot-compaction.js';
 import { pruneDrafts, idleDelay, idleCompactionWanted, rotationReason } from './bot-maintenance.js';
 import { Type } from 'typebox';
+import { resolveRuntimeModel } from './bot-model-runtime.js';
 
 export const BOT_SECTION = 'pivane_bot';
 
@@ -60,24 +61,32 @@ export function botSection(context: any, manager: any, cwd: string, agentDir: st
     } catch { return null; }
 }
 
-// Aligns the run with the Bot's chosen model (null = keep the session's model). Only
-// writes a model/thinking change when it differs. An unavailable model leaves the current
-// one in place and tells the page once per desired model.
-export async function alignModel(pi: any, ctx: any, desired: any, notify: (value: any) => void, reported: Set<string>) {
-    if (!desired) return 'unchanged';
-    const key = `${desired.provider}/${desired.id}`;
+// Resolve the current workspace defaults afresh, independent of the model saved in the native
+// generation. The SDK resolver supplies its automatic choice when no default was configured.
+export async function alignModel(pi: any, ctx: any, desired: any, notify: (value: any) => void, reported: Set<string>,
+    thinking: string | null | undefined = desired?.thinking, agentDir?: string) {
+    const resolved = await resolveRuntimeModel(ctx, desired, thinking, agentDir);
+    if (!resolved) return 'unchanged';
+    const { selection, model, level, unsupported } = resolved;
+    const key = `${selection.provider}/${selection.id}`;
     const current = ctx.model;
-    if (!current || current.provider !== desired.provider || current.id !== desired.id) {
-        const model = ctx.modelRegistry?.find(desired.provider, desired.id);
+    if (!model || !current || current.provider !== selection.provider || current.id !== selection.id) {
         let ok = false;
         try { ok = Boolean(model) && await pi.setModel(model); } catch { ok = false; }
         if (!ok) {
-            if (!reported.has(key)) { reported.add(key); notify({ event: 'model', status: 'unavailable', provider: desired.provider, id: desired.id }); }
+            if (!reported.has(key)) { reported.add(key); notify({ event: 'model', status: 'unavailable', provider: selection.provider, id: selection.id }); }
             return 'unavailable';
         }
     }
     reported.delete(key);
-    if (desired.thinking && pi.getThinkingLevel() !== desired.thinking) pi.setThinkingLevel(desired.thinking);
+    if (unsupported) {
+        const warning = `thinking:${key}:${thinking}`;
+        if (!reported.has(warning)) {
+            reported.add(warning);
+            ctx.ui?.notify(`Bot 保存的思考等级 ${thinking} 不受 ${key} 支持，本次使用 ${level}；可用 /thinking 修改或 /thinking default 跟随默认。`, 'warning');
+        }
+    }
+    if (pi.getThinkingLevel() !== level) pi.setThinkingLevel(level);
     return 'aligned';
 }
 
@@ -201,6 +210,12 @@ function registerSetupTool(pi: ExtensionAPI, context: any, getAgentDir: () => st
     } as any);
 }
 
+// The channel ingress calls this only after validating a fresh, idle start request.
+let modelPreparer: ((ctx: any) => Promise<void>) | null = null;
+export async function prepareBotModel(ctx: any) {
+    await modelPreparer?.(ctx);
+}
+
 // Panel edits arrive through Pivane's internal command; only a verified Bot window worker accepts them.
 let notebookEditor: ((ctx: any, input: any) => any) | null = null;
 export function handleBotNotebook(ctx: any, input: any) {
@@ -215,6 +230,14 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
     const reported = new Set<string>();
     // Private bridge record: the Supervisor consumes it and never shows it as a notification.
     const notifier = (ctx: any) => (value: any) => ctx.ui.notify(JSON.stringify({ pivaneBot: value, sessionId: ctx.sessionManager.getSessionId() }));
+    modelPreparer = async (ctx: any) => {
+        if (!managed(ctx)) return;
+        const loaded = botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir());
+        if (!loaded) throw new Error('Bot window is no longer current');
+        if (scheduledRunActive(ctx.sessionManager)) return;
+        await alignModel(pi, ctx, loaded.model, notifier(ctx), reported, loaded.bot.thinking, getAgentDir());
+        if (!botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir())) throw new Error('Bot window changed before channel start');
+    };
     let toolRegistered = false;
     let grepRegistered = false;
     let schedule: ReturnType<typeof registerBotSchedule> | undefined;
@@ -239,7 +262,7 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
         notify(loaded ? { event: 'loaded', profileId: context.profileId, windowId: context.windowId, generation: loaded.binding.generation }
             : { event: 'loaded', profileId: null });
         // Align at open so the page shows the Bot's model before the first message.
-        if (loaded) await alignModel(pi, ctx, loaded.model, notify, reported);
+        if (loaded && !scheduledRunActive(ctx.sessionManager)) await alignModel(pi, ctx, loaded.model, notify, reported, loaded.bot.thinking, getAgentDir());
     });
     // Tool-layer policy checks private paths before asking; saved exact grants are re-read
     // on every call. Unattended runs cannot approve a step that still needs confirmation.
@@ -357,7 +380,9 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
         if (!isBot(ctx)) return;
         const projection = event.context?.contextEntries || [];
         const drafts = [...topicIndexRetirements(projection),
-            ...(event.outcome === 'completed' ? pruneDrafts(projection, ctx.getContextUsage()) : [])];
+            ...(event.outcome === 'completed' ? pruneDrafts(projection, ctx.getContextUsage(), {
+                branch: ctx.sessionManager.getBranch(), sessionId: ctx.sessionManager.getSessionId()
+            }) : [])];
         return drafts.length ? { entries: [...(event.entries || []), ...drafts] } : undefined;
     });
     // S2 (D-030): once the prompt cache has gone cold, a still idle and fairly full window is
@@ -387,7 +412,7 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
         const loaded = botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir());
         if (!loaded) return;
         // A scheduled run was admitted and priced with the model it selected; it keeps it.
-        if (!scheduledRunActive(ctx.sessionManager)) await alignModel(pi, ctx, loaded.model, notifier(ctx), reported);
+        if (!scheduledRunActive(ctx.sessionManager)) await alignModel(pi, ctx, loaded.model, notifier(ctx), reported, loaded.bot.thinking, getAgentDir());
         setPromptSection(event, BOT_SECTION, loaded.text, { wrapForced: true });
         // The profile runtime keeps the personality loaded at worker start; a Bot's personality
         // can change mid-conversation (onboarding, settings), so the current one replaces it.

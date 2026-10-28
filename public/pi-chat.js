@@ -5240,7 +5240,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.PiChatNavigation = Object.freeze({
         async openSession({ cwd, sessionId, draft }) {
             if (!cwd || !sessionId) throw new Error(translateUi('会话地址无效'));
-            window.PiWorkspaceRoute.navigate('chat');
+            if (window.PiWorkspaceRoute.navigate('chat') === false) throw new Error(translateUi('导航已改变；会话未打开'));
             const navigation = beginConversationNavigation();
             if (transfer.movesEnabled) {
                 const resolved = await apiFetch('/api/pi/sessions/' + encodeURIComponent(sessionId) + '/resolve?cwd=' + encodeURIComponent(cwd));
