@@ -203,7 +203,7 @@ test('verified Bot worker attaches changes to the causing top-level result and p
     registerBotContext(h.pi, () => agentDir); registerToolProvenance(h.pi);
     const ctx = { mode: 'rpc', cwd: session.cwd, sessionManager: manager, hasUI: true,
         ui: { async confirm() { return true; }, notify() {} } };
-    const data = path.join(agentDir, 'pivane-profiles', 'data', created.bot.id), user = path.join(data, 'USER.md');
+    const data = path.join(agentDir, 'ohmybuddy-profiles', 'data', created.bot.id), user = path.join(data, 'USER.md');
     const call = { toolName: 'custom_writer', toolCallId: 'causing-tool', input: {} };
     assert.equal(await h.emit('tool_call', call, ctx), undefined);
     write(user, 'Likes tea'); write(path.join(data, 'skills', 'tea', 'SKILL.md'), '---\nname: Tea brewing\n---\nBrew tea');
