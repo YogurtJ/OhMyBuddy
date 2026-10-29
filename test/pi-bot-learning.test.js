@@ -462,7 +462,7 @@ test('4. an identity converted with bots.fromProfile keeps its learning settings
         content: '---\nname: limit-proof-check\ndescription: Step-by-step limit proof verification\n---\n# limit-proof-check\n\n## When to use\nWhen checking epsilon-delta proofs.\n\n## Procedure\n1. Identify target limit.\n\n## Verification\n- Confirm bound holds.\n'
     });
     assert.equal(savedSkill.status, 'saved');
-    const skillFile = path.join(agentDir, 'pivane-profiles', 'data', profileId, 'skills', 'limit-proof-check', 'SKILL.md');
+    const skillFile = path.join(agentDir, 'ohmybuddy-profiles', 'data', profileId, 'skills', 'limit-proof-check', 'SKILL.md');
     assert.equal(fs.existsSync(skillFile), true, 'learned skill file exists on disk before conversion');
 
     // 4. Convert the identity into a Bot with bots.fromProfile.
@@ -756,7 +756,7 @@ test('native WeChat corrections and preferences commit through real knowledge pr
     assert.deepEqual(saved.items.map(item => item.category).sort(), ['correction', 'preference']);
     assert.deepEqual(saved.items.map(item => item.source.entryId).sort(), [correction.entry.id, preference.entry.id].sort());
     assert.ok(saved.receipts.every(receipt => receipt.origin === 'learning' && receipt.source.sessionId === source.id));
-    assert.match(fs.readFileSync(path.join(agentDir, 'pivane-profiles', 'data', botId, 'MEMORY.md'), 'utf8'), /新版校验清单/);
+    assert.match(fs.readFileSync(path.join(agentDir, 'ohmybuddy-profiles', 'data', botId, 'MEMORY.md'), 'utf8'), /新版校验清单/);
     const rotated = await f.bots.rotate(botId, windowId, { expectedGeneration: 0 });
     const rotatedAgain = await f.bots.rotate(botId, windowId, { expectedGeneration: 1 });
     for (const session of [rotated.session, rotatedAgain.session, source])

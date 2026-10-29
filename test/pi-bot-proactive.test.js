@@ -64,7 +64,7 @@ test('due commitments in a notebook become follow-ups that track edits; sent one
     assert.equal((await w.proactive.syncNotes(w.id, w.main)).changed, 1);
     let list = await w.proactive.list(w.id);
     assert.deepEqual(list.map(item => [item.kind, item.noteId, item.at]), [['due', 'n1', at('2026-10-30T09:00:00')]]);
-    const file = path.join(w.agentDir, 'pivane-bots', w.id, 'proactive.json');
+    const file = path.join(w.agentDir, 'ohmybuddy-bots', w.id, 'proactive.json');
     require('./private-file-helper.cjs').assertPrivateFile(file);
     assert.equal((await w.proactive.syncNotes(w.id, w.main)).changed, 0, 'unchanged notes change nothing');
     // A moved due time replaces the follow-up.

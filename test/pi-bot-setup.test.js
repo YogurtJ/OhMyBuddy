@@ -74,7 +74,7 @@ test('a confirmed card saves identity, onboarding progress and about-you notes o
     assert.equal(listed.bot.onboarding.phase, 'interview');
     // Each step is its own; the job the user dropped from the card is left for later (UAT-14).
     assert.deepEqual(listed.bot.onboarding.steps, { name: 'done', avatar: 'done', job: 'skipped', about: 'done' });
-    const userFile = path.join(agentDir, 'pivane-profiles', 'data', botId, 'USER.md');
+    const userFile = path.join(agentDir, 'ohmybuddy-profiles', 'data', botId, 'USER.md');
     assert.equal(fs.readFileSync(userFile, 'utf8'), '希望被叫做小王');
 
     // Once the tool has its result, the card cannot be saved again.
@@ -351,7 +351,7 @@ test('a new Bot can be told what another Bot knows about the user, only what was
     const copied = await bots.about(target, { action: 'copy', fromProfileId: source, entries: ['叫我小王', '不吃香菜'], expectedRevision: await revision() });
     assert.deepEqual(copied.added, ['叫我小王', '不吃香菜']);
     assert.equal(copied.bot.bot.onboarding.steps.known, 'done');
-    assert.equal(fs.readFileSync(path.join(agentDir, 'pivane-profiles', 'data', target, 'USER.md'), 'utf8'), '叫我小王\n§\n不吃香菜');
+    assert.equal(fs.readFileSync(path.join(agentDir, 'ohmybuddy-profiles', 'data', target, 'USER.md'), 'utf8'), '叫我小王\n§\n不吃香菜');
     assert.match(require('../server/bot/bot-prompt').onboardingGuidance(copied.bot.bot, { kind: 'main' }), /Do not ask again/);
 
     const declined = (await bots.create({ expectedRevision: await revision() })).bot.id;
