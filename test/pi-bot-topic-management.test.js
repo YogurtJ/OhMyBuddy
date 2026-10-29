@@ -168,15 +168,21 @@ test('permanent deletion removes all generations, keeps unrelated chats and prev
     await assert.rejects(f.profiles.reserve(() => f.bots.createWindowLocked(f.id, 'topic', { id: topic.id, title: 'Same ID' })), { code: 'BOT_TOPIC_DELETED' });
 });
 test('partial deletion stays visibly irreversible, never retries itself, and continues only with a fresh explicit confirmation', async t => {
-    const f = await fixture(t), topic = await f.topic(); await f.rotate(topic.id); await f.action('POST', `/windows/${topic.id}/trash`);
+    const f = await fixture(t), topic = await f.topic(), planId = `plan-${randomUUID()}`;
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+    SessionManager.open((await f.row(topic.id)).current.sessionPath).appendCustomEntry('pivane-media-plan', { version: 1, toolCallId: 'old-generation-media', plan: { id: planId, kind: 'image', modelId: 'synthetic', parameters: {} } });
+    await f.rotate(topic.id); await f.action('POST', `/windows/${topic.id}/trash`);
     const row = await f.row(topic.id), files = row.generations.map(item => item.sessionPath), bytes = fs.readFileSync(files[1]);
     const old = fs.unlinkSync; let attempted = 0;
     fs.unlinkSync = file => { if (files.includes(file)) { attempted++; if (file === files[1]) throw Object.assign(new Error('Synthetic disk failure'), { code: 'EACCES' }); } return old(file); };
     let result;
     try { result = await f.action('DELETE', `/windows/${topic.id}`, { confirmed: true }); } finally { fs.unlinkSync = old; }
     assert.notEqual(result.status, 200); assert.equal(attempted, 2); assert.equal(fs.existsSync(files[0]), false); assert.deepEqual(fs.readFileSync(files[1]), bytes);
-    const partial = await f.row(topic.id); assert.ok(partial.deleting); assert.equal(partial.deleting.files.length, 2);
+    const partial = await f.row(topic.id); assert.ok(partial.deleting); assert.equal(partial.deleting.files.length, 2); assert.deepEqual(partial.deleting.planIds, [planId]);
     assert.equal((await f.action('POST', `/windows/${topic.id}/restore`)).data.code, 'BOT_TOPIC_DELETING');
+    f.media.entries.set(planId, { attempts: [{ status: 'running' }] });
+    assert.equal((await f.action('DELETE', `/windows/${topic.id}`, { confirmed: true })).data.code, 'BOT_TOPIC_MEDIA', 'deleted generations retain their media dependency proof');
+    assert.deepEqual(fs.readFileSync(files[1]), bytes); f.media.entries.get(planId).attempts[0].status = 'done';
     const completed = await f.action('DELETE', `/windows/${topic.id}`, { confirmed: true });
     assert.equal(completed.status, 200, JSON.stringify(completed.data)); assert.equal(fs.existsSync(files[1]), false); assert.equal(await f.row(topic.id), undefined);
 });

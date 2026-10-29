@@ -2,8 +2,9 @@
 // Per-Bot window index: <agentDir>/pivane-bots/<profileId>/windows.json.
 // A window is the permanent conversation container the user sees (main chat or a
 // topic). Each window points at its current native session generation and keeps the
-// ordered list of earlier generations. This file is an index: every generation's
-// native session carries a `pivane-bot-window` marker, so the index can be rebuilt.
+// ordered list of earlier generations. Generation pointers are verified against native
+// `pivane-bot-window` markers. Groups, trash and deletion intent are owner metadata:
+// they must be backed up with the native files, not rebuilt from creation markers.
 const fs = require('node:fs');
 const path = require('node:path');
 const { safeFile } = require('../pi-native-service');
@@ -37,7 +38,10 @@ function validRotation(value) {
 }
 
 function validDeletion(value, generations) {
-    return object(value) && iso(value.startedAt) && Object.keys(value).every(key => ['startedAt', 'files'].includes(key))
+    return object(value) && iso(value.startedAt) && Object.keys(value).every(key => ['startedAt', 'files', 'planIds'].includes(key))
+        && Array.isArray(value.planIds) && value.planIds.length <= 50000
+        && value.planIds.every(id => typeof id === 'string' && /^plan-[a-f0-9-]{36}$/.test(id))
+        && new Set(value.planIds).size === value.planIds.length
         && Array.isArray(value.files) && value.files.length === generations.length
         && value.files.every((file, index) => object(file) && file.generation === generations[index].generation
             && typeof file.stamp === 'string' && file.stamp.length <= 512
