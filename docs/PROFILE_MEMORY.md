@@ -42,8 +42,8 @@ when changes are still in SQLite WAL), plus the bytes of Markdown/skill files.
 `/api/pi/status.profileMemory` reports component availability; its public `autoLearn` value remains false. The retired in-worker reviewer is not enabled by this status. Background learning uses `ProfileLearningService` and explicit [auxiliary routes](#background-learning); `runtime.json.reviewModel` is a compatibility hint for explicit adoption. Installation, saved data, indexing and confirmed worker loading are separate states.
 
 The managed web-session extension must **await** `registerProfileMemory(pi)`
-inside an async default factory. Provide `PIVANE_AGENT_PROFILE_CONTEXT` only
-to the matching eligible managed RPC worker, and `PIVANE_HERMES_BUNDLE` as the
+inside an async default factory. Provide `OHMYBUDDY_AGENT_PROFILE_CONTEXT` only
+to the matching eligible managed RPC worker, and `OHMYBUDDY_HERMES_BUNDLE` as the
 verified isolated bundle's absolute path. Do not configure upstream globally,
 change `PI_CODING_AGENT_DIR`, or create a second worker for a native session.
 No-profile, disabled, missing, or ephemeral sessions must not receive context.
@@ -54,7 +54,7 @@ markers never bind a new ID. No-profile sessions receive no adapter tools,
 injection, indexing, discovery or review.
 
 Global profile memory and generated skills live under
-`<agentDir>/pivane-profiles/data/<id>/`, with cwd-specific stores beneath
+`<agentDir>/ohmybuddy-profiles/data/<id>/`, with cwd-specific stores beneath
 `projects/<sha256(canonical cwd)>/`. Global memory/skills cross project cwd;
 project memory/skills do not alias same-name cwd folders. Installed shared Pi
 skills are read-only when refusing a skill collision; profile skill operations
@@ -348,7 +348,7 @@ limits. A saved document is not evidence of successful indexing or activation in
 
 ## Agent write-time comparison
 
-Pivane implements comparison in its own adapter and knowledge service; the
+OhMyBuddy implements comparison in its own adapter and knowledge service; the
 pi-hermes-memory vendor sources and dependencies are unchanged. Native
 `memory_add` and `skill_manage(action:'create')` first return
 `details.comparisonRequired:true`, `saved:false`, related candidates and a
@@ -389,7 +389,7 @@ no saved receipt/card. Deleted-memory protection and explicit restore remain.
 
 ## Content scan
 
-Pivane's own write paths do not call the upstream `MemoryStore`/`SkillStore`
+OhMyBuddy's own write paths do not call the upstream `MemoryStore`/`SkillStore`
 write methods, so they carry the equivalent check themselves.
 `server/profile-memory/content-scan.js` runs on every knowledge `create`,
 `update` and `consolidate` (memory content; skill name, description and body),
@@ -406,7 +406,7 @@ Restoring or undoing an older entry does not re-scan it.
 ## Background learning
 
 The old in-worker three-turn reviewer (`memory.autoLearn`,
-`PIVANE_PROFILE_MEMORY_REVIEW_MODEL`, `runtime.json.reviewModel`) is retired:
+`OHMYBUDDY_PROFILE_MEMORY_REVIEW_MODEL`, `runtime.json.reviewModel`) is retired:
 those values are still read for compatibility but start no model call, and
 `/status.profileMemory.autoLearn` is always false. Learning now runs in the
 server-side `ProfileLearningService` (`server/profile-memory/learning-service.js`),
@@ -595,7 +595,7 @@ selected components and checks native SQLite. The resulting
 `server/profile-memory/upstream-bundle.mjs` must match the reviewed SHA256
 `c1e3dec1004829df2715cacb457990c6f2b1ce6c6fe1439428b92625ac8f7f75`.
 The configuration service selects this release-local bundle before the legacy
-`pivane-profiles/runtime.json` absolute path. It does not rewrite the old file or
+`ohmybuddy-profiles/runtime.json` absolute path. It does not rewrite the old file or
 move profile data. `npm test` supplies the built-in bundle and Pi's Jiti loader,
 so memory integration gates are no longer silently skipped by the normal suite.
 See [bundled capabilities](BUNDLED_CAPABILITIES.md) for installation, platform
@@ -609,7 +609,7 @@ The selected exports are unchanged. Features that live only in upstream's
 default factory do not run here: chunked consolidation, consolidation usage
 signals, the `/memory-insights` usage section, scoped startup Markdown sync,
 `appendSystemPrompt` policy injection and the direct-review transport changes.
-Pivane already injects its block through the native `pivane_profile_memory`
+OhMyBuddy already injects its block through the native `pivane_profile_memory`
 prompt section, and background learning keeps its own auxiliary-model path.
 
 The first 0.9.10 `DatabaseManager` open of a profile `sessions.db` (worker,
@@ -629,7 +629,7 @@ one database (for example the RPC worker and its index thread, or two sessions
 of the same profile) could both `ALTER` and one would fail with `duplicate column
 name`; a failed index thread would stay unavailable for that session.
 `server/profile-memory/schema-prep.js` therefore adds the same two columns under
-`BEGIN IMMEDIATE` before every Pivane-owned `DatabaseManager` opens the file:
+`BEGIN IMMEDIATE` before every OhMyBuddy-owned `DatabaseManager` opens the file:
 the index thread and document index before their open, the RPC worker lazily
 before its first memory tool call (never during extension registration). It
 only reads the schema once migrated and never creates a database. Missing,
@@ -690,14 +690,14 @@ Pi discovers skills by frontmatter `description` alone. The upstream
 writes accept descriptions up to 1024 characters (Pi's limit, advertised as
 `capabilities.skillDescriptionMaxLength`), the skill editor explains what to put
 there, and background-learning skill proposals ask for trigger phrasing in the
-description. `MemoryStore` capacity labels are unchanged for Pivane's enforced
+description. `MemoryStore` capacity labels are unchanged for OhMyBuddy's enforced
 `legacy-inject` mode, and importing the bundle no longer spawns the lock
 incarnation probe until a lock is first used.
 
 ## Legacy isolated installation
 
 The following recipe remains available for legacy installations and compatibility
-testing; ordinary Pivane installation uses the bundled path above.
+testing; ordinary OhMyBuddy installation uses the bundled path above.
 
 Use the pinned upstream tarball; its SHA256 is
 `821dc844ddd6f87a0747c195cf02d6a6db03f65d110ecd8fedb76f4ff8af20cb`
@@ -718,12 +718,12 @@ running service during this review.
 
 ```sh
 npm pack pi-hermes-memory@0.9.10 --pack-destination /private/evidence
-PIVANE_PROFILE_MEMORY_ESBUILD=/path/to/esbuild \
+OHMYBUDDY_PROFILE_MEMORY_ESBUILD=/path/to/esbuild \
   node scripts/profile-memory-build.cjs /private/evidence/pi-hermes-memory-0.9.10.tgz /private/fresh-prefix
 HOME=/private/disposable-identity node scripts/profile-memory-install.cjs /private/fresh-prefix
-PIVANE_TEST_HERMES_BUNDLE=/private/fresh-prefix/package/profile-memory-bundle.mjs \
-PIVANE_TEST_PI_JITI=/private/fresh-prefix/node_modules/@earendil-works/pi-coding-agent/node_modules/jiti \
+OHMYBUDDY_TEST_HERMES_BUNDLE=/private/fresh-prefix/package/profile-memory-bundle.mjs \
+OHMYBUDDY_TEST_PI_JITI=/private/fresh-prefix/node_modules/@earendil-works/pi-coding-agent/node_modules/jiti \
   npm test -- test/pi-profile-memory-integration.test.js test/pi-profile-memory-scope.test.js test/pi-profile-memory-management.test.js
 ```
 
-Use both test variables for isolated compatibility checks. The browser E2E at `test/browser/pi-memory-learning-e2e.cjs` uses a throwaway identity, real Pi RPC and a synthetic provider; preserve bundle, lock and native hashes. Before activation, finish work and back up `<agentDir>/pivane-profiles/` and configuration. Rollback removes the hook/env/router but preserves profile data and native sessions. Platform validation belongs to [release evidence](RELEASE_INSTALL_VALIDATION.md), not this adapter contract.
+Use both test variables for isolated compatibility checks. The browser E2E at `test/browser/pi-memory-learning-e2e.cjs` uses a throwaway identity, real Pi RPC and a synthetic provider; preserve bundle, lock and native hashes. Before activation, finish work and back up `<agentDir>/ohmybuddy-profiles/` and configuration. Rollback removes the hook/env/router but preserves profile data and native sessions. Platform validation belongs to [release evidence](RELEASE_INSTALL_VALIDATION.md), not this adapter contract.

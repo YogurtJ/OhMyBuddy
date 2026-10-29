@@ -59,7 +59,7 @@ function insideWorkspace(cwd, raw, resolve = resolvePiPath) {
     } catch { return false; }
 }
 
-// Deliberately separates recognizable credential stores/private keys from Pivane/Pi
+// Deliberately separates recognizable credential stores/private keys from OhMyBuddy/Pi
 // private application state. This is tool-layer policy, not a filesystem sandbox.
 function forbiddenName(value) {
     return /^\/(?:proc|dev\/fd)(?:\/|$)/.test(value.replaceAll('\\', '/').toLowerCase());
@@ -67,17 +67,17 @@ function forbiddenName(value) {
 function credentialName(value) {
     const parts = value.replaceAll('\\', '/').toLowerCase().split(/[/:]/);
     return forbiddenName(value) || parts.some((part, index) => /^\.env(?:[.*?\[].*)?$/.test(part)
-        || /^(?:auth\.json|shadow|gshadow|master\.passwd|credentials(?:\..*)?|secrets?(?:\..*)?|\.netrc|_netrc|\.npmrc|\.pypirc|\.git-credentials|(?:pivane|pi5)-access\.json)$/.test(part)
-        || /^(?:\.ssh|\.aws|\.azure|\.kube|\.gnupg|(?:pivane|pi5)-channels)$/.test(part)
+        || /^(?:auth\.json|shadow|gshadow|master\.passwd|credentials(?:\..*)?|secrets?(?:\..*)?|\.netrc|_netrc|\.npmrc|\.pypirc|\.git-credentials|(?:ohmybuddy|pivane|pi5)-access\.json)$/.test(part)
+        || /^(?:\.ssh|\.aws|\.azure|\.kube|\.gnupg|(?:ohmybuddy|pivane|pi5)-channels)$/.test(part)
         || /^(?:id_(?:rsa|dsa|ecdsa|ed25519)(?:\..*)?|.*\.(?:pem|key|p12|pfx))$/.test(part)
         || part === '.docker' && parts[index + 1] === 'config.json'
         || part === '.config' && parts[index + 1] === 'gcloud');
 }
 function privateStateName(value) {
     const parts = value.replaceAll('\\', '/').toLowerCase().split(/[/:]/);
-    return parts.some((part, index) => /^(?:\.pivane|pivane-profiles|pivane-bots)$/.test(part)
+    return parts.some((part, index) => /^(?:\.(?:ohmybuddy|pivane)|(?:ohmybuddy|pivane)-(?:profiles|bots))$/.test(part)
         || part === '.pi' && ['agent', 'settings.json', 'trust.json'].includes(parts[index + 1])
-        || part === '.config' && parts[index + 1] === 'pivane');
+        || part === '.config' && ['ohmybuddy', 'pivane'].includes(parts[index + 1]));
 }
 function privateName(value) { return credentialName(value) || privateStateName(value); }
 function pathAccess(raw, cwd, agentDir, resolve = resolvePiPath) {
@@ -112,11 +112,11 @@ function resolveShellPath(input, cwd) { return path.resolve(cwd, input); }
 function resolvePowerShellPath(input, cwd) { return path.resolve(cwd, input.replaceAll('\\', path.sep)); }
 // Darwin's /etc and /var resolve under /private; classify both spellings alike.
 const systemLocation = target => target.replaceAll('\\', '/').toLowerCase().replace(/^\/private\/(?=(?:etc|var)(?:\/|$))/, '/');
-// Writes here still ask even in Hands-off mode: Pivane's own running releases, state and
+// Writes here still ask even in Hands-off mode: OhMyBuddy's own running releases, state and
 // backups, and locations that start programs automatically at login or on a schedule.
 function criticalPath(target) {
     const normalized = systemLocation(target);
-    return /(?:^|\/)\.pivane-runtime(?:\/|$)/.test(normalized)
+    return /(?:^|\/)\.(?:ohmybuddy|pivane)-runtime(?:\/|$)/.test(normalized)
         || /(?:^|\/)(?:library\/(?:launchagents|launchdaemons)|\.config\/(?:systemd|launchd|autostart)|start menu\/programs\/startup)(?:\/|$)/.test(normalized)
         || /^\/(?:etc\/(?:cron[^/]*|systemd|init\.d)|var\/spool\/cron)(?:\/|$)/.test(normalized);
 }

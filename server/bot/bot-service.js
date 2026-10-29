@@ -35,7 +35,7 @@ function countLines(file) {
 const fail = (message, status = 400, code) => { throw Object.assign(new Error(message), { status, ...(code ? { code } : {}) }); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const UUID = /^[a-f0-9-]{36}$/;
-const WORKSPACE_PARENT = 'PivaneBots';
+const WORKSPACE_PARENT = 'OhMyBuddyBots';
 const MAX_BOTS = 50;
 const PLACEHOLDER = Object.freeze({ 'zh-CN': '新伙伴', en: 'New buddy' });
 const DEFAULT_AVATAR = Object.freeze({ kind: 'preset', id: 'pivane-pebble' });
@@ -184,8 +184,8 @@ class BotService extends EventEmitter {
     }
 
     // Where Bot workspaces go: the home folder when it is an allowed project, else the first
-    // allowed project root. The workspaces themselves (<base>/PivaneBots/…) never land in the
-    // service's working directory or the Pivane install: that is where the generic default
+    // allowed project root. The workspaces themselves (<base>/OhMyBuddyBots/…) never land in the
+    // service's working directory or the OhMyBuddy install: that is where the generic default
     // project falls back to.
     workspaceExcluded(directory) {
         const inside = (child, parent) => child === parent || child.startsWith(parent.endsWith(path.sep) ? parent : parent + path.sep);
@@ -217,12 +217,12 @@ class BotService extends EventEmitter {
             if (!stat.isDirectory() || stat.isSymbolicLink()) fail('Bot workspace must be a real directory', 409);
         }
         const workspace = this.store.resolveProject(path.join(parent, `bot-${profileId.slice(0, 8)}`));
-        if (this.workspaceExcluded(workspace)) fail('Bot workspace would be inside the Pivane service directory', 409);
+        if (this.workspaceExcluded(workspace)) fail('Bot workspace would be inside the OhMyBuddy service directory', 409);
         if (process.platform !== 'win32') fs.chmodSync(workspace, 0o700);
         const readme = path.join(workspace, 'README.md');
         const note = language === 'en'
-            ? `# Bot workspace\n\nFiles created by your Pivane Bot (${name}) live here. Bot ID: ${profileId}\n`
-            : `# Bot 工作目录\n\n这里存放你的 Pivane Bot（${name}）创建的文件。Bot ID：${profileId}\n`;
+            ? `# Bot workspace\n\nFiles created by your OhMyBuddy Bot (${name}) live here. Bot ID: ${profileId}\n`
+            : `# Bot 工作目录\n\n这里存放你的 OhMyBuddy Bot（${name}）创建的文件。Bot ID：${profileId}\n`;
         try { fs.writeFileSync(readme, note, { flag: 'wx', mode: 0o600 }); } catch (error) { if (error.code !== 'EEXIST') throw error; }
         return workspace;
     }

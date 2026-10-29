@@ -89,7 +89,7 @@ test('isolated pinned Pi upstream components enforce profile index, recall, skil
     const { validateToolArguments } = await import('@earendil-works/pi-ai');
     const validated = validateToolArguments(add, { type: 'toolCall', id: 'schema-probe', name: 'memory_add',
         arguments: { target: 'memory', content: 'Independent synthetic fact.', comparisonToken: 'schema-only-probe' } });
-    assert.equal(validated.comparisonToken, 'schema-only-probe', 'Pivane extended schemas remain valid in the actual Pi argument validator');
+    assert.equal(validated.comparisonToken, 'schema-only-probe', 'OhMyBuddy extended schemas remain valid in the actual Pi argument validator');
     assert.doesNotThrow(() => validateToolArguments(add, { type: 'toolCall', id: 'first-probe', name: 'memory_add',
         arguments: { target: 'memory', content: 'Independent synthetic fact.' } }), 'the comparison token stays optional on the first read-only attempt');
     const payloads = ['极限推导法', '线性代数的秩', '数据结构栈'];

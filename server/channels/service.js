@@ -7,7 +7,7 @@ const { WeixinAdapter, createTransport, validId } = require('./weixin-adapter');
 const { outcome } = require('./runtime');
 const { bindingBoundary, threadOutcome } = require('./thread-results');
 const { DeliverableStore } = require('../pi-deliverables');
-const { customTypeIs } = require('../pivane-compat');
+const { customTypeIs } = require('../ohmybuddy-compat');
 const botChannel = require('./bot-channel');
 const { readWindowBinding } = require('../bot/bot-window-state');
 const { ChannelApprovals, parseApproval } = require('./bot-approvals');
@@ -51,7 +51,7 @@ class ChannelsService {
         this.ready = this.initialize().catch(() => { this.error = '消息渠道记录或组件无法读取，已停止连接，请检查安装与数据。'; }).finally(() => { this.initializing = false; });
     }
     async initialize() {
-        this.directory ||= path.join((await require('../pi-session-store').getSdk()).getAgentDir(), 'pivane-channels');
+        this.directory ||= require('../ohmybuddy-compat').dataFile((await require('../pi-session-store').getSdk()).getAgentDir(), 'ohmybuddy-channels');
         this.db = new ChannelStore(this.directory);
         this.component = this.componentFactory?.(this.directory) || new WeixinComponent(this.directory);
         if (this.db.value.accounts.some(a => a.enabled)) {
@@ -369,8 +369,8 @@ class ChannelsService {
         // A message a Bot started itself reads like any message from it; failures are not pushed.
         if (event.proactive && (event.status !== 'completed' || !result.body)) return { status: 'skipped', reason: 'nothing-to-push' };
         const body = event.proactive ? result.body : event.status === 'stopped' ? header + '已停止。'
-            : event.status === 'error' ? header + '执行失败，请在 Pivane 网页查看。'
-            : header + '\n\n' + (result.body || '已完成，请在 Pivane 网页查看结果。');
+            : event.status === 'error' ? header + '执行失败，请在 OhMyBuddy 网页查看。'
+            : header + '\n\n' + (result.body || '已完成，请在 OhMyBuddy 网页查看结果。');
         let accepted = false;
         this.db.change(v => {
             if (!event.proactive && this.canNotifyScheduled && !this.canNotifyScheduled(event.jobId)) return;
@@ -576,7 +576,7 @@ class ChannelsService {
                                     if (offer) { void this.adapter.send(currentAccount, peer, offer, `pivane-approval-${id}-${event.id}`.slice(0, 120)).catch(() => {}); return; }
                                     if (waitingNotified) return;
                                     waitingNotified = true;
-                                    void this.adapter.send(currentAccount, peer, '⚠️ 当前任务正在等待交互确认，请打开 Pivane 网页端处理。', `pivane-wait-${id}`).catch(() => {});
+                                    void this.adapter.send(currentAccount, peer, '⚠️ 当前任务正在等待交互确认，请打开 OhMyBuddy 网页端处理。', `pivane-wait-${id}`).catch(() => {});
                                 }
                             });
                         } catch (error) {
@@ -628,8 +628,8 @@ class ChannelsService {
             this.updateJob(id, { status: 'cancelled', reason: 'notification-revoked', directReply: undefined, deliverables: undefined, mediaPlans: undefined }); return;
         }
         const mediaSummary = this.summarizeMediaPlans(result.mediaPlans || []);
-        const baseText = result.status === 'stopped' ? '任务已停止。已发生的操作不会撤销，请在 Pivane 网页核对。'
-            : result.status === 'error' ? '本次任务未成功完成，请在 Pivane 网页查看。' : result.body || '任务已完成，请在 Pivane 网页查看工具结果。';
+        const baseText = result.status === 'stopped' ? '任务已停止。已发生的操作不会撤销，请在 OhMyBuddy 网页核对。'
+            : result.status === 'error' ? '本次任务未成功完成，请在 OhMyBuddy 网页查看。' : result.body || '任务已完成，请在 OhMyBuddy 网页查看工具结果。';
         const deliveryIssues = [];
         const deliverableFiles = await this.collectDeliverables(result.deliverables || [], deliveryIssues);
         const generatedMedia = await this.collectMediaAssets(result.mediaPlans || [], 6 - deliverableFiles.length, deliveryIssues);
@@ -653,7 +653,7 @@ class ChannelsService {
             const last = state?.attempts?.at(-1);
             if (!last) {
                 const icon = plan.kind === 'video' ? '🎬' : plan.kind === 'tts' ? '🔊' : '🎨';
-                lines.push(`${icon} 待确认媒体卡片：${plan.summary || plan.modelId}（${plan.modelId}）\n💡 在微信回复 /confirm ${plan.id} 确认生成或查询结果。${job.bot ? '工具授权请用对应的同意/拒绝 A编号。' : ''}也可打开 Pivane 网页修改参数后确认。`);
+                lines.push(`${icon} 待确认媒体卡片：${plan.summary || plan.modelId}（${plan.modelId}）\n💡 在微信回复 /confirm ${plan.id} 确认生成或查询结果。${job.bot ? '工具授权请用对应的同意/拒绝 A编号。' : ''}也可打开 OhMyBuddy 网页修改参数后确认。`);
             }
         }
         return lines.join('\n\n');
@@ -669,7 +669,7 @@ class ChannelsService {
             'wechat-rejected': '微信拒绝接收', 'wechat-rate-limited': '微信暂时限制发送', 'connection-unavailable': '暂时无法连接微信' };
         const lines = issues.slice(0, 5).map(item => item.name + '：' + (labels[item.reason] || labels.unreadable));
         return '⚠️ 部分附件尚未发送：\n' + lines.join('\n')
-            + (issues.length > 5 ? '\n其他未发送附件请在 Pivane 网页查看投递记录。' : '');
+            + (issues.length > 5 ? '\n其他未发送附件请在 OhMyBuddy 网页查看投递记录。' : '');
     }
     async collectMediaAssets(plans, maxCount = 6, issues = []) {
         if (!Array.isArray(plans) || !plans.length) return [];

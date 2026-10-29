@@ -83,7 +83,7 @@ function enforceShrinkwrapFixes(base = root, fixes = SHRINKWRAP_FIXES) {
 }
 function install() {
     const removed = enforceShrinkwrapFixes();
-    if (removed.length) console.log('[Pivane] Replaced legacy nested ' + removed.join(', ') + ' with reviewed fixed release.');
+    if (removed.length) console.log('[OhMyBuddy] Replaced legacy nested ' + removed.join(', ') + ' with reviewed fixed release.');
     vendorFiles(root);
     for (const entry of catalog) {
         const metadata = JSON.parse(fs.readFileSync(path.join(packagePath(entry), 'package.json'), 'utf8'));
@@ -103,7 +103,7 @@ function install() {
     try { db.exec('CREATE VIRTUAL TABLE verify_fts USING fts5(content, tokenize=trigram)'); } finally { db.close(); }
     const target = memoryBundle(), tmp = `${target}.${process.pid}.tmp`;
     try { fs.writeFileSync(tmp, bytes); fs.renameSync(tmp, target); } finally { fs.rmSync(tmp, { force: true }); }
-    console.log('[Pivane] Bundled ' + catalog.map(entry => `${entry.name} ${entry.version}`).join(', ') + ' ready.');
+    console.log('[OhMyBuddy] Bundled ' + catalog.map(entry => `${entry.name} ${entry.version}`).join(', ') + ' ready.');
 }
 if (require.main === module) { try { install(); } catch (error) { console.error(error.message); process.exitCode = 1; } }
 module.exports = { install, enforceShrinkwrapFixes, SHRINKWRAP_FIXES };

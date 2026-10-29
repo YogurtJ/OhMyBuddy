@@ -12,7 +12,7 @@ export function registerDeliverables(pi: ExtensionAPI) {
         const limits = objects.limits;
         pi.registerTool({
             name: 'deliver_files', label: 'Deliver files',
-            description: `Publish explicitly requested task deliverables as immutable, private Pivane snapshots and return browser-openable links. Up to 20 files, ${limits.deliveryFileBytes / 1024 / 1024} MiB each, ${limits.deliveryTotalBytes / 1024 / 1024} MiB total. Preserves originals. Supply a stable requestId; retry only that same ID after an uncertain response. Defaults to current project; sourceRoot is an explicit allowed external source directory for authorized task outputs, never for credentials or unrelated files. Preview is limited to 16 MiB; larger files remain downloadable within the server download limit.`,
+            description: `Publish explicitly requested task deliverables as immutable, private OhMyBuddy snapshots and return browser-openable links. Up to 20 files, ${limits.deliveryFileBytes / 1024 / 1024} MiB each, ${limits.deliveryTotalBytes / 1024 / 1024} MiB total. Preserves originals. Supply a stable requestId; retry only that same ID after an uncertain response. Defaults to current project; sourceRoot is an explicit allowed external source directory for authorized task outputs, never for credentials or unrelated files. Preview is limited to 16 MiB; larger files remain downloadable within the server download limit.`,
             promptSnippet: 'Publish task deliverables with stable browser preview and download links',
             promptGuidelines: [
                 'When handing over generated documents, images or self-contained HTML, use deliver_files and include its returned links in the final reply. Server paths alone are not downloadable links.',
@@ -26,7 +26,7 @@ export function registerDeliverables(pi: ExtensionAPI) {
                 sourceRoot: Type.Optional(Type.String({ maxLength: 4096 }))
             }),
             execute: async (_id, input, signal, _update, context) => {
-                if (!enabled(context)) throw new Error('A persistent managed Pivane thread is required');
+                if (!enabled(context)) throw new Error('A persistent managed OhMyBuddy thread is required');
                 const sessionId = context.sessionManager.getSessionId(), sessionFile = context.sessionManager.getSessionFile();
                 const result = await objects.publish({ cwd: context.cwd, sessionId }, input, signal);
                 if (sessionId !== context.sessionManager.getSessionId() || sessionFile !== context.sessionManager.getSessionFile()) throw new Error('Session changed; inspect the original requestId');

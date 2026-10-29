@@ -1,6 +1,6 @@
 // One ask_user_question call presents 1–4 questions. Each question is a native
 // select/input request so other clients keep a working fallback dialog. The
-// Pivane panel may answer a select directly with typed text (allowCustom) or an
+// OhMyBuddy panel may answer a select directly with typed text (allowCustom) or an
 // empty string (skip); the generic dialog uses the explicit "Other" entry.
 const LIMITS = Object.freeze({ questions: 4, question: 1000, header: 24, minOptions: 2, maxOptions: 8, label: 120, description: 240, placeholder: 120, answer: 4000 });
 const DEFAULT_TIMEOUT_MS = 600000;

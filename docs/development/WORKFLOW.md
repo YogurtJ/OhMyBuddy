@@ -1,4 +1,4 @@
-# Pivane 开发流程
+# OhMyBuddy 开发流程
 
 ## 从需求到交付
 
@@ -80,7 +80,7 @@ PLAYWRIGHT_MODULE=/path/to/playwright npm run test:browser
 
 ## 源码发现与发布
 
-`scripts/source-files.cjs` 统一枚举 server、public、scripts 和各类测试，递归发现功能子目录；排除用户媒体、旧工作台、vendor 自动发现、隐藏目录和备份，并拒绝代码符号链接。字体和第三方资源使用明确清单。内置能力的官方发布内容由 `vendor/manifest.json` 单独登记并逐文件校验，通过同一 `distributionFiles()` 纳入发行和受管快照；上游 Markdown 不作为 Pivane 自有指南进行链接改写。
+`scripts/source-files.cjs` 统一枚举 server、public、scripts 和各类测试，递归发现功能子目录；排除用户媒体、旧工作台、vendor 自动发现、隐藏目录和备份，并拒绝代码符号链接。字体和第三方资源使用明确清单。内置能力的官方发布内容由 `vendor/manifest.json` 单独登记并逐文件校验，通过同一 `distributionFiles()` 纳入发行和受管快照；上游 Markdown 不作为 OhMyBuddy 自有指南进行链接改写。
 
 - `check-syntax.cjs` 使用相同发现规则检查应用、测试及受管 TypeScript 扩展的语法，不声称执行 TypeScript 类型检查。
 - `run-tests.cjs` 从统一发现的 `.test.js` 集合选择并串行执行，避免依赖平台 shell 展开；可选的 `test-timing-reporter.cjs` 只报告 Node 事件，不改变执行顺序或失败语义。`run-browser-tests.cjs` 使用同一发现规则选择浏览器脚本。

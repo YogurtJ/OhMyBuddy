@@ -2,7 +2,7 @@ const { randomUUID } = require('crypto');
 const { EventEmitter } = require('events');
 const fs = require('fs');
 const path = require('path');
-const { INTERNAL_COMMAND_PATTERN, isInternalCommand, privateReply } = require('./pivane-compat');
+const { INTERNAL_COMMAND_PATTERN, isInternalCommand, privateReply } = require('./ohmybuddy-compat');
 const { PiRpcClient } = require('./pi-rpc-client');
 const { PiRuntimeActivity, isCompactionNoop } = require('./pi-runtime-activity');
 const { progressValue } = require('./pi-task-progress');
@@ -1074,7 +1074,7 @@ class PiAgentSupervisor extends EventEmitter {
         if (this.queueStore) return this.queueStore;
         if (!this.queueStorePromise) this.queueStorePromise = (async () => {
             const sdk = await require('./pi-session-store').getSdk();
-            const root = this.queueRoot || path.join(fs.realpathSync.native(sdk.getAgentDir()), 'pivane-queue');
+            const root = this.queueRoot || require('./ohmybuddy-compat').dataFile(fs.realpathSync.native(sdk.getAgentDir()), 'ohmybuddy-queue');
             return this.queueStore = new (require('./pi-queue-store').PiQueueStore)(root);
         })();
         return this.queueStorePromise;

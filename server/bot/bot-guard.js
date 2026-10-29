@@ -50,7 +50,7 @@ function approvalFor({ permissions, preset = permissions?.preset, toolName, inpu
         return { kind, detail: detailFor(kind, toolName, input), ...(rule ? { rule } : {}) };
     };
     // Reading tools check path access: credentials ask once in Hands-off and are refused in careful
-    // modes; Pivane/Pi state paths run in Hands-off and ask once in careful modes.
+    // modes; OhMyBuddy/Pi state paths run in Hands-off and ask once in careful modes.
     const fileRead = ['read', 'grep', 'find', 'ls'].includes(toolName);
     if (!WRITES.has(toolName) && (fileRead || typeof input?.path === 'string')) {
         const access = pathAccess(input?.path ?? (toolName === 'read' ? null : cwd), cwd, agentDir);
@@ -81,7 +81,7 @@ function approvalFor({ permissions, preset = permissions?.preset, toolName, inpu
         const outside = !insideWorkspace(cwd, input?.path);
         const kind = outside ? 'outside' : 'write';
         if (operation.status === 'credential') return preset === 'free' ? ask(kind) : { block: true, reason: BLOCKED.protected };
-        // Hands-off asks only for credentials, Pivane's own runtime, autostart/scheduler locations and directories.
+        // Hands-off asks only for credentials, OhMyBuddy's own runtime, autostart/scheduler locations and directories.
         if (preset === 'free') return operation.critical || annotations?.destructiveHint === true ? ask(kind) : null;
         if (operation.status === 'state' || operation.status === 'risk' || annotations?.destructiveHint === true) return ask(kind);
         return outside ? ask('outside', true) : preset === 'ask' ? ask('write', true) : null;

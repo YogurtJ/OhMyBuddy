@@ -1,5 +1,5 @@
 // Exact vendor import seams. Upstream files and their original manifest hashes
-// remain unchanged; only Pivane-hosted sessions use these reviewed boundaries.
+// remain unchanged; only OhMyBuddy-hosted sessions use these reviewed boundaries.
 // Node >=22.19 supports synchronous module hooks for import and require.
 import { registerHooks } from 'node:module';
 const redirects = new Map([

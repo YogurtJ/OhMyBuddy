@@ -64,7 +64,7 @@
 
 新后端以 `/status.auxiliaryModels=true` 提供统一[辅助模型](AUXILIARY_MODELS.md)卡片，标题模型与自动命名开关分别位于标题行和该行齿轮选项。已有设置直接沿用，下面的专用标题 API 继续兼容；缺少统一能力时保留原独立卡片。
 
-运行中 `/status.sessionTitles=true` 表示已启用标题接口；旧后端隐藏菜单/设置入口。`sessionTitleModels=true` 另标记可独立选择标题模型，只有旧开关能力时保留开关并隐藏模型选择。实例偏好 `pivane-workspace.json.sessionTitles`（既有 `pi5-workspace.json` 自动沿用） 保存 `enabled`（默认 true）、`provider/modelId`（默认均为空，跟随线程）与递增 `revision`，保留其他字段。专用模型供全部线程的自动/手动命名使用，与媒体规划及聊天默认值独立。配置保存不停止任务或供应商请求；关闭或更改设置后不应用尚在生成的自动结果，手动建议仍报告实际使用的冻结模型。
+运行中 `/status.sessionTitles=true` 表示已启用标题接口；旧后端隐藏菜单/设置入口。`sessionTitleModels=true` 另标记可独立选择标题模型，只有旧开关能力时保留开关并隐藏模型选择。实例偏好 `ohmybuddy-workspace.json.sessionTitles`（既有 `pi5-workspace.json` 自动沿用） 保存 `enabled`（默认 true）、`provider/modelId`（默认均为空，跟随线程）与递增 `revision`，保留其他字段。专用模型供全部线程的自动/手动命名使用，与媒体规划及聊天默认值独立。配置保存不停止任务或供应商请求；关闭或更改设置后不应用尚在生成的自动结果，手动建议仍报告实际使用的冻结模型。
 
 只有在功能开启时通过 POST `/sessions` 新建的未命名持久线程写入 `pivane-web-title` 原生 custom metadata（兼容旧 `pi5-web-title`）。自动命名等待成功最终回复及 `agent_settled`，跳过无标记的旧历史、有名称的线程和临时会话。标记绑定原生 session ID，复制/导入的标记不能使新身份自动命名。用户手动命名后即受保护，后续轮次不自动更新标题。
 
@@ -119,7 +119,7 @@
 
 Pi JSONL 仍是唯一聊天历史。队列只保存尚待确认/投递的消息，接受投递或取消后删除 payload，仅保留最多 100 条终态 metadata。工作台偏好不存这些正文。
 
-未设置 `PORT` 时使用新默认端口 11408，队列为 `~/.pi/agent/pivane-deferred-messages-11408.json`。显式配置端口 3001 的实例继续使用 `~/.pi/agent/pivane-deferred-messages.json`，既有同位置的 `pi5-deferred-messages.json` 自动沿用；其他显式端口追加 `-<port>` 后缀。此前未设置 `PORT` 的旧版安装如需保留 3000 地址及 `-3000` 队列，应在升级前设置 `PORT=3000`；不会自动迁移旧队列。`PI_CODING_AGENT_DIR` 仍决定 Agent 数据根，`PI_WEB_DEFERRED_FILE` 可显式覆盖。一个队列文件只能由一个服务进程管理，不可让两个实例共享该文件或同一正在写入的 Pi session。
+未设置 `PORT` 时使用新默认端口 11408，队列为 `~/.pi/agent/ohmybuddy-deferred-messages-11408.json`。显式配置端口 3001 的实例继续使用 `~/.pi/agent/ohmybuddy-deferred-messages.json`，既有同位置的 `pi5-deferred-messages.json` 自动沿用；其他显式端口追加 `-<port>` 后缀。此前未设置 `PORT` 的旧版安装如需保留 3000 地址及 `-3000` 队列，应在升级前设置 `PORT=3000`；不会自动迁移旧队列。`PI_CODING_AGENT_DIR` 仍决定 Agent 数据根，`PI_WEB_DEFERRED_FILE` 可显式覆盖。一个队列文件只能由一个服务进程管理，不可让两个实例共享该文件或同一正在写入的 Pi session。
 
 队列写入同目录 0600 临时文件，fsync、rename，再 fsync 目录；目录创建权限 0700。最多 50 条非终态消息，完整队列最多 64 MiB。单消息最多 400000 字符、6 张 PNG/JPEG/WebP/GIF、24 MiB base64；浏览器单图 6 MiB、文本附件 1 MiB。预约时间限未来一年。
 

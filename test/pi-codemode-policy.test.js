@@ -99,7 +99,7 @@ test('main and child native factories install the image boundary', async () => {
         const result = await tools[0].execute(label, { code: `return await models.generateImages(${JSON.stringify(imageRef)}, ${JSON.stringify(imageContext)});` }, undefined, undefined,
             { tools: [], modelRegistry: new sdk.ModelRegistry(runtime), sessionManager: { getBranch: () => [] } });
         assert.equal(result.isError, true, label);
-        assert.match(text(result), /blocked in Pivane codemode/, label);
+        assert.match(text(result), /blocked in OhMyBuddy codemode/, label);
         assertNoImages(runtime);
     }
 });
@@ -139,7 +139,7 @@ test('real official codemode blocks direct, aliased and computed images before r
     ]) {
         const result = await f.run(code);
         assert.equal(result.isError, true, code);
-        assert.match(text(result), /models\.generateImages\(\) is blocked in Pivane codemode/);
+        assert.match(text(result), /models\.generateImages\(\) is blocked in OhMyBuddy codemode/);
         assert.match(text(result), /media planning and confirmation.*user-confirmed media execution ticket/);
         assert.equal(result.usage, undefined);
         assert.equal(result.content.some(block => block.type === 'image'), false);
@@ -311,7 +311,7 @@ test('registry facade hides the runtime and prototype and follows current regist
         assert.equal(registry.runtime, undefined);
         assert.equal(registry.constructor, undefined);
         assert.ok(Object.isFrozen(registry));
-        assert.throws(() => registry.generateImages(), /Pivane media planning and confirmation/);
+        assert.throws(() => registry.generateImages(), /OhMyBuddy media planning and confirmation/);
         assert.throws(() => sdk.ModelRegistry.prototype.generateImages.call(registry, imageRef, imageContext), TypeError);
         assert.throws(() => Object.defineProperty(registry, 'generateImages', { value: () => 'bypass' }), TypeError);
         return registry.getModelsOfType('image')[0].name;
@@ -407,7 +407,7 @@ test('real session preserves namespace discovery, nested hook allowlist and succ
     assert.match(text(result), /mcp__fixture_server__echo/);
     assert.match(text(result), /NESTED_OK:accepted/);
     assert.match(text(result), /authorized tool allowlist/);
-    assert.match(text(result), /Pivane media planning and confirmation/);
+    assert.match(text(result), /OhMyBuddy media planning and confirmation/);
     assert.deepEqual(nestedRuns, ['echo']);
     assert.ok(hooks.includes('mcp__fixture-server__forbidden'));
     assert.ok(events.some(event => event.type === 'tool_execution_start' && event.parentToolCallId === 'parent-call'));

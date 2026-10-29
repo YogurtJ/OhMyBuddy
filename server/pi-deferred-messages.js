@@ -19,7 +19,7 @@ class PiDeferredMessages {
         this.now = now;
         const port = String(process.env.PORT || '11408');
         const portSuffix = port === '3001' ? '' : `-${port.replace(/[^0-9]/g, '')}`;
-        this.filePath = filePath || process.env.PI_WEB_DEFERRED_FILE || require('./pivane-compat').dataFile(process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.pi', 'agent'), `pivane-deferred-messages${portSuffix}.json`);
+        this.filePath = filePath || process.env.PI_WEB_DEFERRED_FILE || require('./ohmybuddy-compat').dataFile(process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.pi', 'agent'), `pivane-deferred-messages${portSuffix}.json`);
         this.jobs = [];
         this.revision = randomUUID();
         this.disposed = false;

@@ -1,8 +1,8 @@
 {
-  "name": "@pivane/media-workbench",
+  "name": "@ohmybuddy/media-workbench",
   "version": "1.1.0",
   "private": true,
-  "description": "Official Pi extension and skill adapters for Pivane media planning",
+  "description": "Official Pi extension and skill adapters for OhMyBuddy media planning",
   "keywords": ["pi-package"],
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",

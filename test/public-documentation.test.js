@@ -9,7 +9,7 @@ function fixture(t) {
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
     fs.mkdirSync(path.join(root, 'docs/local'), { recursive: true });
     fs.writeFileSync(path.join(root, 'docs/public-files.json'), JSON.stringify({ version: 1, files: ['README.md', 'docs/GUIDE.md'] }));
-    fs.writeFileSync(path.join(root, 'README.md'), '# Pivane\n\n[Guide](docs/GUIDE.md)\n');
+    fs.writeFileSync(path.join(root, 'README.md'), '# OhMyBuddy\n\n[Guide](docs/GUIDE.md)\n');
     fs.writeFileSync(path.join(root, 'docs/GUIDE.md'), '# Guide\n\n[Home](../README.md)\n');
     fs.writeFileSync(path.join(root, 'docs/local/NOTES.md'), 'PRIVATE_FIXTURE_NOT_FOR_DISTRIBUTION');
     return root;
@@ -26,7 +26,7 @@ test('private, unclassified and broken documentation cannot enter the published 
     assert.throws(() => checkDocumentation(root), /Broken\/private link/);
     fs.writeFileSync(path.join(root, 'README.md'), '[missing](docs/MISSING.md)');
     assert.throws(() => checkDocumentation(root), /Broken\/private link/);
-    fs.writeFileSync(path.join(root, 'README.md'), '# Pivane');
+    fs.writeFileSync(path.join(root, 'README.md'), '# OhMyBuddy');
     fs.writeFileSync(path.join(root, 'docs/NOTES.md'), 'unclassified draft');
     assert.throws(() => checkDocumentation(root), /Classify documentation/);
     assert.throws(() => checkDocumentation(root, ['docs/local/NOTES.md']), /Private or invalid distribution path/);

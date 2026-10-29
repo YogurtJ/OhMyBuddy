@@ -217,7 +217,7 @@ export async function prepareBotModel(ctx: any) {
     await modelPreparer?.(ctx);
 }
 
-// Panel edits arrive through Pivane's internal command; only a verified Bot window worker accepts them.
+// Panel edits arrive through OhMyBuddy's internal command; only a verified Bot window worker accepts them.
 let notebookEditor: ((ctx: any, input: any) => any) | null = null;
 export function handleBotNotebook(ctx: any, input: any) {
     if (!notebookEditor) throw new Error('This chat has no notebook');

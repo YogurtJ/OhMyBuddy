@@ -74,7 +74,7 @@ test('built-in SVG sources contain only the catalog geometry, solid colors and t
         assert.match(preset.path, /^[MmLlHhVvCcSsQqTtAaZz0-9 .,\-]+$/);
         for (const color of [preset.body, preset.eyes, preset.darkBody, preset.darkEyes]) assert.match(color, /^#[a-f0-9]{6}$/);
         const svg = fs.readFileSync(path.resolve(__dirname, '../public', preset.asset), 'utf8');
-        assert.equal(svg.trim(), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Pivane ${preset.name}"><title>Pivane ${preset.name} · 极简原型</title><path fill="${preset.body}" d="${preset.path}"/><g fill="${preset.eyes}"><rect x="61" y="63" width="8" height="19" rx="4"/><rect x="91" y="63" width="8" height="19" rx="4"/></g></svg>`, preset.asset);
+        assert.equal(svg.trim(), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="OhMyBuddy ${preset.name}"><title>OhMyBuddy ${preset.name} · 极简原型</title><path fill="${preset.body}" d="${preset.path}"/><g fill="${preset.eyes}"><rect x="61" y="63" width="8" height="19" rx="4"/><rect x="91" y="63" width="8" height="19" rx="4"/></g></svg>`, preset.asset);
     }
 });
 

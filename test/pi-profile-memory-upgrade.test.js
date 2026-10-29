@@ -38,7 +38,7 @@ async function legacyDatabase(root) {
 // pi-hermes-memory 0.9.10 adds memories.hit_count/last_hit_at. The only schema
 // difference from 0.9.9 is those two columns, so dropping them reproduces an
 // existing profile database written by the previous bundled release.
-test('previous profile memory database upgrades additively without changing Pivane revisions', { skip: !bundle }, async t => {
+test('previous profile memory database upgrades additively without changing OhMyBuddy revisions', { skip: !bundle }, async t => {
     const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-memory-upgrade-')));
     const managers = [];
     t.after(() => { for (const manager of managers) try { manager.close(); } catch { /* already closed */ }
@@ -51,7 +51,7 @@ test('previous profile memory database upgrades additively without changing Piva
     const dbPath = path.join(root, 'sessions.db');
     const legacy = new Database(dbPath);
     legacy.exec('ALTER TABLE memories DROP COLUMN last_hit_at; ALTER TABLE memories DROP COLUMN hit_count;');
-    // Statement shapes used by the previous release and by Pivane's document index.
+    // Statement shapes used by the previous release and by OhMyBuddy's document index.
     const insert = legacy.prepare('INSERT INTO memories (project, target, category, content, created, last_referenced) VALUES (?, ?, ?, ?, ?, ?)');
     insert.run(null, 'memory', null, 'Document mirrored fact about 秩', '2026-01-01', '2026-01-02');
     insert.run('/synthetic/project', 'memory', 'insight', 'SQLite-only project insight', '2026-01-03', '2026-01-03');
@@ -74,7 +74,7 @@ test('previous profile memory database upgrades additively without changing Piva
     };
     const found = await register({ usageTrackingEnabled: false }).execute('search', { query: '秩' });
     assert.equal(found.details.count, 1);
-    assert.deepEqual(hits(db).map(row => row.hits), [0, 0], 'the Pivane adapter option keeps search read-only');
+    assert.deepEqual(hits(db).map(row => row.hits), [0, 0], 'the OhMyBuddy adapter option keeps search read-only');
     // Pin the reviewed upstream default so a future change is noticed in review.
     await register(undefined).execute('search', { query: '秩' });
     assert.deepEqual(hits(db).map(row => row.hits), [1, 0], 'upstream default records a recall hit');
@@ -99,7 +99,7 @@ test('previous profile memory database upgrades additively without changing Piva
     } finally { reopened.close(); }
 });
 
-test('Pivane pre-migration adds exactly the upstream columns once and never follows unsafe paths', { skip: !bundle }, async t => {
+test('OhMyBuddy pre-migration adds exactly the upstream columns once and never follows unsafe paths', { skip: !bundle }, async t => {
     const Database = createRequire(bundle)('better-sqlite3');
     const shape = file => { const db = new Database(file, { readonly: true });
         try { return db.prepare('PRAGMA table_info(memories)').all(); } finally { db.close(); } };
@@ -168,7 +168,7 @@ test('concurrent first opens of an upgraded profile database do not race on adde
     assert.deepEqual(unprepared.results.map(result => result.ok).sort(), [false, true]);
     assert.match(unprepared.results.find(result => !result.ok).error, /duplicate column name/);
     const prepared = await run(true);
-    assert.ok(prepared.migrated && prepared.results.every(result => result.ok && result.reached), 'the Pivane pre-migration serializes the first opens');
+    assert.ok(prepared.migrated && prepared.results.every(result => result.ok && result.reached), 'the OhMyBuddy pre-migration serializes the first opens');
     // A writer holding the lock past the busy timeout makes both preparations fail
     // closed; neither reaches the unsynchronized upstream migration.
     const busy = await run(true, { busyTimeoutMs: 100, holdWriter: true });

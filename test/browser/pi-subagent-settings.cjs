@@ -130,7 +130,7 @@ async function run(browser, base, width, locale) {
     if (width < 700) assert.ok(await card.evaluate(el => el.scrollWidth <= el.clientWidth + 1));
     installed = '0.74.0'; bundled = true;
     await card.locator('.sa-refresh').click(); await trigger.waitFor();
-    await card.getByText(locale === 'en' ? 'Bundled with Pivane; updated with the app' : 'Pivane 内置，随应用更新').waitFor();
+    await card.getByText(locale === 'en' ? 'Bundled with OhMyBuddy; updated with the app' : 'OhMyBuddy 内置，随应用更新').waitFor();
     assert.equal(await card.locator('.sa-upgrade').count(), 0);
     if (width < 900) assert.ok(await card.locator('select').first().evaluate(el => parseFloat(getComputedStyle(el).fontSize)) >= 16);
     await reviewer.locator('summary').click(); await dimensions();

@@ -190,7 +190,7 @@ test('file grants are canonical, exact and bound to tool and working directory',
         assert.ok(decision);
         assert.equal(decision.rule, undefined, target);
     }
-    // Hands-off writes system and startup files directly; only Pivane's runtime, autostart and scheduler locations ask.
+    // Hands-off writes system and startup files directly; only OhMyBuddy's runtime, autostart and scheduler locations ask.
     for (const target of ['.git/config', '.bashrc', '.zprofile']) assert.equal(check('free', 'write', { path: target }), null, target);
     for (const target of ['.config/systemd/test.service', '.config/autostart/x.desktop', 'Library/LaunchAgents/x.plist', '.pivane-runtime/state.json']) {
         const decision = check('free', 'write', { path: target });

@@ -7,7 +7,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const root = path.resolve(__dirname, '../..'), cwd = '/srv/thread-card-fixture';
 const model = { provider: 'fixture', id: 'fixture', name: 'Fixture', input: ['text'] };
 const sessions = [
- ['named', 'Pivane v1.0.0-rc.3 版本发布', '我想请你帮我发布新版本，整理这次改进。'],
+ ['named', 'OhMyBuddy v1.0.0-rc.3 版本发布', '我想请你帮我发布新版本，整理这次改进。'],
  ['fallback', '', '感觉是不是可以把安装引导整理得更清楚，方便第一次使用的用户配置自己的项目与模型。'],
  ['running', '优化安装流程与文档', '安装流程的第一句话'],
  ['waiting', '扩展与工具管理', '等待确认的第一句话'],
@@ -26,7 +26,7 @@ async function run(browser, base, width, locale) {
   const req=route.request(),url=new URL(req.url());
   assert.equal(req.method(),'GET','card browsing must not write server state');
   if(url.pathname==='/api/pi/status')return route.fulfill({json:{ok:true,projectRoots:['/srv'],sessionWorkflows:true,sessionTransfer:true,nativeSettings:true}});
-  if(url.pathname==='/api/pi/projects')return route.fulfill({json:{projects:[{cwd,name:'Pivane 项目',sessionCount:sessions.length}],roots:['/srv'],pinnedProjects:[],hiddenProjects:[]}});
+  if(url.pathname==='/api/pi/projects')return route.fulfill({json:{projects:[{cwd,name:'OhMyBuddy 项目',sessionCount:sessions.length}],roots:['/srv'],pinnedProjects:[],hiddenProjects:[]}});
   if(url.pathname==='/api/pi/sessions')return route.fulfill({json:{sessions}});
   if(url.pathname==='/api/pi/activity')return route.fulfill({status:fresh?200:503,json:{runtimes:[...(retained?[{cwd,sessionId:'named',phase:'idle',busy:false}]:[]),{cwd,sessionId:'running',phase,busy:['running','tool','retrying','compacting'].includes(phase)},{cwd,sessionId:'waiting',phase:'waiting',busy:true},{cwd,sessionId:'error',phase:'error',busy:false}],replyNotices:[{cwd,sessionId:'unread',completionId:'notice',completedAt:'2026-09-19T10:08:00Z'}],pinnedProjects:[],hiddenProjects:[],deferred:{sessions:[{cwd,sessionId:'search',count:1,attention:false}]}}});
   if(url.pathname.endsWith('/deferred'))return route.fulfill({json:{jobs:url.pathname.includes('/search/')?[{id:'queued',status:'scheduled',preview:'Fixture queued message',dueAt:Date.now()+600000}]:[]}});
@@ -82,7 +82,7 @@ async function run(browser, base, width, locale) {
  const preview=row('search').locator('.pi-session-preview');await preview.waitFor();
  assert.match(await preview.innerText(),/^….*隐藏命中/);
  assert.equal(await preview.locator('b').count(),0);
- await page.locator('#pi-session-search').fill('Pivane v1.0');
+ await page.locator('#pi-session-search').fill('OhMyBuddy v1.0');
  assert.equal(await row('named').locator('.pi-session-preview').count(),0,'title match needs no duplicate preview');
  await page.locator('#pi-session-search').fill('自己的项目');
  assert.match(await row('fallback').locator('.pi-session-preview').innerText(),/自己的项目/);

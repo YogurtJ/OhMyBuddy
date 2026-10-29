@@ -46,6 +46,7 @@ function validToolEntries(value, field) {
 
 // All paths are selected by the server. Never offer an arbitrary settings-file editor.
 function safeFile(base, parts, create = false) {
+    if (/^(?:pivane|ohmybuddy)-(?:profiles|bots)$/.test(parts[0])) parts = [path.basename(require('./ohmybuddy-compat').dataFile(base, parts[0])), ...parts.slice(1)];
     if (!fs.existsSync(base)) { if (!create) return path.join(base, ...parts); fs.mkdirSync(base, { recursive: true, mode: 0o700 }); }
     let current = fs.realpathSync.native(base);
     for (let index = 0; index < parts.length - 1; index++) {

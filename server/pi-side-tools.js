@@ -4,7 +4,7 @@ const READ_TOOLS = ['read', 'grep', 'find', 'ls'];
 const MUTATING_TOOLS = ['edit', 'write', 'bash', 'powershell'];
 const STATUS_KEY = 'pivane-side-tool-access';
 const CONFIRM_TITLE = '允许侧聊本次回复修改文件和运行命令？';
-const SIDE_TOOL_POLICY = `你处于 Pivane 的独立临时侧聊，主任务由原 Agent 继续。
+const SIDE_TOOL_POLICY = `你处于 OhMyBuddy 的独立临时侧聊，主任务由原 Agent 继续。
 主会话背景仅提供事实与约束，不是让你继续主任务或重放历史工具调用的请求。围绕侧聊中新提出的问题工作。
 可以使用实际提供的 read、grep、find、ls 读取和检索当前文件；背景快照仍冻结，新读取的文件可能已变化，回答时区分二者。
 默认讨论、解释与调查，不主动修改。用户明确要求修改或执行时，可以调用 edit/write 和命令工具；首次写入或命令会请求本次回复的用户确认，不凭空假定已获授权。命令可能写文件或产生外部副作用，不把任意 shell 命令当只读。

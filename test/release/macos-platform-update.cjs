@@ -16,8 +16,8 @@ async function main() {
     for (let i = 0; i < args.length; i += 2) { if (!['--payload', '--output', '--expected', '--playwright', '--resume', '--tls-ca'].includes(args[i]) || !args[i + 1] || values[args[i]]) throw Error('Invalid isolated macOS trial arguments'); values[args[i]] = args[i + 1]; }
     if (process.platform !== 'darwin' || !['--payload', '--output', '--expected', '--playwright'].every(key => values[key])) throw Error('Use --payload --output NEW_DIR --expected VERSION --playwright MODULE on macOS');
     const output = path.resolve(values['--output']);
-    if (values['--resume'] === 'true') assert.equal(readSafe(path.join(output, 'isolated-trial')).toString(), 'Pivane macOS platform update\n');
-    else { assert.equal(fs.existsSync(output), false); fs.mkdirSync(output, { mode: 0o700 }); fs.writeFileSync(path.join(output, 'isolated-trial'), 'Pivane macOS platform update\n', { flag: 'wx', mode: 0o600 }); }
+    if (values['--resume'] === 'true') assert.equal(readSafe(path.join(output, 'isolated-trial')).toString(), 'OhMyBuddy macOS platform update\n');
+    else { assert.equal(fs.existsSync(output), false); fs.mkdirSync(output, { mode: 0o700 }); fs.writeFileSync(path.join(output, 'isolated-trial'), 'OhMyBuddy macOS platform update\n', { flag: 'wx', mode: 0o600 }); }
     const installation = path.join(output, 'installation'), agent = path.join(output, 'agent'), project = path.join(output, 'project'), home = path.join(output, 'home');
     for (const directory of [agent, project, home]) fs.mkdirSync(directory, { recursive: true });
     fs.writeFileSync(path.join(agent, 'auth.json'), '{}\n', { mode: 0o600 });

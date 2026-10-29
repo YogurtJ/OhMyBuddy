@@ -16,15 +16,19 @@ function tar(entries) {
     return gzipSync(Buffer.concat([...blocks, Buffer.alloc(1024)]));
 }
 function fixture(t) { const root = fs.mkdtempSync(path.join(os.tmpdir(), 'application-update-')); t.after(() => fs.rmSync(root, { recursive: true, force: true })); return path.join(root, 'release'); }
-function archive(extra = {}) {
-    const files = { 'package.json': JSON.stringify({ name: 'pivane', version: '1.2.3', dependencies: { '@earendil-works/pi-coding-agent': '0.86.0' } }), 'package-lock.json': JSON.stringify({ version: '1.2.3', packages: { '': { version: '1.2.3' } } }), ...extra };
-    const manifest = { product: 'Pivane', appVersion: '1.2.3', piVersion: '0.86.0', files: Object.entries(files).map(([name, value]) => ({ path: name, bytes: Buffer.byteLength(value), sha256: hash(Buffer.from(value)) })) };
-    return tar([...Object.entries(files), ['TRIAL_MANIFEST.json', JSON.stringify(manifest)]].map(([name, bytes]) => ['pivane-1.2.3/' + name, bytes]));
+function archive(extra = {}, product = 'OhMyBuddy') {
+    const namePrefix = product === 'OhMyBuddy' ? 'ohmybuddy' : 'pivane';
+    const files = { 'package.json': JSON.stringify({ name: namePrefix, version: '1.2.3', dependencies: { '@earendil-works/pi-coding-agent': '0.86.0' } }), 'package-lock.json': JSON.stringify({ version: '1.2.3', packages: { '': { version: '1.2.3' } } }), ...extra };
+    const manifest = { product, appVersion: '1.2.3', piVersion: '0.86.0', files: Object.entries(files).map(([name, value]) => ({ path: name, bytes: Buffer.byteLength(value), sha256: hash(Buffer.from(value)) })) };
+    return tar([...Object.entries(files), ['TRIAL_MANIFEST.json', JSON.stringify(manifest)]].map(([name, bytes]) => [namePrefix + '-1.2.3/' + name, bytes]));
 }
 test('application archive rejects traversal, links, duplicates, missing manifest and private files', t => {
     for (const entries of [[['pivane-1.2.3/../escape', 'bad']], [['pivane-1.2.3/link', '', '2']], [['pivane-1.2.3/a', 'a'], ['pivane-1.2.3/a', 'b']]]) assert.throws(() => unpack(tar(entries), '1.2.3', fixture(t)));
-    assert.throws(() => unpack(archive({ '.env': 'synthetic' }), '1.2.3', fixture(t)), /private/);
+    for (const name of ['.env', 'OHMYBUDDY_INSTALLATION.json', 'PIVANE_INSTALLATION.json', 'OHMYBUDDY_BUNDLE.json', 'PIVANE_BUNDLE.json', '.ohmybuddy-runtime/state.json', '.pivane-runtime/state.json']) {
+        assert.throws(() => unpack(archive({ [name]: 'synthetic' }), '1.2.3', fixture(t)), /private/);
+    }
     const dir = fixture(t); assert.equal(unpack(archive(), '1.2.3', dir).files.length, 2);
+    assert.equal(unpack(archive({}, 'Pivane'), '1.2.3', fixture(t)).product, 'Pivane');
     assert.equal(JSON.parse(fs.readFileSync(path.join(dir, 'package.json'))).version, '1.2.3');
 });
 test('application installer fails before npm on checksum mismatch and isolates installation credentials', async t => {

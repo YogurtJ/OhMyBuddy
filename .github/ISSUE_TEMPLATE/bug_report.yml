@@ -1,5 +1,5 @@
 name: 🐛 Bug 报告 / Bug report
-description: Pivane 出现错误或与预期不符 / Something in Pivane is broken or behaves unexpectedly
+description: OhMyBuddy 出现错误或与预期不符 / Something in OhMyBuddy is broken or behaves unexpectedly
 labels: [bug]
 body:
   - type: markdown
@@ -10,7 +10,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Pivane 版本 / Pivane version
+      label: OhMyBuddy 版本 / OhMyBuddy version
       description: 在“设置 → 版本与更新”查看 / See Settings → Versions and updates
       placeholder: 例如 / e.g. 1.10.0
     validations:

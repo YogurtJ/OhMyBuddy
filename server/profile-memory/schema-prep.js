@@ -9,7 +9,7 @@ const { createRequire } = require('node:module');
 // database (RPC worker, index worker thread, server document index) can then both
 // ALTER and one fails with "duplicate column name"; the index worker would stay
 // failed for its session. Apply the same additive columns once under BEGIN
-// IMMEDIATE before a Pivane-owned DatabaseManager opens the file, so upstream finds
+// IMMEDIATE before a OhMyBuddy-owned DatabaseManager opens the file, so upstream finds
 // them present. Keep this list equal to upstream's memories schema on upgrades.
 const MEMORY_COLUMNS = Object.freeze([
     ['hit_count', 'INTEGER NOT NULL DEFAULT 0'],

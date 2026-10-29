@@ -8,12 +8,13 @@ const { readSafe, privateDir, hash } = require('./pi-maintenance-files');
 const privateFiles = require('./pi-private-files');
 const MAX_IMAGE = 32 * 1024 ** 2;
 const MAX_REQUEST = 128 * 1024 ** 2;
-const MARKER = '[图片已单独保存；Pivane 会在看图时自动读取]';
+const MARKER = '[图片已单独保存；OhMyBuddy 会在看图时自动读取]';
+const isMarker = text => text === MARKER || text === '[图片已单独保存；Pivane 会在看图时自动读取]';
 function agentDirectory() { return path.resolve(process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.pi', 'agent')); }
-function isReference(block) { return Boolean(block && (block.type === 'text' || block.type === 'image' && block.data === '' && block.text === MARKER) && Object.hasOwn(block, 'pivaneImage')); }
+function isReference(block) { return Boolean(block && (block.type === 'text' || block.type === 'image' && block.data === '' && isMarker(block.text)) && Object.hasOwn(block, 'pivaneImage')); }
 function reference(block) {
     const ref = block?.pivaneImage;
-    if (!isReference(block) || block.text !== MARKER || ref?.version !== 1 || !/^[a-f0-9]{64}$/.test(ref.sha256)
+    if (!isReference(block) || !isMarker(block.text) || ref?.version !== 1 || !/^[a-f0-9]{64}$/.test(ref.sha256)
         || !Number.isSafeInteger(ref.bytes) || ref.bytes < 1 || ref.bytes > MAX_IMAGE
         || !ref.image || ref.image.type !== 'image' || typeof ref.image.mimeType !== 'string' || Object.hasOwn(ref.image, 'data'))
         throw new Error('图片引用无效，原始会话未改动');
@@ -24,7 +25,7 @@ function syncDirectory(directory) {
     const fd = fs.openSync(directory, 'r'); try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
 }
 class SessionImages {
-    constructor(agentDir = agentDirectory()) { this.root = path.join(path.resolve(agentDir), 'pivane-session-images'); }
+    constructor(agentDir = agentDirectory()) { this.root = require('./ohmybuddy-compat').dataFile(path.resolve(agentDir), 'ohmybuddy-session-images'); }
     directory(create = false) {
         if (fs.realpathSync.native(path.dirname(this.root)) !== path.dirname(this.root)) throw new Error('图片身份目录无效');
         if (create) privateDir(this.root);

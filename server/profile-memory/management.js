@@ -78,7 +78,7 @@ function listMemories(root, projects) {
         versions.push(`${file}:${data.revision}`);
         let ordinal = 0;
         for (const content of data.text.split('\n§\n').map(part => part.trim()).filter(Boolean)) {
-            // The recall key follows the SQLite row: Pivane indexes MEMORY/USER text per store
+            // The recall key follows the SQLite row: OhMyBuddy indexes MEMORY/USER text per store
             // scope, while legacy failure rows carry the entry's own project metadata.
             const entry = entryMetadata(content);
             items.push({ id: hash(`${file}\0${ordinal++}\0${content}`), kind: 'memory', target, content,
@@ -218,7 +218,7 @@ function mountProfileMemoryRoutes(router, { profiles, getAgentDir, bundlePath = 
             const agentDir = await getAgentDir();
             if (!path.isAbsolute(agentDir) || fs.realpathSync.native(agentDir) !== agentDir || profile.id !== profileId)
                 throw new Error('Invalid profile identity');
-            const root = path.join(agentDir, 'pivane-profiles', 'data', profileId);
+            const root = path.join(require('../ohmybuddy-compat').dataFile(agentDir, 'ohmybuddy-profiles'), 'data', profileId);
             if (!safeDir(root)) return res.json({ ...base, status: 'missing', reason: 'Profile data is not initialized' });
             const projects = projectRoots(root);
             const listing = kind === 'memories' ? listMemories(root, projects) : listSkills(root, projects);
@@ -253,7 +253,7 @@ function mountProfileMemoryRoutes(router, { profiles, getAgentDir, bundlePath = 
             const agentDir = await getAgentDir();
             if (!path.isAbsolute(agentDir) || fs.realpathSync.native(agentDir) !== agentDir || profile.id !== profileId)
                 throw new Error('Invalid profile identity');
-            const root = path.join(agentDir, 'pivane-profiles', 'data', profileId);
+            const root = path.join(require('../ohmybuddy-compat').dataFile(agentDir, 'ohmybuddy-profiles'), 'data', profileId);
             if (!safeDir(root)) return res.json({ ...base, status: 'missing' });
             const candidate = skillFiles(root, projectRoots(root)).find(entry => hash(entry.file) === skillId);
             if (!candidate) return res.json({ ...base, status: 'missing' });

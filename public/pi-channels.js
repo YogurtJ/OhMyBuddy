@@ -73,7 +73,7 @@
         const header = el('header', null, 'channel-header');
         const headerIcon = el('span', null, 'channel-header-icon'); headerIcon.append(icon('fa-comments'));
         const intro = el('div', null, 'channel-intro');
-        intro.append(el('h3', t('消息渠道', 'Messaging channels')), el('p', t('把微信私聊连接到 Pivane 线程，手机和网页共用对话上下文。', 'Connect a WeChat DM to a Pivane thread and continue the conversation from your phone.')));
+        intro.append(el('h3', t('消息渠道', 'Messaging channels')), el('p', t('把微信私聊连接到 OhMyBuddy 线程，手机和网页共用对话上下文。', 'Connect a WeChat DM to a OhMyBuddy thread and continue the conversation from your phone.')));
         const synced = el('span', '', 'channel-synced');
         const refreshButton = iconButton('fa-rotate', t('刷新状态', 'Refresh status'), () => refresh(true));
         const headerActions = el('div', null, 'channel-header-actions'); headerActions.append(synced, refreshButton);
@@ -233,7 +233,7 @@
         }
         async function write(action, values = {}) {
             if (!snapshot || writing || blocked) return;
-            if (action === 'install' && !window.confirm(t('下载并安装微信连接组件到 Pivane 服务器？安装后仍需扫码和绑定线程。', 'Download and install the WeChat connector on the Pivane server? QR login and a thread binding are still required.'))) return;
+            if (action === 'install' && !window.confirm(t('下载并安装微信连接组件到 OhMyBuddy 服务器？安装后仍需扫码和绑定线程。', 'Download and install the WeChat connector on the OhMyBuddy server? QR login and a thread binding are still required.'))) return;
             if (action === 'uninstall' && !window.confirm(t('卸载微信连接组件？账号、允许用户与线程绑定会保留，重新安装后可继续使用。', 'Uninstall the WeChat connector? Accounts, allowed users and thread bindings are kept for a later reinstall.'))) return;
             if (action === 'unbind-bot' && !window.confirm(t(`断开 ${values.botName}？${values.peerId} 不会再收到它的消息和提醒，聊天记录保留。`, `Disconnect ${values.botName}? ${values.peerId} will no longer get its messages and reminders. History is kept.`))) return;
             delete values.botName;
@@ -304,7 +304,7 @@
             const hasAccount = snapshot.accounts.length > 0, hasBinding = snapshot.bindings.length > 0;
             const steps = el('ol', null, 'channel-steps');
             const items = [
-                [t('安装组件', 'Install connector'), t('确认后下载到运行 Pivane 的机器。', 'Downloads to the machine running Pivane after you confirm.'), installed,
+                [t('安装组件', 'Install connector'), t('确认后下载到运行 OhMyBuddy 的机器。', 'Downloads to the machine running OhMyBuddy after you confirm.'), installed,
                     () => button(t('安装微信组件', 'Install WeChat connector'), () => write('install'), 'primary')],
                 [t('扫码授权微信', 'Scan QR code'), t('用手机微信扫码登录 ClawBot。', 'Scan with WeChat on your phone to sign in to ClawBot.'), hasAccount,
                     () => snapshot.login ? null : button(t('扫码连接微信', 'Connect with QR code'), () => write('login'), 'primary')],
@@ -404,7 +404,7 @@
                     c.broken ? 'error' : installed ? 'on' : 'off');
                 const compSubtitle = c.broken
                     ? t('组件校验未通过，请先停用连接后卸载重装。', 'Connector verification failed. Disable connections, then uninstall and reinstall.')
-                    : installed ? t(`腾讯官方组件 v${c.version}，版本随 Pivane 锁定并校验。`, `Official Tencent connector v${c.version}, pinned and verified by Pivane.`)
+                    : installed ? t(`腾讯官方组件 v${c.version}，版本随 OhMyBuddy 锁定并校验。`, `Official Tencent connector v${c.version}, pinned and verified by OhMyBuddy.`)
                     : t('按需安装；未安装时不会下载微信依赖或启动后台连接。', 'Optional installation. WeChat dependencies and connections are loaded only when installed.');
                 const compMenu = c.installed ? menu(t('微信组件', 'WeChat connector'), [{ label: t('卸载组件', 'Uninstall connector'), icon: 'fa-trash', variant: 'danger', action: () => write('uninstall') }]) : null;
                 component.replaceChildren(cardHead('fa-brands fa-weixin', t('微信 ClawBot', 'WeChat ClawBot'), compSubtitle, compBadge, compMenu));
@@ -571,7 +571,7 @@
                 if (job.sentChunks) sent.push(t(`文字 ${job.sentChunks} 段`, `${job.sentChunks} text chunks`));
                 if (job.sentMedia) sent.push(t(`图片/文件 ${job.sentMedia} 个`, `${job.sentMedia} images/files`));
                 if (sent.length) row.append(el('small', t('已发送：', 'Sent: ') + sent.join(' · '), 'channel-job-sent'));
-                if (job.waiting) row.append(el('p', t('正在等待交互确认，请打开 Pivane 线程处理。', 'Waiting for confirmation. Open the Pivane thread to respond.'), 'channel-job-alert'));
+                if (job.waiting) row.append(el('p', t('正在等待交互确认，请打开 OhMyBuddy 线程处理。', 'Waiting for confirmation. Open the OhMyBuddy thread to respond.'), 'channel-job-alert'));
                 const deliveryReasons = {
                     'delivery-unconfirmed': t('未收到明确的发送回执，为避免重复，本条没有重发。', 'No definite send receipt was received. This item was not resent to avoid duplicates.'),
                     'delivery-retrying': t('正在自动重试确定尚未发送的内容。', 'Automatically retrying content confirmed not sent.'),

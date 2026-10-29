@@ -2,7 +2,7 @@
 
 ## 子 Agent 专属设置
 
-设置 → **模型与能力**管理随 Pivane 交付的子 Agent。统一安装与旧 CLI 声明兼容见[内置能力包](BUNDLED_CAPABILITIES.md)。
+设置 → **模型与能力**管理随 OhMyBuddy 交付的子 Agent。统一安装与旧 CLI 声明兼容见[内置能力包](BUNDLED_CAPABILITIES.md)。
 
 直接管理全局/项目 settings.json 的 `subagents.defaultModel/defaultThinking` 和 `subagents.agentOverrides.<name>.model/thinking`，只修改提交字段，null 删除本层覆盖，保留工具、提示词、供应商覆盖和未知字段。模型及思考选项来自可用模型目录。本层保存值不是最终运行映射，角色定义、供应商覆盖和单次运行参数仍参与插件优先级。
 
@@ -14,10 +14,10 @@
 |---|---|---|
 | GET | `/api/pi/settings/subagents?cwd` | version/cwd/revision/trust、plugin 状态与版本、defaults、roles；仅返回模型和思考字段 |
 | PUT | `/api/pi/settings/subagents` | `{cwd,scope,expectedRevision,changes}`；changes 为 defaultModel/defaultThinking 或 agentOverrides.角色.model/thinking 的扁平键 |
-| POST | `/api/pi/settings/subagents/install` | 兼容旧客户端；校验确认与修订后返回 400，说明组件随 Pivane 管理，不另行安装 |
-| POST | `/api/pi/settings/subagents/upgrade` | 同上，组件只能随 Pivane 更新 |
+| POST | `/api/pi/settings/subagents/install` | 兼容旧客户端；校验确认与修订后返回 400，说明组件随 OhMyBuddy 管理，不另行安装 |
+| POST | `/api/pi/settings/subagents/upgrade` | 同上，组件只能随 OhMyBuddy 更新 |
 
-状态为 missing/disabled/unsupported/ready，ready 表示随当前 Pivane 交付的[内置版本](BUNDLED_CAPABILITIES.md)文件存在且配置启用，不代表当前 worker 已加载。`plugin.managedBy="pivane"`、`canInstall=false`、`upgradeFrom=null`。未就绪时写设置失败。写入复用 nativeSettingsBusy、身份/Origin、修订和配置互斥；设置保存使用原生 settings 锁、私有备份与原子写入，项目写入要求 trust。
+状态为 missing/disabled/unsupported/ready，ready 表示随当前 OhMyBuddy 交付的[内置版本](BUNDLED_CAPABILITIES.md)文件存在且配置启用，不代表当前 worker 已加载。`plugin.managedBy="pivane"`、`canInstall=false`、`upgradeFrom=null`。未就绪时写设置失败。写入复用 nativeSettingsBusy、身份/Origin、修订和配置互斥；设置保存使用原生 settings 锁、私有备份与原子写入，项目写入要求 trust。
 
 保存不启动子任务或重启服务，空闲后重开运行实例核对加载。失败或结果不明时先刷新，不自动重放；草稿按项目／范围保留，浏览器刷新会丢失。
 
@@ -41,7 +41,7 @@
 
 入口以需求输入为中心，示例为轻量标签；安装范围位于下方，“安装位置与项目”按需展开。底部突出“进入助手”按钮，短屏幕时正文内部滚动，按钮保留在底栏。点击后只创建原生会话，需求放入输入框后由用户发送，不自动调用模型或安装。助手使用正常会话的模型选择与工具权限；已有会话的草稿和附件保留在当前页面内存。“返回原会话”恢复原对话；刷新页面会丢失未发送草稿，但可以从会话列表重新打开扩展助手并继续。返回、关闭或停止不会撤销已经发生的安装。
 
-安装发生在运行 Pivane 的机器上，不是访问网页的电脑或手机。助手先检查已有资源，再检索和比较来源、许可、依赖、平台兼容性。官方来源不等于已适配或获得使用授权；公开下载不自动授予修改或分发权。助手只应在许可允许时适配技能，无法访问来源或验证失败时说明限制。
+安装发生在运行 OhMyBuddy 的机器上，不是访问网页的电脑或手机。助手先检查已有资源，再检索和比较来源、许可、依赖、平台兼容性。官方来源不等于已适配或获得使用授权；公开下载不自动授予修改或分发权。助手只应在许可允许时适配技能，无法访问来源或验证失败时说明限制。
 
 Pi 包操作使用 `extensions_inventory` 和 `extensions_package`：读取真实配置与修订，展示来源、范围和计划供用户确认，复用设置页的原生安装/更新/移除服务。项目安装仍要求信任；配置冲突或结果不确定时应先刷新核对，不自动重放。独立技能文件和系统依赖由已启用的常规工具在用户授权后配置，未提供统一依赖事务或一键回滚。许可检查、来源审查和这些常规工具操作由 Agent 指引约束，不是工具沙箱。
 
@@ -182,7 +182,7 @@ Package 的安装/移除使用公开 installAndPersist/removeAndPersist，local 
 
 资源清单为每个 Package 返回 `updateMode`（`check`、`pinned`、`local` 或 `managed`），能读取安装目录 `package.json` 时返回 `version`；技能读取 SKILL.md frontmatter 的 `version` 或 `metadata.version`（最多 500 个技能、64 KiB/文件，按文件身份缓存）。版本只作展示，只接受 40 字符内的字母、数字和 `.+_-`，其他值省略。
 
-检查更新是显式只读操作：`POST /settings/native/packages/updates {cwd, scope}` 调用公开的 `checkForAvailableUpdates()`，全局范围从身份目录执行，不读取未受信项目的 npm 配置；项目范围要求受信。固定版本、本地路径和 Pivane 内置组件不检查；`PI_OFFLINE` 时不联网并返回 `offline:true`。上游把单个包的查询失败视为没有更新，因此“未发现更新”不等于确认已是最新。结果只保存在服务内存，同一范围的并发请求共享一次检查；资源清单在配置修订未变且 24 小时内通过 `updates:{checkedAt,offline,available:[{source,scope,type}]}` 返回，任何包操作后清除。检查不安装、不写配置；更新仍走需确认的 `action:update`。
+检查更新是显式只读操作：`POST /settings/native/packages/updates {cwd, scope}` 调用公开的 `checkForAvailableUpdates()`，全局范围从身份目录执行，不读取未受信项目的 npm 配置；项目范围要求受信。固定版本、本地路径和 OhMyBuddy 内置组件不检查；`PI_OFFLINE` 时不联网并返回 `offline:true`。上游把单个包的查询失败视为没有更新，因此“未发现更新”不等于确认已是最新。结果只保存在服务内存，同一范围的并发请求共享一次检查；资源清单在配置修订未变且 24 小时内通过 `updates:{checkedAt,offline,available:[{source,scope,type}]}` 返回，任何包操作后清除。检查不安装、不写配置；更新仍走需确认的 `action:update`。
 
 新 Package 和资源写入要求 expectedRevision/confirmed:true。与原设置写入和登录流程互斥；不在后台静默安装、不调用模型。旧 Package API 保留兼容，界面在新后端使用新范围接口。
 

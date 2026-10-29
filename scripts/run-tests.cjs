@@ -40,7 +40,7 @@ function testEnvironment(environment) {
     for (const key of Object.keys(env)) {
         // A deployment's HTTPS cookie policy must not alter loopback HTTP fixtures.
         if (key === 'PI_PACKAGE_DIR' || key === 'PI_WEB_SECURE_COOKIE' || /^PI_SUBAGENT(?:_|S_)/.test(key)
-            || key.startsWith('PIVANE_') && !memoryFixtureEnv.has(key) || ambientProviderEnv.test(key) || /^(?:AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN|AWS_PROFILE|GOOGLE_APPLICATION_CREDENTIALS|MINIMAX_API_KEY)$/.test(key)) delete env[key];
+            || key.startsWith('OHMYBUDDY_') || key.startsWith('PIVANE_') && !memoryFixtureEnv.has(key) || ambientProviderEnv.test(key) || /^(?:AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN|AWS_PROFILE|GOOGLE_APPLICATION_CREDENTIALS|MINIMAX_API_KEY)$/.test(key)) delete env[key];
     }
     return env;
 }

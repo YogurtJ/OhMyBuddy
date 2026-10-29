@@ -64,7 +64,7 @@ class CronService {
     async initialize() {
         try {
             const { getAgentDir } = await getSdk();
-            this.db = new CronStore(this.filename || path.join(getAgentDir(), 'pivane-cron', 'scheduler.sqlite'));
+            this.db = new CronStore(this.filename || path.join(require('./ohmybuddy-compat').dataFile(getAgentDir(), 'ohmybuddy-cron'), 'scheduler.sqlite'));
             const now = this.now();
             for (const run of this.db.activeRuns()) if (run.status === 'waiting' && (run.job?.misfire.policy === 'skip'
                 || now - run.scheduledAt > (run.job?.misfire.graceMinutes || 30) * 60000)) {

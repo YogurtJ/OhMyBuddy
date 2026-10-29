@@ -9,7 +9,7 @@ const { PI_PACKAGES } = require('./pi-update-installer');
 function inspectBackup(root, id) {
     if (!/^[a-f0-9-]{36}$/.test(id || '')) throw new Error('Use a backup ID from this installation');
     root = fs.realpathSync.native(root);
-    const directory = path.join(root, '.pivane-runtime/backups', id);
+    const directory = path.join(require('./ohmybuddy-compat').runtimeDirectory(root), 'backups', id);
     if (fs.realpathSync.native(directory) !== directory) throw new Error('Backup directory must not be an alias');
     const proof = require('./pi-maintenance-backup').inspectBackupContents(directory);
     const { installation } = proof;
@@ -27,9 +27,9 @@ async function restoreBackup(root, id) {
     try {
         const plan = inspectBackup(root, id);
         if (process.platform === 'win32' && plan.manifest.entries.some(e => e.type === 'symlink')) throw new Error('This backup contains links; restore those with native Windows tools while stopped');
-        const stateFile = path.join(root, '.pivane-runtime/state.json');
+        const stateFile = path.join(require('./ohmybuddy-compat').runtimeDirectory(root), 'state.json');
         const state = fs.existsSync(stateFile) ? JSON.parse(readSafe(stateFile)) : { version: 1, active: null, previous: null };
-        const safetyId = randomUUID(), safetyDir = path.join(root, '.pivane-runtime/backups', safetyId);
+        const safetyId = randomUUID(), safetyDir = path.join(require('./ohmybuddy-compat').runtimeDirectory(root), 'backups', safetyId);
         const safety = backupRoots(plan.manifest.roots, safetyDir);
         const currentRoot = new ManagedLauncher({ root }).releasePath(state.active);
         recordInstallation(safetyDir, { release: state.active, package: JSON.parse(readSafe(path.join(currentRoot, 'package.json'))), lock: JSON.parse(readSafe(path.join(currentRoot, 'package-lock.json'), 16 * 1024 * 1024)) });

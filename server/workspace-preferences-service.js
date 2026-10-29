@@ -54,7 +54,7 @@ class WorkspacePreferencesService {
         const agentDir = options.agentDir
             || process.env.PI_CODING_AGENT_DIR
             || path.join(os.homedir(), '.pi', 'agent');
-        this.filePath = options.filePath || require('./pivane-compat').dataFile(agentDir, 'pivane-workspace.json');
+        this.filePath = options.filePath || require('./ohmybuddy-compat').dataFile(agentDir, 'pivane-workspace.json');
     }
 
     readDocument() {

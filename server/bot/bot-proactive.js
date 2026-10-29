@@ -369,7 +369,7 @@ class BotProactive {
         const push = found.notify.proactive && (limit === null || used < limit);
         if (push) {
             const count = held.length;
-            const accepted = await this.notifications?.broadcast?.({ id: hash('digest', profileId, now).slice(0, 32), title: 'Pivane',
+            const accepted = await this.notifications?.broadcast?.({ id: hash('digest', profileId, now).slice(0, 32), title: 'OhMyBuddy',
                 body: count === 1 ? `${found.profile.name} 在安静时段给你留了 1 条消息。` : `${found.profile.name} 在安静时段给你留了 ${count} 条消息。` });
             if (accepted === false) return;
             this.reveal(held);

@@ -46,7 +46,7 @@ function parseContext(raw) {
             || !path.isAbsolute(value.sessionPath) || path.resolve(value.sessionPath) !== value.sessionPath)) return null;
         const agentDir = path.dirname(path.dirname(path.dirname(path.resolve(value.profileRoot))));
         if (directoryIdentity(agentDir) !== agentDir
-            || path.resolve(value.profileRoot) !== path.join(agentDir, 'pivane-profiles', 'data', value.profileId)
+            || path.resolve(value.profileRoot) !== path.join(require('../ohmybuddy-compat').dataFile(agentDir, 'ohmybuddy-profiles'), 'data', value.profileId)
             || value.sessionsRoot !== path.join(agentDir, 'sessions')
             || directoryIdentity(value.sessionsRoot) !== value.sessionsRoot) return null;
         if (fs.existsSync(value.profileRoot)) directoryIdentity(value.profileRoot);

@@ -232,7 +232,7 @@ class PiSessionTransfer {
         const imageStore = new (require('./pi-session-images').SessionImages)();
         const assertPortable = entry => {
             const content = entry.type === 'message' ? entry.message?.content : entry.type === 'custom_message' ? entry.content : entry.replacement?.content;
-            if (Array.isArray(content) && content.some(require('./pi-session-images').isReference)) fail('导入文件缺少图片原件；请从来源 Pivane 导出完整 JSONL');
+            if (Array.isArray(content) && content.some(require('./pi-session-images').isReference)) fail('导入文件缺少图片原件；请从来源 OhMyBuddy 导出完整 JSONL');
         };
         entries.forEach(assertPortable);
         const hash = createHash('sha256').update(cwd).update('\0').update(content).digest('hex');

@@ -137,7 +137,7 @@
             if (action === 'export') {
                 const answer = await dialog({
                     title: tr('导出到服务器文件夹', 'Export to server folder'),
-                    description: tr('复制到运行 Pivane 的服务器上，不是当前手机或电脑。要保存到本机，请在预览中选择「下载到设备」。', 'Copies to the server running Pivane, not the device you are browsing on. To save to this device, use “Download to device” in the preview.'),
+                    description: tr('复制到运行 OhMyBuddy 的服务器上，不是当前手机或电脑。要保存到本机，请在预览中选择「下载到设备」。', 'Copies to the server running OhMyBuddy, not the device you are browsing on. To save to this device, use “Download to device” in the preview.'),
                     fields: [
                         { key: 'cwd', label: tr('项目路径', 'Project path'), value: this.state.projects[0]?.cwd || this.state.availableProjects[0]?.cwd || '', maxLength: 4096 },
                         { key: 'directory', label: tr('项目内的现有目录', 'Existing folder in the project'), value: '.', maxLength: 4096, hint: tr('不会覆盖同名文件，也不会创建新目录。', 'Existing files are never overwritten and no folders are created.') }

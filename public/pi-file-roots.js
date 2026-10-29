@@ -106,7 +106,7 @@
             form.onsubmit = event => { event.preventDefault(); void this.navigate(this.input.value.trim()); };
             this.directoryBar = node('div', 'pi-roots-directory-bar'); this.directories = node('div', 'pi-roots-directories'); this.directories.setAttribute('aria-label', t('服务器目录'));
             this.body.append(this.saved, form, this.directoryBar, this.directories);
-            const note = node('p', 'pi-roots-note', t('路径属于运行 Pivane 的服务器，不是当前设备。敏感目录仍受保护。')); this.body.append(note);
+            const note = node('p', 'pi-roots-note', t('路径属于运行 OhMyBuddy 的服务器，不是当前设备。敏感目录仍受保护。')); this.body.append(note);
             this.openButton = node('button', 'pi-roots-secondary', t('临时打开')); this.openButton.type = 'button'; this.openButton.disabled = true;
             this.openButton.onclick = () => { if (this.location) { this.choose(this.location); this.close(); } };
             this.addButton = node('button', 'pi-roots-primary', t('关联并打开')); this.addButton.type = 'button'; this.addButton.disabled = true;

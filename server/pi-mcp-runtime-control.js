@@ -1,6 +1,6 @@
 const { randomUUID } = require('node:crypto');
 const path = require('node:path');
-const { isInternalCommand } = require('./pivane-compat');
+const { isInternalCommand } = require('./ohmybuddy-compat');
 const fail = code => Object.assign(new Error(code), { code, statusCode: 409 });
 const actions = new Set(['snapshot', 'reconnect', 'login', 'logout']);
 function validateRequest(input) {

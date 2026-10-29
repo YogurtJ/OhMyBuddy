@@ -162,7 +162,7 @@ async function run(browser, base, width, locale, theme) {
  await page.waitForFunction(() => document.querySelectorAll('.artifacts-check[aria-checked=true]').length === 1);
  assert.equal(await wrap(kept).locator('.artifacts-check').getAttribute('aria-checked'), 'true', 'failed item remains selected');
  assert.equal(await wrap(second).locator('.artifacts-check').getAttribute('aria-checked'), 'false', 'successful item leaves selection'); failFavorite = false;
- await more('export'); assert.ok((await dialog().locator('.artifacts-dialog-text').textContent()).includes(locale === 'en' ? 'server running Pivane' : '运行 Pivane 的服务器')); await widths(page); await page.keyboard.press('Escape');
+ await more('export'); assert.ok((await dialog().locator('.artifacts-dialog-text').textContent()).includes(locale === 'en' ? 'server running OhMyBuddy' : '运行 OhMyBuddy 的服务器')); await widths(page); await page.keyboard.press('Escape');
  // Delete key opens confirmation from a selected card; cancellation never sends a write.
  await page.locator('.artifacts-manage-dialog').waitFor({ state: 'detached' });
  await wrap(kept).locator('.artifacts-check').focus();

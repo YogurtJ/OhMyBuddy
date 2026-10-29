@@ -1,6 +1,6 @@
 # Pi 原生 MCP 与 Codemode
 
-当前源码绑定 Pi 1.4.0；已公开的 Pivane 1.6.2／Pi 1.0.2 范围见[版本说明](releases/1.6.2.md)。源码新增行为和实际运行实例分别核对，旧归档不改写。
+当前源码绑定 Pi 1.4.0；已公开的 OhMyBuddy 1.6.2／Pi 1.0.2 范围见[版本说明](releases/1.6.2.md)。源码新增行为和实际运行实例分别核对，旧归档不改写。
 
 ## 配置与使用
 
@@ -24,7 +24,7 @@
 
 - 默认 `codemode`：模型写 JavaScript，在 QuickJS 沙箱通过 `tools.<name>()` 编排工具，只返回有用输出。工具本身仍以部署用户权限执行，不是文件权限沙箱。
 - `codemode-deferred` 在 Pi 1.0 中是 `codemode` 的兼容别名，网页统一显示 `codemode`；`deferred` 通过 `tool_search` 按需加载工具；`direct` 直接声明给模型；`hidden` 不可调用。`toolExposure` 可覆盖单项。所有调用，包括嵌套调用，仍经过 Pi 的工具事件与权限钩子。
-- CLI 管理为 `pi mcp add/remove/list/login/logout`；会话命令 `/mcp` 在 RPC 中输出状态，`/mcp login <server>` 等使用原生对话流程。网页入口为“扩展 → MCP”，见下节。Pivane 不提供旧适配器的 MCP Apps 网页、安装网关或 `mcpScript` 工具。
+- CLI 管理为 `pi mcp add/remove/list/login/logout`；会话命令 `/mcp` 在 RPC 中输出状态，`/mcp login <server>` 等使用原生对话流程。网页入口为“扩展 → MCP”，见下节。OhMyBuddy 不提供旧适配器的 MCP Apps 网页、安装网关或 `mcpScript` 工具。
 - 原生工具名为 `mcp__<server>__<tool>`，其中连字符规范化为下划线；超长或冲突名由 Pi 加哈希。仅连字符／下划线不同的服务器名会冲突，须使用不同名称；网页保存拒绝新增冲突，已有配置中被原生加载跳过的冲突项显示无效。配置中的 `toolExposure` 和子任务选择器保留原始名称，以实际注册目录核对工具，不能自行拼接授权名称。
 - 会话启动等待直接暴露的工具，其余服务器按原生按需机制连接。Codemode 提供 `searchTools()`、`describeTool()` 与 `describeNamespace()`，工具搜索也匹配描述；当前加载目录和调用权限仍分别校验。
 - 安装或保存配置不等于当前 worker 已加载。完成任务后重载当前资源或重开 worker，并核对实际工具目录。
@@ -46,9 +46,9 @@
 
 默认工具列表与 `codemode.mode/inlineBudget` 见[原生设置](NATIVE_SETTINGS.md#默认工具与全局信任策略2026-09-10)。它们控制工具选择与呈现，不是完整权限沙箱；声明预算不是执行超时，脚本超时使用 `@options.timeout_ms`。
 
-官方 Codemode executor／sandbox 保留单个脚本输出限制：16 Mi 个字符或 100000 次 text/image/console 调用。超过任一上限会令脚本失败；此前已完成的工具操作不回滚，不自动重试脚本。成功脚本的 store 写入沿用原生分支语义。文本分隔、console、返回值、截断、图片顺序与私有完整输出文件由原生实现处理，Pivane 已移除旧的输出合并适配。
+官方 Codemode executor／sandbox 保留单个脚本输出限制：16 Mi 个字符或 100000 次 text/image/console 调用。超过任一上限会令脚本失败；此前已完成的工具操作不回滚，不自动重试脚本。成功脚本的 store 写入沿用原生分支语义。文本分隔、console、返回值、截断、图片顺序与私有完整输出文件由原生实现处理，OhMyBuddy 已移除旧的输出合并适配。
 
-Pi 1.4 取消或超时会结束脚本调用并请求 VM 停止，VM 真实退出可能稍晚；单 Pi 进程默认最多有两个存活的 Codemode VM，`PI_CODEMODE_MAX_WORKERS` 可设为正整数并按调用读取。满额时新脚本按 FIFO 等待，最长 60 秒或更短的调用期限；等待计入执行期限，取消后仍占用额度至 VM 退出。这个限制不跨 Pivane 的不同 RPC 进程共享。失败或取消的 store 写入不提交，已有工具操作不回滚，不自动重放脚本。
+Pi 1.4 取消或超时会结束脚本调用并请求 VM 停止，VM 真实退出可能稍晚；单 Pi 进程默认最多有两个存活的 Codemode VM，`PI_CODEMODE_MAX_WORKERS` 可设为正整数并按调用读取。满额时新脚本按 FIFO 等待，最长 60 秒或更短的调用期限；等待计入执行期限，取消后仍占用额度至 VM 退出。这个限制不跨 OhMyBuddy 的不同 RPC 进程共享。失败或取消的 store 写入不提交，已有工具操作不回滚，不自动重放脚本。
 
 `autoEnableCodemode` 写在 `mcp.json`，不是 `settings.json`；是否实际启用仍以该 worker 的工具目录为准。关闭扩展、侧聊隔离和子任务授权边界保持不变。
 
@@ -62,13 +62,13 @@ Pi 1.4 取消或超时会结束脚本调用并请求 VM 停止，VM 真实退出
 
 ## 子 Agent 授权
 
-Pivane 保留 pi-subagents 的任务生命周期，用适配边界把 `mcp:server/tool` 选择器解析到 **父会话已连接、由 Pi 注册的原生工具名**。不读取旧 `mcp-cache.json`。父会话先连接服务器，再启动需要该工具的子任务；配置或项目变化、未连接、隐藏工具、缺失名字均失败关闭。仅运行时注册且未持久配置的服务器暂不能交给子任务。当前父会话工具授权快照为 16 KiB／至多 1024 项，超过预算的 MCP 选择器失败关闭，不降级到旧缓存；子会话等待已选服务器完成原生就绪检查，MCP 请求使用各服务器配置的超时；工厂销毁会取消等待并清理子会话。就绪失败或取消不发送模型请求，不另设 Pivane 的固定 10 秒轮询窗口。
+OhMyBuddy 保留 pi-subagents 的任务生命周期，用适配边界把 `mcp:server/tool` 选择器解析到 **父会话已连接、由 Pi 注册的原生工具名**。不读取旧 `mcp-cache.json`。父会话先连接服务器，再启动需要该工具的子任务；配置或项目变化、未连接、隐藏工具、缺失名字均失败关闭。仅运行时注册且未持久配置的服务器暂不能交给子任务。当前父会话工具授权快照为 16 KiB／至多 1024 项，超过预算的 MCP 选择器失败关闭，不降级到旧缓存；子会话等待已选服务器完成原生就绪检查，MCP 请求使用各服务器配置的超时；工厂销毁会取消等待并清理子会话。就绪失败或取消不发送模型请求，不另设 OhMyBuddy 的固定 10 秒轮询窗口。
 
-pi-subagents 0.82.1 的原生 MCP launch plan 使用同一经过校验的工具快照；上游选定 MCP／Codemode wrapper 负责就绪等待，Pivane 注入受过滤的工厂，子会话只创建一份 MCP 连接，并保留父会话传入的项目信任；未受信项目的上下文指令不进入子会话，身份级全局指令仍保留。严格子任务 `tools` 和 capability ceiling 同时限制直接调用与 Codemode 嵌套调用，授权列表只接受已解析的精确工具名，不把 `*` 或 `+/-` 当作新增授权。Pivane 主线程显式 `--tools` 白名单也隐藏未授权的 MCP 工具；普通列表可使用原生 `*` 匹配，但不会像上游 CLI 默认行为那样保留名单外的间接 MCP 工具。`+/-` 仅修改默认选择，不是授权。仅准许 `codemode` 不等于准许它调用所有服务器。拒绝扩展的子任务不获得 MCP。后台子任务的连接由自身会话管理，并在结束时关闭；前台子任务默认仍不加载父会话环境扩展。
+pi-subagents 0.82.1 的原生 MCP launch plan 使用同一经过校验的工具快照；上游选定 MCP／Codemode wrapper 负责就绪等待，OhMyBuddy 注入受过滤的工厂，子会话只创建一份 MCP 连接，并保留父会话传入的项目信任；未受信项目的上下文指令不进入子会话，身份级全局指令仍保留。严格子任务 `tools` 和 capability ceiling 同时限制直接调用与 Codemode 嵌套调用，授权列表只接受已解析的精确工具名，不把 `*` 或 `+/-` 当作新增授权。OhMyBuddy 主线程显式 `--tools` 白名单也隐藏未授权的 MCP 工具；普通列表可使用原生 `*` 匹配，但不会像上游 CLI 默认行为那样保留名单外的间接 MCP 工具。`+/-` 仅修改默认选择，不是授权。仅准许 `codemode` 不等于准许它调用所有服务器。拒绝扩展的子任务不获得 MCP。后台子任务的连接由自身会话管理，并在结束时关闭；前台子任务默认仍不加载父会话环境扩展。
 
 ## 从 pi-mcp-adapter 迁移
 
-Pivane 主／子运行时加载前过滤可识别的旧适配器包与路径，避免第三方 `/mcp` 替换原生实现；原文件保留，不自动卸载用户 CLI 包。发现页不再推荐安装适配器，管理 API 拒绝新增或更新旧适配器。
+OhMyBuddy 主／子运行时加载前过滤可识别的旧适配器包与路径，避免第三方 `/mcp` 替换原生实现；原文件保留，不自动卸载用户 CLI 包。发现页不再推荐安装适配器，管理 API 拒绝新增或更新旧适配器。
 
 **不能仅复制旧 mcp.json 就宣称兼容。** 旧适配器可能从其他客户端导入传输、使用 `bearerToken`、毫秒超时、过滤和懒连接；原生默认只读全局与受信 `.pi/mcp.json`，没有旧闲置连接策略。
 
@@ -79,7 +79,7 @@ Pivane 主／子运行时加载前过滤可识别的旧适配器包与路径，�
 node scripts/migrate-native-mcp.cjs --agent-dir /absolute/agent-dir \
   --legacy-defaults /absolute/reviewed-legacy-mcp.json
 
-# 所有 Pi/Pivane/CLI 写入已结束，停机并完成整批备份后再执行
+# 所有 Pi/OhMyBuddy/CLI 写入已结束，停机并完成整批备份后再执行
 node scripts/migrate-native-mcp.cjs --agent-dir /absolute/agent-dir \
   --legacy-defaults /absolute/reviewed-legacy-mcp.json --apply
 ```
@@ -93,7 +93,7 @@ node scripts/migrate-native-mcp.cjs --agent-dir /absolute/agent-dir \
 Pi 1.2.0 的 `tools.read()` 在图片文件上返回可传给 `image()` 的图片块；`image()` 同时以私有权限保存随机临时文件，后续可通过明确路径复用。临时文件不是永久成果，系统清理后可能失效。分类接口可接受支持图片输入的模型与 `images` 上下文，模型可用性及凭据取自原生目录；OpenAI Decisions 分类器需要 API Key，不自动把 ChatGPT 订阅转成该授权。多个 text 输出有分隔标记，console 输出集中展示，脚本内置对象冻结防止原型破坏。
 
 
-支持官方虚拟模型与分类模型 SDK，是否提供 Auto 路由由用户加载的扩展决定；Pivane 不自动改用其他模型。OpenAI 新 ChatGPT 登录沿用原生安装 deviceId 和认证接口，旧 Codex 身份不自动转换。Pi 1.0 Codemode 增加 `models.generateImages()`；Pivane 主线程与子任务的官方 Codemode 工厂在模型注册表边界拒绝该直接生成入口，并提示使用已有媒体规划、确认与一次性执行票据。模型目录与分类接口保留原生行为。聊天供应商凭据不会因此成为媒体执行授权。
+支持官方虚拟模型与分类模型 SDK，是否提供 Auto 路由由用户加载的扩展决定；OhMyBuddy 不自动改用其他模型。OpenAI 新 ChatGPT 登录沿用原生安装 deviceId 和认证接口，旧 Codex 身份不自动转换。Pi 1.0 Codemode 增加 `models.generateImages()`；OhMyBuddy 主线程与子任务的官方 Codemode 工厂在模型注册表边界拒绝该直接生成入口，并提示使用已有媒体规划、确认与一次性执行票据。模型目录与分类接口保留原生行为。聊天供应商凭据不会因此成为媒体执行授权。
 
 新配置能力仅使用原生文件与验证器：`oauth.clientRegistration:"cimd"` 与自定义模型 `samplingParamsByThinkingLevel` 可按官方文档手工配置，无关网页编辑保留这些字段；本批不新增专门配置界面。CIMD 不适用于所有服务器，其 clientId/clientName 与回调限制由原生校验。
 

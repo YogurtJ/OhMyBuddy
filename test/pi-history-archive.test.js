@@ -255,6 +255,6 @@ test('gateway archive: actual worker reads all views without changing model cont
     assert.doesNotMatch(JSON.stringify(index) + JSON.stringify(turns) + JSON.stringify(processView), /THINKING_SENTINEL|TOOL_RESULT_SENTINEL|PRIVATE_DETAILS/);
     assert.ok(!events.some(e => e.type === 'extension_ui_request' && /pivaneHistory|archived final/.test(e.message || '')));
     const worker = gateway.supervisor.getActiveWorker(session.path), originalRequest = worker.client.request.bind(worker.client);
-    worker.client.request = async (type, ...rest) => type === 'get_commands' ? { commands: [{ source: 'extension', path: path.join(__dirname, '../server/pi-web-session-extension.ts'), name: require('../server/pivane-compat').INTERNAL_COMMAND, description: 'history-v1; tree-v1' }] } : originalRequest(type, ...rest);
+    worker.client.request = async (type, ...rest) => type === 'get_commands' ? { commands: [{ source: 'extension', path: path.join(__dirname, '../server/pi-web-session-extension.ts'), name: require('../server/ohmybuddy-compat').INTERNAL_COMMAND, description: 'history-v1; tree-v1' }] } : originalRequest(type, ...rest);
     await assert.rejects(worker.historyRequest('archive', {}), /尚未加载历史接口/); worker.client.request = originalRequest;
 });

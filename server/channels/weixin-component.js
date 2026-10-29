@@ -48,8 +48,8 @@ async function compile(api, qr) {
     const files = new Map();
     for (const name of API_FILES) { if (!api.has(name)) throw new Error('Missing reviewed module'); files.set('/api/' + name, api.get(name)); }
     for (const name of QR_FILES) { if (!qr.has(name)) throw new Error('Missing QR module'); files.set('/qr/' + name, qr.get(name)); }
-    files.set('/api/dist/src/auth/accounts.js', 'export const loadConfigBotAgent = () => "Pivane/1"; export const loadConfigRouteTag = () => undefined;');
-    // Upstream diagnostics may contain complete API responses. Pivane reports
+    files.set('/api/dist/src/auth/accounts.js', 'export const loadConfigBotAgent = () => "OhMyBuddy/1"; export const loadConfigRouteTag = () => undefined;');
+    // Upstream diagnostics may contain complete API responses. OhMyBuddy reports
     // bounded status codes in its own service; no provider payload is logged.
     files.set('/api/dist/src/util/logger.js', 'const noop=()=>{}; export const logger={debug:noop,info:noop,warn:noop,error:noop};');
     files.set('/package-fs.js', `export default {existsSync:()=>true,readFileSync:()=>${JSON.stringify(api.get('package.json'))}};`);
@@ -117,7 +117,7 @@ class WeixinComponent {
             if (signal.aborted) throw Object.assign(new Error('安装已取消'), { code: 'ABORT_ERR' });
             // Verify independent loading and QR generation before publishing receipt.
             const loaded = await import('data:text/javascript;base64,' + Buffer.from(code).toString('base64'));
-            if (!loaded.qrMatrix('Pivane').length || typeof loaded.api.getUpdates !== 'function' || typeof loaded.cdnDecrypt.downloadAndDecryptBuffer !== 'function' || typeof loaded.cdnUpload.uploadBufferToCdn !== 'function') throw new Error('Component probe failed');
+            if (!loaded.qrMatrix('OhMyBuddy').length || typeof loaded.api.getUpdates !== 'function' || typeof loaded.cdnDecrypt.downloadAndDecryptBuffer !== 'function' || typeof loaded.cdnUpload.uploadBufferToCdn !== 'function') throw new Error('Component probe failed');
             stage = 'save';
             privateDir(this.directory);
             const licenses = archives.map((a, i) => ({ name: SOURCES[i].name, text: a.get('LICENSE') || a.get('LICENSE.txt') }));
@@ -126,7 +126,7 @@ class WeixinComponent {
             const upstreamFiles = [...API_FILES.map(name => ({ source: SOURCES[0].name, name, content: archives[0].get(name) })),
                 ...QR_FILES.map(name => ({ source: SOURCES[1].name, name, content: archives[1].get(name) }))];
             atomicJson(this.filename, { version: 2, sources: SOURCES, code, codeHash: hash(code), licenses, upstreamFiles,
-                adaptations: 'Pivane supplies account configuration, bounded network transport and private diagnostics; upstream module bytes are retained unchanged.', installedAt: new Date().toISOString() });
+                adaptations: 'OhMyBuddy supplies account configuration, bounded network transport and private diagnostics; upstream module bytes are retained unchanged.', installedAt: new Date().toISOString() });
             return this.status();
         } catch (error) { throw installError(stage, error); }
     }

@@ -1,23 +1,23 @@
 # Windows 原生安装与验证
 
-Pivane 在 Windows x64 上原生运行，无需 WSL，使用 Node 22.x、Git for Windows 与 ripgrep。各版本实际验收过的系统与文件系统见[验证范围](RELEASE_INSTALL_VALIDATION.md)；在其他环境遇到问题，欢迎通过 [Issues](https://github.com/YogurtJ/pivane/issues) 反馈。
+OhMyBuddy 在 Windows x64 上原生运行，无需 WSL，使用 Node 22.x、Git for Windows 与 ripgrep。各版本实际验收过的系统与文件系统见[验证范围](RELEASE_INSTALL_VALIDATION.md)；在其他环境遇到问题，欢迎通过 [Issues](https://github.com/YogurtJ/pivane/issues) 反馈。
 
 ## 安装前提
 
 当前源码的 `node scripts/install.cjs` 统一准备内置 pi-subagents 与 pi-hermes-memory，不再向共享 Pi 身份另行安装包；准备失败会返回安装错误。这个入口使用 SQLite 随包的原生二进制，避免 npm 无谓调用 Visual Studio C++ 编译。下文以 1.6.0 为例（安装其他版本时替换版本号），使用统一安装入口；旧归档没有此脚本时仍使用 `npm.cmd ci`。默认启用、旧配置兼容和平台依赖见[内置能力包](BUNDLED_CAPABILITIES.md)。
 
 - Node 22.x x64（当前锁定依赖要求 22.19.0 或更新的 22.x）、npm、Git for Windows（含 Git Bash）、ripgrep 在运行进程 PATH 中可用。Pi 使用项目锁定依赖，不需要全局安装。
-- Pivane 自身使用随包的 Node-API 8 组件，无需现场编译该组件。当前源码内置记忆的 `better-sqlite3` 另外安装适配当前 Node 的二进制；缺少预构建文件时需要 Python 与 Visual Studio C++ 构建工具，见[内置能力包](BUNDLED_CAPABILITIES.md)。维护者重建 Pivane 自身组件的要求见 native/README.md。
+- OhMyBuddy 自身使用随包的 Node-API 8 组件，无需现场编译该组件。当前源码内置记忆的 `better-sqlite3` 另外安装适配当前 Node 的二进制；缺少预构建文件时需要 Python 与 Visual Studio C++ 构建工具，见[内置能力包](BUNDLED_CAPABILITIES.md)。维护者重建 OhMyBuddy 自身组件的要求见 native/README.md。
 - 普通安装复用当前用户的 Pi CLI 身份，Windows 原生默认通常是 `C:\Users\<用户>\.pi\agent`，不是 AppData；非空 `PI_CODING_AGENT_DIR` 优先。媒体和预约使用实例独立路径。只有需要隔离身份时才另建专用 Pi 目录，不把身份指向驱动器根目录或整个主目录。
 - Git Bash 用于内置 Bash 和手动 `!`/`!!`。Pi 的可选 PowerShell 工具沿用原生设置。创建文件符号链接仍受 Windows 的开发者模式/权限限制；本项目不自动开启开发者模式。
 
 下面使用普通用户目录中的新实例。先将发布包和同名.sha256下载到Downloads；PowerShell执行：
 
 ```powershell
-$archive = Join-Path $env:USERPROFILE 'Downloads\pivane-1.6.0.tar.gz'
+$archive = Join-Path $env:USERPROFILE 'Downloads\ohmybuddy-1.6.0.tar.gz'
 $expected = (Get-Content -LiteralPath ($archive + '.sha256') -Raw).Trim().Split()[0]
 if ($expected -notmatch '^[a-fA-F0-9]{64}$' -or (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ine $expected) { throw '发布包校验失败' }
-$base = Join-Path $env:USERPROFILE 'Pivane'
+$base = Join-Path $env:USERPROFILE 'OhMyBuddy'
 if (Test-Path -LiteralPath $base) { throw '此目录已存在，请按更新流程操作或选择新的base' }
 $app = Join-Path $base 'releases\1.6.0'
 @($app, "$base\data\media", "$base\projects\demo", "$base\backups") | ForEach-Object { New-Item -ItemType Directory -Path $_ -Force | Out-Null }
@@ -51,7 +51,7 @@ PI_WORKSPACE_BASE_URL=http://127.0.0.1:11408
 PI_CODING_AGENT_DIR=$piIdentity
 PI_MEDIA_CONFIG_DIR=$dataRoot/data/media-lab
 PI_MEDIA_DATA_DIR=$dataRoot/data/media
-PI_WEB_DEFERRED_FILE=$dataRoot/data/pivane-deferred-messages.json
+PI_WEB_DEFERRED_FILE=$dataRoot/data/ohmybuddy-deferred-messages.json
 PI_PROJECT_ROOTS=$projectRoots
 "@
 [IO.File]::WriteAllText((Join-Path $base 'instance.env'), $config, [Text.UTF8Encoding]::new($false))
@@ -59,7 +59,7 @@ Copy-Item -LiteralPath (Join-Path $base 'instance.env') -Destination (Join-Path 
 node.exe scripts/install-service.cjs
 ```
 
-打开http://127.0.0.1:11408或桌面 Pivane 入口。安装终端可以关闭，以后用户登录时由计划任务启动；首次安装成功后不用每次重装依赖。运行进程已有环境变量优先于.env，启动前核对实际身份和认证依赖；保留原 Pi 需要的 Provider 环境变量、代理和命令 PATH，清除其他实例的无关覆盖，不输出秘密值，也不修改其他应用的系统环境。打开“供应商与模型”检查复用的配置，缺少可用认证时才登录。
+打开http://127.0.0.1:11408或桌面 OhMyBuddy 入口。安装终端可以关闭，以后用户登录时由计划任务启动；首次安装成功后不用每次重装依赖。运行进程已有环境变量优先于.env，启动前核对实际身份和认证依赖；保留原 Pi 需要的 Provider 环境变量、代理和命令 PATH，清除其他实例的无关覆盖，不输出秘密值，也不修改其他应用的系统环境。打开“供应商与模型”检查复用的配置，缺少可用认证时才登录。
 
 上例默认开放安装时 Windows 可见的各盘符根目录（例如`C:/;D:/`），系统文件权限继续生效；新增盘符时更新此配置并空闲重启。只有用户明确要求缩小范围时才设置`C:/Projects;D:/Work`等指定目录，使用分号分隔。实际目录必须存在，仍经过系统realpath、目录与权限检查。按需要修改instance.env并同步复制到当前代码目录，端口变更需同时修改PORT和PI_WORKSPACE_BASE_URL。上例只监听本机；开放远程访问需要相应监听地址、防火墙及访问验证配置。常驻配置、计划任务和桌面入口的管理见[后台常驻](BACKGROUND_SERVICE.md)。前台 `npm.cmd start` 仅用于试用与排障；停止前先结束任务并暂停预约，不能把强制结束任务当作正常退出。普通关闭与远端/脱离进程不是事务性撤销。
 
@@ -85,7 +85,7 @@ node.exe scripts/install-service.cjs
 - 拒绝 ADS、设备命名空间、保留设备名、盘符相对路径及含糊的末尾点/空格；网页文件链接支持盘符、反斜杠和行号。真实规范路径仍由后端核对。
 - 私密文件创建时携带受保护 DACL，只允许当前用户、SYSTEM 与管理员；专用 Pi 目录、项目原生配置目录和私有导出目录同步保护。不会用 POSIX mode 数值冒充 Windows ACL，也不修改系统临时目录权限。
 - 预约/访问/通知文件先通过可写句柄刷盘，再用 `MoveFileExW(REPLACE_EXISTING|WRITE_THROUGH)` 替换。Windows 不执行目录 fsync。打开文件导致系统拒绝替换时明确报错，不吞掉失败或重放外部请求。
-- 每个线程首次打开都会启动独立的 Pi worker，需要读取数千个依赖与扩展文件；实时病毒扫描可能使首次冷启动达到数十秒，之后的同线程操作复用已启动实例。worker 默认最多等待 120 秒就绪，可在 instance.env 设置 `PIVANE_WEB_STARTUP_TIMEOUT_MS`（20000–170000）。该值属于实例配置，升级复制同一 instance.env 后保留，无需修改源码。
+- 每个线程首次打开都会启动独立的 Pi worker，需要读取数千个依赖与扩展文件；实时病毒扫描可能使首次冷启动达到数十秒，之后的同线程操作复用已启动实例。worker 默认最多等待 120 秒就绪，可在 instance.env 设置 `OHMYBUDDY_WEB_STARTUP_TIMEOUT_MS`（20000–170000）。该值属于实例配置，升级复制同一 instance.env 后保留，无需修改源码。
 - 常见 HTTP 媒体连接保持原协议。Windows 的 GPU bridge 可指向明确的 Node 脚本（.js/.cjs/.mjs）或可执行文件；Node 脚本通过当前 runtime 启动，远端命令仍是单个参数，用户正文仍经 stdin，不启用 cmd shell 解析。真实 GPU 服务未在本轮调用。
 
 ## 验证结果

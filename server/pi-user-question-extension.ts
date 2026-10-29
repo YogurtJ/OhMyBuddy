@@ -8,7 +8,7 @@ export function registerUserQuestion(pi: ExtensionAPI) {
         if (ctx.mode !== 'rpc' || !process.env.PI_WEB_NAVIGATION_TOKEN) return;
         pi.registerTool({
             name: 'ask_user_question', label: 'Ask user', exposure: 'model-only',
-            description: 'Ask the user 1–4 questions in the Pivane Web UI and wait for their explicit answers. Each question may offer 2–8 options (label plus optional one-line description); the user can also type their own answer unless allowCustom is false, or skip a question. Omit options for a free-text question. The user answers all questions in one panel and submits once. Cancellation, timeout, stopping and unavailable UI return distinct statuses with no answers. Default timeout: 10 minutes for the whole call; maximum: 30 minutes.',
+            description: 'Ask the user 1–4 questions in the OhMyBuddy Web UI and wait for their explicit answers. Each question may offer 2–8 options (label plus optional one-line description); the user can also type their own answer unless allowCustom is false, or skip a question. Omit options for a free-text question. The user answers all questions in one panel and submits once. Cancellation, timeout, stopping and unavailable UI return distinct statuses with no answers. Default timeout: 10 minutes for the whole call; maximum: 30 minutes.',
             promptSnippet: 'Ask the user 1–4 short questions, each with optional choices',
             promptGuidelines: [
                 'Use ask_user_question when a meaningful user decision or missing information blocks progress. Group related questions into one call (at most 4). Prefer 2–4 concise, mutually exclusive options and put the recommended option first; continue independent work when possible.',

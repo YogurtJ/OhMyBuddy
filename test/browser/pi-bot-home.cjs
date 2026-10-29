@@ -33,12 +33,12 @@ const session = id => windowRecord(id).sessionId;
                 if (pathname !== '/api/pi/activity') return undefined;
                 if (failing) return { status: 500, json: { error: 'down' } };
                 return { json: { pinnedProjects: [], hiddenProjects: [], runtimes: [
-                    { cwd: '/fixture/PivaneBots/bot-11111111', sessionId: session(T1), phase: 'waiting', busy: true },
-                    { cwd: '/fixture/PivaneBots/bot-33333333', sessionId: session(T3), phase: 'tool', busy: true },
-                    { cwd: '/fixture/PivaneBots/bot-88888888', sessionId: session(MAIN3), phase: 'waiting', busy: true },
-                    { cwd: '/fixture/PivaneBots/bot-11111111', sessionId: session(MAIN), phase: 'idle', busy: false }],
-                    replyNotices: [{ cwd: '/fixture/PivaneBots/bot-33333333', sessionId: session(MAIN2), completionId: 'c1' },
-                        { cwd: '/fixture/PivaneBots/bot-11111111', sessionId: session(T2), completionId: 'c2' }] } };
+                    { cwd: '/fixture/OhMyBuddyBots/bot-11111111', sessionId: session(T1), phase: 'waiting', busy: true },
+                    { cwd: '/fixture/OhMyBuddyBots/bot-33333333', sessionId: session(T3), phase: 'tool', busy: true },
+                    { cwd: '/fixture/OhMyBuddyBots/bot-88888888', sessionId: session(MAIN3), phase: 'waiting', busy: true },
+                    { cwd: '/fixture/OhMyBuddyBots/bot-11111111', sessionId: session(MAIN), phase: 'idle', busy: false }],
+                    replyNotices: [{ cwd: '/fixture/OhMyBuddyBots/bot-33333333', sessionId: session(MAIN2), completionId: 'c1' },
+                        { cwd: '/fixture/OhMyBuddyBots/bot-11111111', sessionId: session(T2), completionId: 'c2' }] } };
             };
             const { context, page, errors } = await botPage(browser, base, world, { width, api, reducedMotion: width === 320 ? 'reduce' : 'no-preference' });
             const shot = async name => { if (evidence) { await page.waitForTimeout(200); await page.screenshot({ path: path.join(evidence, `${name}-${width}.png`) }); } };

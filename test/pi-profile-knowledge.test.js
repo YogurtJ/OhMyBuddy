@@ -23,7 +23,7 @@ function setup(t) {
         skills: { learnedEnabled: true } };
     const service = new ProfileKnowledgeService({ profiles: { getProfile: async key => key === id ? profile : null, reserve: work => work() },
         getAgentDir: async () => agent, bundlePath: bundle });
-    const root = path.join(agent, 'pivane-profiles', 'data', id);
+    const root = path.join(agent, 'ohmybuddy-profiles', 'data', id);
     let serial = 0;
     const mutate = async (operation, kind, fields = {}) => service.mutate(id, { requestId: `synthetic-${++serial}`,
         expectedRevision: (await service.snapshot(id)).revision, operation, kind, ...fields });
@@ -167,7 +167,7 @@ test('published skill with metadata failure is pending and same request repairs 
         operation: 'create', kind: 'skill', name: 'recover-skill', description: 'Recovery', content: 'Retain publication.' };
     const original = privateFiles.writePrivateFileSync;
     privateFiles.writePrivateFileSync = (file, content, sync) => {
-        if (file.includes('.pivane-knowledge.json.')) throw new Error('Synthetic metadata failure');
+        if (file.includes('.ohmybuddy-knowledge.json.')) throw new Error('Synthetic metadata failure');
         return original(file, content, sync);
     };
     try { await assert.rejects(service.mutate(id, input), /Synthetic metadata failure/); }
@@ -180,7 +180,7 @@ test('published skill with metadata failure is pending and same request repairs 
     assert.equal(result.status, 'saved');
     assert.equal(fs.readFileSync(file, 'utf8'), bytes);
     assert.equal((await service.mutate(id, input)).receipt.id, result.receipt.id);
-    assert.equal(fs.existsSync(path.join(root, '.pivane-knowledge.pending')), false);
+    assert.equal(fs.existsSync(path.join(root, '.ohmybuddy-knowledge.pending')), false);
 });
 
 test('unpublished skill retry reuses the same request after a verified pre-publication failure', async t => {
@@ -354,7 +354,7 @@ test('the request journal keeps accepting writes after the active receipt window
                 [Math.min(i + 2, 200), Math.max(i + 2 - 200, 0), i + 2]);
         }
     }
-    const data = JSON.parse(fs.readFileSync(path.join(root, '.pivane-knowledge.json'), 'utf8'));
+    const data = JSON.parse(fs.readFileSync(path.join(root, '.ohmybuddy-knowledge.json'), 'utf8'));
     assert.equal(data.version, 2);
     assert.equal(data.receipts.length, 200);
     assert.equal(data.archive.length, 6);
@@ -446,7 +446,7 @@ test('expired client request IDs are refused instead of re-executed', async t =>
     const input = { requestId: 'expiring-request', expectedRevision: (await service.snapshot(id)).revision,
         operation: 'create', kind: 'skill', name: 'expiring-skill', description: 'Expiry', content: 'Keep once.' };
     await service.mutate(id, input);
-    const ledgerPath = path.join(root, '.pivane-knowledge.json');
+    const ledgerPath = path.join(root, '.ohmybuddy-knowledge.json');
     const data = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
     data.requests['expiring-request'].at = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
     fs.writeFileSync(ledgerPath, JSON.stringify(data));
@@ -470,7 +470,7 @@ test('archived receipts stop being undoable while tombstones keep blocking reviv
     const updated = await service.mutate(id, { requestId: 'archive-update', expectedRevision: (await service.snapshot(id)).revision,
         operation: 'update', kind: 'memory', itemId: created.item.id, itemRevision: created.item.revision,
         category: 'fact', content: 'Replaced managed fact.' });
-    const ledgerPath = path.join(root, '.pivane-knowledge.json');
+    const ledgerPath = path.join(root, '.ohmybuddy-knowledge.json');
     const data = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
     while (data.receipts.length < 200) data.receipts.push({ requestId: `synthetic-${data.receipts.length}`,
         id: `synthetic-${data.receipts.length}`, operation: 'create', kind: 'skill', status: 'saved',
@@ -498,7 +498,7 @@ test('version 1 knowledge metadata upgrades on write and keeps idempotency and t
     const input = { requestId: 'legacy-request', expectedRevision: (await service.snapshot(id)).revision,
         operation: 'create', kind: 'memory', category: 'fact', content: 'Legacy managed fact.' };
     const saved = await service.mutate(id, input);
-    const ledgerPath = path.join(root, '.pivane-knowledge.json');
+    const ledgerPath = path.join(root, '.ohmybuddy-knowledge.json');
     const v2 = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
     assert.equal(v2.version, 2);
     const revisionBefore = (await service.snapshot(id)).revision;
@@ -539,7 +539,7 @@ test('large skill histories stay readable beyond 2 MiB and give up the oldest un
             name: 'large-proof', description: 'Large synthetic skill', content: body(i) });
         assert.equal(saved.status, 'saved');
     }
-    const ledgerBytes = fs.statSync(path.join(root, '.pivane-knowledge.json')).size;
+    const ledgerBytes = fs.statSync(path.join(root, '.ohmybuddy-knowledge.json')).size;
     assert.ok(ledgerBytes > 2 * 1024 * 1024, `ledger ${ledgerBytes} should exceed the old read limit`);
     assert.ok(ledgerBytes <= 8 * 1024 * 1024);
     const snapshot = await service.snapshot(id, { kind: 'skill' });
@@ -550,7 +550,7 @@ test('large skill histories stay readable beyond 2 MiB and give up the oldest un
     assert.equal(latest.id, saved.receipt.id);
     assert.equal(latest.undoable, true);
     // The snapshot lists only recent receipts; inspect the journal for the oldest ones.
-    const journal = JSON.parse(fs.readFileSync(path.join(root, '.pivane-knowledge.json'), 'utf8'));
+    const journal = JSON.parse(fs.readFileSync(path.join(root, '.ohmybuddy-knowledge.json'), 'utf8'));
     const dropped = journal.receipts.filter(row => row.undoable === false);
     assert.ok(dropped.length > 0, 'oldest copies were dropped to stay within budget');
     assert.equal(journal.receipts[0].id, first.id);
@@ -613,7 +613,7 @@ test('receipts carry origin, preview and category; origin cannot come from raw i
     const listed = (await service.snapshot(id)).receipts.map(row => row.origin);
     assert.deepEqual(listed, ['manual', 'agent', 'manual', 'learning', 'agent', 'manual']);
     // Compaction to the archive keeps origin but drops the preview text.
-    const ledgerPath = path.join(root, '.pivane-knowledge.json');
+    const ledgerPath = path.join(root, '.ohmybuddy-knowledge.json');
     const data = JSON.parse(fs.readFileSync(ledgerPath, 'utf8'));
     while (data.receipts.length < 200) data.receipts.push({ requestId: `filler-${data.receipts.length}`,
         id: `filler-${data.receipts.length}`, operation: 'create', kind: 'skill', status: 'saved',

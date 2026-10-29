@@ -127,7 +127,7 @@ function packageFixture(root) {
     const piDir = path.join(root, 'node_modules/@earendil-works/pi-coding-agent');
     fs.mkdirSync(piDir, { recursive: true });
     fs.writeFileSync(path.join(piDir, 'package.json'), JSON.stringify({ version: original.dependencies['@earendil-works/pi-coding-agent'] }));
-    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ ...original, pivaneCompatibility: undefined }));
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ ...original, ohmybuddyCompatibility: undefined, pivaneCompatibility: undefined }));
     fs.writeFileSync(path.join(root, 'package-lock.json'), JSON.stringify({ packages: {} }));
 }
 

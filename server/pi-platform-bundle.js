@@ -7,38 +7,41 @@ const { MAX_BUNDLE, VERSION, bundleName, assetUrl, configuration } = require('./
 function validBundle(release, platform = process.platform, arch = process.arch) {
     const bundle = release?.bundle;
     return bundle && platform === 'darwin' && bundle.platform === platform && bundle.arch === arch
-        && ['arm64', 'x64'].includes(arch) && Number.isSafeInteger(bundle.bytes) && bundle.bytes > 0 && bundle.bytes <= MAX_BUNDLE;
+        && ['arm64', 'x64'].includes(arch) && Number.isSafeInteger(bundle.bytes) && bundle.bytes > 0 && bundle.bytes <= MAX_BUNDLE && (bundle.product === undefined || require('./ohmybuddy-compat').isProduct(bundle.product));
 }
-function verifyManifest(manifest, entries, { version, platform, arch }) {
-    if (manifest?.version !== 1 || manifest.product !== 'Pivane' || manifest.appVersion !== version
+function verifyManifest(manifest, entries, { version, platform, arch, product }) {
+    const expectedProduct = product || manifest?.product;
+    const manifestName = expectedProduct === 'OhMyBuddy' ? 'OHMYBUDDY_BUNDLE.json' : 'PIVANE_BUNDLE.json';
+    if (manifest?.version !== 1 || !require('./ohmybuddy-compat').isProduct(manifest.product) || manifest.product !== expectedProduct || manifest.appVersion !== version
         || manifest.platform !== platform || manifest.arch !== arch || platform !== 'darwin' || !['arm64', 'x64'].includes(arch)
         || !/^22\.(\d+)\.\d+$/.test(manifest.nodeVersion) || Number(manifest.nodeVersion.split('.')[1]) < 19
         || !Array.isArray(manifest.files) || manifest.files.length !== entries.size - 1) throw Error('Platform bundle identity mismatch');
+    if (!entries.has(manifestName) || entries.has(expectedProduct === 'OhMyBuddy' ? 'PIVANE_BUNDLE.json' : 'OHMYBUDDY_BUNDLE.json')) throw Error('Conflicting platform manifest identity');
     const listed = new Set();
     for (const entry of manifest.files) {
         const file = entries.get(entry.path);
-        if (!file || listed.has(entry.path) || entry.path === 'PIVANE_BUNDLE.json' || ![0o644, 0o755].includes(entry.mode)
+        if (!file || listed.has(entry.path) || ['OHMYBUDDY_BUNDLE.json', 'PIVANE_BUNDLE.json'].includes(entry.path) || ![0o644, 0o755].includes(entry.mode)
             || file.mode !== entry.mode || entry.bytes !== file.bytes.length || hash(file.bytes) !== entry.sha256) throw Error('Platform bundle integrity mismatch');
         listed.add(entry.path);
     }
     for (const name of entries.keys()) if ((/^\.env(?:$|\.)/.test(name) && name !== '.env.example')
-        || /^(?:auth\.json|PIVANE_INSTALLATION\.json|PI_.*\.json)$/.test(name)
-        || /^(?:\.git|\.pivane-runtime|backups)(?:\/|$)/.test(name)
+        || /^(?:auth\.json|(?:OHMYBUDDY|PIVANE)_INSTALLATION\.json|PI_.*\.json)$/.test(name)
+        || /^(?:\.git|\.(?:ohmybuddy|pivane)-runtime|backups)(?:\/|$)/.test(name)
         || /^public\/(?:images|videos|audio)\//.test(name)) throw Error('Platform bundle contains user data');
     for (const file of ['runtime/bin/node', 'bin/rg', 'bin/fd', 'server/pi-update-probe.js', 'config/distribution.json']) if (!listed.has(file)) throw Error('Incomplete platform bundle');
     for (const file of ['runtime/bin/node', 'bin/rg', 'bin/fd']) if (entries.get(file).mode !== 0o755) throw Error('Platform tool is not executable');
     const pkg = JSON.parse(entries.get('package.json')?.bytes.toString() || 'null');
     const lock = JSON.parse(entries.get('package-lock.json')?.bytes.toString() || 'null');
     const pi = JSON.parse(entries.get('node_modules/@earendil-works/pi-coding-agent/package.json')?.bytes.toString() || 'null');
-    if (pkg?.name !== 'pivane' || pkg.version !== version || lock?.version !== version || lock.packages?.['']?.version !== version
+    if (pkg?.name !== (expectedProduct === 'OhMyBuddy' ? 'ohmybuddy' : 'pivane') || pkg.version !== version || lock?.version !== version || lock.packages?.['']?.version !== version
         || pkg.dependencies?.['@earendil-works/pi-coding-agent'] !== manifest.piVersion || pi?.version !== manifest.piVersion
-        || pkg.pivaneBundle?.platform !== platform || pkg.pivaneBundle?.arch !== arch || pkg.pivaneBundle?.nodeVersion !== manifest.nodeVersion) throw Error('Platform package identity mismatch');
+        || require('./ohmybuddy-compat').packageMetadata(pkg, 'Bundle')?.platform !== platform || require('./ohmybuddy-compat').packageMetadata(pkg, 'Bundle')?.arch !== arch || require('./ohmybuddy-compat').packageMetadata(pkg, 'Bundle')?.nodeVersion !== manifest.nodeVersion) throw Error('Platform package identity mismatch');
     return manifest;
 }
-function unpackBundle(bytes, { version, platform = process.platform, arch = process.arch }, directory) {
+function unpackBundle(bytes, { version, platform = process.platform, arch = process.arch, product = 'OhMyBuddy' }, directory) {
     if (!VERSION.test(version) || bytes.length > MAX_BUNDLE) throw Error('Invalid platform archive');
-    const entries = parseArchive(bytes, { prefix: bundleName(version, platform, arch).replace(/\.tar\.gz$/, '') + '/', maxExpanded: 1024 ** 3, maxFile: 128 * 1024 ** 2, maxFiles: 40000 });
-    const manifest = verifyManifest(JSON.parse(entries.get('PIVANE_BUNDLE.json')?.bytes.toString() || 'null'), entries, { version, platform, arch });
+    const entries = parseArchive(bytes, { prefix: bundleName(version, platform, arch, product).replace(/\.tar\.gz$/, '') + '/', maxExpanded: 1024 ** 3, maxFile: 128 * 1024 ** 2, maxFiles: 40000 });
+    const manifest = verifyManifest(JSON.parse(entries.get(product === 'OhMyBuddy' ? 'OHMYBUDDY_BUNDLE.json' : 'PIVANE_BUNDLE.json')?.bytes.toString() || 'null'), entries, { version, platform, arch, product });
     privateDir(directory);
     // All content is authenticated and checked before any entry is extracted.
     for (const [name, file] of entries) {
@@ -71,11 +74,11 @@ async function stageBundle({ root, directory, release, env = process.env, signal
     const config = configuration(env, root);
     if (!config) throw Error('Platform distribution is not configured');
     progress('downloading');
-    const url = assetUrl(config, release.version, release.bundle.platform, release.bundle.arch);
+    const url = assetUrl(config, release.version, release.bundle.platform, release.bundle.arch, release.bundle.product || 'OhMyBuddy');
     const bytes = await get(url, { env, signal, maxBytes: release.bundle.bytes, distributionOrigin: new URL(config.url).origin });
     if (bytes.length !== release.bundle.bytes || hash(bytes) !== release.sha256) throw Error('Platform archive SHA256 mismatch');
     progress('unpacking');
-    const manifest = unpackBundle(bytes, { version: release.version }, directory);
+    const manifest = unpackBundle(bytes, { version: release.version, product: release.bundle.product || 'OhMyBuddy' }, directory);
     progress('verifying');
     await probeBundle(directory, manifest, { env, signal, run, onOutput });
     const markerPath = path.join(directory, 'PI_INSTALL_COMPLETE.json'), marker = JSON.parse(readSafe(markerPath));

@@ -46,9 +46,9 @@
 
 ## 新增、更新与重复内容
 
-身份助手新增记忆或技能时，Pivane 先返回相关旧内容供比较，本次不保存。已有事实或流程可跳过；明确补充或纠正先读取完整旧条目并更新，独立新内容才继续新增。这个内部比较无需用户再次确认，服务仍核对身份、目录、参数和修订；不会把新增请求悄悄改成覆盖。
+身份助手新增记忆或技能时，OhMyBuddy 先返回相关旧内容供比较，本次不保存。已有事实或流程可跳过；明确补充或纠正先读取完整旧条目并更新，独立新内容才继续新增。这个内部比较无需用户再次确认，服务仍核对身份、目录、参数和修订；不会把新增请求悄悄改成覆盖。
 
-后台学习在原有一次专用辅助模型调用中比较 USER/MEMORY 和现有技能，明确选择跳过、新增、补充、纠正或提出合并方案。补充保留原文并追加新细节，纠正需要用户明确表述；多条合并保留原条目，审核后才应用。个人事实与偏好进入 USER，资料入口与有日期的长期经历进入 MEMORY；后台不会自动改写成品技能，新流程仍只生成待审草稿。相近内容的判断由模型完成，有界候选检索不保证识别所有改写；精确查重和范围／版本核验由 Pivane 保证。具体工具协议与限制见[记忆适配](PROFILE_MEMORY.md#agent-write-time-comparison)。
+后台学习在原有一次专用辅助模型调用中比较 USER/MEMORY 和现有技能，明确选择跳过、新增、补充、纠正或提出合并方案。补充保留原文并追加新细节，纠正需要用户明确表述；多条合并保留原条目，审核后才应用。个人事实与偏好进入 USER，资料入口与有日期的长期经历进入 MEMORY；后台不会自动改写成品技能，新流程仍只生成待审草稿。相近内容的判断由模型完成，有界候选检索不保证识别所有改写；精确查重和范围／版本核验由 OhMyBuddy 保证。具体工具协议与限制见[记忆适配](PROFILE_MEMORY.md#agent-write-time-comparison)。
 
 ## 主线程与定时任务
 
@@ -56,7 +56,7 @@
 
 ## 数据与会话归属
 
-私有档案注册表位于 `<Pi agentDir>/pivane-profiles/profiles.json`，档案数据位于 `data/<id>/`。部署或迁移前备份完整 Pi 身份目录。SOUL 保存协作方式，长期记忆保存稳定事实，动态学习进度和知识收藏仍以项目资料为准。
+私有档案注册表位于 `<Pi agentDir>/ohmybuddy-profiles/profiles.json`，档案数据位于 `data/<id>/`。部署或迁移前备份完整 Pi 身份目录。SOUL 保存协作方式，长期记忆保存稳定事实，动态学习进度和知识收藏仍以项目资料为准。
 
 注册表可选 `avatar` 为 null、`{kind:'emoji',value}`、`{kind:'image',version}` 或 `{kind:'preset',id}`。内置预设支持小石（`pivane-pebble`）、豆豆（`pivane-bean`）和方方（`pivane-tile`）；只保存稳定 ID，不保存 SVG 或外部路径，不自动替换已有头像。格式合法但目录暂缺的预设仍可读取，修改其他字段或原样保存时保留引用；新选未知 ID 拒绝，完整校验见 [API](API.md#可选助手档案)。图片作为独立的私有 PNG 资产保存，不在注册表嵌入数据或引用外部 URL。可选 `memory.memoryCharLimit`、`memory.userCharLimit` 分别默认 16000 和 8000 字符，允许范围分别为 256..65536 和 256..32768。缩小上限不删除旧数据，旧内容仍可读取并如实显示超限；运行 worker 的旧上限在重新加载前继续生效。
 
@@ -68,7 +68,7 @@
 
 ## 记忆组件安装与实例配置
 
-Pivane 随包提供 pi-hermes-memory 0.9.10 的选定组件。`node scripts/install.cjs` 安装依赖并构建当前应用目录的记忆 bundle，正常安装不再需要手动填写 `pivane-profiles/runtime.json`。平台 SQLite 依赖和故障补全步骤见[内置能力包](BUNDLED_CAPABILITIES.md)。
+OhMyBuddy 随包提供 pi-hermes-memory 0.9.10 的选定组件。`node scripts/install.cjs` 安装依赖并构建当前应用目录的记忆 bundle，正常安装不再需要手动填写 `ohmybuddy-profiles/runtime.json`。平台 SQLite 依赖和故障补全步骤见[内置能力包](BUNDLED_CAPABILITIES.md)。
 
 已有 `runtime.json.bundlePath` 保留；可用的内置组件优先，缺少可用内置组件时才按旧校验规则尝试该绝对路径。记忆数据目录不变。旧 `reviewModel` 配置只读兼容，不再供旧的三轮复盘调用。后台学习需要在“设置 → 辅助模型”按纠错、复盘、提取分别指定可用模型，并在档案的学习设置显式开启；保存两类设置本身均不发送模型请求。
 
@@ -107,7 +107,7 @@ Pivane 随包提供 pi-hermes-memory 0.9.10 的选定组件。`node scripts/inst
 
 `session.agentProfile` 为 null 或 `{id,name,avatar,enabled,available}`，只描述保存的身份。WebSocket `get_runtime_configuration.agentProfile` 返回 `saved`、`savedProfileRevision`、`loadedProfileId`、`loadedProfileRevision`、`loadedConfirmed`、`matchesSavedProfile`，区分身份相同但SOUL／设置版本已变化的情况。缺少确认时保持未验证。
 
-Supervisor在启动前核对原生会话身份，向符合条件的worker提供不含凭据的 `PIVANE_AGENT_PROFILE_CONTEXT`，包括version、profileId、sessionId、cwd、sessionPath、profileRoot、sessionsRoot和memory／skills开关。扩展再次验证会话归属，并将SOUL追加到Pi现有提示词；原生会话JSONL仍是唯一对话事实来源。
+Supervisor在启动前核对原生会话身份，向符合条件的worker提供不含凭据的 `OHMYBUDDY_AGENT_PROFILE_CONTEXT`，包括version、profileId、sessionId、cwd、sessionPath、profileRoot、sessionsRoot和memory／skills开关。扩展再次验证会话归属，并将SOUL追加到Pi现有提示词；原生会话JSONL仍是唯一对话事实来源。
 
 模块与持久化边界见[档案架构](development/AGENT_PROFILES.md)。
 

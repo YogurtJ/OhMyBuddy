@@ -1,14 +1,14 @@
 'use strict';
 
 // Blocks credentials and prompt-injection payloads before they are persisted to
-// profile memory or skills. Every Pivane knowledge write (manual web edit,
+// profile memory or skills. Every OhMyBuddy knowledge write (manual web edit,
 // background learning, Agent tool writes routed through the knowledge service,
 // the full-document editor) passes here, because those paths do not call the
 // upstream MemoryStore/SkillStore write methods that carry this check.
 //
 // The English threat and secret patterns are ported from pi-hermes-memory 0.9.9
 // src/store/content-scanner.ts (MIT License, Copyright (c) 2025 Chandra Teja),
-// which ports hermes-agent's memory threat scan. Pivane adds Chinese injection
+// which ports hermes-agent's memory threat scan. OhMyBuddy adds Chinese injection
 // phrases, newer key prefixes and structured error codes. Unlike upstream, a bare
 // variable name such as OPENAI_API_KEY is allowed: a name is not a secret, and
 // "the project reads OPENAI_API_KEY from .env" is a useful procedure note.

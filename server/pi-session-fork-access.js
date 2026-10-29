@@ -16,7 +16,7 @@ const referenceKey = ref => `${ref.id}:${ref.manifestRevision}`;
 async function directory(create = false) {
     const agent = fs.realpathSync.native((await getSdk()).getAgentDir());
     let current = agent;
-    for (const part of ['pivane-session-moves', 'forks']) {
+    for (const part of [path.basename(require('./ohmybuddy-compat').dataFile(agent, 'ohmybuddy-session-moves')), 'forks']) {
         current = path.join(current, part);
         if (create && privateDir(current) !== current) throw fail();
         const stat = fs.lstatSync(current);

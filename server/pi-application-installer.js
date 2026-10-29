@@ -11,6 +11,7 @@ function validApplicationVersion(version) {
 }
 function validRelease(release) {
     return release && validApplicationVersion(release.version) && /^[a-f0-9]{64}$/.test(release.sha256)
+        && (release.assetName === undefined || [`ohmybuddy-${release.version}.tar.gz`, `pivane-${release.version}.tar.gz`].includes(release.assetName))
         && (release.bundle === undefined || require('./pi-platform-bundle').validBundle(release));
 }
 async function download(url, { env, signal, request = fetch, maxBytes = MAX_ARCHIVE, distributionOrigin } = {}) {
@@ -28,7 +29,7 @@ async function download(url, { env, signal, request = fetch, maxBytes = MAX_ARCH
             if (target.protocol !== 'https:' || target.username || target.password || !trusted) throw Error('Untrusted release download origin');
             const agent = proxyFor(url, env || process.env);
             try {
-                const response = await request(url, { redirect: 'manual', size: maxBytes, signal: controller.signal, agent, headers: { 'User-Agent': 'Pivane-Application-Update' } });
+                const response = await request(url, { redirect: 'manual', size: maxBytes, signal: controller.signal, agent, headers: { 'User-Agent': 'OhMyBuddy-Application-Update' } });
                 if ([301, 302, 303, 307, 308].includes(response.status)) { response.body?.destroy(); url = new URL(response.headers.get('location'), url).href; continue; }
                 if (!response.ok) throw Error('Release download failed');
                 const bytes = await response.buffer();
@@ -44,7 +45,8 @@ async function download(url, { env, signal, request = fetch, maxBytes = MAX_ARCH
 function unpack(bytes, version, directory) {
     const tar = gunzipSync(bytes, { maxOutputLength: MAX_EXPANDED });
     const files = new Map(), names = new Set(); let offset = 0, ended = false;
-    const prefix = `pivane-${version}/`;
+    let prefix;
+    const prefixes = [`ohmybuddy-${version}/`, `pivane-${version}/`];
     const text = buffer => buffer.toString('utf8').replace(/\0.*$/s, '');
     while (offset + 512 <= tar.length) {
         const header = tar.subarray(offset, offset + 512); offset += 512;
@@ -54,7 +56,8 @@ function unpack(bytes, version, directory) {
         if (header.reduce((sum, b, i) => sum + (i >= 148 && i < 156 ? 32 : b), 0) !== checksum) throw Error('Invalid tar header');
         const name = (text(header.subarray(345, 500)) ? text(header.subarray(345, 500)) + '/' : '') + text(header.subarray(0, 100));
         const type = header[156], size = octal(header.subarray(124, 136));
-        if (![0, 48, 53].includes(type) || !name.startsWith(prefix) || name.includes('\\') || /[\x00-\x1f\x7f:]/.test(name)) throw Error('Unsupported archive entry');
+        prefix ||= prefixes.find(candidate => name.startsWith(candidate));
+        if (![0, 48, 53].includes(type) || (!prefix || !name.startsWith(prefix)) || name.includes('\\') || /[\x00-\x1f\x7f:]/.test(name)) throw Error('Unsupported archive entry');
         const relative = name.slice(prefix.length).replace(/\/$/, '');
         if (relative && relative.split('/').some(p => !p || p === '.' || p === '..' || /[. ]$/.test(p) || /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(p))) throw Error('Unsafe archive path');
         if (offset + size > tar.length || size > 32 * 1024 * 1024 || names.size >= 20000 || names.has(relative.toLowerCase())) throw Error('Invalid archive size or duplicate entry');
@@ -65,14 +68,14 @@ function unpack(bytes, version, directory) {
     }
     if (!ended) throw Error('Truncated archive');
     const manifest = JSON.parse(files.get('TRIAL_MANIFEST.json')?.toString() || 'null');
-    if (manifest?.product !== 'Pivane' || manifest.appVersion !== version || !Array.isArray(manifest.files) || manifest.files.length !== files.size - 1) throw Error('Release manifest mismatch');
+    if (!require('./ohmybuddy-compat').isProduct(manifest?.product) || (manifest.product === 'OhMyBuddy') !== prefix.startsWith('ohmybuddy-') || manifest.appVersion !== version || !Array.isArray(manifest.files) || manifest.files.length !== files.size - 1) throw Error('Release manifest mismatch');
     const listed = new Set();
     for (const entry of manifest.files) {
         if (listed.has(entry.path) || !files.has(entry.path) || entry.path === 'TRIAL_MANIFEST.json' || hash(files.get(entry.path)) !== entry.sha256 || files.get(entry.path).length !== entry.bytes) throw Error('Release file integrity mismatch');
         listed.add(entry.path);
     }
     // User data and installation control files must never be supplied by a package.
-    for (const name of files.keys()) if (/(^|\/)(?:node_modules|\.git|\.pivane-runtime|backups|local)(\/|$)/.test(name) || /^(?:\.env|auth\.json|PI_.*\.json)$/.test(name) || /^public\/(?:images|videos|audio)\//.test(name)) throw Error('Release contains private or runtime files');
+    for (const name of files.keys()) if (/(^|\/)(?:node_modules|\.git|\.(?:ohmybuddy|pivane)-runtime|backups|local)(\/|$)/.test(name) || /^(?:\.env|auth\.json|PI_.*\.json|(?:OHMYBUDDY|PIVANE)_(?:INSTALLATION|BUNDLE)\.json)$/.test(name) || /^public\/(?:images|videos|audio)\//.test(name)) throw Error('Release contains private or runtime files');
     privateDir(directory);
     for (const [name, body] of files) { const destination = path.join(directory, name); privateDir(path.dirname(destination)); fs.writeFileSync(destination, body, { flag: 'wx', mode: 0o600 }); }
     return manifest;
@@ -81,14 +84,15 @@ async function stageApplication({ root, directory, release, env = process.env, s
     if (!validRelease(release)) throw Error('Invalid application release identity');
     if (release.bundle) return require('./pi-platform-bundle').stageBundle({ root, directory, release, env, signal, run, get, progress, onOutput });
     progress('downloading');
-    const url = `https://github.com/YogurtJ/pivane/releases/download/v${release.version}/pivane-${release.version}.tar.gz`;
+    const asset = release.assetName || `ohmybuddy-${release.version}.tar.gz`;
+    const url = `https://github.com/YogurtJ/pivane/releases/download/v${release.version}/${asset}`;
     const bytes = await get(url, { env, signal });
     if (bytes.length > MAX_ARCHIVE || hash(bytes) !== release.sha256) throw Error('Application archive SHA256 mismatch');
     const manifest = unpack(bytes, release.version, directory);
     const pkg = JSON.parse(readSafe(path.join(directory, 'package.json')));
     const lock = JSON.parse(readSafe(path.join(directory, 'package-lock.json'), 16 * 1024 * 1024));
     const pi = pkg.dependencies?.['@earendil-works/pi-coding-agent'];
-    if (pkg.name !== 'pivane' || pkg.version !== release.version || lock.version !== pkg.version || lock.packages?.['']?.version !== pkg.version || !exactVersion(pi) || manifest.piVersion !== pi) throw Error('Application package identity mismatch');
+    if (pkg.name !== (manifest.product === 'OhMyBuddy' ? 'ohmybuddy' : 'pivane') || pkg.version !== release.version || lock.version !== pkg.version || lock.packages?.['']?.version !== pkg.version || !exactVersion(pi) || manifest.piVersion !== pi) throw Error('Application package identity mismatch');
     progress('installing');
     const installEnv = installEnvironment(env, directory);
     await run([npmCli(env), 'ci', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: directory, env: installEnv, signal, onOutput, secretEnv: env });

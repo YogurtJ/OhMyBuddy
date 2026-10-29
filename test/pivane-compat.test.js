@@ -16,13 +16,13 @@ function fixture(t) {
     return root;
 }
 
-test('new installations use Pivane names; existing data and damaged legacy paths are not silently replaced', t => {
-    const root = fixture(t), legacy = path.join(root, 'pi5-workspace.json'), current = path.join(root, 'pivane-workspace.json');
+test('new installations use OhMyBuddy names; existing data and damaged legacy paths are not silently replaced', t => {
+    const root = fixture(t), legacy = path.join(root, 'pi5-workspace.json'), current = path.join(root, 'ohmybuddy-workspace.json');
     assert.equal(dataFile(root, 'pivane-workspace.json'), current);
     fs.writeFileSync(legacy, 'legacy bytes');
     assert.equal(dataFile(root, 'pivane-workspace.json'), legacy);
     fs.writeFileSync(current, 'new bytes');
-    assert.throws(() => dataFile(root, 'pivane-workspace.json'), /Both/);
+    assert.throws(() => dataFile(root, 'pivane-workspace.json'), /Conflicting/);
     assert.equal(fs.readFileSync(legacy, 'utf8'), 'legacy bytes');
     if (process.platform !== 'win32') {
         const broken = path.join(root, 'pi5-access.json');
@@ -31,7 +31,7 @@ test('new installations use Pivane names; existing data and damaged legacy paths
     }
 });
 
-test('Pivane environment aliases preserve inherited precedence, clean isolation and native Pi identity', t => {
+test('OhMyBuddy environment aliases preserve inherited precedence, clean isolation and native Pi identity', t => {
     const root = fixture(t), file = path.join(root, '.env');
     fs.writeFileSync(file, 'PIVANE_PROJECT_ROOTS=/from-file\nPIVANE_WEB_TOKEN=synthetic-file-value\nPI_CODING_AGENT_DIR=/native-identity\n');
     const env = { PI_PROJECT_ROOTS: '/inherited', PI_WEB_TOKEN: 'synthetic-inherited-value' };

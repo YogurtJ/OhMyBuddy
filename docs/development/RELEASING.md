@@ -1,4 +1,4 @@
-# Pivane 发布准备
+# OhMyBuddy 发布准备
 
 ## 版本边界
 
@@ -45,7 +45,7 @@ node scripts/publish-platform.cjs --build /private/new-output/build.json --key /
 node scripts/refresh-platform-channel.cjs --channel-file /private/public-output/channels/preview.json --key /private/signing.pem --key-id release-key
 ```
 
-构建只复制统一 `distributionFiles()` 集合，使用专用 Node 22 和独立 npm 配置安装锁定依赖，保留工具许可证，不使用维护者 node_modules／身份／供应商环境。发布包仅含普通文件，清单绑定字节、SHA256 和执行位，含 Node、Pi、依赖和本地工具；`PIVANE_BUNDLE.json` 与源码包的 `TRIAL_MANIFEST.json` 分开。源归档的私有文件与 node_modules 拒绝规则不放宽。DMG 中的应用仅为不可变安装入口，可写安装与数据在 Application Support；不要求用户运行 npm。预览版未签名和未公证须明确标记。
+构建只复制统一 `distributionFiles()` 集合，使用专用 Node 22 和独立 npm 配置安装锁定依赖，保留工具许可证，不使用维护者 node_modules／身份／供应商环境。发布包仅含普通文件，清单绑定字节、SHA256 和执行位，含 Node、Pi、依赖和本地工具；`OHMYBUDDY_BUNDLE.json` 与源码包的 `TRIAL_MANIFEST.json` 分开。源归档的私有文件与 node_modules 拒绝规则不放宽。DMG 中的应用仅为不可变安装入口，可写安装与数据在 Application Support；不要求用户运行 npm。预览版未签名和未公证须明确标记。
 
 发布器先验证并复制不可覆盖的版本资产，最后原子更新签名渠道和下载页；初次公开上传前仍须完成对应平台验证。签名清单有效期 30 天，维护者须在到期前重新发布经过签名的清单；客户端到期后显示检查失败。`refresh-platform-channel.cjs` 只在原始签名与元数据验证后更新时间，不增删或修改版本；它也能续签已过期的本地批准清单。刷新后将同一渠道 JSON 原子部署到分发服务器，新增版本仍使用发布器。下载服务器只需公开产物和公钥，不放签名私钥、构建凭据或私有验证数据。HTTP 入口用于证书验证和 HTTPS 跳转；非标准 HTTPS 端口需要实际公网入站验证。
 

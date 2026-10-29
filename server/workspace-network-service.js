@@ -45,7 +45,7 @@ class WorkspaceNetworkService {
         // A prior managed release proves an existing installation. Preserve its
         // unspecified bind instead of silently disconnecting remote users.
         this.legacy = false;
-        try { if (env.PI_MEDIA_PROFILE !== 'clean') { const state = JSON.parse(readSafe(path.join(env.PI_MANAGED_BASE || root, '.pivane-runtime/state.json'), 1024 * 1024)); this.legacy = typeof state.active === 'string'; } }
+        try { if (env.PI_MEDIA_PROFILE !== 'clean') { const state = JSON.parse(readSafe(path.join(require('./ohmybuddy-compat').runtimeDirectory(env.PI_MANAGED_BASE || root), 'state.json'), 1024 * 1024)); this.legacy = typeof state.active === 'string'; } }
         catch (error) { if (error.code !== 'ENOENT') throw fail('无法核对原监听配置，请在部署配置中明确设置 HOST', 503); }
         if (this.config.defaultListen) this.legacy = this.config.defaultListen === 'legacy';
         this.host = this.resolveHost(this.config.listen);
@@ -144,7 +144,7 @@ class WorkspaceNetworkService {
         try {
             const target = body.target === 'github' ? 'https://api.github.com/repos/YogurtJ/pivane' : 'https://registry.npmjs.org/-/ping';
             agent = proxyAgent(target, environmentFor(proxy, this.env, this.nativeProxy, this.host));
-            const response = await this.fetch(target, { method: 'GET', redirect: 'error', size: 16384, signal: controller.signal, agent, headers: { 'User-Agent': 'Pivane-Network-Test' } });
+            const response = await this.fetch(target, { method: 'GET', redirect: 'error', size: 16384, signal: controller.signal, agent, headers: { 'User-Agent': 'OhMyBuddy-Network-Test' } });
             response.body?.destroy();
             return { reached: true, ok: response.ok, status: response.status, durationMs: Date.now() - now };
         } catch { return { reached: false, ok: false, durationMs: Date.now() - now }; }

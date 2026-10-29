@@ -19,7 +19,7 @@
         unchecked: '尚未检查', available: '发现新版本', current: '已是最新', ahead: '当前版本较新',
         unknown: '版本无法比较', 'no-release': '暂无发布版本', error: '暂时无法检查'
     };
-    const agentPrompt = '请协助我更新部署机器上的 Pivane，并评估是否需要同步更新其使用的 Pi Coding Agent。先只读核对当前运行实例、源码/运行版本、官方仓库发布版本、Pi 实际版本和锁定依赖；阅读 https://github.com/YogurtJ/pivane 的 docs/AGENT_GUIDE.md、docs/INSTALL_RECOVERY.md 及目标版本说明；只有涉及修改源码时再遵循仓库 AGENTS.md，不要用旧发布包覆盖尚未发布的修复。先向我说明差异、兼容性、备份范围、实施及回退计划，等我明确确认后才执行。执行前确认所有任务、子 Agent、Shell、侧聊、预约及外部共用身份的写入已安全结束，保存草稿与附件；停机备份身份、会话、配置、媒体与项目数据，校验下载来源及包哈希，保留旧版并验证升级后的版本和数据。不要自动重试不确定的操作，不要删除用户数据。如果你本身运行在待更新的 Pivane 实例里，不要在当前会话中停止或重启承载你的服务；请让部署机器上的独立 Agent 或管理员在安全窗口执行，并从外部核对结果。';
+    const agentPrompt = '请协助我更新部署机器上的 OhMyBuddy，并评估是否需要同步更新其使用的 Pi Coding Agent。先只读核对当前运行实例、源码/运行版本、官方仓库发布版本、Pi 实际版本和锁定依赖；阅读 https://github.com/YogurtJ/pivane 的 docs/AGENT_GUIDE.md、docs/INSTALL_RECOVERY.md 及目标版本说明；只有涉及修改源码时再遵循仓库 AGENTS.md，不要用旧发布包覆盖尚未发布的修复。先向我说明差异、兼容性、备份范围、实施及回退计划，等我明确确认后才执行。执行前确认所有任务、子 Agent、Shell、侧聊、预约及外部共用身份的写入已安全结束，保存草稿与附件；停机备份身份、会话、配置、媒体与项目数据，校验下载来源及包哈希，保留旧版并验证升级后的版本和数据。不要自动重试不确定的操作，不要删除用户数据。如果你本身运行在待更新的 OhMyBuddy 实例里，不要在当前会话中停止或重启承载你的服务；请让部署机器上的独立 Agent 或管理员在安全窗口执行，并从外部核对结果。';
     function create({ apiFetch }) {
         const panel = document.getElementById('settings-updates-panel');
         const notifications = window.PiUpdateNotifications.start({ apiFetch });
@@ -38,7 +38,7 @@
             check.disabled = busy; check.addEventListener('click', () => void load(true));
             header.append(heading, check); panel.append(header);
             const cards = node('div', undefined, { class: 'updates-cards', 'aria-busy': String(busy) });
-            for (const [key, name, current, info] of [['pivane', 'Pivane', data.appVersion, data.pivane], ['pi', 'Pi Coding Agent', data.piVersion, data.pi]]) {
+            for (const [key, name, current, info] of [['pivane', 'OhMyBuddy', data.appVersion, data.pivane], ['pi', 'Pi Coding Agent', data.piVersion, data.pi]]) {
                 const card = node('article', undefined, { class: 'updates-card', id: 'updates-' + key });
                 const top = node('div', undefined, { class: 'updates-card-top' });
                 const icon = node('span', undefined, { class: 'updates-card-icon', 'aria-hidden': 'true' });
@@ -54,7 +54,7 @@
                 card.append(versions);
                 if (key === 'pi' && !data.dependencyMatches) card.append(node('p', t('当前 Pi 与发布包配套版本不同。'), { class: 'updates-note' }));
                 const links = node('div', undefined, { class: 'updates-links' });
-                links.append(link(t(key === 'pi' && !data.distributionUrl ? 'Pi 官方页面' : 'Pivane 发布页面'), info.releasesUrl, data.distributionUrl));
+                links.append(link(t(key === 'pi' && !data.distributionUrl ? 'Pi 官方页面' : 'OhMyBuddy 发布页面'), info.releasesUrl, data.distributionUrl));
                 card.append(links); cards.append(card);
             }
             panel.append(cards, installer.render(data));
@@ -65,7 +65,7 @@
             const guide = node('details', undefined, { class: 'updates-agent-guide', id: 'updates-agent-guide' }); guide.open = promptOpen;
             guide.append(node('summary', t('交给独立 Agent 协助更新')));
             const content = node('div', undefined, { class: 'updates-agent-content' });
-            content.append(node('p', t('在部署机器上使用独立 Agent；不要让正在被更新的 Pivane 会话重启自身。先让它核对并提出计划，确认后再执行。')));
+            content.append(node('p', t('在部署机器上使用独立 Agent；不要让正在被更新的 OhMyBuddy 会话重启自身。先让它核对并提出计划，确认后再执行。')));
             const prompt = node('textarea', t(agentPrompt), { id: 'updates-agent-prompt', readonly: '', 'aria-label': t('更新提示词') });
             const copy = node('button', t('复制提示词'), { type: 'button', class: 'settings-secondary-button', id: 'updates-copy-prompt' });
             const copyFeedback = node('span', '', { role: 'status', 'aria-live': 'polite', class: 'updates-copy-feedback' });

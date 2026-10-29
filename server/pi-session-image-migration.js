@@ -50,7 +50,7 @@ async function migrate(plan, { agentDir, directory, assertOffline, sdk }) {
         // storage migration. A separate proof-preserving migration is required
         // for those sessions; never silently alter their receipts.
         let moves = '';
-        const moveRecords = path.join(agentDir, 'pivane-session-moves', 'records.json');
+        const moveRecords = path.join(require('./ohmybuddy-compat').dataFile(agentDir, 'ohmybuddy-session-moves'), 'records.json');
         if (fs.existsSync(moveRecords)) moves = JSON.stringify(JSON.parse(readSafe(moveRecords, 16 * 1024 ** 2)));
         for (const row of plan.files) {
             if (moves.includes(JSON.stringify(row.sessionId))) throw new Error('Session has move evidence; image migration requires a preserved prefix proof');

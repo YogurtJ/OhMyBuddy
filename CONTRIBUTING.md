@@ -1,4 +1,4 @@
-# 参与 Pivane 开发
+# 参与 OhMyBuddy 开发
 
 从 [源码 Agent 入口](AGENTS.md)、[模块导航](docs/development/MODULES.md) 和 [开发流程](docs/development/WORKFLOW.md) 找到本次任务的实现、契约与验证入口。整体数据边界见 [架构](docs/development/ARCHITECTURE.md)。
 
@@ -12,7 +12,7 @@
 
 使用锁定依赖和受支持的 Node 版本，运行 `node scripts/install.cjs`（旧归档没有此脚本时使用 `npm ci`）。普通安装基线推荐 Node 22.x（当前锁定依赖要求至少 22.19.0）；运行与验证时记录实际版本，不能把另一版本的结果当作本机验收。
 
-测试实例使用独立的 Agent、媒体、预约、项目路径与实例 URL。只换端口不能隔离身份；不继承真实供应商认证。Node 测试统一通过 `npm test` 运行，全量与定向模式均去掉供应商环境凭据和 Pivane 实例别名变量，再串行执行选中的测试。
+测试实例使用独立的 Agent、媒体、预约、项目路径与实例 URL。只换端口不能隔离身份；不继承真实供应商认证。Node 测试统一通过 `npm test` 运行，全量与定向模式均去掉供应商环境凭据和 OhMyBuddy 实例别名变量，再串行执行选中的测试。
 
 日常迭代先跑相关文件，例如 `npm test -- test/source-files.test.js`；列表与计时用法见 [测试入口](docs/development/WORKFLOW.md#node-测试入口与计时)。源码交付和本机部署按 [验证矩阵](docs/development/WORKFLOW.md#验证矩阵) 只跑覆盖本次改动的测试，不跑全量；已通过的结果按 [复用规则](docs/development/WORKFLOW.md#验证结果复用与失效) 跟随文件内容，提交或切换时不重跑。全量是否需要及公开发布的证据复用按[发布流程](docs/development/RELEASING.md#验证范围与证据复用)判断，不因包SHA变化自动重跑。浏览器与发行专项不在 `npm test` 内；UI 改动用 `npm run test:browser -- <相关脚本>` 跑 Chromium/Playwright 桌面与手机回归。平台组件变更须在目标系统验证，浏览器模拟或容器不能代替原生实机验收。
 

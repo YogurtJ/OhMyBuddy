@@ -1,5 +1,5 @@
 const { randomUUID } = require('node:crypto');
-const { isInternalCommand, privateReply } = require('./pivane-compat');
+const { isInternalCommand, privateReply } = require('./ohmybuddy-compat');
 class PiModelCatalog {
     constructor(worker) { this.worker = worker; this.pending = new Map(); this.inflight = null; }
     refresh() {

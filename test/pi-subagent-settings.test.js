@@ -122,7 +122,7 @@ test('bundled plugin ignores legacy versions without rewriting CLI declarations 
             assert.equal(snapshot.plugin.upgradeFrom, null);
             await assert.rejects(service.upgrade({ cwd, expectedRevision: snapshot.revision }), /确认/);
             await assert.rejects(service.upgrade({ cwd, expectedRevision: 'stale', confirmed: true }), /变化/);
-            await assert.rejects(service.upgrade({ cwd, expectedRevision: snapshot.revision, confirmed: true }), /Pivane/);
+            await assert.rejects(service.upgrade({ cwd, expectedRevision: snapshot.revision, confirmed: true }), /OhMyBuddy/);
             assert.equal(fs.readFileSync(globalFile, 'utf8'), bytes);
         }
     } finally { sdk.DefaultPackageManager.prototype.installAndPersist = original; }

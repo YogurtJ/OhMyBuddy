@@ -15,7 +15,7 @@ class ForkRequests {
     }
     async file(key, create = false) {
         let root = fs.realpathSync.native((await getSdk()).getAgentDir());
-        for (const part of ['pivane-session-moves', 'fork-requests']) {
+        for (const part of [path.basename(require('./ohmybuddy-compat').dataFile(root, 'ohmybuddy-session-moves')), 'fork-requests']) {
             root = path.join(root, part);
             let stat;
             try { stat = fs.lstatSync(root); }

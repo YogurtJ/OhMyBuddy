@@ -7729,15 +7729,15 @@
         "Stopping a command requires its executionId"
     ],
     ["版本与更新", "Versions and updates"],
-    ["如何更新 Pivane 和 Pi", "How to update Pivane and Pi"],
-    ["本页提供检查、下载和手动更新步骤。安装需要在部署机器上完成。", "This page provides version checks, downloads and manual update steps. Install updates on the machine hosting Pivane."],
+    ["如何更新 OhMyBuddy 和 Pi", "How to update OhMyBuddy and Pi"],
+    ["本页提供检查、下载和手动更新步骤。安装需要在部署机器上完成。", "This page provides version checks, downloads and manual update steps. Install updates on the machine hosting OhMyBuddy."],
     ["阅读目标版本说明，下载发布包及 SHA-256 校验文件，按平台指南核对哈希。", "Read the release notes, download the archive and SHA-256 checksum, and verify the hash using your platform guide."],
     ["保存草稿与附件，完成 Agent、Shell、侧聊、媒体、设置和导入导出操作，并暂停所有预约。", "Save drafts and attachments, finish Agent, Shell, side chat, media, settings and transfer operations, and pause all scheduled messages."],
     ["停止服务及使用同一身份的 Pi CLI，等进程退出后备份配置、会话、项目和媒体数据。", "Stop the service and any Pi CLI using the same identity. Wait for the processes to exit, then back up configuration, sessions, projects and media."],
     ["解压到新的空目录，运行 npm ci 安装配套依赖，沿用原数据路径和启动配置，然后启动新版本。", "Extract to a new empty directory, run npm ci to install the bundled dependencies, keep your data paths and startup configuration, then start the new version."],
     ["核对版本与数据后再恢复预约；若更新失败，停止新服务，按平台指南恢复旧版本和配套备份。", "Verify versions and data before resuming scheduled messages. If the update fails, stop the new service and follow your platform guide to restore the old version and matching backup."],
     ["{0} 更新指南", "{0} update guide"],
-    ["Pi 随 Pivane 发布包的锁定依赖一起安装。全局安装的 Pi CLI 与此工作台独立；在 Packages 中更新扩展也不会更新 Pi 内核。", "Pi is installed with the dependencies locked in the Pivane release. A globally installed Pi CLI is separate from this workspace. Updating extensions in Packages does not update Pi itself."],
+    ["Pi 随 OhMyBuddy 发布包的锁定依赖一起安装。全局安装的 Pi CLI 与此工作台独立；在 Packages 中更新扩展也不会更新 Pi 内核。", "Pi is installed with the dependencies locked in the OhMyBuddy release. A globally installed Pi CLI is separate from this workspace. Updating extensions in Packages does not update Pi itself."],
     ["尚未检查", "Not checked yet"],
     ["有可用更新", "Update available"],
     ["与可用版本一致", "Matches the available version"],
@@ -7745,8 +7745,8 @@
     ["无法比较版本", "Unable to compare versions"],
     ["此渠道暂无发布", "No release in this channel"],
     ["检查失败，请稍后重试或打开官方页面。", "Check failed. Try again later or open the official page."],
-    ["查看 Pivane 和 Pi Coding Agent 的版本与更新方式。", "View versions and update options for Pivane and Pi Coding Agent."],
-    ["Pivane 更新渠道", "Pivane update channel"],
+    ["查看 OhMyBuddy 和 Pi Coding Agent 的版本与更新方式。", "View versions and update options for OhMyBuddy and Pi Coding Agent."],
+    ["OhMyBuddy 更新渠道", "OhMyBuddy update channel"],
     ["正式版", "Stable releases"],
     ["包含预发布版", "Include prereleases"],
     ["正在检查更新…", "Checking for updates…"],
@@ -7755,8 +7755,8 @@
     ["当前运行版本：{0}", "Running version: {0}"],
     ["上游最新正式版：{0}", "Latest upstream stable version: {0}"],
     ["此渠道可用版本：{0}", "Available version in this channel: {0}"],
-    ["本版 Pivane 配套 Pi：{0}", "Pi bundled with this Pivane version: {0}"],
-    ["上游新版不代表已通过 Pivane 兼容验证。更新工作台使用的 Pi，请安装配套的新 Pivane 发布包。", "A new upstream version has not necessarily been tested with Pivane. To update the Pi used by this workspace, install a new Pivane release with its matching dependencies."],
+    ["本版 OhMyBuddy 配套 Pi：{0}", "Pi bundled with this OhMyBuddy version: {0}"],
+    ["上游新版不代表已通过 OhMyBuddy 兼容验证。更新工作台使用的 Pi，请安装配套的新 OhMyBuddy 发布包。", "A new upstream version has not necessarily been tested with OhMyBuddy. To update the Pi used by this workspace, install a new OhMyBuddy release with its matching dependencies."],
     ["实际 Pi 版本与发布包声明不一致，请按锁定依赖核对安装。", "The installed Pi version differs from the release declaration. Check the installation against the locked dependencies."],
     ["Pi 官方页面", "Official Pi page"],
     ["发布说明", "Release notes"],
@@ -7942,9 +7942,9 @@
     ,['没有高于当前版本的 Pi 正式版', 'No newer stable Pi version is available']
     ,['无法核对 Pi 更新版本，请稍后再试', 'Could not verify the Pi update version. Try again later.']
     ,['维护提交失败，请查看状态后再决定', 'Maintenance submission failed. Check status before proceeding.']
-    ,['Pi 可通过下方受管更新单独升级，也可随新的 Pivane 发布包安装。上游新版仍需核对第三方扩展兼容性。', 'Update Pi separately using managed updates below, or install it with a new Pivane release. Check third-party extension compatibility with upstream updates.']
+    ,['Pi 可通过下方受管更新单独升级，也可随新的 OhMyBuddy 发布包安装。上游新版仍需核对第三方扩展兼容性。', 'Update Pi separately using managed updates below, or install it with a new OhMyBuddy release. Check third-party extension compatibility with upstream updates.']
     ,['服务已重新启动，上次提交未被确认；请核对后手动决定，不会自动重试。', 'The service restarted without confirming the previous submission. Verify the state and decide manually; no automatic retry will be made.']
-    ,['以下为手动更新步骤，也适用于更新 Pivane 应用本身。', 'These manual update steps also apply to the Pivane application itself.']
+    ,['以下为手动更新步骤，也适用于更新 OhMyBuddy 应用本身。', 'These manual update steps also apply to the OhMyBuddy application itself.']
     ,['实例维护，完成后请重新确认发送', 'Instance maintenance; confirm scheduled sending again after it finishes']
     ,['辅助模型', 'Auxiliary models']
     ,['标题生成', 'Title generation']
@@ -8002,10 +8002,10 @@
     ,['将创建独立会话并保留原对话草稿。需求先放入输入框，由你发送；打开助手不会自动安装。', 'A separate session preserves your original draft. Your request is placed in the composer for you to send; opening the assistant does not install anything.']
     ,['返回原会话', 'Return to original chat']
     ,['管理已安装', 'Manage installed items']
-    ,['安装到运行 Pivane 的机器。项目上下文：{0}', 'Installs run on the machine hosting Pivane. Project context: {0}']
+    ,['安装到运行 OhMyBuddy 的机器。项目上下文：{0}', 'Installs run on the machine hosting OhMyBuddy. Project context: {0}']
     ,['正在创建扩展助手会话…', 'Creating an assistant session…']
     ,['请先核对会话列表，再重新打开助手；不会自动重试。', 'Check the session list before opening the assistant again. This request will not be retried automatically.']
-    ,['扩展助手 · {0} · 安装位置：Pivane 部署端', 'Extension Assistant · {0} · Installs on the Pivane host']
+    ,['扩展助手 · {0} · 安装位置：OhMyBuddy 部署端', 'Extension Assistant · {0} · Installs on the OhMyBuddy host']
     ,['扩展助手会话已创建，可从会话列表打开。', 'The assistant session was created. Open it from the session list.']
     ,['原会话已不存在，请从会话列表选择其他会话。', 'The original chat no longer exists. Choose another session from the list.']
     ,['让助手帮我配置', 'Set up with assistant']
@@ -8058,7 +8058,7 @@
     ,['多模态', 'Multimodal']
     ,['子 Agent', 'Subagents']
     ,['由 pi-subagents 提供。默认安装不会自动启动子任务。', 'Powered by pi-subagents. Installing it does not automatically start child tasks.']
-    ,['尚未安装 pi-subagents，暂时无法设置子 Agent。下载失败不影响 Pivane 的其他功能。', 'pi-subagents is not installed, so its settings are unavailable. Download failure does not affect other Pivane features.']
+    ,['尚未安装 pi-subagents，暂时无法设置子 Agent。下载失败不影响 OhMyBuddy 的其他功能。', 'pi-subagents is not installed, so its settings are unavailable. Download failure does not affect other OhMyBuddy features.']
     ,['pi-subagents 已安装但未启用，请在 Packages 中启用后刷新。', 'pi-subagents is installed but disabled. Enable it in Packages, then refresh.']
     ,['已安装的 pi-subagents 版本尚未适配，暂时无法编辑。请在 Packages 中核对版本。', 'This pi-subagents version is not supported by the settings adapter. Check its version in Packages.']
     ,['插件已安装并配置启用；这不代表当前会话已经加载。保存后请在任务结束时重开运行实例。', 'The plugin is installed and enabled in configuration; this does not confirm it is loaded in the current session. Reopen the runtime after tasks finish to apply changes.']
@@ -8180,14 +8180,14 @@
     ,['关闭提醒', 'Dismiss reminder']
     ,['提醒设置保存失败，请重试。', 'Could not save update reminder settings. Please retry.']
     ,['尚未手动检查。自动检查仅查询 Pi 正式版。', 'No manual check yet. Automatic checks only query stable Pi releases.']
-    ,['更新 Pivane', 'Update Pivane']
-    ,['更新 Pivane：{0} → {1}', 'Update Pivane: {0} → {1}']
-    ,['Pivane 版本：{0} → {1}', 'Pivane version: {0} → {1}']
+    ,['更新 OhMyBuddy', 'Update OhMyBuddy']
+    ,['更新 OhMyBuddy：{0} → {1}', 'Update OhMyBuddy: {0} → {1}']
+    ,['OhMyBuddy 版本：{0} → {1}', 'OhMyBuddy version: {0} → {1}']
     ,['安装与维护', 'Installation and maintenance']
-    ,['正在下载并校验 Pivane…', 'Downloading and verifying Pivane…']
+    ,['正在下载并校验 OhMyBuddy…', 'Downloading and verifying OhMyBuddy…']
     ,['手动更新与故障帮助', 'Manual update and troubleshooting']
     ,['自动下载、校验和备份后安装，失败时尝试启动旧版。', 'Download, verify, back up and install automatically. If startup fails, try starting the previous version.']
-    ,['当前启动器不支持 Pivane 应用更新，请先加载新版启动器', 'This launcher does not support application updates. Load the new launcher first.']
+    ,['当前启动器不支持 OhMyBuddy 应用更新，请先加载新版启动器', 'This launcher does not support application updates. Load the new launcher first.']
     ,['已持久入账，删除会话后仍保留统计。{0} 条记录按官方目录价补算，{1} 条非零用量仍无可确认价格。', 'Usage is durably recorded and retained after session deletion. {0} records use official catalog estimates; {1} records with nonzero usage still have no confirmed price.']
     ,['汇总周期', 'Aggregation period']
     ,['每周用量（周一开始）', 'Weekly usage (Monday start)']
@@ -8460,7 +8460,7 @@
     ,["{0} 个已结束", "{0} finished"]
     ,["后台工作进行中", "Background work in progress"]
     ,["会话保持中", "Session kept open"]
-    ,["后台子 Agent 未结束，Pivane 会保留此会话，以便结果返回后主 Agent 自动继续。", "Background subagents are still working. Pivane keeps this session open so the main Agent can continue automatically when results arrive."]
+    ,["后台子 Agent 未结束，OhMyBuddy 会保留此会话，以便结果返回后主 Agent 自动继续。", "Background subagents are still working. OhMyBuddy keeps this session open so the main Agent can continue automatically when results arrive."]
     ,["后台工作尚未提供运行详情。", "Background work has not reported run details yet."]
     ,["另有 {0} 个运行未显示。", "{0} more runs are not shown."]
     ,["用量与费用", "Usage and cost"]
@@ -8838,8 +8838,8 @@
     ,['当前名称', 'Current name']
     ,['首条消息预览', 'First message preview']
     ,['请先在概览中启用此身份并保存。', 'Enable this profile in Overview and save it first.']
-    ,['Pivane 内置，随应用更新', 'Bundled with Pivane; updated with the app']
-    ,['内置组件未就绪，请检查 Pivane 安装或重新安装依赖。', 'The bundled component is not ready. Check the Pivane installation or reinstall dependencies.']
+    ,['OhMyBuddy 内置，随应用更新', 'Bundled with OhMyBuddy; updated with the app']
+    ,['内置组件未就绪，请检查 OhMyBuddy 安装或重新安装依赖。', 'The bundled component is not ready. Check the OhMyBuddy installation or reinstall dependencies.']
 ,['定时任务', 'Scheduled tasks']
     ,['时间', 'Time']
     ,['目标', 'Destination']
@@ -8958,7 +8958,7 @@
     ,['此线程也是身份的主线程；删除后需重新指定，不会自动重建。', 'This is also a profile’s main thread. Choose a replacement after deletion; it will not be recreated automatically.']
     ,['关联的定时任务会暂停，主线程引用需重新指定。', 'Related schedules will be paused. Main-thread references will need a replacement.']
     ,['管理定时任务', 'Manage scheduled tasks']
-    ,['Pi 运行实例启动超时，请重试连接；如经常出现，可调大 PIVANE_WEB_STARTUP_TIMEOUT_MS', 'Pi runtime startup timed out. Retry the connection; if this happens often, increase PIVANE_WEB_STARTUP_TIMEOUT_MS.']
+    ,['Pi 运行实例启动超时，请重试连接；如经常出现，可调大 OHMYBUDDY_WEB_STARTUP_TIMEOUT_MS', 'Pi runtime startup timed out. Retry the connection; if this happens often, increase OHMYBUDDY_WEB_STARTUP_TIMEOUT_MS.']
     ,['助手', 'Assistant']
     ,['定时', 'Schedules']
     ,['创作', 'Create']
@@ -8987,7 +8987,7 @@
     ,['选择助手项目', 'Choose an assistant project']
     ,['继续：{0}', 'Continue: {0}']
     ,['示例只会追加到草稿，不会自动发送。', 'Examples are appended to your draft, never sent automatically.']
-    ,['目录位于部署 Pivane 的服务器，不是当前浏览器所在设备。', 'Folders are on the server running Pivane, not on the device running this browser.']
+    ,['目录位于部署 OhMyBuddy 的服务器，不是当前浏览器所在设备。', 'Folders are on the server running OhMyBuddy, not on the device running this browser.']
     ,['操作结果待核实', 'Action outcome needs verification']
     ,['核对当前状态', 'Check current state']
     ,['已刷新当前状态；请同时核对运行队列与取回内容。', 'Current state refreshed. Also check the run queue and recovered text.']
@@ -9073,7 +9073,7 @@
         ['正在安装更新…', 'Installing the update…'],
         ['正在解压更新…', 'Extracting the update…'],
         ['正在验证新版…', 'Verifying the new version…'],
-        ['正在安全停止 Pivane…', 'Stopping Pivane safely…'],
+        ['正在安全停止 OhMyBuddy…', 'Stopping OhMyBuddy safely…'],
         ['正在备份会话、配置和媒体…', 'Backing up sessions, settings and media…'],
         ['正在启动新版…', 'Starting the new version…'],
         ['正在整理更新备份…', 'Managing update backups…'],
@@ -9089,8 +9089,8 @@
         ['更新到 {0}', 'Update to {0}'],
         ['当前实例未通过独立更新器启动，请使用安装入口修复启动方式。', 'This instance is not running through the independent updater. Use the installer to repair its startup configuration.'],
         ['更新提交结果尚未确认，请勿重复提交。正在核对状态…', 'Update submission is unconfirmed. Do not submit again. Checking its status…'],
-        ['正在等待 Pivane 重新连接，请保持页面打开…', 'Waiting for Pivane to reconnect. Keep this page open…'],
-        ['正在核对更新版本和空闲状态…', 'Checking the update version and whether Pivane is idle…'],
+        ['正在等待 OhMyBuddy 重新连接，请保持页面打开…', 'Waiting for OhMyBuddy to reconnect. Keep this page open…'],
+        ['正在核对更新版本和空闲状态…', 'Checking the update version and whether OhMyBuddy is idle…'],
         ['无法准备更新，请稍后再试。', 'Could not prepare the update. Try again later.'],
         ['正在提交更新，请勿重复操作…', 'Submitting the update. Do not submit again…'],
         ['保持了解', 'Stay informed'],
@@ -9103,17 +9103,17 @@
         ['版本无法比较', 'Cannot compare versions'],
         ['暂无发布版本', 'No releases yet'],
         ['暂时无法检查', 'Unable to check right now'],
-        ['Pivane 发布页面', 'Pivane releases'],
+        ['OhMyBuddy 发布页面', 'OhMyBuddy releases'],
         ['当前 Pi 与发布包配套版本不同。', 'Running Pi differs from the version bundled with this release.'],
         ['尚未手动检查。Pi 可能显示自动检查的结果。', 'Not checked manually yet. Pi may show an automatic check result.'],
         ['交给独立 Agent 协助更新', 'Ask an independent Agent to help update'],
-        ['在部署机器上使用独立 Agent；不要让正在被更新的 Pivane 会话重启自身。先让它核对并提出计划，确认后再执行。', 'Use an independent Agent on the host machine. Do not restart Pivane from the conversation it is hosting. Ask for a plan first, then confirm execution.'],
+        ['在部署机器上使用独立 Agent；不要让正在被更新的 OhMyBuddy 会话重启自身。先让它核对并提出计划，确认后再执行。', 'Use an independent Agent on the host machine. Do not restart OhMyBuddy from the conversation it is hosting. Ask for a plan first, then confirm execution.'],
         ['更新提示词', 'Update prompt'],
         ['复制提示词', 'Copy prompt'],
         ['无法自动复制，已选中提示词，请手动复制。', 'Could not copy automatically. The prompt is selected; copy it manually.'],
         ['暂时无法读取版本信息，请稍后再试。', 'Could not read version information. Try again later.'],
         ['查看版本', 'View versions'],
-        ['请协助我更新部署机器上的 Pivane，并评估是否需要同步更新其使用的 Pi Coding Agent。先只读核对当前运行实例、源码/运行版本、官方仓库发布版本、Pi 实际版本和锁定依赖；阅读 https://github.com/YogurtJ/pivane 的 docs/AGENT_GUIDE.md、docs/INSTALL_RECOVERY.md 及目标版本说明；只有涉及修改源码时再遵循仓库 AGENTS.md，不要用旧发布包覆盖尚未发布的修复。先向我说明差异、兼容性、备份范围、实施及回退计划，等我明确确认后才执行。执行前确认所有任务、子 Agent、Shell、侧聊、预约及外部共用身份的写入已安全结束，保存草稿与附件；停机备份身份、会话、配置、媒体与项目数据，校验下载来源及包哈希，保留旧版并验证升级后的版本和数据。不要自动重试不确定的操作，不要删除用户数据。如果你本身运行在待更新的 Pivane 实例里，不要在当前会话中停止或重启承载你的服务；请让部署机器上的独立 Agent 或管理员在安全窗口执行，并从外部核对结果。', 'Help me update Pivane on its host machine, and assess whether its Pi Coding Agent also needs updating. First, read-only: verify the running instance, source/runtime versions, official repository releases, actual Pi version and locked dependencies. Read docs/AGENT_GUIDE.md, docs/INSTALL_RECOVERY.md and the target release notes at https://github.com/YogurtJ/pivane; follow the repository AGENTS.md if source changes are needed. Do not overwrite unpublished fixes with an older release. Explain the differences, compatibility, backup scope, execution and rollback plan, then wait for my explicit approval. Before execution, ensure all tasks, subagents, Shell sessions, side chats, schedules and external writers sharing the identity have safely finished; save drafts and attachments. Back up identity, sessions, configuration, media and project data while stopped; verify download origin and archive hash, retain the old version and check versions and data after updating. Do not retry uncertain operations automatically or delete user data. If you are running inside the Pivane instance being updated, do not stop or restart the service hosting this conversation. Ask an independent Agent or administrator on the host to act in a safe window and verify the result externally.']
+        ['请协助我更新部署机器上的 OhMyBuddy，并评估是否需要同步更新其使用的 Pi Coding Agent。先只读核对当前运行实例、源码/运行版本、官方仓库发布版本、Pi 实际版本和锁定依赖；阅读 https://github.com/YogurtJ/pivane 的 docs/AGENT_GUIDE.md、docs/INSTALL_RECOVERY.md 及目标版本说明；只有涉及修改源码时再遵循仓库 AGENTS.md，不要用旧发布包覆盖尚未发布的修复。先向我说明差异、兼容性、备份范围、实施及回退计划，等我明确确认后才执行。执行前确认所有任务、子 Agent、Shell、侧聊、预约及外部共用身份的写入已安全结束，保存草稿与附件；停机备份身份、会话、配置、媒体与项目数据，校验下载来源及包哈希，保留旧版并验证升级后的版本和数据。不要自动重试不确定的操作，不要删除用户数据。如果你本身运行在待更新的 OhMyBuddy 实例里，不要在当前会话中停止或重启承载你的服务；请让部署机器上的独立 Agent 或管理员在安全窗口执行，并从外部核对结果。', 'Help me update OhMyBuddy on its host machine, and assess whether its Pi Coding Agent also needs updating. First, read-only: verify the running instance, source/runtime versions, official repository releases, actual Pi version and locked dependencies. Read docs/AGENT_GUIDE.md, docs/INSTALL_RECOVERY.md and the target release notes at https://github.com/YogurtJ/pivane; follow the repository AGENTS.md if source changes are needed. Do not overwrite unpublished fixes with an older release. Explain the differences, compatibility, backup scope, execution and rollback plan, then wait for my explicit approval. Before execution, ensure all tasks, subagents, Shell sessions, side chats, schedules and external writers sharing the identity have safely finished; save drafts and attachments. Back up identity, sessions, configuration, media and project data while stopped; verify download origin and archive hash, retain the old version and check versions and data after updating. Do not retry uncertain operations automatically or delete user data. If you are running inside the OhMyBuddy instance being updated, do not stop or restart the service hosting this conversation. Ask an independent Agent or administrator on the host to act in a safe window and verify the result externally.']
     );
     rows.push(
         ['我的要求', 'My instructions'],
@@ -9175,7 +9175,7 @@
         ['原生工具名称与 +/- 修饰符', 'Native tool names and +/- modifiers'],
         ['工具名称', 'Tool names'],
         ['（自定义工具）', ' (custom tool)'],
-        ['显式空列表：Pivane 不默认启用任何工具，包括扩展和自定义工具。', 'Explicit empty list: Pivane initially enables no tools, including extension and custom tools.'],
+        ['显式空列表：OhMyBuddy 不默认启用任何工具，包括扩展和自定义工具。', 'Explicit empty list: OhMyBuddy initially enables no tools, including extension and custom tools.'],
         ['仅 +/- 修饰符：修改继承的工具选择，按顺序应用。', 'Only +/- modifiers: change the inherited tool selection in order.'],
         ['普通名称替换继承列表，再按顺序应用 +/- 修饰符。', 'Plain names replace the inherited list, then +/- modifiers apply in order.'],
         ['每行一个名称或 +名称 / -名称。保留自定义名称；未知或未加载工具不代表已获授权。', 'One name or +name / -name per line. Custom names are retained; an unknown or unloaded tool is not an authorization grant.'],
@@ -9234,7 +9234,7 @@
         ["针对特定任务的说明与脚本（SKILL.md）。任务匹配时 Agent 会自动读取；停用后不再加载。", "Task-specific instructions and scripts (SKILL.md). The agent reads a skill when a task matches it; disabled skills are not loaded."],
         ["为 Agent 增加工具、命令或自动行为的代码模块，随会话加载并可执行代码。只启用可信来源。", "Code modules that add tools, commands or automatic behavior to the agent. They load with the session and can run code; enable only trusted sources."],
         ["可复用的提示词，在输入框输入 /模板名 即可插入。", "Reusable prompts. Type /template-name in the composer to insert one."],
-        ["Pi 终端界面（TUI）的配色，不影响 Pivane 网页外观，通常无需调整。", "Color schemes for the Pi terminal interface (TUI). They do not change how Pivane looks and rarely need changes."],
+        ["Pi 终端界面（TUI）的配色，不影响 OhMyBuddy 网页外观，通常无需调整。", "Color schemes for the Pi terminal interface (TUI). They do not change how OhMyBuddy looks and rarely need changes."],
         ["打包安装的能力合集，可能同时提供下方的技能、扩展模块、提示词模板和主题。更新与移除在“⋯”菜单中。", "Installed bundles. A package can provide any of the skills, extensions, prompt templates and themes below. Update or remove it from the “⋯” menu."],
         ["点击右上角“安装扩展包”，或让助手帮你挑选。", "Use “Install package” at the top right, or ask the assistant to help you choose."],
         ["查看全部 {0} 项{1}", "View all {0} {1}"],
@@ -9542,7 +9542,7 @@
         ['请等待会话与后台任务空闲后再更改分类', 'Wait until the conversation and background tasks are idle before changing category'],
         ['请关闭此会话的侧聊后再更改分类', 'Close this conversation’s side chat before changing category']);
     rows.push(['在当前会话中安排任务', 'Schedule a task in this conversation']);
-    rows.push(...[["网络与访问","Network & access"],["网络代理设置","Network proxy settings"],["管理工作台的访问方式与服务器网络连接。","Manage access to your workspace and its outbound connections."],["使用运行环境","Use runtime environment"],["直连","Direct connection"],["自定义代理","Custom proxy"],["仅本机访问","This computer only"],["允许其他设备连接","Allow other devices"],["登录验证已开启","Sign-in required"],["登录验证未开启","Sign-in is off"],["当前监听：{0}","Listening on: {0}"],["由部署配置 HOST 管理。需要在服务器修改后重启。","Managed by the deployment HOST setting. Change it on the server, then restart."],["沿用旧安装的监听范围；选择后可交由此页面管理。","Using the existing installation’s binding. Select a scope to manage it here."],["更改后重启生效，不会自动开放防火墙。","Changes take effect after restart. Firewall rules are not changed."],["当前使用：{0}","Currently using: {0}"],["检测到代理配置","Proxy configuration detected"],["更新源未使用代理","No proxy for update sources"],["检测到 Pi 原生代理。运行环境模式保留现有配置；直连或自定义仅覆盖 Pivane 受管请求。","A native Pi proxy is configured. Environment mode preserves it; direct or custom mode overrides Pivane-managed requests only."],["运行环境模式沿用服务器已有代理；未配置时直连。不会改变浏览器或系统 VPN。","Environment mode uses the server’s existing proxy, or connects directly if none is configured. Browser settings and system VPNs are unchanged."],["服务器本机","On the server"],["其他设备 · 待验证","Other devices · not verified"],["复制地址","Copy address"],["地址已复制","Address copied"],["无法复制，请手动选择地址","Unable to copy. Select the address manually."],["未发现可展示的访问地址，请核对部署配置。","No access address found. Check your deployment configuration."],["保存访问范围","Save access scope"],["保存代理","Save proxy"],["允许其他设备连接可能暴露到公网。请确认已启用登录验证，并自行限制防火墙和网络入口。保存不会重启服务。","Allowing other devices may expose this service to the internet. Enable sign-in and restrict firewall and network access. Saving will not restart the service."],["重启后，直接远程连接将不可用。请先保留服务器本机、SSH 或本机隧道的恢复方式。","Direct remote access will stop after restart. Keep a local, SSH or local-tunnel recovery path available."],["已保存，安全重启后生效。当前任务与网络连接未改变。","Saved for the next safe restart. Current tasks and connections are unchanged."],["已保存，当前无需重启。","Saved. No restart is currently needed."],["请刷新核对后再保存；未自动重试。","Refresh and verify before saving again. Nothing was retried automatically."],["正在测试草稿配置…","Testing draft settings…"],["已连接到目标（HTTP {0}，{1} ms）。未保存配置，也未调用生成模型。","Target reached (HTTP {0}, {1} ms). Settings were not saved and no generation model was called."],["未能连接。请检查服务器上的代理地址、端口与网络。","Connection failed. Check the proxy address, port and network on the server."],["网络设置暂不可用","Network settings are unavailable"],["正在读取网络状态","Reading network status"],["有配置等待重启生效","Changes pending restart"],["保存不会中断任务。请在任务结束、草稿保存后，由部署端安全重启整个服务。","Saving does not interrupt tasks. Finish tasks and save drafts before safely restarting the entire service from the deployment host."],["撤销待生效配置","Discard pending changes"],["访问安全","Access security"],["用登录验证保护工作台。已登录设备共享此实例的使用权限。","Protect your workspace with sign-in. Signed-in devices share access to this instance."],["访问安全说明","About access security"],["访问范围","Access scope"],["选择哪些设备可以直接连接这个工作台。","Choose which devices may connect directly to this workspace."],["允许连接的设备","Devices allowed to connect"],["候选地址不代表已连通。防火墙、路由和容器端口映射仍需自行配置。","Listed addresses are not connectivity checks. Configure firewalls, routing and container port mappings separately."],["允许其他设备连接不等于仅限局域网；公网接口也可能接受连接。IPv4 与 IPv6 应分别核对。","Allowing other devices is not limited to your LAN. Public interfaces may also accept connections. Check IPv4 and IPv6 separately."],["访问地址与部署说明","Addresses & deployment details"],["出站代理","Outbound proxy"],["用于更新检查与 Pivane 管理的模型请求。","For update checks and Pivane-managed model requests."],["连接方式","Connection mode"],["代理地址","Proxy address"],["这里的 localhost 指运行 Pivane 的服务器，不是打开网页的设备。","localhost refers to the Pivane server, not the device viewing this page."],["额外绕过代理的地址","Additional proxy bypass addresses"],["本机回环与内部连接默认直连。额外地址用逗号分隔；不支持 CIDR。","Loopback and internal connections bypass the proxy. Separate additional hosts with commas; CIDR is not supported."],["支持 HTTP/HTTPS 代理，暂不支持 SOCKS、PAC 或带账号密码的自定义地址。","HTTP/HTTPS proxies are supported. SOCKS, PAC and custom URLs with credentials are not supported yet."],["保存后重启整个服务生效。不会接管浏览器、独立 CLI、任意 Shell 或第三方扩展；系统 VPN/TUN 不受直连选项控制。","Restart the entire service to apply changes. This does not control the browser, independent CLIs, arbitrary shell commands or third-party extensions. Direct mode does not bypass system VPN/TUN routing."],["高级与适用范围","Advanced & scope"],["测试目标","Test target"],["测试连接","Test connection"],["测试草稿连接","Test draft connection"],["远程访问","Remote access"],["推荐私有网络或 HTTPS；无需在这里安装穿透工具。","Use a private network or HTTPS. No tunnel tools are installed here."],["Tailscale 私有访问","Private access with Tailscale"],["直接访问 Tailscale 地址需要相应监听；同机 Tailscale Serve 可转发到本机地址，无需开放全部接口。","Direct access to a Tailscale IP requires a matching listener. Tailscale Serve on the same machine can forward to loopback without opening all interfaces."],["HTTPS 反向代理","HTTPS reverse proxy"],["同机代理可连接本机监听。需要保留 Host、转发 WebSocket、配置 Secure Cookie，并限制后端直接入口。","A local reverse proxy can use loopback. Preserve Host, forward WebSockets, configure Secure cookies and restrict direct backend access."],["本机隧道与端口转发","Local tunnels & port forwarding"],["SSH 转发或同机隧道客户端可以访问回环监听。隧道可能扩大访问范围，仍应启用 Token；不自动创建公网入口。","SSH forwarding or a local tunnel client can reach loopback. Tunnels may expand access, so keep Token protection enabled. No public endpoint is created automatically."],["查看接入指引","View setup guide"],["请先在上方开启登录验证，再修改网络设置或测试代理。","Enable sign-in above before changing network settings or testing a proxy."],["刷新网络状态","Refresh network status"],["撤销已保存但尚未生效的网络配置？当前运行连接不会改变。","Discard saved network changes that have not taken effect? Current connections will remain unchanged."],["刷新会替换本页未保存的网络草稿，是否继续？","Refreshing will replace unsaved network edits. Continue?"],["请选择有效的代理方式","Choose a valid proxy mode"],["代理配置过长","Proxy configuration is too long"],["请输入完整的 HTTP 或 HTTPS 代理地址","Enter a complete HTTP or HTTPS proxy URL"],["代理仅支持 HTTP/HTTPS 地址；请勿填写账号、密码、路径或查询参数","Use an HTTP/HTTPS proxy URL without credentials, paths or query parameters"],["仅自定义模式需要代理地址","Only custom mode accepts a proxy URL"],["绕过地址请用逗号分隔的主机名或 IP，不支持路径和 CIDR","Use comma-separated hostnames or IP addresses for bypass rules; paths and CIDR are not supported"],["网络配置无法读取，请在服务器修复；未回退为开放访问或直连","Network configuration cannot be read. Repair it on the server; access was not opened and routing did not fall back to direct"],["无法核对原监听配置，请在部署配置中明确设置 HOST","Unable to verify the prior binding. Set HOST explicitly in deployment configuration"],["无法读取 Pi 网络配置，请先修复原生设置","Unable to read Pi network settings. Repair the native settings first"],["请先改为仅本机监听并重启生效，再关闭登录验证","Switch to local-only listening and restart before disabling sign-in"],["网络设置参数无效","Invalid network settings request"],["网络设置已变化，请刷新核对后再保存","Network settings changed. Refresh and verify before saving"],["监听地址由部署配置 HOST 管理，请在服务器修改","The listener is managed by deployment HOST; change it on the server"],["请选择访问范围","Choose an access scope"],["请先开启登录验证，再允许其他设备连接","Enable sign-in before allowing other devices"],["网络设置分区无效","Invalid network settings section"],["网络设置保存结果不确定，请刷新核对；未自动重试","The save outcome is uncertain. Refresh and verify; nothing was retried"],["请选择 GitHub 或 npm 测试目标","Choose GitHub or npm as the test target"],["连接测试过于频繁，请稍后再试","Too many connection tests. Try again later"],["网络设置请求来源无效","Invalid network settings request origin"],["请先开启登录验证，再修改网络设置","Enable sign-in before changing network settings"],["无法读取网络状态，请在服务器核对配置","Unable to read network status. Check the configuration on the server"]]);
+    rows.push(...[["网络与访问","Network & access"],["网络代理设置","Network proxy settings"],["管理工作台的访问方式与服务器网络连接。","Manage access to your workspace and its outbound connections."],["使用运行环境","Use runtime environment"],["直连","Direct connection"],["自定义代理","Custom proxy"],["仅本机访问","This computer only"],["允许其他设备连接","Allow other devices"],["登录验证已开启","Sign-in required"],["登录验证未开启","Sign-in is off"],["当前监听：{0}","Listening on: {0}"],["由部署配置 HOST 管理。需要在服务器修改后重启。","Managed by the deployment HOST setting. Change it on the server, then restart."],["沿用旧安装的监听范围；选择后可交由此页面管理。","Using the existing installation’s binding. Select a scope to manage it here."],["更改后重启生效，不会自动开放防火墙。","Changes take effect after restart. Firewall rules are not changed."],["当前使用：{0}","Currently using: {0}"],["检测到代理配置","Proxy configuration detected"],["更新源未使用代理","No proxy for update sources"],["检测到 Pi 原生代理。运行环境模式保留现有配置；直连或自定义仅覆盖 OhMyBuddy 受管请求。","A native Pi proxy is configured. Environment mode preserves it; direct or custom mode overrides OhMyBuddy-managed requests only."],["运行环境模式沿用服务器已有代理；未配置时直连。不会改变浏览器或系统 VPN。","Environment mode uses the server’s existing proxy, or connects directly if none is configured. Browser settings and system VPNs are unchanged."],["服务器本机","On the server"],["其他设备 · 待验证","Other devices · not verified"],["复制地址","Copy address"],["地址已复制","Address copied"],["无法复制，请手动选择地址","Unable to copy. Select the address manually."],["未发现可展示的访问地址，请核对部署配置。","No access address found. Check your deployment configuration."],["保存访问范围","Save access scope"],["保存代理","Save proxy"],["允许其他设备连接可能暴露到公网。请确认已启用登录验证，并自行限制防火墙和网络入口。保存不会重启服务。","Allowing other devices may expose this service to the internet. Enable sign-in and restrict firewall and network access. Saving will not restart the service."],["重启后，直接远程连接将不可用。请先保留服务器本机、SSH 或本机隧道的恢复方式。","Direct remote access will stop after restart. Keep a local, SSH or local-tunnel recovery path available."],["已保存，安全重启后生效。当前任务与网络连接未改变。","Saved for the next safe restart. Current tasks and connections are unchanged."],["已保存，当前无需重启。","Saved. No restart is currently needed."],["请刷新核对后再保存；未自动重试。","Refresh and verify before saving again. Nothing was retried automatically."],["正在测试草稿配置…","Testing draft settings…"],["已连接到目标（HTTP {0}，{1} ms）。未保存配置，也未调用生成模型。","Target reached (HTTP {0}, {1} ms). Settings were not saved and no generation model was called."],["未能连接。请检查服务器上的代理地址、端口与网络。","Connection failed. Check the proxy address, port and network on the server."],["网络设置暂不可用","Network settings are unavailable"],["正在读取网络状态","Reading network status"],["有配置等待重启生效","Changes pending restart"],["保存不会中断任务。请在任务结束、草稿保存后，由部署端安全重启整个服务。","Saving does not interrupt tasks. Finish tasks and save drafts before safely restarting the entire service from the deployment host."],["撤销待生效配置","Discard pending changes"],["访问安全","Access security"],["用登录验证保护工作台。已登录设备共享此实例的使用权限。","Protect your workspace with sign-in. Signed-in devices share access to this instance."],["访问安全说明","About access security"],["访问范围","Access scope"],["选择哪些设备可以直接连接这个工作台。","Choose which devices may connect directly to this workspace."],["允许连接的设备","Devices allowed to connect"],["候选地址不代表已连通。防火墙、路由和容器端口映射仍需自行配置。","Listed addresses are not connectivity checks. Configure firewalls, routing and container port mappings separately."],["允许其他设备连接不等于仅限局域网；公网接口也可能接受连接。IPv4 与 IPv6 应分别核对。","Allowing other devices is not limited to your LAN. Public interfaces may also accept connections. Check IPv4 and IPv6 separately."],["访问地址与部署说明","Addresses & deployment details"],["出站代理","Outbound proxy"],["用于更新检查与 OhMyBuddy 管理的模型请求。","For update checks and OhMyBuddy-managed model requests."],["连接方式","Connection mode"],["代理地址","Proxy address"],["这里的 localhost 指运行 OhMyBuddy 的服务器，不是打开网页的设备。","localhost refers to the OhMyBuddy server, not the device viewing this page."],["额外绕过代理的地址","Additional proxy bypass addresses"],["本机回环与内部连接默认直连。额外地址用逗号分隔；不支持 CIDR。","Loopback and internal connections bypass the proxy. Separate additional hosts with commas; CIDR is not supported."],["支持 HTTP/HTTPS 代理，暂不支持 SOCKS、PAC 或带账号密码的自定义地址。","HTTP/HTTPS proxies are supported. SOCKS, PAC and custom URLs with credentials are not supported yet."],["保存后重启整个服务生效。不会接管浏览器、独立 CLI、任意 Shell 或第三方扩展；系统 VPN/TUN 不受直连选项控制。","Restart the entire service to apply changes. This does not control the browser, independent CLIs, arbitrary shell commands or third-party extensions. Direct mode does not bypass system VPN/TUN routing."],["高级与适用范围","Advanced & scope"],["测试目标","Test target"],["测试连接","Test connection"],["测试草稿连接","Test draft connection"],["远程访问","Remote access"],["推荐私有网络或 HTTPS；无需在这里安装穿透工具。","Use a private network or HTTPS. No tunnel tools are installed here."],["Tailscale 私有访问","Private access with Tailscale"],["直接访问 Tailscale 地址需要相应监听；同机 Tailscale Serve 可转发到本机地址，无需开放全部接口。","Direct access to a Tailscale IP requires a matching listener. Tailscale Serve on the same machine can forward to loopback without opening all interfaces."],["HTTPS 反向代理","HTTPS reverse proxy"],["同机代理可连接本机监听。需要保留 Host、转发 WebSocket、配置 Secure Cookie，并限制后端直接入口。","A local reverse proxy can use loopback. Preserve Host, forward WebSockets, configure Secure cookies and restrict direct backend access."],["本机隧道与端口转发","Local tunnels & port forwarding"],["SSH 转发或同机隧道客户端可以访问回环监听。隧道可能扩大访问范围，仍应启用 Token；不自动创建公网入口。","SSH forwarding or a local tunnel client can reach loopback. Tunnels may expand access, so keep Token protection enabled. No public endpoint is created automatically."],["查看接入指引","View setup guide"],["请先在上方开启登录验证，再修改网络设置或测试代理。","Enable sign-in above before changing network settings or testing a proxy."],["刷新网络状态","Refresh network status"],["撤销已保存但尚未生效的网络配置？当前运行连接不会改变。","Discard saved network changes that have not taken effect? Current connections will remain unchanged."],["刷新会替换本页未保存的网络草稿，是否继续？","Refreshing will replace unsaved network edits. Continue?"],["请选择有效的代理方式","Choose a valid proxy mode"],["代理配置过长","Proxy configuration is too long"],["请输入完整的 HTTP 或 HTTPS 代理地址","Enter a complete HTTP or HTTPS proxy URL"],["代理仅支持 HTTP/HTTPS 地址；请勿填写账号、密码、路径或查询参数","Use an HTTP/HTTPS proxy URL without credentials, paths or query parameters"],["仅自定义模式需要代理地址","Only custom mode accepts a proxy URL"],["绕过地址请用逗号分隔的主机名或 IP，不支持路径和 CIDR","Use comma-separated hostnames or IP addresses for bypass rules; paths and CIDR are not supported"],["网络配置无法读取，请在服务器修复；未回退为开放访问或直连","Network configuration cannot be read. Repair it on the server; access was not opened and routing did not fall back to direct"],["无法核对原监听配置，请在部署配置中明确设置 HOST","Unable to verify the prior binding. Set HOST explicitly in deployment configuration"],["无法读取 Pi 网络配置，请先修复原生设置","Unable to read Pi network settings. Repair the native settings first"],["请先改为仅本机监听并重启生效，再关闭登录验证","Switch to local-only listening and restart before disabling sign-in"],["网络设置参数无效","Invalid network settings request"],["网络设置已变化，请刷新核对后再保存","Network settings changed. Refresh and verify before saving"],["监听地址由部署配置 HOST 管理，请在服务器修改","The listener is managed by deployment HOST; change it on the server"],["请选择访问范围","Choose an access scope"],["请先开启登录验证，再允许其他设备连接","Enable sign-in before allowing other devices"],["网络设置分区无效","Invalid network settings section"],["网络设置保存结果不确定，请刷新核对；未自动重试","The save outcome is uncertain. Refresh and verify; nothing was retried"],["请选择 GitHub 或 npm 测试目标","Choose GitHub or npm as the test target"],["连接测试过于频繁，请稍后再试","Too many connection tests. Try again later"],["网络设置请求来源无效","Invalid network settings request origin"],["请先开启登录验证，再修改网络设置","Enable sign-in before changing network settings"],["无法读取网络状态，请在服务器核对配置","Unable to read network status. Check the configuration on the server"]]);
     rows.push(['费用由所选后端决定；当前无法提供可靠报价。', 'Pricing depends on the selected backend; a reliable estimate is not currently available.']);
     rows.push(
         ['Agent 辅助规划（可选）', 'Optional Agent planning'],
@@ -9649,7 +9649,7 @@
         ['添加或管理目录', 'Add or manage folders'], ['文件目录响应无效', 'Invalid folder response'],
         ['关联目录只影响文件浏览，不改变会话工作目录或 Agent 权限。', 'Linked folders only affect browsing, not the session working directory or Agent permissions.'],
         ['输入绝对路径，或在下方选择', 'Enter an absolute path or choose below'], ['前往', 'Go'],
-        ['路径属于运行 Pivane 的服务器，不是当前设备。敏感目录仍受保护。', 'Paths belong to the Pivane server, not this device. Sensitive folders remain protected.'],
+        ['路径属于运行 OhMyBuddy 的服务器，不是当前设备。敏感目录仍受保护。', 'Paths belong to the OhMyBuddy server, not this device. Sensitive folders remain protected.'],
         ['临时打开', 'Open temporarily'], ['关联并打开', 'Link and open'], ['移除关联，不删除文件', 'Unlink without deleting files'],
         ['已移除关联，文件未删除', 'Folder unlinked. Files were not deleted.'], ['允许的位置', 'Allowed locations'], ['上一级目录', 'Parent folder'],
         ['没有可显示的子目录，可直接打开当前位置。', 'No subfolders to show. You can open this location.'], ['仅显示部分目录，可输入完整路径前往。', 'Some folders are shown. Enter a full path to navigate directly.'],
@@ -10185,9 +10185,9 @@
         ['正在检查更新，可能需要一些时间…', 'Checking for updates; this can take a while…'],
         ['离线模式（PI_OFFLINE）下不联网检查更新。', 'Offline mode (PI_OFFLINE) skips network update checks.'],
         ['{0} 个扩展包有可用更新，可在对应行点击“更新”。', 'Updates are available for {0} packages. Use Update on each row.', 'An update is available for {0} package. Use Update on its row.'],
-        ['未发现可用更新。固定版本、本地路径和 Pivane 内置组件不参与检查；查询失败的包同样不会显示更新。', 'No updates found. Pinned versions, local paths and Pivane components are not checked; packages whose lookup failed also show no update.'],
-        ['Pivane 内置', 'Bundled with Pivane'],
-        ['随 Pivane 更新', 'Updates with Pivane'],
+        ['未发现可用更新。固定版本、本地路径和 OhMyBuddy 内置组件不参与检查；查询失败的包同样不会显示更新。', 'No updates found. Pinned versions, local paths and OhMyBuddy components are not checked; packages whose lookup failed also show no update.'],
+        ['OhMyBuddy 内置', 'Bundled with OhMyBuddy'],
+        ['随 OhMyBuddy 更新', 'Updates with OhMyBuddy'],
         ['固定版本', 'Pinned'],
         ['来源指定了版本或 Git 引用，检查更新时跳过', 'The source pins a version or Git ref, so update checks skip it'],
         ['未发现更新', 'No update found'],
@@ -10379,7 +10379,7 @@
         ["内容刚刚有变化，请再选一次", "This just changed. Please choose again."],
         ["谢谢，这些我都记下了。我还没有名字，再花两三分钟互相认识一下？随时可以说“先跳过”。", "Thanks, I've noted all that. I still don't have a name. Two or three more minutes to get acquainted? Say “Skip for now” any time."],
         ["放手", "Hands-off"],
-        ["几乎所有事直接办好，相当于完全权限。只有 sudo、递归删除、关机或停服务、git push／重置、发布、发邮件、设定时任务和改 Pivane 自身运行目录时会先问你。", "Gets almost everything done directly, like full access. Asks you first only for sudo, recursive deletes, shutting down or stopping services, git push/reset, publishing, sending mail, scheduled jobs, or changes to Pivane's own runtime."],
+        ["几乎所有事直接办好，相当于完全权限。只有 sudo、递归删除、关机或停服务、git push／重置、发布、发邮件、设定时任务和改 OhMyBuddy 自身运行目录时会先问你。", "Gets almost everything done directly, like full access. Asks you first only for sudo, recursive deletes, shutting down or stopping services, git push/reset, publishing, sending mail, scheduled jobs, or changes to OhMyBuddy's own runtime."],
         ["创建失败", "Could not create it"],
         ["稳妥", "Careful"],
         ["查资料、记东西、在工作目录里写文件直接做；运行命令、改工作目录以外的文件、交给别的助手前，会弹出确认等你允许。", "Looks things up, takes notes and writes files in its workspace directly; before running a command, changing files outside its workspace or handing work to another assistant, it shows an approval card and waits for you."],
@@ -10591,9 +10591,9 @@
         ["设置刚刚有变化，请再选一次", "Settings just changed. Please choose again."],
         ["好的，想到要做什么，随时跟我说。", "Sure. Whenever something comes up, just tell me."],
         ["认识好啦！先说说我平时怎么做事", "We're all set! Here's how I work"],
-        ["聊天、记忆和我做的文件都保存在运行 Pivane 的这台电脑上；回复时，需要的内容会发给下面选的模型服务。", "Our chats, my memory and the files I make are kept on the computer running Pivane. To reply, the content I need is sent to the model service chosen below."],
+        ["聊天、记忆和我做的文件都保存在运行 OhMyBuddy 的这台电脑上；回复时，需要的内容会发给下面选的模型服务。", "Our chats, my memory and the files I make are kept on the computer running OhMyBuddy. To reply, the content I need is sent to the model service chosen below."],
         ["关于你的事记在“关于你”，这段聊天定下的事记在“我记着的事”，都能随时查看和修改。", "Things about you go to “About you”, and what we settle in this chat goes to my chat notes. You can view and edit both any time."],
-        ["这些确认在 Pivane 的工具层进行，不是系统沙箱；可以在设置里改。", "These confirmations happen in Pivane's tool layer, not an OS sandbox. You can change them in settings."],
+        ["这些确认在 OhMyBuddy 的工具层进行，不是系统沙箱；可以在设置里改。", "These confirmations happen in OhMyBuddy's tool layer, not an OS sandbox. You can change them in settings."],
         ["想先做点什么？点一下就会发给 {0}。", "What would you like to start with? Clicking one sends it to {0}."],
         ["我自己说", "I'll say it myself"],
         ["运行这条命令", "Run this command"],
@@ -10612,7 +10612,7 @@
         ["不撤销：{0}", "Keep: {0}"],
         ["撤销：{0}", "Revoke: {0}"],
         ["另有 {0} 条这个版本看不懂的规则，会原样保留。", "{0} more rules aren't understood by this version and are kept as they are."],
-        ["一直允许只对完全相同的命令（同一个目录）或同一个文件跳过确认，其他照常询问。它只在 Pivane 的工具层生效，不是系统沙箱：允许的命令以 Pivane 服务的权限运行。", "Always allow skips the confirmation only for exactly the same command (in the same folder) or the same file; everything else is still asked about. It works in Pivane's tool layer and is not an OS sandbox: allowed commands run with the Pivane service's permissions."],
+        ["一直允许只对完全相同的命令（同一个目录）或同一个文件跳过确认，其他照常询问。它只在 OhMyBuddy 的工具层生效，不是系统沙箱：允许的命令以 OhMyBuddy 服务的权限运行。", "Always allow skips the confirmation only for exactly the same command (in the same folder) or the same file; everything else is still asked about. It works in OhMyBuddy's tool layer and is not an OS sandbox: allowed commands run with the OhMyBuddy service's permissions."],
         ["还有修改没保存。再点一次就放弃这些修改，接着移到回收站。", "You have unsaved changes. Click again to discard them and move to the trash."],
         ["把 {0} 移到回收站？", "Move {0} to the trash?"],
         ["{0} 会从 Bot 列表里移走。它的名字、性格、记忆、聊天记录和工作目录里的文件都会保留，之后可以在“身份”页的回收站恢复。", "{0} will leave the Bot list. Its name, personality, memory, chat history and the files in its folder are all kept, and you can restore it later from the trash on the Profiles page."],
@@ -10663,7 +10663,7 @@
         ["允许这次", "Allow this time"],
         ["确认以后都允许", "Confirm: always allow"],
         ["以后都允许", "Always allow"],
-        ["这条规则只在 Pivane 的工具层生效，不是系统沙箱：允许的命令以 Pivane 服务的权限运行。可以随时在设置的“做事方式”里撤销。", "This rule works only in Pivane's tool layer and is not an OS sandbox: allowed commands run with the Pivane service's permissions. You can revoke it any time under Way of working in settings."],
+        ["这条规则只在 OhMyBuddy 的工具层生效，不是系统沙箱：允许的命令以 OhMyBuddy 服务的权限运行。可以随时在设置的“做事方式”里撤销。", "This rule works only in OhMyBuddy's tool layer and is not an OS sandbox: allowed commands run with the OhMyBuddy service's permissions. You can revoke it any time under Way of working in settings."],
         ["设置刚刚在别处改过，规则还没保存；可以再点一次，或者只允许这次", "Settings were just changed elsewhere and the rule was not saved. Click again, or allow just this time."],
         ["规则没有保存：{0}", "The rule was not saved: {0}"],
         ["规则已保存；那一步已经不在等待，没有替你回答。", "The rule was saved. That step is no longer waiting, so it was not answered for you."],
@@ -10820,9 +10820,9 @@
         ["运行命令和脚本","Run commands and scripts"],
         ["安装依赖","Install dependencies"],
         ["上网查资料","Search the web"],
-        ["记忆和 Pivane 定时任务","Memory and Pivane scheduled tasks"],
+        ["记忆和 OhMyBuddy 定时任务","Memory and OhMyBuddy scheduled tasks"],
         ["交给其他助手","Hand off to other assistants"],
-        ["读写 Pivane 的设置和记录","Read and write Pivane settings and records"],
+        ["读写 OhMyBuddy 的设置和记录","Read and write OhMyBuddy settings and records"],
         ["sudo 等提权","sudo and other privilege elevation"],
         ["递归删除","Recursive deletes"],
         ["关机、结束进程、启停服务","Shutting down, ending processes, starting or stopping services"],
@@ -10831,14 +10831,14 @@
         ["发邮件","Sending email"],
         ["系统定时（cron 等）和开机自启","System schedules (cron etc.) and startup items"],
         ["密码和密钥文件","Password and key files"],
-        ["Pivane 正在运行的程序目录","Pivane's running program directory"],
+        ["OhMyBuddy 正在运行的程序目录","OhMyBuddy's running program directory"],
         ["工作目录里直接做，运行命令前先问你","Works directly in its working directory; asks before running commands"],
         ["读文件","Read files"],
         ["在工作目录里写文件","Write files in its working directory"],
         ["图片与语音","Images and speech"],
         ["运行任何命令","Running any command"],
         ["写工作目录以外的文件","Writing files outside its working directory"],
-        ["设定或取消 Pivane 定时任务","Setting or cancelling Pivane scheduled tasks"],
+        ["设定或取消 OhMyBuddy 定时任务","Setting or cancelling OhMyBuddy scheduled tasks"],
         ["除了看和回答，每一步都先问你","Asks before every step except reading and answering"],
         ["阅读文件","Read files"],
         ["查资料和回答","Look things up and answer"],
@@ -10875,7 +10875,7 @@
         ["：直接拒绝，不会弹出确认",": refused outright, no approval card"],
         ["安全边界","Safety boundary"],
         ["这是工具层的检查，不是系统沙箱","These are tool-level checks, not a system sandbox"],
-        ["允许执行的命令以 Pivane 服务的权限运行，不会被隔离。","Allowed commands run with the Pivane service's permissions and are not isolated."],
+        ["允许执行的命令以 OhMyBuddy 服务的权限运行，不会被隔离。","Allowed commands run with the OhMyBuddy service's permissions and are not isolated."],
         ["“放手”只认得上面列出的常见高风险操作，藏在复杂脚本里的不一定认得出。","“Hands-off” recognizes only the common high-risk actions listed above; ones hidden in complex scripts may not be caught."],
         ["对外发消息、明显花钱：靠 {0} 按指令先问你和对应功能自己的确认，工具层不一定识别得出。","Sending messages out or spending money: {0} is instructed to ask first and those features have their own confirmations, but the tool checks may not recognize them."],
         ["任何方式下都不会列出全部环境变量。","It never lists all environment variables, in any mode."],
@@ -11002,7 +11002,7 @@
         ["完整备份需要在空闲停机时保存实际 Pi 身份目录、Bot 工作目录及关联媒体/配置；聊天里的 /export 仅导出当前会话范围，不是整个 Bot 的备份。", "A full backup needs the actual Pi identity directory, Bot working directories and associated media/configuration, saved while idle and stopped. /export in chat only exports the current session scope, not the whole Bot."],
         ["查看备份与恢复指南", "Read the backup & recovery guide"]
     );
-    rows.push(["聊天、记忆和工作文件保存在运行 Pivane 的服务机器上；回复时，相关上下文会发送给已配置的外部模型服务。", "Chats, memory and work files are stored on the machine running Pivane. Relevant context is sent to the configured external model service when replying."]);
+    rows.push(["聊天、记忆和工作文件保存在运行 OhMyBuddy 的服务机器上；回复时，相关上下文会发送给已配置的外部模型服务。", "Chats, memory and work files are stored on the machine running OhMyBuddy. Relevant context is sent to the configured external model service when replying."]);
     rows.push(
         ["思考程度：{0}", "Thinking level: {0}"],
         ["已达到本次运行的用量或时间限制", "This run reached its usage or time limit"],

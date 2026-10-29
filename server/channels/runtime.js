@@ -40,7 +40,7 @@ function registerChannelTurns(pi, { prepareStart } = {}) {
             active = { version: 1, id: input.id, sessionId: input.sessionId, status: 'running', startedAt: Date.now() };
             pi.appendEntry(STATE, active);
             const approvalHint = readWindowBinding(ctx.sessionManager) ? '工具授权只通过对应的同意/拒绝 A编号回答，不能用 /confirm 代替。' : '';
-            const header = '[用户通过已绑定的微信私聊发来消息。请完成本次请求；回复、自动生成完成的媒体（图片/音频）及本次通过 deliver_files 发布的文件/图片将自动发送回该微信聊天。若存在待确认的媒体生成卡片（如视频），用户可在微信发送 /confirm [卡片ID] 确认生成或查询结果，也可到 Pivane 网页处理。' + approvalHint + ']';
+            const header = '[用户通过已绑定的微信私聊发来消息。请完成本次请求；回复、自动生成完成的媒体（图片/音频）及本次通过 deliver_files 发布的文件/图片将自动发送回该微信聊天。若存在待确认的媒体生成卡片（如视频），用户可在微信发送 /confirm [卡片ID] 确认生成或查询结果，也可到 OhMyBuddy 网页处理。' + approvalHint + ']';
             const promptText = `${header}\n\n${text.trim() || '请查看我发来的图片。'}`;
             const content = images.length
                 ? [{ type: 'text', text: promptText }, ...images.map(({ mimeType, data }) => ({ type: 'image', mimeType, data }))]

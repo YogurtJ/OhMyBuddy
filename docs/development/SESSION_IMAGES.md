@@ -1,16 +1,16 @@
 # 原生会话图片存储
 
-Pivane 保留 Pi SessionManager 的会话树、条目 ID、时间、分支、书签和上下文编辑语义。图片字节由原生条目中的引用指向身份目录内的不可变对象。没有第二套聊天正文或模型历史。
+OhMyBuddy 保留 Pi SessionManager 的会话树、条目 ID、时间、分支、书签和上下文编辑语义。图片字节由原生条目中的引用指向身份目录内的不可变对象。没有第二套聊天正文或模型历史。
 
 ## 数据与请求
 
-`server/pi-session-images.js` 将标准图片 content block 保存为二进制对象，目录为 `<agentDir>/pivane-session-images/<sha256>`。文件使用私有权限，写入、fsync 后独占发布；同身份下相同字节去重。对象存储不可用时，持久化保留内联图片，不能因节省空间丢失消息。读回核验已打开文件的身份、内核路径、大小和 SHA256。非规范编码保持内联，继续由原来的图片校验处理。
+`server/pi-session-images.js` 将标准图片 content block 保存为二进制对象，目录为 `<agentDir>/ohmybuddy-session-images/<sha256>`。文件使用私有权限，写入、fsync 后独占发布；同身份下相同字节去重。对象存储不可用时，持久化保留内联图片，不能因节省空间丢失消息。读回核验已打开文件的身份、内核路径、大小和 SHA256。非规范编码保持内联，继续由原来的图片校验处理。
 
 JSONL 使用 A2：普通 `text` block 加 `pivaneImage` 结构字段，包含 version、sha256、bytes 和原 image block 的非 data 字段。只有结构化引用会还原，普通文字中的引用样式不触发读取。模型请求出口在副本上还原图片，再执行既有模型兼容与缩放；不按图片年龄或数量主动删除历史图片。没有图片能力的模型继续得到原来的省略提示。缺失或损坏的必需图片阻止视觉请求，不能静默退化成文字。
 
 持久主会话、Bot 和子会话通过公开 `message_end` 扩展保存图片；直接发送的 custom message 通过公开 SDK 方法包装覆盖。侧聊可以读取继承的引用，其自身内存消息不落入原生 JSONL。工具的内部嵌套返回值不提前改成引用，保证 codemode 等调用者仍收到原始工具协议。
 
-A2 在未安装 Pivane 适配的原版 Pi 中显示为文字占位。受管 SDK 使用 `pi-session-image-context.js` 的公开 SessionManager facade：上下文和分支读取返回带引用的轻量 image block，使 Pi 的 token 粗估、压缩切点与摘要序列化继续遵循图片语义；原生 getEntries、完整树、分叉写入仍绑定同一个实际 manager。持久化入口将运行时图片投影恢复为 A2，不能把空 data 投影写入原生文件。Bot 自有维护预算也识别引用为图片，并保留含图片的工具结果。Pivane 的 JSONL/HTML 导出会把图片还原成内联数据，适用于原版 Pi 和跨实例传输，既有导出大小限额仍有效。导入外置引用但缺少图片字节的裸 JSONL 会被拒绝。
+A2 在未安装 OhMyBuddy 适配的原版 Pi 中显示为文字占位。受管 SDK 使用 `pi-session-image-context.js` 的公开 SessionManager facade：上下文和分支读取返回带引用的轻量 image block，使 Pi 的 token 粗估、压缩切点与摘要序列化继续遵循图片语义；原生 getEntries、完整树、分叉写入仍绑定同一个实际 manager。持久化入口将运行时图片投影恢复为 A2，不能把空 data 投影写入原生文件。Bot 自有维护预算也识别引用为图片，并保留含图片的工具结果。OhMyBuddy 的 JSONL/HTML 导出会把图片还原成内联数据，适用于原版 Pi 和跨实例传输，既有导出大小限额仍有效。导入外置引用但缺少图片字节的裸 JSONL 会被拒绝。
 
 ## 展示与其他消费者
 

@@ -50,7 +50,7 @@ class PiSubagentSettingsService {
         if (!input || Object.keys(input).some(key => !['cwd', 'expectedRevision', 'confirmed'].includes(key)) || input.confirmed !== true) throw fail('请确认组件操作');
         const ctx = await this.context(input.cwd);
         if (ctx.revision !== input.expectedRevision) throw fail('配置已变化，请刷新', 409);
-        throw fail('此组件由 Pivane 管理，请随 Pivane 安装或更新');
+        throw fail('此组件由 OhMyBuddy 管理，请随 OhMyBuddy 安装或更新');
     }
     async save(input) {
         if (!input || Object.keys(input).some(key => !['cwd', 'scope', 'expectedRevision', 'changes'].includes(key)) || !['global', 'project'].includes(input.scope)

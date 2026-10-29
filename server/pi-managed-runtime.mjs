@@ -1,5 +1,5 @@
 // Managed RPC entrypoint using Pi's public SDK and native RPC transport.
-// Pivane owns resource selection; SessionManager remains the conversation owner.
+// OhMyBuddy owns resource selection; SessionManager remains the conversation owner.
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createAgentSessionRuntime, createAgentSessionServices,

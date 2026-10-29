@@ -13,7 +13,7 @@ const TRASH = 'retention-trash';
 const plans = new WeakMap();
 function retentionLimits(env = {}) {
     const read = (name, kind) => {
-        const raw = String(env[name] ?? '').trim();
+        const raw = String(require('./pi-local-env').environmentValue(env, name.replace(/^PIVANE_/, ''), false) ?? '').trim();
         if (!raw) return DEFAULT_RETENTION[kind];
         if (raw.toLowerCase() === 'off') return null;
         const value = /^\d{1,4}$/.test(raw) ? Number(raw) : NaN;
@@ -33,11 +33,11 @@ function realDirectories(parent) {
 }
 function releaseProof(root, id) {
     if (id !== null && !ID.test(id || '')) throw new Error('Invalid retained release reference');
-    const dir = id === null ? root : path.join(root, '.pivane-runtime/releases', id);
+    const dir = id === null ? root : path.join(require('./ohmybuddy-compat').runtimeDirectory(root), 'releases', id);
     if (fs.realpathSync.native(dir) !== dir) throw new Error('Linked retained release');
     const pkg = JSON.parse(readSafe(path.join(dir, 'package.json')));
     const lockBytes = readSafe(path.join(dir, 'package-lock.json'), 16 * 1024 * 1024), lock = JSON.parse(lockBytes);
-    if (pkg.name !== 'pivane' || !validApplicationVersion(pkg.version) || !exactVersion(pkg.dependencies?.[PI_PACKAGES[0]])
+    if (!require('./ohmybuddy-compat').isPackage(pkg.name) || !validApplicationVersion(pkg.version) || !exactVersion(pkg.dependencies?.[PI_PACKAGES[0]])
         || lock.packages?.['']?.version !== pkg.version) throw new Error('Invalid native installation metadata');
     if (id === null) verifyPiPackages(dir, pkg, lock, pkg.dependencies[PI_PACKAGES[0]]);
     if (id !== null) {
@@ -67,7 +67,7 @@ function planRetention(directory, state, limits = DEFAULT_RETENTION, { completed
     if ([state.active, state.previous].some(id => id !== null && !ID.test(id || ''))) throw new Error('Invalid retention state identity');
     for (const kind of ['releases', 'backups']) if (limits[kind] !== null && (!Number.isInteger(limits[kind]) || limits[kind] < MINIMUM[kind] || limits[kind] > 9999)) throw new Error('Invalid retention limits');
     const root = path.dirname(directory);
-    if (path.basename(directory) !== '.pivane-runtime' || fs.realpathSync.native(directory) !== directory) throw new Error('Invalid retention root');
+    if (!['.ohmybuddy-runtime', '.pivane-runtime'].includes(path.basename(directory)) || fs.realpathSync.native(directory) !== directory) throw new Error('Invalid retention root');
     const plan = { keepReleases: [], removeReleases: [], incompleteReleases: [], keepBackups: [], removeBackups: [], incompleteBackups: [], unverifiedBackups: [] };
     const releases = [], backups = [], items = [];
     const round = { ...budgets.round }, each = budgets.backup;

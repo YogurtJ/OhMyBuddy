@@ -54,7 +54,7 @@
                 scope.replaceChildren(node('option', t('所有项目'), { value: 'global' }));
                 if (current.cwd) scope.append(node('option', t('当前项目'), { value: 'project' }));
                 scope.value = detail.scope === 'project' && current.cwd ? 'project' : 'global';
-                target.textContent = t('安装到运行 Pivane 的机器。项目上下文：{0}', cwd);
+                target.textContent = t('安装到运行 OhMyBuddy 的机器。项目上下文：{0}', cwd);
                 need.value = typeof detail.need === 'string' ? detail.need.slice(0, 4000) : '';
                 location.open = false; body.scrollTop = 0;
                 status.textContent = ''; submit.disabled = false;
@@ -80,7 +80,7 @@
                     const profile = session?.assistant;
                     banner.hidden = profile?.kind !== 'extensions';
                     if (banner.hidden) return;
-                    info.textContent = t('扩展助手 · {0} · 安装位置：Pivane 部署端', profile.scope === 'project' ? t('当前项目') : t('所有项目'));
+                    info.textContent = t('扩展助手 · {0} · 安装位置：OhMyBuddy 部署端', profile.scope === 'project' ? t('当前项目') : t('所有项目'));
                     back.hidden = !profile.returnSessionId;
                 }
             };

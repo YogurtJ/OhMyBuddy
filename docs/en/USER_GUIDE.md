@@ -1,8 +1,8 @@
-# Pivane user guide
+# OhMyBuddy user guide
 
 [简体中文](../USER_GUIDE.md) · [Install](INSTALL.md) · [Documentation](../README.md)
 
-Pivane runs on your computer or server. Other devices can use its browser interface, but project paths, Shell commands and Agent tools use the **server's filesystem and OS permissions**.
+OhMyBuddy runs on your computer or server. Other devices can use its browser interface, but project paths, Shell commands and Agent tools use the **server's filesystem and OS permissions**.
 
 ## Start your first session
 
@@ -37,7 +37,7 @@ Channels supporting Fast or Ultrafast show a separate Speed control with cost mu
 
 Ask the main Agent explicitly to delegate. The **Subagents** chip above the composer shows the number of runs and workflow progress (such as `1/3`). Open it to see one card per run: task rows show role, model, thinking level, the current tool and elapsed time, and a long stretch without activity is highlighted in amber. Steer, Stop (with a confirmation) and, for eligible runs, Continue are in the card's **⋯** menu. Completed and stopped runs fold under **Finished**, and the footer shows the subagent cost total (read when the panel opens, at most every 30 seconds). Steering reports delivery only when the subagent confirms it; queued or unconfirmed guidance says so. Actual availability depends on the run's state. Refresh and check uncertain outcomes before repeating an action.
 
-Subagents ship with Pivane. Global/project defaults and role overrides are saved in Models & capabilities; an override does not create a role definition. Saving leaves active tasks unchanged, and an idle runtime reopen applies new settings. See [bundled capabilities](../BUNDLED_CAPABILITIES.md).
+Subagents ship with OhMyBuddy. Global/project defaults and role overrides are saved in Models & capabilities; an override does not create a role definition. Saving leaves active tasks unchanged, and an idle runtime reopen applies new settings. See [bundled capabilities](../BUNDLED_CAPABILITIES.md).
 
 **Session kept open** means background work is still active. Closing the page does not stop it; maintenance also waits. Use the run's Stop control when needed. Result notices and requests can be expanded from their compact rows.
 
@@ -104,13 +104,13 @@ Under **Settings → System prompts**, select All projects or This project, edit
 Open **Extensions** on desktop or **More → Extensions** on phones:
 
 - **Discover** filters curated items by type (packages, skills, messaging, MCP) and installation state. Cards show the installation state and installed version, and **Update available** after the latest check found a newer version; requirements and examples expand inside the card. Learn & set up places a request in a dedicated Extension Assistant draft for you to send; browsing and filtering do not install or call a model.
-- **Installed** filters Packages, Skills, extension modules, templates and terminal themes, and shows package and skill versions (from the package manifest or SKILL.md; package resources show their package version). **Check for updates** queries npm and Git remotes only when you click it; packages with a newer version get an inline **Update**. Pinned versions, local paths and Pivane components are not checked, and offline mode makes no network request. Enable/disable is in the row; other update, remove and restore-inheritance actions are in its menu. Review source, scope and code-execution implications before installation.
+- **Installed** filters Packages, Skills, extension modules, templates and terminal themes, and shows package and skill versions (from the package manifest or SKILL.md; package resources show their package version). **Check for updates** queries npm and Git remotes only when you click it; packages with a newer version get an inline **Update**. Pinned versions, local paths and OhMyBuddy components are not checked, and offline mode makes no network request. Enable/disable is in the row; other update, remove and restore-inheritance actions are in its menu. Review source, scope and code-execution implications before installation.
 - **Messaging** summarises the connector, accounts, bindings and messages that need attention, and guides unfinished setup through install → QR login → thread binding. Allowed users are added and removed as tags, with a save bar only for unsaved changes; uninstall and disable live in the `⋯` menu and ask for confirmation. It binds text/image DMs, file deliveries, slash commands and scheduled notifications to native threads. Use **Connect to WeChat…** in a thread menu to preselect it. See [messaging channels](../MESSAGE_CHANNELS.md).
 - **MCP** manages global or trusted-project configuration. Saving is separate from connecting or reloading. Existing credentials stay unless explicitly replaced or removed. Status, reconnect and OAuth use an open persistent thread.
 
 Installed does not mean loaded in the current conversation. Reload idle resources and verify them after setup. Untrusted projects cannot receive project writes. Legacy MCP adapter migration requires stopped backups; see [MCP](../MCP.md) and [native resources](../NATIVE_SETTINGS.md).
 
-Use **Add → Add capabilities…** for setup or troubleshooting. Package operations use web confirmation, and tools run on the deployment machine. Computer-use extensions do not directly control the phone viewing Pivane. Third-party resources need their own dependencies and permissions.
+Use **Add → Add capabilities…** for setup or troubleshooting. Package operations use web confirmation, and tools run on the deployment machine. Computer-use extensions do not directly control the phone viewing OhMyBuddy. Third-party resources need their own dependencies and permissions.
 
 ## Scheduled tasks
 
@@ -196,7 +196,7 @@ The picker is limited by server `PI_PROJECT_ROOTS` and OS permissions. Projects 
 
 ## Versions and updates
 
-**Settings → Versions and updates** checks Pivane and Pi versions without installing them. Copy the independent-Agent prompt to a separate Agent on the host to inspect compatibility, backups and an update plan. An Agent inside the service must not directly stop the service hosting its own conversation. Pi and Pivane are upgraded together. See [updates](../UPDATES.md).
+**Settings → Versions and updates** checks OhMyBuddy and Pi versions without installing them. Copy the independent-Agent prompt to a separate Agent on the host to inspect compatibility, backups and an update plan. An Agent inside the service must not directly stop the service hosting its own conversation. Pi and OhMyBuddy are upgraded together. See [updates](../UPDATES.md).
 
 ## Settings, usage and notifications
 

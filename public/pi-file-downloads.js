@@ -26,7 +26,7 @@
                 if (controller.signal.aborted || current.key !== context.key || current.generation !== context.generation) return;
                 const frame = document.createElement('iframe'); frame.hidden = true;
                 // Page-local targets also work on HTTP without Web Crypto UUIDs.
-                do { frame.name = 'pivane-download-' + ++nextFrame; } while (document.getElementsByName(frame.name).length);
+                do { frame.name = 'ohmybuddy-download-' + ++nextFrame; } while (document.getElementsByName(frame.name).length);
                 frame.setAttribute('aria-hidden', 'true');
                 const link = document.createElement('a'); link.href = url; link.target = frame.name;
                 link.download = target.name || target.path?.split(/[\\/]/).at(-1) || 'download';

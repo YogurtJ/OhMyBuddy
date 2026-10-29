@@ -1,5 +1,5 @@
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
-const { INTERNAL_COMMAND, INTERNAL_COMMAND_PATTERN } = require('./pivane-compat');
+const { INTERNAL_COMMAND, INTERNAL_COMMAND_PATTERN } = require('./ohmybuddy-compat');
 
 function validateMessage(input, { plain = false } = {}) {
     if (typeof input.message !== 'string' || input.message.length > 400000) throw new Error('消息必须为不超过 400000 字符的文本');

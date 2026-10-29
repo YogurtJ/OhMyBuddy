@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Pivane",
-  "short_name": "Pivane",
+  "name": "OhMyBuddy",
+  "short_name": "OhMyBuddy",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

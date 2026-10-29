@@ -1,4 +1,4 @@
-// Pivane-owned integration catalog; vendor manifests and source remain upstream originals.
+// OhMyBuddy-owned integration catalog; vendor manifests and source remain upstream originals.
 const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const catalog = Object.freeze([

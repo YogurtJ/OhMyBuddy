@@ -376,7 +376,7 @@ test('the settings sheet reads identity, personality and the model list, and sav
     assert.deepEqual(read.models.models.map(model => model.id), ['small', 'large']);
     assert.equal(read.models.defaults.modelId, 'small');
     assert.equal(asked.length, 1);
-    assert.match(asked[0], /PivaneBots[\\/]bot-/, 'models are listed for the Bot workspace');
+    assert.match(asked[0], /OhMyBuddyBots[\\/]bot-/, 'models are listed for the Bot workspace');
 
     const events = [];
     bots.on('botChanged', event => events.push(event));

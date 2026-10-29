@@ -16,7 +16,7 @@ export const loadNativeMcpConfig = configApi.loadMcpConfig;
 export const nativeMcpNamespace = serversApi.mcpNamespace;
 export const nativeMcpToolName = toolsApi.createMcpToolName;
 export const nativeBuiltins = ['llama.cpp', 'codemode', 'tool-search', 'mcp'];
-// Pi 1.1 keeps indirect MCP tools outside a non-MCP CLI allowlist. Pivane's
+// Pi 1.1 keeps indirect MCP tools outside a non-MCP CLI allowlist. OhMyBuddy's
 // explicit lists remain strict: hide ungranted native tools at registration,
 // before the snapshot is published and before any direct or nested loadout.
 function restrictMcpFactory(factory, permits) {

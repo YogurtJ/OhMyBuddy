@@ -1,10 +1,12 @@
 <div align="center">
 
-<img src="public/brand/logo-192.png" alt="Pivane logo" width="96" height="96">
+<img src="public/brand/logo-192.png" alt="OhMyBuddy logo" width="96" height="96">
 
-# Pivane
+# OhMyBuddy
 
-**A self-hosted web workspace for AI coding agents, usable from any screen.**
+**A self-hosted AI buddy for conversations, coding and everyday tasks.**
+
+Formerly **Pivane**. Existing installations keep their data and settings; see the [rename and upgrade guide](docs/development/NAMING.md).
 
 Run the [Pi coding agent](https://pi.dev) on your own machine and use it from any browser on your desktop, tablet or phone.<br>
 Subagents, scheduled tasks, MCP, long-term memory, rich file previews and a built-in image, video and speech lab work with your own models and keys.
@@ -19,26 +21,24 @@ Subagents, scheduled tasks, MCP, long-term memory, rich file previews and a buil
 
 [Download](https://github.com/YogurtJ/pivane/releases/latest) · [Install](docs/en/INSTALL.md) · [User guide](docs/en/USER_GUIDE.md) · [Changelog](CHANGELOG.md) · [Report an issue](https://github.com/YogurtJ/pivane/issues/new/choose) · [Discussions](https://github.com/YogurtJ/pivane/discussions)
 
-<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/hero-en.webp" alt="Pivane on the desktop: projects and threads, a just-finished coding task (budget alerts, 7 tests passing) and its diff" width="100%">
+<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/hero-en.webp" alt="OhMyBuddy on the desktop: a personal Bot conversation, folded process and reviewable memory receipts" width="100%">
 
 </div>
 
-## Why Pivane
+## Why OhMyBuddy
 
-- **Uses Pi's own runtime.** Pivane runs Pi's native runtime and reads and writes Pi's own session files. You get streaming replies, tool calls, file diffs, shell commands, steering and context compaction in a UI that is easy to read on any screen.
-- **Start on your desktop and check in from your phone.** Sessions are stored on your server. When you open a thread on another device, the same agent process serves it. You can add Pivane to your home screen and get notified when a reply finishes. With the optional WeChat connector, you can also hand tasks to the agent from a WeChat chat and get the files back there.
+- **Uses Pi's own runtime.** OhMyBuddy runs Pi's native runtime and reads and writes Pi's own session files. You get streaming replies, tool calls, file diffs, shell commands, steering and context compaction in a UI that is easy to read on any screen.
+- **Start on your desktop and check in from your phone.** Sessions are stored on your server. When you open a thread on another device, the same agent process serves it. You can add OhMyBuddy to your home screen and get notified when a reply finishes. With the optional WeChat connector, you can also hand tasks to the agent from a WeChat chat and get the files back there.
 - **Run many agents from one workspace.** You can use subagents, task threads that agents create for themselves, messages between threads, side chats and cron-scheduled tasks. A live view shows what each one is doing.
 - **Your models, your keys, your machine.** You can use any provider Pi supports, including Anthropic, OpenAI, Google Gemini, GitHub Copilot, OpenRouter, DeepSeek, Qwen, Kimi, MiniMax, xAI and Mistral. Sign in with an API key or OAuth, or add your own OpenAI-compatible endpoint. Credentials and history stay on your machine.
 - **Extends the same way Pi does.** Pi packages, skills, prompt templates and MCP servers can be installed from the browser. You can also ask the built-in extension assistant to find and set them up for you.
 - **Media generation and voice are built in.** Connect your own image, video and speech services. An agent turns your idea into parameters you can edit; per-type settings control automatic execution in chat, while video asks for confirmation by default. You can also dictate messages and have replies read aloud.
 
-### See it in action
+### A conversation that leaves useful results
 
-Describe a task once: the agent reads the code, edits it, adds tests and runs them while the progress card updates. When it finishes, the tool trace folds into one line, and the changed files open as a diff.
+Ask your Buddy to remember a plan and a preference. The conversation keeps one final reply, while the process and changes stay available for review.
 
-<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/demo-en.gif" alt="Adding budget alerts to a budgeting app in Pivane: the agent reads the code, edits it, adds and runs tests, then the diff opens" width="100%"></p>
-
-<sub>Screenshots and recordings use a synthetic demo project and conversations; the code edits and tests in the recording actually ran.</sub>
+<sub>Current screenshots use synthetic conversations and local fixtures; no real provider or WeChat message was sent.</sub>
 
 ## Features
 
@@ -61,7 +61,6 @@ Describe a task once: the agent reads the code, edits it, adds tests and runs th
 
 ### Multi-agent and automation
 
-<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/agents-en.webp" alt="Three subagents checking boundaries, test gaps and docs in parallel while a side chat answers a quick question" width="100%">
 
 - Subagents are built in through [pi-subagents](https://pi.dev/packages/pi-subagents). A live panel shows each run's status and models, lets you steer, stop or continue it, and reports token usage and cost.
 - An agent can start a new task thread or message another thread in the same project.
@@ -85,7 +84,7 @@ Describe a task once: the agent reads the code, edits it, adds tests and runs th
 
 ### Messaging channels
 
-- Install the optional WeChat connector when needed, sign in with a QR code, allow specific users and bind a private chat to a Pivane thread.
+- Install the optional WeChat connector when needed, sign in with a QR code, allow specific users and bind a private chat to an OhMyBuddy thread.
 - Exchange text, images and delivered files, use common slash commands, and receive scheduled notifications. Connection status and delivery receipts are available in the browser.
 
 ### Files and rendering
@@ -97,7 +96,6 @@ Describe a task once: the agent reads the code, edits it, adds tests and runs th
 
 ### Extensions and MCP
 
-<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/extensions-en.webp" alt="Extension discovery on a phone: scope and installation filters, optional WeChat messaging, requirements and examples" width="393"></p>
 
 - You can manage Pi packages, skills, extensions, prompt templates and themes globally or for a single project.
 - MCP uses Pi's native support, including Codemode and tool search. Servers and OAuth sign-ins are managed in the browser.
@@ -106,7 +104,6 @@ Describe a task once: the agent reads the code, edits it, adds tests and runs th
 
 ### Media lab and voice
 
-<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/media-en.webp" alt="A media card in chat with an autumn drink poster generated by GPT Image 2.5, next to a product photo, a reference edit, an illustration and an app icon from the same model" width="100%">
 
 <sub>Example images were generated by GPT Image 2.5.</sub>
 
@@ -117,22 +114,22 @@ Describe a task once: the agent reads the code, edits it, adds tests and runs th
 
 ### Everyday use
 
-<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/mobile-en.webp" alt="Pivane on phones: a task result, dark mode with math, and favorite models including Claude, GPT, Gemini, DeepSeek, Kimi and MiniMax" width="100%">
+<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/mobile-en.webp" alt="OhMyBuddy on a phone: a personal Bot conversation, process summary and memory receipts" width="100%">
 
-- Layouts adapt to desktop, tablet and phone screens, and Pivane can be installed to your home screen.
+- Layouts adapt to desktop, tablet and phone screens, and OhMyBuddy can be installed to your home screen.
 - In-page notifications and sounds are available, with optional Web Push for background alerts.
 - A usage dashboard breaks down tokens and estimated cost by day, provider, model, project and session.
 - Light and dark color themes, adjustable font sizes, and an English or Simplified Chinese interface are available.
-- An access token protects the workspace. Pivane runs as a background service with a desktop shortcut. It checks for new releases and gives you an upgrade prompt to hand to an agent on the host.
+- An access token protects the workspace. OhMyBuddy runs as a background service with a desktop shortcut. It checks for new releases and gives you an upgrade prompt to hand to an agent on the host.
 
 ## Quick start
 
 Use **Node.js 22.x (22.19.0 or later)** with npm to satisfy the current locked dependencies, plus `bash` and [ripgrep](https://github.com/BurntSushi/ripgrep) (on Windows, Git for Windows provides Bash). You also need an account with a model provider. You do not need a global Pi installation, a frontend build step or a GPU.
 
 ```bash
-# 1. Download pivane-<version>.tar.gz and its .sha256 file from Releases, then verify the archive
-sha256sum -c pivane-<version>.tar.gz.sha256    # macOS: shasum -a 256 -c …
-tar -xzf pivane-<version>.tar.gz && cd pivane-<version>
+# 1. Download ohmybuddy-<version>.tar.gz and its .sha256 file from Releases, then verify the archive
+sha256sum -c ohmybuddy-<version>.tar.gz.sha256    # macOS: shasum -a 256 -c …
+tar -xzf ohmybuddy-<version>.tar.gz && cd ohmybuddy-<version>
 
 # 2. Install the locked dependencies, including the pinned Pi runtime
 node scripts/install.cjs
@@ -143,23 +140,23 @@ npm start
 
 Open <http://127.0.0.1:11408>, check **Settings → Providers and models**, pick a project folder and start a new chat.
 
-For everyday use, follow the [installation guide](docs/en/INSTALL.md) to keep your data outside the app directory, then run `node scripts/install-service.cjs`. This keeps Pivane running in the background and starts it when you log in. On macOS and Windows, it also adds a desktop shortcut.
+For everyday use, follow the [installation guide](docs/en/INSTALL.md) to keep your data outside the app directory, then run `node scripts/install-service.cjs`. This keeps OhMyBuddy running in the background and starts it when you log in. On macOS and Windows, it also adds a desktop shortcut.
 
-> **Already using Pi CLI?** Pivane uses the same Pi identity by default, so your models, logins, settings and sessions are available right away. Avoid writing to the same session from the CLI and the browser at the same time. See [existing Pi users](docs/en/INSTALL.md#existing-pi-cli-users).
+> **Already using Pi CLI?** OhMyBuddy uses the same Pi identity by default, so your models, logins, settings and sessions are available right away. Avoid writing to the same session from the CLI and the browser at the same time. See [existing Pi users](docs/en/INSTALL.md#existing-pi-cli-users).
 >
 > **Want an agent to set it up?** Give your coding agent this repository and the [agent operations guide](docs/AGENT_GUIDE.md). It covers installation, configuration, upgrades and troubleshooting.
 
 ## Platforms
 
-Pivane runs **natively on Linux, macOS and Windows** (no WSL or Docker required). It is light enough to host on a Raspberry Pi, and you can use it from any modern browser.
+OhMyBuddy runs **natively on Linux, macOS and Windows** (no WSL or Docker required). It is light enough to host on a Raspberry Pi, and you can use it from any modern browser.
 
-Pivane listens on localhost by default. To reach it from your phone or another computer, turn on the access token, then connect over your LAN, a VPN such as Tailscale, or an HTTPS reverse proxy. See [Network & access](docs/en/USER_GUIDE.md#network--access).
+OhMyBuddy listens on localhost by default. To reach it from your phone or another computer, turn on the access token, then connect over your LAN, a VPN such as Tailscale, or an HTTPS reverse proxy. See [Network & access](docs/en/USER_GUIDE.md#network--access).
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    B["Browsers<br/>desktop · tablet · phone"] <-->|HTTP + WebSocket| S["Pivane server<br/>Node.js"]
+    B["Browsers<br/>desktop · tablet · phone"] <-->|HTTP + WebSocket| S["OhMyBuddy server<br/>Node.js"]
     S <-->|RPC| W["Pi agent workers<br/>one per open thread"]
     W --> D[("Pi sessions and settings<br/>native JSONL")]
     W --> P["Your project folders"]
@@ -170,13 +167,13 @@ flowchart LR
 - A Node.js server (Express and WebSocket) serves a plain JavaScript frontend, so there is no build step.
 - Each persistent thread is served by exactly one Pi worker process, and every browser that opens the thread connects to that worker.
 - Pi's SessionManager and JSONL files are the only record of each conversation. Usage statistics are kept in a separate ledger that stores no message content.
-- Each Pivane release bundles a tested version of Pi, which is upgraded together with Pivane.
+- Each OhMyBuddy release bundles a tested version of Pi, which is upgraded together with OhMyBuddy.
 
 ## Security model
 
-- Pivane is meant for **personal, single-user** instances. Everyone who has the access token shares the same instance, and there are no separate user accounts.
+- OhMyBuddy is meant for **personal, single-user** instances. Everyone who has the access token shares the same instance, and there are no separate user accounts.
 - Project roots limit which folders you can browse, but they are **not a sandbox**. The agent, shell, packages and extensions all run with the permissions of the server's user account, so install only extensions you trust.
-- Media execution follows your per-type chat settings and confirmation policy. Pivane never automatically replays failed or uncertain submissions.
+- Media execution follows your per-type chat settings and confirmation policy. OhMyBuddy never automatically replays failed or uncertain submissions.
 
 ## FAQ
 
@@ -203,7 +200,7 @@ flowchart LR
 
 Feedback of any kind is welcome. Start with the [welcome post](https://github.com/YogurtJ/pivane/discussions/5).
 
-- **Bugs and feature requests:** [open an issue](https://github.com/YogurtJ/pivane/issues/new/choose). For bugs, include your Pivane version and the shortest steps that reproduce it.
+- **Bugs and feature requests:** [open an issue](https://github.com/YogurtJ/pivane/issues/new/choose). For bugs, include your OhMyBuddy version and the shortest steps that reproduce it.
 - **Questions, chat and sharing:** post in [Discussions](https://github.com/YogurtJ/pivane/discussions) or reply to the welcome post. Not sure where something belongs? Post it anywhere and I'll see it.
 - **Pull requests:** welcome. Issues labeled [`good first issue`](https://github.com/YogurtJ/pivane/labels/good%20first%20issue) are a good place to start.
 
@@ -213,4 +210,4 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [development docs](docs/developm
 
 ## License
 
-Pivane is released under the [ISC License](LICENSE). Pi, Font Awesome, KaTeX, Mermaid and other bundled components keep their own licenses; see [Third-party notices](THIRD_PARTY_NOTICES.md).
+OhMyBuddy is released under the [ISC License](LICENSE). Pi, Font Awesome, KaTeX, Mermaid and other bundled components keep their own licenses; see [Third-party notices](THIRD_PARTY_NOTICES.md).

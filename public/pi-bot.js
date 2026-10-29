@@ -1490,7 +1490,7 @@
                     const where = globalThis.PiBotRules.place(rule);
                     if (where) grant.append(el('small', null, where));
                     scope.append(grant, el('p', null, globalThis.PiBotRules.scope(rule, who)),
-                        el('p', null, translateUi("这条规则只在 Pivane 的工具层生效，不是系统沙箱：允许的命令以 Pivane 服务的权限运行。可以随时在设置的“做事方式”里撤销。")));
+                        el('p', null, translateUi("这条规则只在 OhMyBuddy 的工具层生效，不是系统沙箱：允许的命令以 OhMyBuddy 服务的权限运行。可以随时在设置的“做事方式”里撤销。")));
                     parts.push(scope);
                 }
                 foot.append(note, deny, keep, allow);

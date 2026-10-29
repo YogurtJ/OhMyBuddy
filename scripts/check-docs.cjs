@@ -2,10 +2,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { lexer, walkTokens } = require('marked');
 
-const PRIVATE_PATH = /^(?:docs\/local(?:\/|$)|backups(?:\/|$)|\.pivane-runtime(?:\/|$)|AGENTS\.local\.md$|\.env(?:$|\.(?!example$))|\.pi(?:\/|$)|node_modules(?:\/|$)|dist(?:\/|$)|public\/(?:images|videos|audio|downloads|legacy-workspace)(?:\/|$)|(?:generation_history|video_history|tts_history|media_chat_requests|prompts)\.json$)/i;
+const PRIVATE_PATH = /^(?:docs\/local(?:\/|$)|backups(?:\/|$)|\.(?:ohmybuddy|pivane)-runtime(?:\/|$)|AGENTS\.local\.md$|\.env(?:$|\.(?!example$))|\.pi(?:\/|$)|node_modules(?:\/|$)|dist(?:\/|$)|public\/(?:images|videos|audio|downloads|legacy-workspace)(?:\/|$)|(?:generation_history|video_history|tts_history|media_chat_requests|prompts)\.json$)/i;
 function assertPublicPath(file) {
     if (typeof file !== 'string' || !file || file.includes('\\') || path.posix.isAbsolute(file)
-        || file.split('/').some(part => !part || part === '.' || part === '..') || PRIVATE_PATH.test(file) || file.split('/').some(part => /^pivane-network\.json(?:$|[.~_-])/i.test(part))) {
+        || file.split('/').some(part => !part || part === '.' || part === '..') || PRIVATE_PATH.test(file) || file.split('/').some(part => /^(?:ohmybuddy|pivane)-network\.json(?:$|[.~_-])/i.test(part))) {
         throw new Error(`Private or invalid distribution path: ${file}`);
     }
 }
@@ -46,7 +46,7 @@ function checkDocumentation(root, distributionFiles) {
         }
     }
     inspectDirectory('docs');
-    const instanceMarker = /\/srv\/(?:Pi5_GUI|pivane(?:-maintenance)?)(?:\/|\b)|\/home\/pi(?:\/|["`])|(?:pi5|pivane)-[a-z-]+-deploy-\d{8}|\/tmp\/pi-[a-z0-9-]*deploy-result\.json|backups\/[a-z0-9-]+-2026\d{4}/i;
+    const instanceMarker = /\/srv\/(?:Pi5_GUI|(?:ohmybuddy|pivane)(?:-maintenance)?)(?:\/|\b)|\/home\/pi(?:\/|["`])|(?:pi5|pivane)-[a-z-]+-deploy-\d{8}|\/tmp\/pi-[a-z0-9-]*deploy-result\.json|backups\/[a-z0-9-]+-2026\d{4}/i;
     for (const file of files) {
         if (!regular(file)) { errors.push(`Not a regular public file: ${file}`); continue; }
         if (included && !included.has(file)) errors.push(`Public document omitted from package: ${file}`);
@@ -75,6 +75,6 @@ function checkDocumentation(root, distributionFiles) {
 }
 module.exports = { assertPublicPath, publicDocumentation, checkDocumentation };
 if (require.main === module) {
-    try { console.log(`Pivane documentation checked: ${checkDocumentation(path.resolve(__dirname, '..')).documents} public files`); }
+    try { console.log(`OhMyBuddy documentation checked: ${checkDocumentation(path.resolve(__dirname, '..')).documents} public files`); }
     catch (error) { console.error(error.message); process.exitCode = 1; }
 }

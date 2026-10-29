@@ -17,7 +17,7 @@ function fixture() {
     const profileId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     const otherProfileId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
     const context = { version: 1, profileId, sessionId: 'session-a', cwd,
-        profileRoot: path.join(agent, 'pivane-profiles', 'data', profileId), sessionsRoot,
+        profileRoot: path.join(agent, 'ohmybuddy-profiles', 'data', profileId), sessionsRoot,
         memory: { enabled: true, autoLearn: false, memoryCharLimit: 16000, userCharLimit: 8000 }, skills: { learnedEnabled: true } };
     function session(id, profile, folder = 'project', workdir = cwd) {
         const dir = path.join(sessionsRoot, folder);

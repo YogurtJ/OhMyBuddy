@@ -53,22 +53,25 @@ function collect(root) {
     }
     visit(''); fs.chmodSync(root, 0o755); return files;
 }
-function verifyArchive(archive, version, arch) {
+function verifyArchive(archive, version, arch, product = 'OhMyBuddy') {
     const { parseArchive } = require('../server/pi-release-archive');
     const { verifyManifest } = require('../server/pi-platform-bundle');
-    const entries = parseArchive(readSafe(archive, 512 * 1024 ** 2), { prefix: bundleName(version, 'darwin', arch).replace(/\.tar\.gz$/, '') + '/',
+    const entries = parseArchive(readSafe(archive, 512 * 1024 ** 2), { prefix: bundleName(version, 'darwin', arch, product).replace(/\.tar\.gz$/, '') + '/',
         maxExpanded: 1024 ** 3, maxFile: 128 * 1024 ** 2, maxFiles: 40000 });
-    verifyManifest(JSON.parse(entries.get('PIVANE_BUNDLE.json')?.bytes.toString() || 'null'), entries, { version, platform: 'darwin', arch });
+    verifyManifest(JSON.parse(entries.get(product === 'OhMyBuddy' ? 'OHMYBUDDY_BUNDLE.json' : 'PIVANE_BUNDLE.json')?.bytes.toString() || 'null'), entries, { version, platform: 'darwin', arch, product });
 }
 function wrapper(script) { return '#!/bin/sh\nHERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 1\nexec "$HERE/node" "$HERE/../lib/node_modules/npm/bin/' + script + '" "$@"\n'; }
-async function build({ source, inputs, version, output, work, dmg = true }) {
+async function build({ source, inputs, version, output, work, dmg = true, product = 'OhMyBuddy' }) {
+    if (!require('../server/ohmybuddy-compat').isProduct(product)) throw Error('Unknown build product');
+    const packageName = product === 'OhMyBuddy' ? 'ohmybuddy' : 'pivane';
+    const metadataName = product === 'OhMyBuddy' ? 'OHMYBUDDY_BUNDLE.json' : 'PIVANE_BUNDLE.json';
     if (process.platform !== 'darwin' || !['arm64', 'x64'].includes(process.arch)) throw Error('Build and validate the installer on its target Mac architecture');
     if (!VERSION.test(version) || version.length > 79 || fs.existsSync(work) || fs.existsSync(output)) throw Error('Invalid build identity or output already exists');
     const feed = { version: 1, url: baseUrl(inputs.distribution.url), channel: inputs.distribution.channel || 'stable', keys: inputs.distribution.keys };
     if (!['stable', 'preview'].includes(feed.channel) || !Array.isArray(feed.keys) || !feed.keys.length || feed.keys.some(key => !/^[a-z0-9-]{1,64}$/.test(key.id) || createPublicKey(key.pem).asymmetricKeyType !== 'ed25519')) throw Error('Pinned distribution public keys are required');
     if (inputs.sourceCommit !== undefined && !/^[a-f0-9]{40}$/.test(inputs.sourceCommit)) throw Error('Invalid source commit identity');
     privateDir(work); privateDir(output);
-    const name = bundleName(version, 'darwin', process.arch).replace(/\.tar\.gz$/, ''), payload = privateDir(path.join(work, name));
+    const name = bundleName(version, 'darwin', process.arch, product).replace(/\.tar\.gz$/, ''), payload = privateDir(path.join(work, name));
     const budget = { bytes: 0, files: 0, maxBytes: 256 * 1024 ** 2, maxFiles: 20000 };
     for (const file of distributionFiles(source)) { const target = path.join(payload, file); privateDir(path.dirname(target)); copySafe(path.join(source, file), target, budget); }
     const unpackedNode = extractInput(inputs.node, path.join(work, 'node-input'));
@@ -96,8 +99,11 @@ async function build({ source, inputs, version, output, work, dmg = true }) {
     }
     for (const file of ['package.json', 'package-lock.json']) {
         const target = path.join(payload, file), data = JSON.parse(readSafe(target, 16 * 1024 ** 2)); data.version = version;
-        if (file === 'package.json') data.pivaneBundle = { version: 1, platform: 'darwin', arch: process.arch, nodeVersion: nodeInfo.version };
-        else data.packages[''].version = version;
+        data.name = packageName;
+        if (file === 'package.json') {
+            delete data.pivaneBundle; delete data.ohmybuddyBundle;
+            data[packageName + 'Bundle'] = { version: 1, platform: 'darwin', arch: process.arch, nodeVersion: nodeInfo.version };
+        } else { data.packages[''].version = version; data.packages[''].name = packageName; }
         atomicJson(target, data);
     }
     atomicJson(path.join(payload, 'config/distribution.json'), feed);
@@ -108,30 +114,30 @@ async function build({ source, inputs, version, output, work, dmg = true }) {
     await runNode([path.join(payload, 'scripts/install.cjs'), '--omit=dev'], { cwd: payload, env, executable: node, onOutput });
     for (const name of ['npm-cache', 'user.npmrc', 'global.npmrc']) fs.rmSync(path.join(payload, name), { recursive: true, force: true });
     const pkg = JSON.parse(readSafe(path.join(payload, 'package.json')));
-    const manifest = { version: 1, product: 'Pivane', appVersion: version, piVersion: pkg.dependencies['@earendil-works/pi-coding-agent'],
+    const manifest = { version: 1, product, appVersion: version, piVersion: pkg.dependencies['@earendil-works/pi-coding-agent'],
         platform: 'darwin', arch: process.arch, nodeVersion: nodeInfo.version, sourceCommit: inputs.sourceCommit || null,
         inputSha256: Object.fromEntries(['node', 'rg', 'fd'].map(name => [name, inputs[name].sha256])), files: collect(payload) };
-    atomicJson(path.join(payload, 'PIVANE_BUNDLE.json'), manifest); fs.chmodSync(path.join(payload, 'PIVANE_BUNDLE.json'), 0o644);
+    atomicJson(path.join(payload, metadataName), manifest); fs.chmodSync(path.join(payload, metadataName), 0o644);
     const archive = path.join(output, name + '.tar.gz');
     execFileSync('/usr/bin/tar', ['--format', 'ustar', '--uid', '0', '--gid', '0', '--uname', 'root', '--gname', 'root', '-czf', archive, '-C', work, name], { env: { PATH: '/usr/bin:/bin', COPYFILE_DISABLE: '1' }, stdio: 'inherit' });
-    verifyArchive(archive, version, process.arch);
+    verifyArchive(archive, version, process.arch, product);
     const proof = hashFileSafe(archive, 512 * 1024 ** 2);
-    const receipt = { version, platform: 'darwin', arch: process.arch, nodeVersion: nodeInfo.version, piVersion: manifest.piVersion, sourceCommit: manifest.sourceCommit, inputSha256: manifest.inputSha256, archive: path.basename(archive), ...proof };
+    const receipt = { version, product, platform: 'darwin', arch: process.arch, nodeVersion: nodeInfo.version, piVersion: manifest.piVersion, sourceCommit: manifest.sourceCommit, inputSha256: manifest.inputSha256, archive: path.basename(archive), ...proof };
     fs.writeFileSync(archive + '.sha256', `${proof.sha256}  ${path.basename(archive)}\n`, { flag: 'wx', mode: 0o644 });
     if (dmg) {
-        const image = privateDir(path.join(work, 'image')), app = path.join(image, 'Pivane.app'), contents = privateDir(path.join(app, 'Contents'));
+        const image = privateDir(path.join(work, 'image')), app = path.join(image, 'OhMyBuddy.app'), contents = privateDir(path.join(app, 'Contents'));
         privateDir(path.join(contents, 'MacOS')); privateDir(path.join(contents, 'Resources'));
         // The app is an immutable first-install entry; writable releases and data
         // live under Application Support, preserving future code-signing seals.
         fs.cpSync(payload, path.join(contents, 'Resources/payload'), { recursive: true, preserveTimestamps: false });
-        fs.writeFileSync(path.join(contents, 'MacOS/Pivane'), '#!/bin/sh\nRESOURCES=$(CDPATH= cd -- "$(dirname -- "$0")/../Resources" && pwd) || exit 1\nexec "$RESOURCES/payload/runtime/bin/node" "$RESOURCES/payload/scripts/macos-bootstrap.cjs" "$RESOURCES/payload"\n', { mode: 0o755 });
-        fs.writeFileSync(path.join(contents, 'Info.plist'), `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleName</key><string>Pivane</string><key>CFBundleDisplayName</key><string>Pivane</string><key>CFBundleIdentifier</key><string>app.pivane.desktop</string><key>CFBundleExecutable</key><string>Pivane</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleShortVersionString</key><string>${version.split('-')[0]}</string><key>CFBundleVersion</key><string>${version.split('-')[0]}</string><key>LSMinimumSystemVersion</key><string>13.5</string><key>LSUIElement</key><true/></dict></plist>`);
+        fs.writeFileSync(path.join(contents, 'MacOS/OhMyBuddy'), '#!/bin/sh\nRESOURCES=$(CDPATH= cd -- "$(dirname -- "$0")/../Resources" && pwd) || exit 1\nexec "$RESOURCES/payload/runtime/bin/node" "$RESOURCES/payload/scripts/macos-bootstrap.cjs" "$RESOURCES/payload"\n', { mode: 0o755 });
+        fs.writeFileSync(path.join(contents, 'Info.plist'), `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleName</key><string>OhMyBuddy</string><key>CFBundleDisplayName</key><string>OhMyBuddy</string><key>CFBundleIdentifier</key><string>app.ohmybuddy.desktop</string><key>CFBundleExecutable</key><string>OhMyBuddy</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleShortVersionString</key><string>${version.split('-')[0]}</string><key>CFBundleVersion</key><string>${version.split('-')[0]}</string><key>LSMinimumSystemVersion</key><string>13.5</string><key>LSUIElement</key><true/></dict></plist>`);
         // Unsigned preview by explicit operator choice. No quarantine bypass or
         // modification of the user's macOS trust settings is performed.
         for (const directory of [image, app, contents, path.join(contents, 'MacOS'), path.join(contents, 'Resources')]) fs.chmodSync(directory, 0o755);
         fs.symlinkSync('/Applications', path.join(image, 'Applications'));
         const imageFile = path.join(output, name + '.dmg');
-        execFileSync('/usr/bin/hdiutil', ['create', '-quiet', '-volname', 'Pivane', '-srcfolder', image, '-format', 'UDZO', imageFile], { stdio: 'inherit' });
+        execFileSync('/usr/bin/hdiutil', ['create', '-quiet', '-volname', 'OhMyBuddy', '-srcfolder', image, '-format', 'UDZO', imageFile], { stdio: 'inherit' });
         receipt.dmg = { file: path.basename(imageFile), ...hashFileSafe(imageFile, 1024 ** 3), notarized: false };
     }
     atomicJson(path.join(output, 'build.json'), receipt); console.log(JSON.stringify(receipt, null, 2));
@@ -139,9 +145,9 @@ async function build({ source, inputs, version, output, work, dmg = true }) {
 }
 if (require.main === module) {
     const args = process.argv.slice(2), values = {};
-    for (let i = 0; i < args.length; i += 2) { if (!['--source', '--inputs', '--version', '--output', '--work'].includes(args[i]) || !args[i + 1] || values[args[i]]) throw Error('Usage: package-macos.cjs --inputs FILE --version VERSION --output NEW_DIR --work NEW_DIR [--source DIR]'); values[args[i]] = args[i + 1]; }
+    for (let i = 0; i < args.length; i += 2) { if (!['--source', '--inputs', '--version', '--output', '--work', '--product'].includes(args[i]) || !args[i + 1] || values[args[i]]) throw Error('Usage: package-macos.cjs --inputs FILE --version VERSION --output NEW_DIR --work NEW_DIR [--source DIR]'); values[args[i]] = args[i + 1]; }
     if (!values['--inputs'] || !values['--version'] || !values['--output'] || !values['--work']) throw Error('Missing macOS build arguments');
     build({ source: fs.realpathSync.native(values['--source'] || path.resolve(__dirname, '..')), inputs: JSON.parse(readSafe(path.resolve(values['--inputs']))),
-        version: values['--version'], output: path.resolve(values['--output']), work: path.resolve(values['--work']) }).catch(error => { console.error(error.message); process.exitCode = 1; });
+        version: values['--version'], product: values['--product'] || 'OhMyBuddy', output: path.resolve(values['--output']), work: path.resolve(values['--work']) }).catch(error => { console.error(error.message); process.exitCode = 1; });
 }
 module.exports = { build, collect, verifyArchive };
