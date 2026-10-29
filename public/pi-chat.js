@@ -123,7 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // What Pi is doing before visible output arrives, and the last compaction result, at the tail.
     const activityRoot = $('pi-transcript-activity');
     const transcriptActivity = activityRoot && window.PiTranscriptActivity?.create({ root: activityRoot, content: elements.transcript,
-        onChange: () => { transcriptScroll.update(); if (state.botMode) transcriptView.schedule(); }, locateSummary: () => locateCompactionSummary(),
+        onChange: () => { transcriptScroll.update(); if (state.botMode) { transcriptView.schedule(); if (botUi) refreshAgentState(); } }, locateSummary: () => locateCompactionSummary(),
         plain: () => state.botMode, waiting: () => state.pendingUi.size > 0 }) || null;
     transcriptView.botActivity = () => transcriptActivity;
     if (activityRoot) transcriptScroll.resizeObserver?.observe(activityRoot);
@@ -911,8 +911,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const runs = controls?.subagents?.snapshot?.runs || [];
             const working = Boolean(state.streaming || state.shellBusy || state.compacting || state.retrying || state.resourceRequested
                 || controls?.subagents?.background?.active || runs.some(run => run.state === 'running'));
+            const queued = queue > 0 || runs.some(run => run.state === 'queued');
+            const phase = transcriptActivity?.phase?.kind;
+            const thinking = working && !state.shellBusy && !state.compacting && !state.retrying
+                && !runs.some(run => run.state === 'running') && (phase === 'thinking' || phase === 'waiting' && !transcriptActivity?.phase?.afterTool);
+            const pending = state.pendingUi.size;
+            const attentionLabel = pending ? ([...state.pendingUi.values()].some(item => userQuestions.owns(item)) ? translateUi('等你回复') : translateUi('等你确认'))
+                + (pending > 1 ? ` · ${pending}` : '') : translateUi('等你处理');
             botUi?.status(!state.connected ? (kind === 'connecting' ? 'connecting' : 'offline') : kind === 'waiting' ? 'waiting' : working ? 'working' : 'connected',
-                { key: botMotionKey(), label: title, working, queued: queue > 0 || runs.some(run => run.state === 'queued'),
+                { key: botMotionKey(), label: title, working, thinking, queued, attentionLabel,
+                    sleepAllowed: !labels.length && !state.submittingDrafts.size && !state.attachmentReads && !state.treeBusy,
                     stopping: Boolean(controls?.stopping || state.controlRequested) });
         }
         elements.agentState.textContent = title;
@@ -4002,7 +4010,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function openPendingRequest() {
         if (!isViewingSession() || !state.pendingUi.size) return;
         const event = [...state.pendingUi.values()].find(item => !panelOwns(item));
-        if (!event) { if ([...state.pendingUi.values()].some(item => userQuestions.owns(item))) userQuestions.focus(); return; }
+        if (!event) {
+            if ([...state.pendingUi.values()].some(item => userQuestions.owns(item))) { userQuestions.focus(); return; }
+            const panel = [botSetup, botApproval].find(owner => [...state.pendingUi.values()].some(item => owner?.owns(item)))?.element;
+            if (panel) { panel.scrollIntoView({ block: 'nearest' }); panel.querySelector('button:not(:disabled),input:not(:disabled),select:not(:disabled)')?.focus(); }
+            return;
+        }
         state.shownUiId = event.id;
         elements.requestTitle.textContent = event.title || translateUi("等待确认");
         elements.requestFields.replaceChildren();
@@ -5224,6 +5237,14 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     botUi = window.PiBot?.create({ api: apiFetch, toast, open: openBotWindow, say: botSay, pane: $('pi-bot-pane'), header: $('pi-bot-header'), input: elements.input,
         draft: botDraft, focusComposer: () => { if (!elements.input.disabled) elements.input.focus({ preventScroll: true }); },
+        focusAttention: key => {
+            if (!state.botMode || !state.connected || !isViewingSession() || key !== botMotionKey()) return;
+            if (state.pendingUi.size) openPendingRequest();
+            else {
+                const panel = document.getElementById('pi-subagent-runs');
+                if (panel && !panel.hidden) { panel.open = true; panel.scrollIntoView({ block: 'nearest' }); panel.querySelector('summary')?.focus(); }
+            }
+        },
         onChange: kind => {
             // A new name or face shows in the open conversation's replies at once.
             if (kind === 'identity' && state.botMode && elements.transcript.querySelector(':scope > .pi-bot-empty')) renderEmptySession();

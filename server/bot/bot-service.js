@@ -1055,7 +1055,7 @@ class BotService extends EventEmitter {
                     fail('A setup card can only make the Bot more careful; give it more freedom in Bot settings', 409, 'BOT_WORK_STYLE_FREER');
                 const onboarding = { ...bot.onboarding, steps: { ...bot.onboarding.steps } };
                 // A proposed value the Bot already has is left off the card; that step is answered.
-                const has = { name: previous.name, avatar: previous.avatar?.kind === 'emoji' ? previous.avatar.value : previous.avatar?.kind === 'preset' ? previous.avatar : null, job: bot.job,
+                const has = { name: previous.name, avatar: previous.avatar?.kind === 'emoji' ? previous.avatar.value : ['preset', 'composed'].includes(previous.avatar?.kind) ? previous.avatar : null, job: bot.job,
                     personality: previous.soul, workStyle: bot.permissions.preset };
                 for (const [field, step] of Object.entries(setup.STEP_OF)) {
                     if (!Object.hasOwn(proposal, field) || field === 'workStyle' && !workOffered) continue;

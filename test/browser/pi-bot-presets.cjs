@@ -46,6 +46,7 @@ const BOT = '11111111-1111-4111-8111-111111111111';
             const openSettings = async () => {
                 await page.evaluate(() => x.open());
                 await settingsPage(sheet(), 'profile');
+                await sheet().locator('[data-avatar-tab="preset"]').click();
             };
             // All presets roundtrip through the same avatar field and preview before Save.
             for (const id of ['pivane-pebble', 'pivane-bean', 'pivane-tile']) {
@@ -77,16 +78,54 @@ const BOT = '11111111-1111-4111-8111-111111111111';
             if (process.env.PI_BOT_EVIDENCE) await page.screenshot({ path: path.join(process.env.PI_BOT_EVIDENCE, `preset-settings-${width}.png`) });
             await sheet().locator('.pi-bot-sheet-save').click(); await page.waitForFunction(() => !document.querySelector('.pi-bot-sheet[open]'));
             assert.deepEqual(await page.evaluate(() => x.writes.at(-1).changes), { avatar: { kind: 'preset', id: 'pivane-bean' } });
-            // No emoji input is shown; only the three built-in characters and picture upload exist.
+            // The complete catalog and pictures share the draft, without an emoji input.
             await openSettings();
             assert.equal(await sheet().locator('[data-sheet-emoji]').count(), 0);
             assert.equal(await sheet().locator('.pi-bot-sheet-emoji').count(), 0);
-            assert.equal(await sheet().locator('[data-avatar-preset]').count(), 3);
+            assert.equal(await sheet().locator('[data-avatar-preset]').count(), 12);
             await sheet().locator('.pi-bot-sheet-close').click();
             const png = Buffer.from(await page.evaluate(() => { const c = document.createElement('canvas'); c.width = c.height = 8; return c.toDataURL().split(',')[1]; }), 'base64');
+            // Composition stays local, supports compatible parts/locks/undo and survives a conflict.
+            await openSettings();
+            await sheet().locator('[data-avatar-tab="compose"]').click();
+            await sheet().locator('[data-avatar-part="shape"]').selectOption('drop');
+            await sheet().locator('[data-avatar-part="palette"]').selectOption('blue');
+            await sheet().locator('[data-avatar-part="eyes"]').selectOption('oval');
+            assert.equal(await sheet().locator('[data-avatar-part="decoration"] option[value="sprout"]').evaluate(node => node.disabled), true);
+            assert.equal(await page.evaluate(() => x.profile.avatar.kind), 'preset');
+            await sheet().locator('[data-avatar-lock="shape"]').click();
+            await sheet().locator('[data-avatar-random]').click();
+            assert.equal(await sheet().locator('[data-avatar-part="shape"]').inputValue(), 'drop');
+            await sheet().locator('[data-avatar-undo]').click();
+            assert.equal(await sheet().locator('[data-avatar-part="eyes"]').inputValue(), 'oval');
+            await sheet().getByRole('combobox', { name: '预览形象状态' }).selectOption('waiting');
+            assert.equal(await sheet().locator('.pi-avatar-stage > span').getAttribute('data-avatar-state'), 'waiting');
+            assert.equal(await sheet().locator('.pi-avatar-stage .avatar-badge.is-waiting').evaluate(n => getComputedStyle(n).display), 'inline');
+            if (process.env.PI_BOT_EVIDENCE) await page.screenshot({ path: path.join(process.env.PI_BOT_EVIDENCE, `avatar-composition-${width}.png`) });
+            await sheet().getByRole('combobox', { name: '预览形象状态' }).selectOption('idle');
+            await sheet().getByRole('button', { name: '播放动作', exact: true }).click();
+            await page.waitForFunction(() => document.querySelector('.pi-avatar-stage > span')?.dataset.avatarLive === 'true');
+            assert.equal(await sheet().locator('.pi-avatar-stage .avatar-breath').evaluate(node => getComputedStyle(node).animationName), 'avatar-breathe');
+            await sheet().getByRole('checkbox', { name: '播放形象动画' }).uncheck();
+            assert.equal(await sheet().locator('.pi-avatar-stage .avatar-breath').evaluate(node => getComputedStyle(node).animationName), 'none');
+            assert.equal(await page.evaluate(() => localStorage.getItem('ohmybuddy-avatar-motion')), 'off');
+            await sheet().getByRole('checkbox', { name: '播放形象动画' }).check();
+            await page.evaluate(() => { x.fails = 1; });
+            await sheet().locator('.pi-bot-sheet-save').click();
+            await sheet().locator('.pi-bot-sheet-status').filter({ hasText: '修改还在' }).waitFor();
+            await sheet().locator('[data-avatar-tab="compose"]').click();
+            assert.equal(await sheet().locator('[data-avatar-part="shape"]').inputValue(), 'drop');
+            await sheet().locator('.pi-bot-sheet-save').click();
+            await page.waitForFunction(() => !document.querySelector('.pi-bot-sheet[open]'));
+            assert.equal(await page.evaluate(() => x.profile.avatar.kind), 'composed');
+            await openSettings();
+            assert.equal(await sheet().locator('[data-avatar-part="shape"]').inputValue(), 'drop');
+            assert.equal(await sheet().locator('.pi-bot-sheet-save').isDisabled(), true);
+            await sheet().locator('.pi-bot-sheet-close').click();
             await openSettings();
             await sheet().locator('[data-sheet-picture-file]').setInputFiles({ name: 'face.png', mimeType: 'image/png', buffer: png });
             await sheet().locator('.pi-bot-sheet-avatar-face img[src^="data:"]').waitFor();
+            await sheet().locator('[data-avatar-tab="preset"]').click();
             await sheet().locator('[data-avatar-preset="pivane-tile"]').click();
             await sheet().locator('.pi-bot-sheet-save').click(); await page.waitForFunction(() => !document.querySelector('.pi-bot-sheet[open]'));
             assert.equal(await page.evaluate(() => x.uploads || 0), 0, 'replacing the local picture with a preset does not upload it');
@@ -181,6 +220,28 @@ const BOT = '11111111-1111-4111-8111-111111111111';
             assert.equal(await page.locator('#live .avatar-motion').evaluate(n => getComputedStyle(n).animationName), 'none');
             if (process.env.PI_BOT_EVIDENCE) await page.screenshot({ path: path.join(process.env.PI_BOT_EVIDENCE, `preset-sizes-dark-${width}.png`) });
             assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+            // All shape/eye families keep a readable static pose at every state, with no shared SVG IDs.
+            const failures = await page.evaluate(() => {
+                const host = document.querySelector('#fixture'); host.replaceChildren(); const failures = [];
+                for (const shape of PiAvatarPresets.shapes) for (const eyes of PiAvatarPresets.eyes) {
+                    const value = { ...PiAvatarPresets.find('ohmybuddy-mint').recipe, shape: shape.id, eyes: eyes.id };
+                    const face = PiAvatar.render({ avatar: value }, 'pi-bot-face is-xl'); host.append(face);
+                    for (const state of PiBotMotion.states) {
+                        face.dataset.avatarState = state;
+                        const expected = state === 'sleeping' ? '.avatar-closed' : state === 'failed' ? '.avatar-sad'
+                            : ['done', 'greeting'].includes(state) ? '.avatar-happy' : '.avatar-normal';
+                        if (getComputedStyle(face.querySelector(expected)).display === 'none') failures.push([shape.id, eyes.id, state]);
+                    }
+                    if (face.querySelector('[id]') || face.hasAttribute('data-avatar-live')) failures.push(['static-or-id', shape.id]);
+                    face.remove();
+                }
+                for (const preset of PiAvatarPresets.presets) host.append(PiAvatar.render({ avatar: { kind: 'preset', id: preset.id } }, 'pi-bot-face is-xl'));
+                host.style.display = 'grid'; host.style.gridTemplateColumns = 'repeat(3,minmax(0,1fr))'; host.style.gap = '16px';
+                return failures;
+            });
+            assert.deepEqual(failures, []);
+            if (process.env.PI_BOT_EVIDENCE) await page.screenshot({ path: path.join(process.env.PI_BOT_EVIDENCE, `avatar-catalog-dark-${width}.png`) });
+            await page.evaluate(() => { const host = document.querySelector('#fixture'); host.style.display = ''; host.style.gridTemplateColumns = ''; host.style.gap = ''; });
             // A successful schedule tool result produces a card with the real job id and route.
             await page.evaluate(id => {
                 const job = { id, title: '今晚复习', message: '复习数学第 2 章', schedule: { kind: 'once', at: Date.parse('2026-11-01T19:00:00+08:00'), timeZone: 'Asia/Shanghai' }, enabled: true, revision: 1 };

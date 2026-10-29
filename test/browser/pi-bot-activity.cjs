@@ -167,7 +167,7 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
                 assert.equal(await page.locator('.pi-attachment-chip').count(), 1);
                 // Thinking alone on the default model never pins that model.
                 sheet = await openSettings(); await settingsPage(sheet, 'model');
-                const thinkingSelect = sheet.locator('select').nth(1);
+                const thinkingSelect = sheet.locator('[data-sheet-thinking]');
                 assert.equal(await thinkingSelect.inputValue(), 'high');
                 await thinkingSelect.selectOption('low');
                 if (width < 600) assert.equal(await thinkingSelect.evaluate(node => getComputedStyle(node).fontSize), '16px');
@@ -178,14 +178,14 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
                 model = null; thinking = null;
                 sheet = await openSettings(); await settingsPage(sheet, 'model');
                 assert.match(await sheet.locator('[data-sheet-model-trigger]').innerText(), /跟随默认/);
-                assert.equal(await sheet.locator('select').nth(1).inputValue(), '');
+                assert.equal(await sheet.locator('[data-sheet-thinking]').inputValue(), '');
                 await page.keyboard.press('Escape'); await sheet.waitFor({ state: 'detached' });
                 // Legacy nested thinking remains readable, and migrates only when changed.
                 legacy = true; model = { provider: 'fixture', id: 'reasoner', thinking: 'high' };
                 sheet = await openSettings(); await settingsPage(sheet, 'model');
-                assert.equal(await sheet.locator('select').nth(1).inputValue(), 'high');
+                assert.equal(await sheet.locator('[data-sheet-thinking]').inputValue(), 'high');
                 assert.equal(await sheet.locator('.pi-bot-sheet-save').isDisabled(), true);
-                await sheet.locator('select').nth(1).selectOption('');
+                await sheet.locator('[data-sheet-thinking]').selectOption('');
                 await sheet.locator('.pi-bot-sheet-save').click(); await sheet.waitFor({ state: 'detached' });
                 assert.deepEqual(patches.at(-1).changes, { bot: { thinking: null } });
                 // A late read from Bot A cannot render into Bot B's newly opened sheet.

@@ -385,12 +385,17 @@ const NEW_FACE = { kind: 'preset', id: 'pivane-pebble' };
                 await page.locator('.pi-bot-sheet[open]').waitFor(); await page.locator('.pi-bot-sheet-close').click();
                 const pose = () => page.locator('#pi-bot-header .pi-bot-identity > .pi-bot-face').getAttribute('data-avatar-state');
                 socket.send(JSON.stringify({ type: 'agent_start' }));
-                await page.waitForFunction(() => document.querySelector('.pi-bot-identity > .pi-bot-face')?.dataset.avatarState === 'working');
+                await page.waitForFunction(() => document.querySelector('.pi-bot-identity > .pi-bot-face')?.dataset.avatarState === 'thinking');
+                socket.send(JSON.stringify({ type: 'tool_execution_start', toolCallId: 'recoverable', toolName: 'read', args: {} }));
                 socket.send(JSON.stringify({ type: 'tool_execution_end', toolCallId: 'recoverable', toolName: 'read', isError: true, result: { content: [] } }));
                 assert.equal(await pose(), 'working', 'a recoverable tool error does not fail the turn');
                 socket.send(JSON.stringify({ type: 'extension_ui_request', id: 'pose-wait', method: 'confirm', title: APPROVAL, message: `command #${'4'.repeat(16)}\n\npwd` }));
                 await page.waitForFunction(() => document.querySelector('.pi-bot-identity > .pi-bot-face')?.dataset.avatarState === 'waiting');
                 assert.equal(await page.locator('.pi-bot-status').evaluate(node => node.classList.contains('is-quiet')), false, 'waiting keeps its status text');
+                await page.locator('.pi-bot-attention').click();
+                assert.equal(await page.evaluate(() => document.activeElement?.closest('.pi-bot-approval') !== null), true, 'waiting focuses the approval card without answering');
+                assert.equal(responses.some(item => item.id === 'pose-wait'), false);
+                if (evidence) await page.screenshot({ path: path.join(evidence, `avatar-waiting-${width}.png`) });
                 socket.send(JSON.stringify({ type: 'message_end', message: { role: 'assistant', content: [], stopReason: 'stop', timestamp: Date.now() } }));
                 socket.send(JSON.stringify({ type: 'agent_settled' }));
                 await page.waitForFunction(() => document.querySelector('.pi-bot-identity > .pi-bot-face')?.dataset.avatarState === 'waiting');
@@ -401,13 +406,26 @@ const NEW_FACE = { kind: 'preset', id: 'pivane-pebble' };
                 socket.send(JSON.stringify({ type: 'agent_settled' }));
                 await page.waitForFunction(() => document.querySelector('.pi-bot-identity > .pi-bot-face')?.dataset.avatarState === 'done');
                 socket.send(JSON.stringify({ type: 'agent_start' }));
-                await page.waitForFunction(() => document.querySelector('.pi-bot-identity > .pi-bot-face')?.dataset.avatarState === 'working');
+                await page.waitForFunction(() => document.querySelector('.pi-bot-identity > .pi-bot-face')?.dataset.avatarState === 'thinking');
                 await page.waitForTimeout(1200);
-                assert.equal(await pose(), 'working', 'new work interrupts the previous celebration timer');
+                assert.equal(await pose(), 'thinking', 'new work interrupts the previous celebration timer');
                 socket.send(JSON.stringify({ type: 'message_end', message: { role: 'assistant', content: [], stopReason: 'stop', timestamp: Date.now() } }));
                 socket.send(JSON.stringify({ type: 'agent_settled', aborted: true }));
                 await page.waitForFunction(() => document.querySelector('.pi-bot-identity > .pi-bot-face')?.dataset.avatarState === 'idle');
                 if (evidence) await page.screenshot({ path: path.join(evidence, `bot-preset-header-${width}.png`) });
+                // Attention without a pending question opens the current subagent panel, without running a command.
+                const attentionControls = revision => ({ runtimeId: 'avatar-attention', revision, queue: { steering: [], followUp: [] },
+                    recoveries: [], stopping: false, drafts: [], extension: { title: '', statuses: [], widgets: [] },
+                    subagents: { snapshot: { version: 1, generatedAt: Date.now(), omitted: { runs: 0, children: 0 }, runs: revision === 1
+                        ? [{ id: 'avatar-review', kind: 'workflow', label: 'Review needs attention', state: 'paused', startedAt: Date.now(), children: [] }] : [] },
+                        background: { supported: true, active: false, sources: [] } } });
+                socket.send(JSON.stringify({ type: 'gateway_controls', controls: attentionControls(1) }));
+                await page.locator('.pi-bot-attention').waitFor();
+                await page.evaluate(() => { document.getElementById('pi-subagent-runs').open = false; });
+                await page.locator('.pi-bot-attention').click();
+                assert.equal(await page.locator('#pi-subagent-runs').evaluate(node => node.open), true);
+                socket.send(JSON.stringify({ type: 'gateway_controls', controls: attentionControls(2) }));
+                await page.locator('.pi-bot-attention').waitFor({ state: 'hidden' });
                 face = '🦊'; bots = list();
                 await page.evaluate(() => window.dispatchEvent(new Event('workspace:agent-profiles-changed')));
 
@@ -503,7 +521,7 @@ const NEW_FACE = { kind: 'preset', id: 'pivane-pebble' };
                 await sheetModelDialog.waitFor();
                 await sheetModelDialog.locator('.pi-model-all').click();
                 await sheetModelDialog.locator('.pi-model-option').filter({ hasText: 'Large' }).click();
-                await sheet.locator('select').nth(1).selectOption({ label: '高' });
+                await sheet.locator('[data-sheet-thinking]').selectOption({ label: '高' });
                 await settingsPage(sheet, 'mode');
                 await sheet.locator('.pi-bot-sheet-preset', { hasText: '稳妥' }).click();
                 if (evidence) { await page.waitForTimeout(250); await page.screenshot({ path: path.join(evidence, `bot-settings-${width}.png`) }); }

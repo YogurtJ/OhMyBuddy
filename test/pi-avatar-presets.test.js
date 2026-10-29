@@ -34,6 +34,50 @@ async function fixture(t) {
     return { store, profiles, bots, revision, save, update };
 }
 
+test('composed avatars persist through Bot edits, profile runtime and missing-part tolerance', async t => {
+    const f = await fixture(t);
+    const avatar = { ...catalog.find('ohmybuddy-sprout').recipe, eyes: 'display' };
+    const created = await f.bots.create({ expectedRevision: await f.revision() });
+    await f.update(created.bot.id, { avatar });
+    await f.update(created.bot.id, { name: 'Composed friend', soul: 'Remember this identity.' });
+    assert.deepEqual((await f.bots.settings(created.bot.id)).bot.avatar, avatar);
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+    const { session } = await f.bots.resolve(created.bot.id, created.window.id);
+    const manager = SessionManager.open(session.path), cwd = manager.getCwd();
+    const context = await f.profiles.context(manager, cwd);
+    assert.equal(readProfileRuntime(manager, cwd, agentDir, path.join(agentDir, 'sessions'), JSON.stringify(context)).soul, 'Remember this identity.');
+    const { file } = await f.profiles.paths();
+    const missing = { ...avatar, eyes: 'future-eyes', version: 2 };
+    const state = JSON.parse(fs.readFileSync(file, 'utf8'));
+    state.profiles.find(p => p.id === created.bot.id).avatar = missing;
+    fs.writeFileSync(file, JSON.stringify(state));
+    await f.update(created.bot.id, { soul: 'Keep unknown parts.' });
+    await f.update(created.bot.id, { avatar: { ...missing } });
+    assert.deepEqual((await f.profiles.getProfile(created.bot.id)).avatar, missing);
+    await assert.rejects(f.update(created.bot.id, { avatar: { ...missing, eyes: 'other-future' } }), /Invalid avatar/);
+    await f.update(created.bot.id, { avatar });
+    const before = await f.revision();
+    for (const bad of [{ ...avatar, eyes: '../x' }, { ...avatar, version: '1' }, { ...avatar, svg: '<svg/>' },
+        { ...avatar, shape: 'drop', decoration: 'sprout' }, { ...avatar, palette: 'not-a-palette' }])
+        await assert.rejects(f.update(created.bot.id, { avatar: bad }), /Invalid avatar/);
+    assert.equal(await f.revision(), before);
+});
+
+test('combination resolution is stable and randomization respects locks and compatibility', () => {
+    const current = catalog.find('ohmybuddy-sprout').recipe;
+    assert.ok(Object.isFrozen(current));
+    for (let seed = 0; seed < 100; seed++) {
+        const value = catalog.randomize(current, ['decoration', 'palette'], String(seed));
+        assert.equal(value.decoration, current.decoration);
+        assert.equal(value.palette, current.palette);
+        assert.ok(catalog.knownComposition(value));
+        assert.deepEqual(value, catalog.randomize(current, ['decoration', 'palette'], String(seed)));
+    }
+    assert.deepEqual(catalog.randomize(current, catalog.fields, 'anything'), current);
+    assert.equal(catalog.resolve({ ...current, version: 2 }), null);
+    assert.equal(catalog.same(current, Object.fromEntries(Object.entries(current).reverse())), true);
+});
+
 const malformed = [
     { kind: 'preset' }, { kind: 'preset', id: null }, { kind: 'preset', id: 1 },
     preset('../pivane-bean'), preset('pivane-../bean'), preset('pivane-bean.svg'), preset('pivane-Bean'),
@@ -136,7 +180,7 @@ test('PNG upload switches a preset only after CAS, keeps private assets and neve
     assert.equal(uploaded.statusCode, 200);
     const { version } = uploaded.data.profile.avatar;
     assert.deepEqual((await call('GET', {}, { version })).data, image);
-    const asset = path.join(agentDir, 'pivane-profiles/data', id, `avatar-${version}.png`);
+    const asset = path.join(require('../server/pi-profile-documents').location(agentDir, id, false), `avatar-${version}.png`);
     saved = await f.save({ ...uploaded.data.profile, avatar: preset('pivane-bean') });
     assert.equal((await call('GET', {}, { version })).statusCode, 404);
     assert.deepEqual(fs.readFileSync(asset), image, 'switching away never deletes a private image');

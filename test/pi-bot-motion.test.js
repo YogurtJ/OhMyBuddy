@@ -9,6 +9,21 @@ function fixture() {
     const finish = reason => { motion.begin('A/session/1'); motion.result('A/session/1', reason); motion.settle('A/session/1'); };
     return { motion, update, finish, timers, cancelled, get output() { return output; } };
 }
+test('thinking follows live phase and sleep requires confirmed idle eligibility, wakes on attention or interaction', () => {
+    const f = fixture();
+    f.update({ working: true, thinking: true, sleepAllowed: true }); assert.equal(f.output.state, 'thinking');
+    f.update({ waiting: true, working: true, thinking: true }); assert.equal(f.output.state, 'waiting');
+    f.update({ sleepAllowed: true });
+    assert.equal(f.timers.size, 1);
+    const old = [...f.timers.values()][0]; old(); assert.equal(f.output.state, 'sleeping');
+    f.motion.interact(); assert.equal(f.output.state, 'idle');
+    f.update({ queued: true, sleepAllowed: true }); old(); assert.equal(f.output.state, 'idle');
+    f.update({ sleepAllowed: true }); f.motion.visibility(true); assert.equal(f.output.live, false);
+    f.motion.visibility(false); assert.equal(f.output.state, 'idle');
+    f.update({ working: true, sleepAllowed: true }); assert.equal(f.output.state, 'working');
+    f.motion.dispose();
+});
+
 test('only an observed normal live turn can celebrate; stops, unknown outcomes and recoverable tool errors do not', () => {
     const f = fixture(); f.update();
     f.motion.settle('A/session/1'); assert.equal(f.output.state, 'idle');
