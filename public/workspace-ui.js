@@ -142,7 +142,7 @@
             const header = document.createElement('header'); header.className = 'workspace-settings-header';
             const heading = document.createElement('div');
             const kicker = document.createElement('span'); kicker.className = 'pi-pane-kicker'; kicker.textContent = 'PI WORKSPACE';
-            const title = document.createElement('h2'); title.textContent = featureText('工作台设置', 'Workspace settings');
+            const title = document.createElement('h2'); title.textContent = featureText('OhMyBuddy 设置', 'Workspace settings');
             heading.append(kicker, title);
             const back = document.createElement('button'); back.type = 'button'; back.className = 'icon-btn subtle';
             back.setAttribute('aria-label', featureText('返回对话', 'Back to conversation'));

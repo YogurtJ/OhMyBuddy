@@ -20,12 +20,12 @@
         modelBar.append(document.querySelector('.pi-model-field'), document.querySelector('.pi-thinking-field'));
         modelBar.querySelector('#pi-thinking-select').setAttribute('aria-label', t('思考'));
         document.querySelector('.pi-composer-actions.right').before(modelBar); // Keep keyboard order aligned with visual order; move, never copy controls.
-        const navLabels = { bot: 'Bot', chat: t('工作'), cron: t('定时'), artifacts: globalThis.PiI18n?.locale?.startsWith('en') ? 'Artifacts' : '成果', media: t('创作'), profiles: t('身份'), extensions: t('扩展') };
+        const navLabels = { bot: t('伙伴'), chat: t('工作台'), cron: t('定时'), artifacts: globalThis.PiI18n?.locale?.startsWith('en') ? 'Artifacts' : '成果', media: t('创作'), profiles: t('身份'), extensions: t('扩展') };
         document.querySelectorAll('.nav-btn[data-tab]').forEach(node => {
             const short = document.createElement('span'); short.className = 'workspace-nav-short'; short.textContent = navLabels[node.dataset.tab];
             node.append(short);
             if (!node.title) node.title = node.querySelector('span')?.textContent || short.textContent;
-            node.setAttribute('aria-label', node.title);
+            node.setAttribute('aria-label', node.querySelector('span')?.textContent || node.title);
         });
         $('pi-session-filters').querySelector('[data-filter="all"]').textContent = t('项目');
         $('pi-session-filters').querySelector('[data-filter="work"]').textContent = t('动态');

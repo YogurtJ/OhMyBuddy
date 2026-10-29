@@ -2,9 +2,9 @@
 
 [English home](../../README.md) · [User guide](USER_GUIDE.md) · [中文完整指南](../INSTALL_RECOVERY.md)
 
-OhMyBuddy runs natively on Linux, macOS and Windows with **Node.js 22.x (22.19.0 or later)** and npm, as required by the current locked dependencies. The environments validated for each release are listed in [platform validation](../RELEASE_INSTALL_VALIDATION.md); if you run into a problem elsewhere, please [open an issue](https://github.com/YogurtJ/pivane/issues).
+OhMyBuddy runs natively on Linux, macOS and Windows with **Node.js 22.x (22.19.0 or later)** and npm, as required by the current locked dependencies. The environments validated for each release are listed in [platform validation](../RELEASE_INSTALL_VALIDATION.md); if you run into a problem elsewhere, please [open an issue](https://github.com/YogurtJ/OhMyBuddy/issues).
 
-The examples below use **1.11.0**; replace it with the version you downloaded from [Releases](https://github.com/YogurtJ/pivane/releases). Use matching archives, checksums and version directories together. Each release's notes and validation attachment describe the checks performed on that archive.
+The examples below use **1.11.0**; replace it with the version you downloaded from [Releases](https://github.com/YogurtJ/OhMyBuddy/releases). Use matching archives, checksums and version directories together. Each release's notes and validation attachment describe the checks performed on that archive.
 
 ## Prerequisites
 
@@ -43,7 +43,7 @@ Environment-only keys, proxy settings and external credential commands must also
 
 ## Linux and macOS
 
-Download the archive and its `.sha256` file from [Releases](https://github.com/YogurtJ/pivane/releases) to Downloads and verify the source. In Bash or your macOS terminal:
+Download the archive and its `.sha256` file from [Releases](https://github.com/YogurtJ/OhMyBuddy/releases) to Downloads and verify the source. In Bash or your macOS terminal:
 
 ```bash
 ARCHIVE="$HOME/Downloads/ohmybuddy-1.11.0.tar.gz"

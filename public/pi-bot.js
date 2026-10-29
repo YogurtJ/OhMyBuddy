@@ -130,7 +130,7 @@
         needsModel() {
             if (this.models !== 0) return null;
             const note = el('div', 'pi-bot-needs-model');
-            note.append(icon('fa-plug'), el('p', null, translateUi("还没有可用的聊天模型。Bot 要接入一个模型才能和你说话。")));
+            note.append(icon('fa-plug'), el('p', null, translateUi("还没有可用的聊天模型。伙伴要接入一个模型才能和你说话。")));
             const setup = button('pi-bot-primary'); setup.dataset.botAction = 'models'; setup.textContent = translateUi("接入模型");
             return [note, setup];
         }
@@ -170,7 +170,7 @@
                 if (!this.bots.length) { this.profileId = null; this.windowId = null; this.render(); this.onChange?.('empty'); return; }
                 const wanted = params.get('profileId') || localStorage.getItem(LAST_KEY);
                 let bot = this.bots.find(item => item.id === wanted && item.enabled) || this.bots.find(item => item.enabled) || this.bots[0];
-                if (!bot.enabled) throw new Error(translateUi("这个 Bot 已停用，请在设置中重新启用"));
+                if (!bot.enabled) throw new Error(translateUi("这个伙伴已停用，请在设置中重新启用"));
                 let main = bot.windows.find(item => item.kind === 'main' && item.generation !== null);
                 if (!main) {
                     await this.api(`/api/pi/bots/${encodeURIComponent(bot.id)}/main-window`, { method: 'POST' });
@@ -268,7 +268,7 @@
             const here = () => this.active && epoch === this.epoch && this.profileId === target.profileId && this.windowId === target.windowId;
             if (!here() || this.leavingWindow === target.windowId) return false;
             this.leavingWindow = target.windowId;
-            const name = this.bot()?.name || 'Bot';
+            const name = this.bot()?.name || translateUi('伙伴');
             try {
                 try { await this.load(); } catch { /* go on with what is known */ }
                 if (!here()) return false;
@@ -309,7 +309,7 @@
             } catch (error) {
                 // A stale revision means another tab changed Bots; reload and let the user try again.
                 if (error.status === 409) await this.load().catch(() => {});
-                this.toast(error.status === 409 ? translateUi("Bot 列表刚刚有变化，请再试一次") : error.message, 'error');
+                this.toast(error.status === 409 ? translateUi("伙伴列表刚刚有变化，请再试一次") : error.message, 'error');
             } finally { this.creating = false; this.render(); this.home?.update(this.bots, this.live, false); }
         }
 
@@ -323,7 +323,7 @@
         // A picture face chosen on a setup card, through the profile avatar service.
         async uploadAvatar(dataUrl) {
             const bot = this.bot();
-            if (!bot) throw new Error(translateUi("请先打开 Bot 的聊天"));
+            if (!bot) throw new Error(translateUi("请先打开伙伴的聊天"));
             if (this.revision === null) await this.load();
             try {
                 const result = await this.api(`/api/pi/profiles/${encodeURIComponent(bot.id)}/avatar`, { method: 'POST',
@@ -341,7 +341,7 @@
         // records that step only if it did); left out by callers that do not know.
         async saveSetup(toolCallId, changes, { picture = null, workStyleShown } = {}) {
             const current = this.current();
-            if (!current) throw new Error(translateUi("请先打开 Bot 的聊天"));
+            if (!current) throw new Error(translateUi("请先打开伙伴的聊天"));
             if (this.revision === null) await this.load();
             try {
                 const result = await this.api(`/api/pi/bots/${encodeURIComponent(current.profileId)}/setup`, { method: 'POST',
@@ -384,7 +384,7 @@
         // and the way of working are kept; a conflict is reported, not retried.
         async rememberRule(rule) {
             const profileId = this.profileId;
-            if (!profileId || !window.PiBotRules?.valid(rule)) throw new Error(translateUi("请先打开 Bot 的聊天"));
+            if (!profileId || !window.PiBotRules?.valid(rule)) throw new Error(translateUi("请先打开伙伴的聊天"));
             const data = await this.api(`/api/pi/bots/${encodeURIComponent(profileId)}/settings`);
             const rules = data?.bot?.bot?.permissions?.rules;
             if (!Array.isArray(rules) || typeof data.revision !== 'string') throw new Error(translateUi("服务暂时不能记住规则，这次可以先只允许一次"));
@@ -426,7 +426,7 @@
             const nodes = [el('p', null, translateUi("嗨，我是新来的伙伴，还没有名字。")),
                 el('p', null, translateUi("{0} 已经知道你的这些事，要我也记住吗？不想让我知道的可以取消勾选。", source.name))];
             if (known.sources.length > 1) {
-                const pick = el('div', 'pi-bot-known-sources'); pick.setAttribute('role', 'group'); pick.setAttribute('aria-label', translateUi("从哪个 Bot"));
+                const pick = el('div', 'pi-bot-known-sources'); pick.setAttribute('role', 'group'); pick.setAttribute('aria-label', translateUi("从哪个伙伴"));
                 for (const item of known.sources) {
                     const choice = button('pi-bot-known-source'); choice.dataset.botAction = 'known-source'; choice.dataset.profileId = item.profileId;
                     choice.setAttribute('aria-pressed', String(item.profileId === source.profileId));
@@ -715,7 +715,7 @@
             const focused = this.pane.contains(document.activeElement) ? document.activeElement : null;
             const focusKey = focused?.dataset.botAction ? `${focused.dataset.botAction}|${focused.dataset.botId || ''}|${focused.dataset.windowId || ''}` : null;
             const home = window.PiBotHome, live = this.live;
-            const rail = el('nav', 'pi-bot-rail'); rail.setAttribute('aria-label', translateUi("我的 Bot"));
+            const rail = el('nav', 'pi-bot-rail'); rail.setAttribute('aria-label', translateUi("我的伙伴"));
             for (const bot of this.bots) {
                 const item = button('pi-bot-rail-item', bot.name); item.dataset.botAction = 'bot'; item.dataset.botId = bot.id;
                 if (bot.id === this.profileId) item.setAttribute('aria-current', 'true');
@@ -729,7 +729,7 @@
                 if (notes.length) { const label = [bot.name, ...notes].join('，'); item.title = label; item.setAttribute('aria-label', label); }
                 rail.append(item);
             }
-            const add = button('pi-bot-rail-add', this.creating ? translateUi("正在创建…") : translateUi("新建 Bot"));
+            const add = button('pi-bot-rail-add', this.creating ? translateUi("正在创建…") : translateUi("新建伙伴"));
             add.dataset.botAction = 'create'; add.disabled = this.creating;
             add.append(this.creating ? el('span', 'pi-spinner') : icon('fa-plus'));
             rail.append(add);
@@ -739,12 +739,12 @@
             if (bot && this.bots.length > 1 && this.home) {
                 // Phones: back to every Bot at a glance (hidden on wide screens, where the rail shows them).
                 const all = button('pi-bot-all'); all.dataset.botAction = 'home';
-                all.append(icon('fa-chevron-left'), el('span', null, translateUi("所有 Bot")));
+                all.append(icon('fa-chevron-left'), el('span', null, translateUi("所有伙伴")));
                 const others = home && live ? home.othersWithNews(this.bots, live, bot.id) : 0;
                 if (others) {
                     const news = el('span', 'pi-bot-all-news'); news.append(el('i', 'pi-bot-status-dot'), document.createTextNode(translateUi("另有 {0} 个有动静", others)));
                     all.append(news);
-                    all.setAttribute('aria-label', translateUi("所有 Bot，另有 {0} 个 Bot 有新回复或等你确认", others));
+                    all.setAttribute('aria-label', translateUi("所有伙伴，另有 {0} 个伙伴有新回复或等你确认", others));
                 }
                 side.append(all);
             }
@@ -853,7 +853,7 @@
 
         renderHeader() {
             const bot = this.bot();
-            const menu = button('pi-bot-menu', translateUi("我的 Bot 与聊天")); menu.dataset.botAction = 'menu';
+            const menu = button('pi-bot-menu', translateUi("我的伙伴与聊天")); menu.dataset.botAction = 'menu';
             menu.append(icon('fa-bars'));
             if (!bot) { this.header.replaceChildren(menu); return; }
             const who = el('div', 'pi-bot-who');
@@ -884,7 +884,7 @@
             if (!this.bots.length) {
                 root.classList.add('is-welcome');
                 root.append(face({ avatar: NEW_BOT_FACE }, 'xl'));
-                root.append(el('h2', null, translateUi("认识你的 Bot")));
+                root.append(el('h2', null, translateUi("认识你的伙伴")));
                 root.append(el('p', null, translateUi("一个一直在的私人助理：记得你说过的话，帮你查、记、写、提醒。先花两三分钟互相认识一下。")));
                 if (globalThis.PiBotOnboarding?.dataNotice) root.append(globalThis.PiBotOnboarding.dataNotice(null));
                 const missing = this.needsModel();
@@ -1451,7 +1451,7 @@
 
         function render(waiting) {
             const target = current, { event, kind, detail, rule } = target;
-            const who = name() || 'Bot';
+            const who = name() || translateUi('伙伴');
             const head = el('header', 'pi-bot-setup-head');
             head.append(currentFace(), el('strong', null, APPROVAL_KINDS[kind](who)));
             const shown = kind === 'action' && Object.hasOwn(APPROVAL_ACTIONS, detail) ? APPROVAL_ACTIONS[detail]()

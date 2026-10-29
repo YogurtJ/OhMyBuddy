@@ -66,24 +66,24 @@ async function main() {
                 await page.locator('.pi-profile-row').first().waitFor();
                 // Offered only for an enabled identity that is not a Bot yet.
                 let items = await open(OFF);
-                assert.equal(await items.filter({ hasText: '变成 Bot' }).isDisabled(), true, 'a disabled identity has to be turned on first');
+                assert.equal(await items.filter({ hasText: '变成伙伴' }).isDisabled(), true, 'a disabled identity has to be turned on first');
                 await close();
                 items = await open(BOT);
-                assert.equal(await items.filter({ hasText: '变成 Bot' }).count(), 0, 'a Bot is not offered again');
+                assert.equal(await items.filter({ hasText: '变成伙伴' }).count(), 0, 'a Bot is not offered again');
                 await close();
                 items = await open(TUTOR);
-                const make = items.filter({ hasText: '变成 Bot' });
+                const make = items.filter({ hasText: '变成伙伴' });
                 assert.equal(await make.isDisabled(), false);
                 if (width < 681) assert.ok((await make.boundingBox()).height >= 44, 'touch-sized menu item');
                 await make.click();
                 const confirm = page.locator('.pi-profile-confirm[open]');
                 await confirm.waitFor();
-                assert.equal(await confirm.locator('h2').textContent(), '把“数学老师”变成 Bot？');
+                assert.equal(await confirm.locator('h2').textContent(), '把“数学老师”变成伙伴？');
                 assert.equal(await confirm.locator('.pi-profile-confirm-item').count(), 3, 'structured confirmation highlights');
                 assert.equal(await confirm.locator('.pi-profile-confirm-primary').count(), 1, 'primary action tone');
                 const text = await confirm.innerText();
-                assert.match(text, /保留名字、头像、性格、记忆和技能/); assert.match(text, /Pi Agent 的线程列表/);
-                assert.match(text, /以它为目标的 1 个定时任务以后会发到 Bot 的主聊天/, 'only live tasks aimed at this identity are counted');
+                assert.match(text, /保留名字、头像、性格、记忆和技能/); assert.match(text, /工作台的线程列表/);
+                assert.match(text, /以它为目标的 1 个定时任务以后会发到伙伴的主聊天/, 'only live tasks aimed at this identity are counted');
                 assert.match(text, /不能再变回普通身份/);
                 const box = await confirm.boundingBox();
                 assert.ok(box.x >= 0 && box.x + box.width <= width + 1, 'the confirmation fits the screen');
@@ -91,11 +91,11 @@ async function main() {
                 await page.keyboard.press('Escape');
                 assert.equal(writes.length, 0);
                 // A conflict changes nothing and says so; the next try uses the fresh revision and opens the Bot.
-                await (await open(TUTOR)).filter({ hasText: '变成 Bot' }).click();
+                await (await open(TUTOR)).filter({ hasText: '变成伙伴' }).click();
                 await confirm.locator('.settings-primary-button').click();
                 await page.locator('.pi-id-toast').filter({ hasText: '身份已变化' }).first().waitFor();
                 assert.match(location(page), /#\/profiles/);
-                await (await open(TUTOR)).filter({ hasText: '变成 Bot' }).click();
+                await (await open(TUTOR)).filter({ hasText: '变成伙伴' }).click();
                 await confirm.locator('.settings-primary-button').click();
                 await page.waitForFunction(id => decodeURIComponent(location.hash).includes('bot') && decodeURIComponent(location.hash).includes(id), TUTOR);
                 const sent = writes.filter(write => write.p === '/api/pi/bots/from-profile');

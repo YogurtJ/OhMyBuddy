@@ -11,7 +11,7 @@ const session = { id: 'updates-fixture', cwd, name: 'Fixture conversation', mess
 const model = { provider: 'fixture', id: 'fixture-model', name: 'Fixture', input: ['text', 'image'], contextWindow: 32000, available: true, thinkingLevels: ['off'] };
 const empty = () => ({ appVersion: '1.0.0-rc.2', piVersion: '0.85.0', bundledPiVersion: '0.85.0', dependencyMatches: true,
     channel: 'preview', platform: 'linux', checkedAt: null,
-    pivane: { status: 'unchecked', releasesUrl: 'https://github.com/YogurtJ/pivane/releases' },
+    pivane: { status: 'unchecked', releasesUrl: 'https://github.com/YogurtJ/OhMyBuddy/releases' },
     pi: { status: 'unchecked', releasesUrl: 'https://www.npmjs.com/package/@earendil-works/pi-coding-agent' } });
 async function run(browser, base, width, language) {
     const english = language === 'en-US';
@@ -37,9 +37,9 @@ async function run(browser, base, width, language) {
             data.pi = { ...data.pi, version: '0.86.0', status: 'available' };
             data.pivane = mode === 'error' ? { ...data.pivane, status: 'error' } : mode === 'empty' ? { ...data.pivane, status: 'no-release' } : {
                 status: 'available', version: '1.0.0-rc.10', prerelease: true,
-                releasesUrl: 'https://github.com/YogurtJ/pivane/releases/tag/v1.0.0-rc.10',
-                downloadUrl: 'https://github.com/YogurtJ/pivane/releases/download/v1.0.0-rc.10/pivane-1.0.0-rc.10.tar.gz',
-                checksumUrl: 'https://github.com/YogurtJ/pivane/releases/download/v1.0.0-rc.10/pivane-1.0.0-rc.10.tar.gz.sha256' };
+                releasesUrl: 'https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.0.0-rc.10',
+                downloadUrl: 'https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.0.0-rc.10/pivane-1.0.0-rc.10.tar.gz',
+                checksumUrl: 'https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.0.0-rc.10/pivane-1.0.0-rc.10.tar.gz.sha256' };
         } else if (url.pathname === '/api/pi/status') data = { ok: true, updateChecks: true, projectRoots: ['/fixture'], defaultProject: cwd };
         else if (url.pathname === '/api/pi/projects') data = { roots: ['/fixture'], projects: [{ cwd, name: 'Fixture', sessionCount: 1 }] };
         else if (url.pathname === '/api/pi/sessions') data = { sessions: [session] };

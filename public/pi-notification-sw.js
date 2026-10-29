@@ -6,7 +6,7 @@ self.addEventListener('push', event => {
         let data = {}; try { data = event.data?.json() || {}; } catch {}
         const title = typeof data.title === 'string' ? data.title.slice(0, 80) : 'OhMyBuddy';
         await self.registration.showNotification(title, {
-            body: typeof data.body === 'string' ? data.body.slice(0, 200) : '工作台有新的任务提醒。',
+            body: typeof data.body === 'string' ? data.body.slice(0, 200) : 'OhMyBuddy 有新的任务提醒。',
             icon: '/brand/logo-192.png', badge: '/brand/logo-64.png',
             tag: 'pi-' + String(data.id || 'notification').slice(0, 100),
             data: { url: self.location.origin + '/' }

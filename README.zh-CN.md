@@ -9,7 +9,7 @@
 开源的私人 AI 助理，自带完整的编程 Agent 工作台，基于 [Pi Coding Agent](https://pi.dev)。<br>
 用你自己的模型：Claude、GPT、Gemini、DeepSeek、通义千问、Kimi 等都可以。聊天、记忆和 Key 都留在你的机器上。
 
-[![Latest release](https://img.shields.io/github/v/release/YogurtJ/pivane?style=flat-square&label=release)](https://github.com/YogurtJ/pivane/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/YogurtJ/OhMyBuddy?style=flat-square&label=release)](https://github.com/YogurtJ/OhMyBuddy/releases/latest)
 [![License: ISC](https://img.shields.io/badge/license-ISC-blue?style=flat-square)](LICENSE)
 [![Node.js 22](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)](docs/INSTALL_RECOVERY.md)
 [![Platforms](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-555?style=flat-square)](#支持平台)
@@ -17,9 +17,9 @@
 
 [English](README.md) · **简体中文**
 
-[下载](https://github.com/YogurtJ/pivane/releases/latest) · [安装](docs/INSTALL_RECOVERY.md) · [用户指南](docs/USER_GUIDE.md) · [变更记录](CHANGELOG.md) · [反馈问题](https://github.com/YogurtJ/pivane/issues/new/choose) · [讨论区](https://github.com/YogurtJ/pivane/discussions)
+[下载](https://github.com/YogurtJ/OhMyBuddy/releases/latest) · [安装](docs/INSTALL_RECOVERY.md) · [用户指南](docs/USER_GUIDE.md) · [变更记录](CHANGELOG.md) · [反馈问题](https://github.com/YogurtJ/OhMyBuddy/issues/new/choose) · [讨论区](https://github.com/YogurtJ/OhMyBuddy/discussions)
 
-<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/hero-zh.webp" alt="自托管私人 AI 助理 OhMyBuddy 的电脑界面：Bot 对话、折叠的过程摘要和记忆回执" width="100%">
+<img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/hero-zh.webp" alt="自托管私人 AI 助理 OhMyBuddy 的电脑界面：伙伴对话、折叠的过程摘要和记忆回执" width="100%">
 
 </div>
 
@@ -31,15 +31,15 @@ OhMyBuddy 是一个自托管的网页应用，把 Pi Coding Agent 变成随时�
 
 它有两面，共用同一套运行时、模型和工具：
 
-- **Bot：你的私人伙伴。** Bot 有名字、形象和性格，和你一直在同一个对话里聊；它记得跨聊天的重要信息，帮你处理日常提问、计划、笔记、资料整理、提醒和电脑上的小活。
-- **Pi Agent：你的 Agent 工作台。** 面向真实文件夹里的项目工作：线程、流式工具调用、文件差异、子 Agent、侧聊和会话树一应俱全，会话与 Pi CLI 兼容。
+- **伙伴：懂你的私人助理。** 伙伴有名字、形象和性格，和你一直在同一个对话里聊；它记得跨聊天的重要信息，帮你处理日常提问、计划、笔记、资料整理、提醒和电脑上的小活。
+- **工作台：完整的 Agent 工作台。** 面向真实文件夹里的项目工作：线程、流式工具调用、文件差异、子 Agent、侧聊和会话树一应俱全，会话与 Pi CLI 兼容。
 
 ## 为什么选择 OhMyBuddy
 
-- **记得你，而且记了什么你都看得见。** 每个 Bot 都有“关于你”、长期记忆、学到的技能，每个聊天还有自己的记事本。回复里保存了什么，下方就出现一条回执；每条记忆和技能都可以查看、修改或撤销。
-- **在微信里派活。** 装上可选的微信连接组件并扫码后，在微信里发一句话或一张图片，家里电脑上的 Bot 或 Agent 就会读文件、跑工具，做完把文件发回微信。
+- **记得你，而且记了什么你都看得见。** 每个伙伴都有“关于你”、长期记忆、学到的技能，每个聊天还有自己的记事本。回复里保存了什么，下方就出现一条回执；每条记忆和技能都可以查看、修改或撤销。
+- **在微信里派活。** 装上可选的微信连接组件并扫码后，在微信里发一句话或一张图片，家里电脑上的伙伴或 Agent 就会读文件、跑工具，做完把文件发回微信。
 - **一个伙伴，所有屏幕。** 会话保存在你的服务器上，电脑、手机和微信接着同一段对话。可以添加到手机主屏幕，回复完成时收到通知。
-- **真能干活。** Bot 和 Agent 可以读写文件、执行命令、上网、使用 MCP 工具、启动子 Agent、运行定时任务。Bot 提供“放手”“稳妥”“每次都问”三种做事方式。
+- **真能干活。** 伙伴和 Agent 可以读写文件、执行命令、上网、使用 MCP 工具、启动子 Agent、运行定时任务。伙伴提供“放手”“稳妥”“每次都问”三种做事方式。
 - **模型、Key 和机器都由你掌控。** Pi 支持的供应商都可以使用，包括 Anthropic、OpenAI、Google Gemini、GitHub Copilot、OpenRouter、DeepSeek、通义千问、Kimi、MiniMax、xAI 和 Mistral；可以用 API Key 或 OAuth 登录，也可以接入自己的 OpenAI 兼容服务。凭据和历史都保存在你自己的机器上。
 - **跟着 Pi 生态一起长。** Pi 的 Packages、Skills、提示词模板和 MCP 服务器都可以在浏览器里安装，也可以让内置的扩展助手帮你查找和配置。
 - **内置图像、视频和语音。** 接入自己的图像、视频和语音服务，说出想法就能得到可编辑的生成参数；也可以语音输入消息，或让回复朗读出来。
@@ -53,16 +53,16 @@ OhMyBuddy 是一个自托管的网页应用，把 Pi Coding Agent 变成随时�
 
 ## 功能
 
-### Bot：私人伙伴
+### 伙伴：记得你的私人助理
 
-- 给 Bot 起名字、选头像、定性格和工作目录。可选的两三分钟“互相认识”会问清怎么称呼你、主要帮你做什么、该怎么做事，也可以跳过。
-- 每个 Bot 有一个一直聊下去的主聊天和最多 100 个话题。每个聊天都有自己的“我记着的事”，记下定好的事、答应的事、截止时间和待回答的问题；话题共用这个 Bot 的记忆与技能。
-- 长聊天一直好用：旧工具输出会被省略，空闲时在后台整理摘要；更早的聊天可以只读回看，Bot 也能按原话翻找。
+- 给伙伴起名字、选头像、定性格和工作目录。可选的两三分钟“互相认识”会问清怎么称呼你、主要帮你做什么、该怎么做事，也可以跳过。
+- 每个伙伴有一个一直聊下去的主聊天和最多 100 个话题。每个聊天都有自己的“我记着的事”，记下定好的事、答应的事、截止时间和待回答的问题；话题共用这个伙伴的记忆与技能。
+- 长聊天一直好用：旧工具输出会被省略，空闲时在后台整理摘要；更早的聊天可以只读回看，伙伴也能按原话翻找。
 - 每轮只显示一个回复和一行可展开的过程摘要；记忆、记事本、技能、设置和定时任务的变化都以回执呈现，点开即可查看。
-- 可以同时有多个 Bot，记忆互不共享；新 Bot 可以从其他 Bot 勾选复制“关于你”。
-- 主动联系和后台学习在 Bot 设置里各有开关和额度。详见 [Bot 模式](docs/BOT_MODE.md)。
+- 可以同时有多个伙伴，记忆互不共享；新伙伴可以从其他伙伴勾选复制“关于你”。
+- 主动联系和后台学习在伙伴设置里各有开关和额度。详见 [伙伴模式](docs/BOT_MODE.md)。
 
-### Pi Agent：Agent 工作台
+### 工作台：项目、线程与工具
 
 - 线程按项目组织，直接在服务器上的文件夹里工作。
 - 回复会流式显示思考过程、工具调用和本轮修改的文件。默认的简洁视图会把每个已完成的轮次收成一行“用时 · 工具调用”摘要。
@@ -70,7 +70,7 @@ OhMyBuddy 是一个自托管的网页应用，把 Pi Coding Agent 变成随时�
 - 任务运行时，可以发送引导或排队一条后续消息，也可以停止、重试或压缩上下文。
 - `!命令` 在服务器上执行 Shell 命令；`!!命令` 的输出不会进入模型上下文。
 - 模型选择器支持搜索、跨设备同步的常用模型、按模型调整的思考等级，并显示上下文用量；进度卡会显示 Agent 正在执行的计划。
-- 在任意项目里可以“以身份新建…”线程，选一个 Bot，把它的性格、记忆和技能带进项目工作。
+- 在任意项目里可以“以身份新建…”线程，选一个伙伴，把它的性格、记忆和技能带进项目工作。
 
 ### 会话与历史
 
@@ -88,15 +88,15 @@ OhMyBuddy 是一个自托管的网页应用，把 Pi Coding Agent 变成随时�
 
 ### 记忆与学习
 
-- Bot 和助手身份都有自己的人设、关于你的偏好记录和长期记忆，由 [pi-hermes-memory](https://pi.dev/packages/pi-hermes-memory?name=memory) 提供支持。概览、设定、记忆、技能、学习分别展示待处理变化、内容和预算。
+- 伙伴和助手身份都有自己的人设、关于你的偏好记录和长期记忆，由 [pi-hermes-memory](https://pi.dev/packages/pi-hermes-memory?name=memory) 提供支持。概览、设定、记忆、技能、学习分别展示待处理变化、内容和预算。
 - 可以开启后台学习，在每日预算内从你的纠正和偏好中学习。
 - 多个逻辑项目可以指向同一个目录，并各自带有项目指令。
 
 ### 微信
 
 - 按需安装可选的微信连接组件，扫码登录，只允许指定用户。连接的是微信 ClawBot（iLink）机器人身份，不会接管你个人微信号的聊天。
-- 可以在微信里和 Bot 聊天，也可以把私聊绑定到 Pi Agent 线程。支持发送文字和图片，最终回复、交付文件和定时通知都会发回微信。
-- 斜杠指令可以切换 Bot（`/bot`）和话题（`/topic`）、修改模型与思考等级、查看状态、停止或确认任务；浏览器中可以查看连接状态与投递回执。详见[消息渠道](docs/MESSAGE_CHANNELS.md)。
+- 可以在微信里和伙伴聊天，也可以把私聊绑定到工作台线程。支持发送文字和图片，最终回复、交付文件和定时通知都会发回微信。
+- 斜杠指令可以切换伙伴（`/bot`、`/伙伴` 或 `/切换`）和话题（`/topic`）、修改模型与思考等级、查看状态、停止或确认任务；浏览器中可以查看连接状态与投递回执。详见[消息渠道](docs/MESSAGE_CHANNELS.md)。
 
 ### 文件与渲染
 
@@ -121,13 +121,13 @@ OhMyBuddy 是一个自托管的网页应用，把 Pi Coding Agent 变成随时�
 
 ### 日常使用
 
-<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/mobile-zh.webp" alt="手机上的 OhMyBuddy：Bot 对话、过程摘要与记忆回执" width="280"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/mobile-zh.webp" alt="手机上的 OhMyBuddy：伙伴对话、过程摘要与记忆回执" width="280"></p>
 
 - 布局会适应电脑、平板和手机屏幕，OhMyBuddy 也可以添加到手机主屏幕。
 - 提供页面通知和提示音，并可选开启 Web Push 后台提醒。
 - 用量统计按日期、供应商、模型、项目和会话汇总 token 和估算费用。
 - 提供浅色和深色主题，可以调整字号，界面可选英文或简体中文。
-- 工作台用访问 Token 保护。OhMyBuddy 作为后台服务运行，并提供桌面入口。它会检查新版本，并生成升级提示词，你可以交给部署机器上的 Agent 执行。
+- 用访问 Token 保护你的实例。OhMyBuddy 作为后台服务运行，并提供桌面入口。它会检查新版本，并生成升级提示词，你可以交给部署机器上的 Agent 执行。
 
 ## 快速开始
 
@@ -145,14 +145,14 @@ node scripts/install.cjs
 npm start
 ```
 
-打开 <http://127.0.0.1:11408>，检查 **设置 → 供应商与模型**，然后打开 **Bot** 认识你的第一个伙伴，或在 **Pi Agent** 里选择一个项目文件夹。
+打开 <http://127.0.0.1:11408>，检查 **设置 → 供应商与模型**，然后打开 **伙伴** 认识你的第一个伙伴，或在 **工作台** 里选一个项目文件夹。
 
 日常使用时，请按[安装指南](docs/INSTALL_RECOVERY.md)（另有 [macOS](docs/MACOS.md) 和 [Windows](docs/WINDOWS.md) 版本）把数据放在应用目录之外，然后运行 `node scripts/install-service.cjs`。这样 OhMyBuddy 会在后台运行，并在你登录时自动启动；在 macOS 和 Windows 上还会添加桌面入口。
 
 **让编程 Agent 帮你装。** 在目标电脑上把下面这段话发给 Claude Code、Codex、Pi 或其他 Agent：
 
 ```text
-请在这台电脑上安装 OhMyBuddy：https://github.com/YogurtJ/pivane
+请在这台电脑上安装 OhMyBuddy：https://github.com/YogurtJ/OhMyBuddy
 按仓库里的 docs/AGENT_GUIDE.md 和本平台的安装指南操作：使用最新 Release，
 校验压缩包哈希，安装为后台服务，最后告诉我访问地址、版本和数据路径。
 不要打印或复制我的任何 API Key。
@@ -180,22 +180,22 @@ flowchart LR
 ```
 
 - Node.js 服务（Express 和 WebSocket）提供纯 JavaScript 前端，不需要构建步骤。
-- 每个持久线程（包括 Bot 的每个聊天和话题）只由一个 Pi worker 进程提供服务，打开它的所有浏览器都连接到同一个 worker。
+- 每个持久线程（包括伙伴的每个聊天和话题）只由一个 Pi worker 进程提供服务，打开它的所有浏览器都连接到同一个 worker。
 - Pi 的 SessionManager 和 JSONL 文件是每段对话唯一的记录。用量统计保存在单独的账本里，不保存消息内容。
 - 每个 OhMyBuddy 版本都内置一个经过测试的 Pi 版本，Pi 随 OhMyBuddy 一起升级。
 
 ## 安全模型
 
 - OhMyBuddy 面向**个人、单用户**的实例。拿到访问 Token 的人共用同一个实例，没有单独的用户账户。
-- 项目根目录限制了可以浏览的文件夹，但它**不是沙箱**。Bot、Agent、Shell、Packages 和扩展都以服务器用户的权限运行；Bot 的做事方式只决定什么时候先问你，也不是操作系统沙箱。请只安装你信任的扩展。
+- 项目根目录限制了可以浏览的文件夹，但它**不是沙箱**。伙伴、Agent、Shell、Packages 和扩展都以服务器用户的权限运行；伙伴的做事方式只决定什么时候先问你，也不是操作系统沙箱。请只安装你信任的扩展。
 - 只有允许列表里的微信用户能进入绑定的聊天，他们可以使用该聊天已有的工具，请只添加你信任的人。
 - 媒体按你设置的各类型对话自动执行偏好和确认策略运行。失败或结果不确定的提交不会自动重放。
 
 ## 常见问题
 
-**Bot 和 Pi Agent 有什么区别？** Bot 是一段持续的私人对话，隐藏项目、模型和上下文这些控制；Pi Agent 是面向项目文件夹的完整工作台。两者用同一个 Pi 运行时，也可以“以身份新建”一个 Pi Agent 线程，把 Bot 的记忆带进去。
+**伙伴和工作台有什么区别？** 伙伴是一段持续的私人对话，隐藏项目、模型和上下文这些控制；工作台是面向项目文件夹的完整 Agent 工作台。两者用同一个 Pi 运行时，也可以“以身份新建”一个工作台线程，把伙伴的记忆带进去。
 
-**它只是 Pi 的网页界面吗？** 最早是，那时叫 Pivane。现在它仍然直接使用 Pi 的运行时和会话文件，但 Bot、看得见的记忆、微信、定时任务和媒体实验室，让它成了日常不用打开终端也能用的私人 Agent。
+**它只是 Pi 的网页界面吗？** 最早是，那时叫 Pivane。现在它仍然直接使用 Pi 的运行时和会话文件，但伙伴、看得见的记忆、微信、定时任务和媒体实验室，让它成了日常不用打开终端也能用的私人 Agent。
 
 **和 OpenClaw、Hermes Agent 有什么不同？** 它们都在你自己的机器上用你自己的模型运行 Agent。OhMyBuddy 以浏览器为中心：记忆变化以回执呈现、可以核对，自带 Pi 编程工作台，微信通过 ClawBot 接入。如果你主要想把一个助理接进很多聊天软件，OpenClaw 支持的渠道更多。
 
@@ -211,7 +211,8 @@ flowchart LR
 
 如果你是帮用户安装、配置、升级或排查 OhMyBuddy 的 AI Agent，请从[用户 Agent 操作指南](docs/AGENT_GUIDE.md)开始；只有被要求修改源码时才阅读 [AGENTS.md](AGENTS.md)。
 
-- **是什么**：自托管的私人 AI Agent（带记忆的 Bot）和编程 Agent 工作台（Pi Agent），原名 Pivane，ISC 许可证。
+- **是什么**：自托管的私人 AI Agent（带记忆的“伙伴”），加上编程 Agent 工作台（“工作台”），原名 Pivane，ISC 许可证。
+- **代码中的名称**：接口、数据目录和微信指令把伙伴称为 `bot`（`/api/pi/bots`、`/bot`）；工作台标签是 `chat`。
 - **运行环境**：Node.js 22.x（22.19.0 或更新）、npm、`bash` 和 ripgrep；不需要构建、GPU、Docker 或全局安装 Pi。
 - **默认地址**：`http://127.0.0.1:11408`。默认只监听本机；允许其他设备访问前先开启访问 Token。
 - **引擎**：固定版本的 [Pi Coding Agent](https://pi.dev) 运行时；对话是 Pi 原生 JSONL 会话，与 Pi CLI 兼容。
@@ -223,19 +224,19 @@ flowchart LR
 |---|---|
 | 安装、升级与恢复 | [安装与恢复](docs/INSTALL_RECOVERY.md) · [macOS](docs/MACOS.md) · [Windows](docs/WINDOWS.md) · [后台服务](docs/BACKGROUND_SERVICE.md) |
 | 日常使用 | [用户指南](docs/USER_GUIDE.md) |
-| Bot | [Bot 模式](docs/BOT_MODE.md) · [微信与消息渠道](docs/MESSAGE_CHANNELS.md) |
+| 伙伴 | [伙伴模式](docs/BOT_MODE.md) · [微信与消息渠道](docs/MESSAGE_CHANNELS.md) |
 | 全部功能详解 | [文档目录](docs/README.md) |
 | REST 和 WebSocket API | [API 参考](docs/API.md) |
 | 让自己的 Agent 帮忙 | [用户 Agent 操作指南](docs/AGENT_GUIDE.md) |
-| 版本变化与后续计划 | [变更记录](CHANGELOG.md) · [Releases](https://github.com/YogurtJ/pivane/releases) · [路线图](docs/ROADMAP.md) |
+| 版本变化与后续计划 | [变更记录](CHANGELOG.md) · [Releases](https://github.com/YogurtJ/OhMyBuddy/releases) · [路线图](docs/ROADMAP.md) |
 
 ## 参与贡献
 
-欢迎各种反馈，可以先看看[欢迎帖](https://github.com/YogurtJ/pivane/discussions/4)。
+欢迎各种反馈，可以先看看[欢迎帖](https://github.com/YogurtJ/OhMyBuddy/discussions/4)。
 
-- **Bug 和功能建议**：[新建 issue](https://github.com/YogurtJ/pivane/issues/new/choose)。报告 Bug 时请写明 OhMyBuddy 版本和最短的复现步骤。
-- **使用问题、交流和分享**：到 [Discussions](https://github.com/YogurtJ/pivane/discussions) 发帖，或直接在欢迎帖下留言。不确定发哪里也没关系，随便发，我都会看到。
-- **PR**：非常欢迎，可以从带 [`good first issue`](https://github.com/YogurtJ/pivane/labels/good%20first%20issue) 标签的任务开始。
+- **Bug 和功能建议**：[新建 issue](https://github.com/YogurtJ/OhMyBuddy/issues/new/choose)。报告 Bug 时请写明 OhMyBuddy 版本和最短的复现步骤。
+- **使用问题、交流和分享**：到 [Discussions](https://github.com/YogurtJ/OhMyBuddy/discussions) 发帖，或直接在欢迎帖下留言。不确定发哪里也没关系，随便发，我都会看到。
+- **PR**：非常欢迎，可以从带 [`good first issue`](https://github.com/YogurtJ/OhMyBuddy/labels/good%20first%20issue) 标签的任务开始。
 
 日志和截图请先去除凭据和私人内容。
 

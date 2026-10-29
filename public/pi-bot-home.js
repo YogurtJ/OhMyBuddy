@@ -106,9 +106,9 @@
         function head() {
             const bar = el('header', 'pi-bot-home-head');
             const back = button('pi-bot-home-back', translateUi("回到聊天")); back.dataset.homeAction = 'close'; back.append(icon('fa-chevron-left'));
-            const title = el('h2', null, translateUi("我的 Bot")); title.id = 'pi-bot-home-title';
+            const title = el('h2', null, translateUi("我的伙伴")); title.id = 'pi-bot-home-title';
             const count = el('span', 'pi-bot-home-count', translateUi("{0} 个", bots.length));
-            const add = button('pi-bot-home-new', creating ? translateUi("正在创建…") : translateUi("新建 Bot")); add.dataset.homeAction = 'create'; add.disabled = creating;
+            const add = button('pi-bot-home-new', creating ? translateUi("正在创建…") : translateUi("新建伙伴")); add.dataset.homeAction = 'create'; add.disabled = creating;
             add.append(creating ? el('span', 'pi-spinner') : icon('fa-plus'), el('span', null, translateUi("新建")));
             bar.append(back, title, count, add);
             return bar;
@@ -119,7 +119,7 @@
             inner.append(head());
             const search = el('div', 'pi-bot-home-search'); search.setAttribute('role', 'search');
             const input = document.createElement('input'); input.type = 'search'; input.id = 'pi-bot-home-query'; input.value = query;
-            input.placeholder = translateUi("找 Bot 或话题"); input.autocomplete = 'off'; input.enterKeyHint = 'search'; input.setAttribute('aria-label', translateUi("找 Bot 或话题"));
+            input.placeholder = translateUi("找伙伴或话题"); input.autocomplete = 'off'; input.enterKeyHint = 'search'; input.setAttribute('aria-label', translateUi("找伙伴或话题"));
             search.append(icon('fa-magnifying-glass'), input);
             const counts = { all: bots.length, waiting: 0, unread: 0 };
             for (const bot of bots) { const summary = summarize(bot, state); if (summary.kind === 'waiting') counts.waiting++; if (summary.unread) counts.unread++; }
@@ -143,11 +143,11 @@
                 const calm = el('div', 'pi-bot-home-calm');
                 const text = query.trim() ? translateUi("没有找到“{0}”", query.trim()) : filter === 'waiting' ? translateUi("现在没有等你确认的事") : translateUi("没有新回复");
                 const clear = button('pi-bot-chip'); clear.dataset.homeAction = 'clear'; clear.textContent = translateUi("清除筛选");
-                calm.append(el('strong', null, text), el('p', null, query.trim() ? translateUi("试试 Bot 的名字或话题名。") : translateUi("有新的动静时会出现在这里。")), clear);
+                calm.append(el('strong', null, text), el('p', null, query.trim() ? translateUi("试试伙伴的名字或话题名。") : translateUi("有新的动静时会出现在这里。")), clear);
                 list.replaceChildren(calm);
                 return;
             }
-            const ul = el('ul', 'pi-bot-home-bots'); ul.setAttribute('aria-label', translateUi("Bot 列表"));
+            const ul = el('ul', 'pi-bot-home-bots'); ul.setAttribute('aria-label', translateUi("伙伴列表"));
             for (const row of found) ul.append(item(row));
             list.replaceChildren(ul);
         }

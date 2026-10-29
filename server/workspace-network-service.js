@@ -142,7 +142,7 @@ class WorkspaceNetworkService {
         const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 8000);
         let agent;
         try {
-            const target = body.target === 'github' ? 'https://api.github.com/repos/YogurtJ/pivane' : 'https://registry.npmjs.org/-/ping';
+            const target = body.target === 'github' ? `https://api.github.com/repos/${require('./ohmybuddy-compat').REPOSITORY}` : 'https://registry.npmjs.org/-/ping';
             agent = proxyAgent(target, environmentFor(proxy, this.env, this.nativeProxy, this.host));
             const response = await this.fetch(target, { method: 'GET', redirect: 'error', size: 16384, signal: controller.signal, agent, headers: { 'User-Agent': 'OhMyBuddy-Network-Test' } });
             response.body?.destroy();
@@ -156,7 +156,7 @@ class WorkspaceNetworkService {
             res.set('Cache-Control', 'no-store');
             try {
                 const identity = access.authenticate(req);
-                if (!identity) throw fail('请先登录工作台', 401);
+                if (!identity) throw fail('请先登录 OhMyBuddy', 401);
                 if (!access.csrf(req, identity, write)) throw fail('网络设置请求来源无效', 403);
                 if (write && !access.configuration().enabled) throw fail('请先开启登录验证，再修改网络设置', 403);
                 res.json(await action(req.body));

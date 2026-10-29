@@ -385,7 +385,7 @@
             }
             if (this.preview && this.data.kind === 'html') {
                 const note = document.createElement('p'); note.className = 'pi-file-preview-warning';
-                note.textContent = this.runHtml ? translateUi('隔离交互已运行；无法访问工作台。仅运行可信页面，脚本导航仍可能联网。') : translateUi('静态预览 · 脚本尚未运行。仅对可信页面启用交互；相对资源不自动加载。');
+                note.textContent = this.runHtml ? translateUi('隔离交互已运行；无法访问 OhMyBuddy。仅运行可信页面，脚本导航仍可能联网。') : translateUi('静态预览 · 脚本尚未运行。仅对可信页面启用交互；相对资源不自动加载。');
                 const frame = document.createElement('iframe'); frame.className = 'pi-file-html'; frame.title = translateUi('HTML 隔离预览');
                 frame.setAttribute('sandbox', this.runHtml ? 'allow-scripts' : ''); frame.referrerPolicy = 'no-referrer'; frame.setAttribute('credentialless', '');
                 frame.setAttribute('allow', "camera 'none'; microphone 'none'; geolocation 'none'; clipboard-read 'none'; clipboard-write 'none'; fullscreen 'none'");

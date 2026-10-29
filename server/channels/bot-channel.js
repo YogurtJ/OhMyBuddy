@@ -28,7 +28,7 @@ const windowRef = target => ({ profileId: target.profileId, windowId: target.win
 const windowName = window => window.kind === 'main' ? '主聊天' : `${window.emoji ? window.emoji + ' ' : ''}${window.title || '话题'}`;
 
 function botsService(service) {
-    if (!service.bots) throw fail('Bot 功能不可用');
+    if (!service.bots) throw fail('伙伴功能不可用');
     return service.bots;
 }
 
@@ -38,7 +38,7 @@ async function resolveTarget(service, profileId, windowId = null) {
 
 // The web page connects a WeChat chat to a Bot: the chat now talks to the Bot's main chat.
 async function bindBot(service, account, input) {
-    if (typeof input.botProfileId !== 'string' || !UUID.test(input.botProfileId)) throw fail('无效的 Bot');
+    if (typeof input.botProfileId !== 'string' || !UUID.test(input.botProfileId)) throw fail('无效的伙伴');
     const target = await resolveTarget(service, input.botProfileId);
     const bot = windowRef(target);
     await service.withBindingTarget(target.session.cwd, target.session.id, (session, boundary) => {
@@ -46,7 +46,7 @@ async function bindBot(service, account, input) {
         service.db.change(v => {
             const previous = v.bindings.find(b => b.accountId === account.id && b.peerId === input.peerId);
             const bots = [...new Set([...(previous?.bots || []), bot.profileId])];
-            if (bots.length > MAX_BOTS) throw fail(`一个微信聊天最多连接 ${MAX_BOTS} 个 Bot`);
+            if (bots.length > MAX_BOTS) throw fail(`一个微信聊天最多连接 ${MAX_BOTS} 个 Buddy`);
             v.bindings = v.bindings.filter(b => !(b.accountId === account.id && b.peerId === input.peerId));
             v.bindings.push({ id: randomUUID(), accountId: account.id, peerId: input.peerId, cwd: session.cwd, sessionId: session.id,
                 name: target.name, replyMode: input.replyMode ?? 'all', ...boundary, bot, bots });
@@ -58,7 +58,7 @@ async function bindBot(service, account, input) {
 // next connected Bot that is still available, or loses its binding when none is.
 async function unbindBot(service, input) {
     const binding = service.db.value.bindings.find(b => b.accountId === input.accountId && b.peerId === input.peerId);
-    if (!binding?.bots?.includes(input.botProfileId)) throw fail('此微信聊天没有连接这个 Bot');
+    if (!binding?.bots?.includes(input.botProfileId)) throw fail('此微信聊天没有连接这个伙伴');
     service.assertPeerIdle(input.accountId, input.peerId);
     const rest = binding.bots.filter(id => id !== input.botProfileId);
     const keep = changes => service.db.change(v => {
@@ -93,7 +93,7 @@ async function ensureCurrent(service, jobId) {
         if (error.code !== 'BOT_WINDOW_ARCHIVED' && error.status !== 404 && error.code !== 'BOT_DISABLED') throw error;
         // The topic is gone: the chat returns to the Bot's main chat. Without an available Bot the
         // binding stays; the message is explained, never run somewhere else.
-        let reply = '⚠️ 这个 Bot 现在不可用，刚才这条消息没有发出。可以发 /切换 换一个 Bot。';
+        let reply = '⚠️ 这个伙伴现在不可用，刚才这条消息没有发出。可以发 /切换 换一个伙伴。';
         if (!binding.bot.main && error.code !== 'BOT_DISABLED') {
             try {
                 const main = await resolveTarget(service, binding.bot.profileId);

@@ -26,14 +26,14 @@ const LEGACY_MODEL_REJECTIONS = new Set(['请先为线程配置可用模型',
     '当前聊天没有可用模型，请用 /model 选择模型或检查工作区默认模型',
     '当前聊天模型不支持图片输入，请用 /model 选择支持视觉的模型后重新发送图片']);
 const SLASH_COMMANDS = new Set(['/help', '/status', '/stop', '/new', '/reset', '/resume', '/name', '/model', '/thinking', '/compact', '/reload', '/confirm', '/bot', '/topic']);
-// Chinese names for the Bot commands (M4-4).
-const SLASH_ALIASES = new Map([['/切换', '/bot'], ['/话题', '/topic']]);
+// Chinese names for the Bot commands (M4-4); /buddy and /伙伴 follow the Buddy display name.
+const SLASH_ALIASES = new Map([['/切换', '/bot'], ['/伙伴', '/bot'], ['/buddy', '/bot'], ['/话题', '/topic']]);
 function parseSlash(text) {
     const trimmed = String(text || '').trim();
     if (!trimmed.startsWith('/')) return null;
     const match = /^(\/[\p{L}\p{N}_-]+)(?:\s+([\s\S]*))?$/u.exec(trimmed);
     if (!match) return null;
-    const cmd = SLASH_ALIASES.get(match[1]) || match[1].toLowerCase();
+    const cmd = SLASH_ALIASES.get(match[1]) || SLASH_ALIASES.get(match[1].toLowerCase()) || match[1].toLowerCase();
     return SLASH_COMMANDS.has(cmd) ? { command: cmd, args: (match[2] || '').trim() } : null;
 }
 class ChannelsService {
@@ -61,7 +61,7 @@ class ChannelsService {
         }
     }
     get busy() { return this.initializing || this.mutating || Boolean(this.login && Date.now() < this.login.expiresAt) || Boolean(this.loginFlight) || this.operations.size > 0 || this.runs.size > 0; }
-    healthy() { if (this.error) throw fail(this.error); if (this.stopping || this.isSuspended()) throw fail('工作台正在维护，请稍后再试', 409); }
+    healthy() { if (this.error) throw fail(this.error); if (this.stopping || this.isSuspended()) throw fail('OhMyBuddy 正在维护，请稍后再试', 409); }
     async ensureAdapter() {
         if (!this.adapter) this.adapter = this.adapterFactory ? await this.adapterFactory() : new WeixinAdapter(await this.component.load(createTransport(this.stopController.signal, () => this.login?.controller?.signal)));
         return this.adapter;
@@ -184,11 +184,11 @@ class ChannelsService {
             // A thread binding names one session file; a Bot chat moves to new files over time, so it
             // is only reachable through a Bot binding that names its window (bot-channel.js).
             const marked = read.manager().getEntries().some(e => e.type === 'custom' && e.customType === 'pivane-bot-window');
-            if (marked && !bot) throw fail('Bot 聊天请在 Bot 设置或渠道设置里按 Bot 连接微信');
+            if (marked && !bot) throw fail('伙伴聊天请在伙伴设置或渠道设置里按伙伴连接微信');
             // The same native ownership proof the Bot service uses (one marker, bound to this session and its profile).
             const owner = bot ? readWindowBinding(read.manager()) : null;
             if (bot && (owner?.profileId !== bot.profileId || owner.windowId !== bot.windowId || owner.sessionId !== session.id))
-                throw fail('Bot 聊天与微信绑定不一致，请刷新核对', 409);
+                throw fail('伙伴聊天与微信绑定不一致，请刷新核对', 409);
             read.validate();
             // The caller's synchronous commit shares this validated file snapshot.
             return commit(session, bindingBoundary(read.manager()));

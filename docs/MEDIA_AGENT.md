@@ -10,7 +10,7 @@
 
 ## 聊天生成卡片
 
-受管的普通会话（Pi Agent、助手对话、任务线程和定时任务所用的持久 worker）由 `pi-web-session-extension` 注册三个工具，不依赖用户安装 `media-workbench` 包；侧聊和临时会话没有这三个工具。
+受管的普通会话（工作台、助手对话、任务线程和定时任务所用的持久 worker）由 `pi-web-session-extension` 注册三个工具，不依赖用户安装 `media-workbench` 包；侧聊和临时会话没有这三个工具。
 
 | 工具 | 作用 |
 |---|---|
@@ -43,7 +43,7 @@ card confirm (user session) -> POST /api/pi/media/chat/requests {key, modelId, p
 
 ## 聊天图片编辑与参考素材
 
-Pi Agent 和助手对话中，先上传 PNG/JPEG/WebP 图片并说明修改要求，例如“用已配置的图片编辑模型，保留主体，把背景改成夜景”。Agent 选择声明了图片输入的模型（编辑接口可能单独列为模型），把当前原生会话分支的图片交给生成卡片。卡片展示原图缩略图、修改要求和模型；需要手动确认时可先核对后执行；“修改参数”也能替换参考图。可接着要求“把刚生成的图再改成水彩风格”。没有图片输入的文生图模型不能代替编辑模型。
+工作台和助手对话中，先上传 PNG/JPEG/WebP 图片并说明修改要求，例如“用已配置的图片编辑模型，保留主体，把背景改成夜景”。Agent 选择声明了图片输入的模型（编辑接口可能单独列为模型），把当前原生会话分支的图片交给生成卡片。卡片展示原图缩略图、修改要求和模型；需要手动确认时可先核对后执行；“修改参数”也能替换参考图。可接着要求“把刚生成的图再改成水彩风格”。没有图片输入的文生图模型不能代替编辑模型。
 
 `media_generate` 的 image/video 参数接受下列引用；multiple 字段使用有序数组：
 
@@ -101,7 +101,7 @@ TTS 的字段来自 `TtsProviderService.getPublicConfig()`；已配置模型复�
 
 ## Pi Package
 
-位置为 `pi-packages/media-workbench/`，包含 `extensions/media-tools.ts` 和 `skills/media-workbench/SKILL.md`。终端/完整 Pi Agent 可通过设置中心的公开 PackageManager 安装这个本地 package；专用实验室 planner 会显式加载它，不要求用户先全局安装。
+位置为 `pi-packages/media-workbench/`，包含 `extensions/media-tools.ts` 和 `skills/media-workbench/SKILL.md`。终端/完整工作台可通过设置中心的公开 PackageManager 安装这个本地 package；专用实验室 planner 会显式加载它，不要求用户先全局安装。
 
 | 工具 | 副作用 |
 |---|---|
@@ -121,7 +121,7 @@ TTS 的字段来自 `TtsProviderService.getPublicConfig()`；已配置模型复�
 
 没有显式或已保存模型时采用“自动”：`PI_MEDIA_PLANNER_MODEL`、Pi 默认模型形成候选；没有匹配项时选第一个可用非 batch 模型。候选来自 `ModelRuntime.getAvailable()`，保留既有默认候选尝试及结果报告，不内置个人 Provider/模型名称。
 
-偏好仍保存于选定 Pi Agent 目录下的 `ohmybuddy-workspace.json.mediaAgent`（既有 `pi5-workspace.json` 自动沿用），不改变 Pi 对话默认模型。保存后下一次 plan 生效，response 返回实际 `plannerModel`、`fallbackUsed` 和截断的失败尝试；只有自动默认候选可在失败后切换，不重试媒体执行。
+偏好仍保存于选定工作台目录下的 `ohmybuddy-workspace.json.mediaAgent`（既有 `pi5-workspace.json` 自动沿用），不改变 Pi 对话默认模型。保存后下一次 plan 生效，response 返回实际 `plannerModel`、`fallbackUsed` 和截断的失败尝试；只有自动默认候选可在失败后切换，不重试媒体执行。
 
 ## API 和连接
 

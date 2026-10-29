@@ -10,7 +10,7 @@ const { once } = require('node:events');
 
 const release = (version, extra = {}) => ({ tag_name: 'v' + version, prerelease: version.includes('-'), draft: false,
     assets: ['', '.sha256'].map(suffix => ({ name: `pivane-${version}.tar.gz${suffix}`, state: 'uploaded',
-        browser_download_url: `https://github.com/YogurtJ/pivane/releases/download/v${version}/pivane-${version}.tar.gz${suffix}` })), ...extra });
+        browser_download_url: `https://github.com/YogurtJ/OhMyBuddy/releases/download/v${version}/pivane-${version}.tar.gz${suffix}` })), ...extra });
 const fixture = (releases, options = {}) => {
     const requests = [];
     const service = new UpdateService({ env: {}, appVersion: '1.0.0-rc.2', piVersion: options.piVersion || '0.85.1',
@@ -63,8 +63,9 @@ test('local update snapshots never contact sources; stable and preview are disti
     const stable = await service.check('stable');
     assert.equal(stable.pivane.version, '0.9.0'); assert.equal(stable.pivane.status, 'ahead');
     assert.equal((await service.check()).pivane.version, '1.0.0-rc.10', 'default lookup includes prereleases even for stable local versions');
-    for (const { opts } of requests) {
-        assert.equal(opts.redirect, 'error'); assert.equal(opts.size, 2 * 1024 * 1024);
+    assert.ok(requests.some(({ url }) => url === 'https://api.github.com/repos/YogurtJ/OhMyBuddy/releases?per_page=100'));
+    for (const { url, opts } of requests) {
+        assert.equal(opts.redirect, url.startsWith('https://api.github.com/') ? 'manual' : 'error'); assert.equal(opts.size, 2 * 1024 * 1024);
         assert.deepEqual(Object.keys(opts.headers).sort(), ['Accept', 'User-Agent']);
     }
 });
@@ -93,6 +94,29 @@ test('missing stable releases, partial failure and mismatched dependencies remai
     assert.equal(result.pivane.status, 'error'); assert.equal(result.pi.status, 'available');
     assert.equal(result.dependencyMatches, false); assert.ok(!JSON.stringify(result).includes('secret'));
     await service.check('stable'); assert.equal(calls, 2);
+});
+
+test('a renamed repository keeps update checks working through same-origin GitHub API redirects only', async () => {
+    const moved = (location, status = 301) => ({ ok: false, status, headers: { get: name => name === 'location' ? location : null }, body: { destroy() {} } });
+    const run = async respond => {
+        const urls = [];
+        const { service } = fixture([], { fetch: async (url, opts) => {
+            urls.push(url);
+            if (!url.startsWith('https://api.github.com/')) return { ok: true, json: async () => ({ name: '@earendil-works/pi-coding-agent', version: '0.86.0' }) };
+            assert.equal(opts.redirect, 'manual');
+            return respond(url);
+        } });
+        return { result: await service.check('preview'), urls: urls.filter(url => url.includes('github')) };
+    };
+    const followed = await run(url => url.includes('/repos/') ? moved('/repositories/123/releases?per_page=100') : { ok: true, status: 200, json: async () => [release('1.0.0-rc.10')] });
+    assert.equal(followed.result.pivane.version, '1.0.0-rc.10');
+    assert.deepEqual(followed.urls, ['https://api.github.com/repos/YogurtJ/OhMyBuddy/releases?per_page=100', 'https://api.github.com/repositories/123/releases?per_page=100']);
+    for (const location of ['https://evil.invalid/releases', 'http://api.github.com/repositories/1/releases', 'https://user:pass@api.github.com/x']) {
+        const refused = await run(() => moved(location));
+        assert.equal(refused.result.pivane.status, 'error'); assert.equal(refused.urls.length, 1);
+    }
+    const looping = await run(url => moved(url));
+    assert.equal(looping.result.pivane.status, 'error'); assert.equal(looping.urls.length, 3);
 });
 
 test('invalid remote payloads and hostile release URLs never become download links', async () => {

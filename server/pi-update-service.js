@@ -3,9 +3,11 @@ const { proxyAgent: proxyFor } = require('./workspace-network-transport');
 const application = require('../package.json');
 const { version: installedPi } = require('../node_modules/@earendil-works/pi-coding-agent/package.json');
 
-const RELEASES = 'https://api.github.com/repos/YogurtJ/pivane/releases?per_page=100';
+const { REPOSITORY, REPOSITORY_URL } = require('./ohmybuddy-compat');
+const GITHUB_API = 'https://api.github.com';
+const RELEASES = `${GITHUB_API}/repos/${REPOSITORY}/releases?per_page=100`;
 const PI_LATEST = 'https://registry.npmjs.org/@earendil-works%2fpi-coding-agent/latest';
-const RELEASE_PAGE = 'https://github.com/YogurtJ/pivane/releases';
+const RELEASE_PAGE = `${REPOSITORY_URL}/releases`;
 const PI_PAGE = 'https://www.npmjs.com/package/@earendil-works/pi-coding-agent';
 const TTL = 5 * 60 * 1000;
 
@@ -76,16 +78,31 @@ class UpdateService {
     async json(url) {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 12000);
-        let agent;
         try {
-            agent = proxyFor(url, this.env);
-            const response = await this.fetch(url, {
-                method: 'GET', redirect: 'error', size: 2 * 1024 * 1024, signal: controller.signal, agent,
-                headers: { Accept: 'application/json', 'User-Agent': 'OhMyBuddy-Update-Check' }
-            });
-            if (!response.ok) throw new Error('Remote lookup failed');
-            return await response.json();
-        } finally { clearTimeout(timer); agent?.destroy(); }
+            // A renamed GitHub repository answers with a same-origin API redirect. Follow only
+            // those few hops; every other source keeps refusing redirects.
+            for (let hops = 0; hops < 3; hops++) {
+                const github = new URL(url).origin === GITHUB_API;
+                let agent;
+                try {
+                    agent = proxyFor(url, this.env);
+                    const response = await this.fetch(url, {
+                        method: 'GET', redirect: github ? 'manual' : 'error', size: 2 * 1024 * 1024, signal: controller.signal, agent,
+                        headers: { Accept: 'application/json', 'User-Agent': 'OhMyBuddy-Update-Check' }
+                    });
+                    if (github && [301, 302, 307, 308].includes(response.status)) {
+                        response.body?.destroy?.();
+                        const next = new URL(response.headers?.get('location') || '', url);
+                        if (next.origin !== GITHUB_API || next.username || next.password) throw new Error('Remote lookup failed');
+                        url = next.href;
+                        continue;
+                    }
+                    if (!response.ok) throw new Error('Remote lookup failed');
+                    return await response.json();
+                } finally { agent?.destroy(); }
+            }
+            throw new Error('Remote lookup failed');
+        } finally { clearTimeout(timer); }
     }
     feed(channel) {
         if (this.feedRequests.has(channel)) return this.feedRequests.get(channel);

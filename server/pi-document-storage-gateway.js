@@ -67,7 +67,7 @@ function documentStorageIntegration({ maintenance, supervisor, deferred, cron, s
                     // in another process. Require actual worker exit; the host
                     // never terminates someone's runtime as a cleanup side effect.
                     if (supervisor.workers.size || supervisor.ephemeralWorkers.size || supervisor.retiring.size) {
-                        throw Object.assign(new Error('请先退出工作台中已打开的运行实例，再清理附件；用量仍可查看'), { status: 409, code: 'DOCUMENT_STORAGE_BUSY' });
+                        throw Object.assign(new Error('请先退出 OhMyBuddy 中已打开的运行实例，再清理附件；用量仍可查看'), { status: 409, code: 'DOCUMENT_STORAGE_BUSY' });
                     }
                 },
                 check() {

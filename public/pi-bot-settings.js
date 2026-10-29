@@ -863,9 +863,9 @@
                 nodes.push(el('p', 'pi-bot-sheet-note', translateUi("只读最近的有限记录（全局最近 {0} 次定时运行、{1} 条渠道记录），最多显示 {2} 项；每个聊天核对最近 {3} 代，链接打开当前一代。", snap.limits.schedulerRuns, snap.limits.channelJobs, snap.limits.items, snap.limits.generationsPerWindow)));
                 activityCard.replaceChildren(...nodes);
                 const push = snap.quota?.proactivePushes, schedule = snap.quota?.scheduledTasks;
-                const quotaNodes = [el('p', 'pi-bot-sheet-note', push ? translateUi("此 Bot 今日主动推送：{0} / {1}（{2}，{3}）；安静时段暂存 {4} 条。", push.used ?? translateUi("未知"), push.limit ?? translateUi("不限"), push.day, push.timeZone, push.held) : translateUi("今日主动推送用量未知。"))];
+                const quotaNodes = [el('p', 'pi-bot-sheet-note', push ? translateUi("此伙伴今日主动推送：{0} / {1}（{2}，{3}）；安静时段暂存 {4} 条。", push.used ?? translateUi("未知"), push.limit ?? translateUi("不限"), push.day, push.timeZone, push.held) : translateUi("今日主动推送用量未知。"))];
                 if (schedule) {
-                    quotaNodes.push(el('p', 'pi-bot-sheet-note', translateUi("全部用户定时任务今日共用额度（UTC）：运行 {0}/{1}，tokens {2}/{3}。不含 Bot 主动跟进和后台学习。", schedule.runs ?? translateUi("未知"), schedule.maxRuns ?? translateUi("未知"), schedule.tokens ?? translateUi("未知"), schedule.maxTokens ?? translateUi("未知"))));
+                    quotaNodes.push(el('p', 'pi-bot-sheet-note', translateUi("全部用户定时任务今日共用额度（UTC）：运行 {0}/{1}，tokens {2}/{3}。不含伙伴主动跟进和后台学习。", schedule.runs ?? translateUi("未知"), schedule.maxRuns ?? translateUi("未知"), schedule.tokens ?? translateUi("未知"), schedule.maxTokens ?? translateUi("未知"))));
                     quotaNodes.push(el('p', 'pi-bot-sheet-note', schedule.estimatedCost === null ? translateUi("定时任务费用估算未知。") : translateUi("定时任务费用估算：${0}；费用上限：{1}。", schedule.estimatedCost.toFixed(3), schedule.maxCost === null ? translateUi("未设置") : `$${schedule.maxCost}`)));
                 } else quotaNodes.push(el('p', 'pi-bot-sheet-note', translateUi("定时任务共用额度暂不可用。")));
                 activityQuota.replaceChildren(...quotaNodes);
@@ -882,9 +882,9 @@
             const activity = group(translateUi("最近活动与结果"), card([activityHead, activityCard])); activity.dataset.botActivity = '';
             const costs = disclosure('pi-bot-costs', 'fa-coins', el('strong', null, translateUi("模型调用与费用")), translateUi("推送条数不是费用上限"));
             remember(costs.details, 'costs');
-            for (const text of [translateUi("聊天和定时任务使用对话模型；空闲整理摘要也会调用这个 Bot 的模型，可能收费。"),
+            for (const text of [translateUi("聊天和定时任务使用对话模型；空闲整理摘要也会调用这个伙伴的模型，可能收费。"),
                 translateUi("后台学习另外调用辅助模型；关闭学习只暂停学习，不会停止聊天、空闲摘要或定时任务。"),
-                translateUi("关闭主动联系会暂停 Bot 自己的跟进和推送；你设置的定时任务仍按计划执行。安静时段和推送上限只控制通知，不限制模型花费。")]) costs.content.append(el('p', 'pi-bot-sheet-note', text));
+                translateUi("关闭主动联系会暂停伙伴自己的跟进和推送；你设置的定时任务仍按计划执行。安静时段和推送上限只控制通知，不限制模型花费。")]) costs.content.append(el('p', 'pi-bot-sheet-note', text));
             const schedules = linkRow('fa-clock', translateUi("管理定时任务"), translateUi("查看运行预算，暂停或取消你设置的任务"));
             schedules.addEventListener('click', () => leave('schedules', () => window.PiWorkspaceRoute?.navigate('cron')));
             const usage = linkRow('fa-chart-simple', translateUi("查看用量统计"), translateUi("按现有统计范围查看模型用量；未报告的费用仍未知"));
@@ -943,7 +943,7 @@
                         const mark = el('span', 'pi-bot-sheet-rule-icon is-wechat'); mark.append(icon('fa-weixin', 'fa-brands'));
                         const copy = el('div', 'pi-bot-sheet-rule-copy');
                         copy.append(el('strong', null, chat.peerId), el('small', null, chat.bot?.profileId === options.profileId
-                            ? translateUi("正在和 {0} 聊", name) : translateUi("正在和别的 Bot 聊；{0} 的提醒和消息也会发到这里", name)));
+                            ? translateUi("正在和 {0} 聊", name) : translateUi("正在和别的伙伴聊；{0} 的提醒和消息也会发到这里", name)));
                         const drop = button('pi-bot-chip', translateUi("断开")); drop.dataset.wechatDisconnect = '';
                         drop.setAttribute('aria-label', translateUi("断开微信：{0}", chat.peerId));
                         drop.addEventListener('click', async () => {
@@ -970,7 +970,7 @@
                         const binding = (channels.bindings || []).find(b => b.accountId === accountId && b.peerId === peerId);
                         if (binding) {
                             const accepted = await window.PiProfileDialog?.confirm({ title: translateUi("让这个微信聊天改和 {0} 聊？", name),
-                                message: binding.bot ? translateUi("它现在在和“{0}”聊。连接后改和 {1} 聊，原来的 Bot 仍然连着，在微信里发 /切换 可以换回去。", binding.name || '', name)
+                                message: binding.bot ? translateUi("它现在在和“{0}”聊。连接后改和 {1} 聊，原来的伙伴仍然连着，在微信里发 /切换 可以换回去。", binding.name || '', name)
                                     : translateUi("它现在绑定在线程“{0}”。连接后改为和 {1} 聊，线程和记录都保留。", binding.name || binding.sessionId, name),
                                 accept: translateUi("连接"), cancelLabel: translateUi("取消"), current: () => sheet.open });
                             if (!accepted || !sheet.open) return;
@@ -980,7 +980,7 @@
                     const connectRow = el('div', 'pi-bot-sheet-wechat-connect'); connectRow.append(pickUser, connect);
                     nodes.push(group(translateUi("连接新的聊天"), card([connectRow])));
                 }
-                nodes.push(el('p', 'pi-bot-sheet-note', translateUi("在微信里发 /切换 换一个 Bot，发 /话题 换话题，发 /help 看全部。")));
+                nodes.push(el('p', 'pi-bot-sheet-note', translateUi("在微信里发 /切换 换一个伙伴，发 /话题 换话题，发 /help 看全部。")));
                 return nodes;
             };
             makePage('wechat', translateUi("在微信里和 {0} 聊天、收它的提醒。连接和断开都立即生效。", bot.name), wechat);
@@ -1062,7 +1062,7 @@
                 }
                 const today = snap.health?.today;
                 rows.push(el('p', 'pi-bot-sheet-note', today ? translateUi("此身份今日学习（UTC）：运行 {0}/{1}，预留 tokens {2}/{3}；实际 tokens：{4}。", today.runs ?? translateUi("未知"), today.maxRuns ?? translateUi("未知"), today.reservedTokens ?? translateUi("未知"), today.maxTokens ?? translateUi("未知"), today.usedTokens ?? translateUi("暂无报告")) : translateUi("今日学习用量未知。")));
-                rows.push(el('p', 'pi-bot-sheet-note', translateUi("关闭学习只暂停辅助模型的后台学习；聊天、空闲摘要和定时任务继续。次数与预留 tokens 额度不是整个 Bot 的费用上限。")));
+                rows.push(el('p', 'pi-bot-sheet-note', translateUi("关闭学习只暂停辅助模型的后台学习；聊天、空闲摘要和定时任务继续。次数与预留 tokens 额度不是整个伙伴的费用上限。")));
                 rows.push(more);
                 return [group(translateUi("自己学习"), card(rows), { instant: true })];
             };
@@ -1092,7 +1092,7 @@
                 if (leaving) await options.onRestart?.();
             });
             // Moving the Bot to the trash keeps everything and can be undone on the identity page.
-            const trash = linkRow('fa-trash-can', translateUi("移到回收站"), translateUi("从 Bot 列表移走；聊天、记忆和文件都保留，可在“身份”页的回收站恢复。"), 'is-danger');
+            const trash = linkRow('fa-trash-can', translateUi("移到回收站"), translateUi("从伙伴列表移走；聊天、记忆和文件都保留，可在“身份”页的回收站恢复。"), 'is-danger');
             trash.dataset.sheetAction = 'trash';
             trash.addEventListener('click', () => void moveToTrash());
             makePage('more', translateUi("不常用、但需要时找得到的操作。"),
@@ -1175,7 +1175,7 @@
             if (saving || decoding || !controls || !data) return;
             const name = data.bot.name;
             const accepted = await window.PiProfileDialog?.confirm({ title: translateUi("把 {0} 移到回收站？", name),
-                items: [{ icon: 'fa-box-archive', text: translateUi("{0} 会从 Bot 列表里移走。它的名字、性格、记忆、聊天记录和工作目录里的文件都会保留，之后可以在“身份”页的回收站恢复。", name) },
+                items: [{ icon: 'fa-box-archive', text: translateUi("{0} 会从伙伴列表里移走。它的名字、性格、记忆、聊天记录和工作目录里的文件都会保留，之后可以在“身份”页的回收站恢复。", name) },
                     ...(edited() ? [{ icon: 'fa-triangle-exclamation', tone: 'warn', text: translateUi("还有修改没保存，继续会放弃这些修改。") }] : [])],
                 accept: translateUi("移到回收站"), cancelLabel: translateUi("保留"), current: () => sheet.open });
             if (!accepted || !sheet.open || saving) return;

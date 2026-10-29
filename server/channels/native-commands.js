@@ -6,7 +6,7 @@ function fmtTokens(n) {
     return String(Math.round(n));
 }
 async function handleNativeControl(service, job, slash, control, busyWithOther, { bot = null } = {}) {
-    if (bot && slash.command === '/compact' && slash.args.trim()) return 'Bot 使用结构化摘要，暂不接受附加压缩要求。请发送 /compact；需要长期保留的内容请写进记事本或话题说明。';
+    if (bot && slash.command === '/compact' && slash.args.trim()) return '伙伴使用结构化摘要，暂不接受附加压缩要求。请发送 /compact；需要长期保留的内容请写进记事本或话题说明。';
     if (slash.command === '/compact') {
         if (busyWithOther()) return '⚠️ 当前线程正在运行任务，请等待完成后再压缩上下文。';
         return control.withWorker(async (worker, rpc, state) => {

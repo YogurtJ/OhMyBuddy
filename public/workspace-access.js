@@ -78,7 +78,7 @@
             return true;
         } catch (error) {
             if (epoch !== statusEpoch) return;
-            if (access.supported && locked) message('workspace-access-login-error', error.message || translateUi("无法连接工作台，请稍后重试"));
+            if (access.supported && locked) message('workspace-access-login-error', error.message || translateUi("无法连接 OhMyBuddy，请稍后重试"));
             return false;
         }
     }
@@ -119,7 +119,7 @@
             snapshot = data;
             $('workspace-access-enabled').checked = data.enabled;
             $('workspace-access-token').value = ''; $('workspace-access-generate').checked = false;
-            $('workspace-access-source').textContent = data.editable ? translateUi("由此工作台管理，可随时修改。") : translateUi("由服务器 PI_WEB_TOKEN 强制启用；请在部署配置中修改。");
+            $('workspace-access-source').textContent = data.editable ? translateUi("由 OhMyBuddy 管理，可随时修改。") : translateUi("由服务器 PI_WEB_TOKEN 强制启用；请在部署配置中修改。");
             controls();
         } catch (error) { if (active && epoch === settingsEpoch) message('workspace-access-error', error.message); }
     }
@@ -150,7 +150,7 @@
                 await request('/login', 'POST', { token: $('pi-token-input').value, remember: $('workspace-access-remember').checked });
                 statusEpoch++; unlock(); if (active) void loadSettings();
             } catch (error) { message('workspace-access-login-error', error.message); }
-            finally { button.disabled = false; button.querySelector('span').textContent = translateUi("登录工作台"); $('pi-token-form').removeAttribute('aria-busy'); }
+            finally { button.disabled = false; button.querySelector('span').textContent = translateUi("登录 OhMyBuddy"); $('pi-token-form').removeAttribute('aria-busy'); }
         });
         $('pi-token-dialog').addEventListener('keydown', event => {
             if (!locked) return;
@@ -166,7 +166,7 @@
         $('workspace-access-form').addEventListener('submit', async event => {
             event.preventDefault(); if (busy || !snapshot?.editable) return;
             const enabled = $('workspace-access-enabled').checked, generate = $('workspace-access-generate').checked;
-            if (!enabled && snapshot.enabled && !confirm(translateUi("关闭访问验证后，能够连接此服务的客户端均可使用工作台。确认关闭？"))) return;
+            if (!enabled && snapshot.enabled && !confirm(translateUi("关闭访问验证后，能够连接此服务的客户端均可使用 OhMyBuddy。确认关闭？"))) return;
             if (enabled && snapshot.enabled && !confirm(translateUi("更换 Token 将使原 Token 和所有已登录设备失效，并断开原网页连接。持久任务继续运行，临时会话和侧聊将结束。确认更换？"))) return;
             const epoch = settingsEpoch;
             const body = { enabled, expectedRevision: snapshot.revision, confirmed: true,

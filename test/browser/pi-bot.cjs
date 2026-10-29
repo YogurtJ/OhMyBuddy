@@ -196,7 +196,7 @@ const NEW_FACE = { kind: 'preset', id: 'pivane-pebble' };
                 // 1. No Bot yet: a welcome page instead of the Pi Agent start page and controls.
                 await page.goto(`${base}#/bot`, { waitUntil: 'domcontentloaded' });
                 await page.locator('.pi-bot-empty.is-welcome').waitFor({ timeout: 8000 });
-                assert.match(await page.locator('.pi-bot-empty h2').textContent(), /认识你的 Bot/);
+                assert.match(await page.locator('.pi-bot-empty h2').textContent(), /认识你的伙伴/);
                 // Without any chat model the page asks for one instead of starting.
                 await page.locator('.pi-bot-empty [data-bot-action="models"]').waitFor({ timeout: 8000 });
                 assert.equal(await page.locator('.pi-bot-empty [data-bot-action="create"]').count(), 0);

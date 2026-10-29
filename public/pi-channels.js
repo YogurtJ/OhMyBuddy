@@ -62,7 +62,7 @@
         ['/confirm', t('确认待生成的媒体卡片', 'Confirm a pending media card')], ['/new', t('新建线程并切换', 'Start and switch to a new thread')], ['/resume', t('列出或切换线程', 'List or switch threads')],
         ['/name', t('重命名当前线程', 'Rename this thread')], ['/model', t('查看或切换模型', 'Show or switch models')], ['/thinking', t('查看或切换思考等级', 'Show or switch thinking level')],
         ['/compact', t('压缩上下文', 'Compact the context')], ['/reload', t('重新加载技能与扩展', 'Reload skills and extensions')],
-        ['/切换', t('Bot 聊天：列出或换一个 Bot', 'Bot chats: list or switch Bots')], ['/话题', t('Bot 聊天：列出或换话题', 'Bot chats: list or switch topics')]
+        ['/切换', t('伙伴聊天：列出或换一个伙伴', 'Buddy chats: list or switch Buddies')], ['/话题', t('伙伴聊天：列出或换话题', 'Buddy chats: list or switch topics')]
     ];
     // A chat connected to Bots (M4-4) names its current Bot window; the project select offers Bots as targets.
     const BOT_PREFIX = 'bot:';
@@ -101,7 +101,7 @@
         bindForm.append(
             label(t('微信账号', 'WeChat account'), accountSelect),
             label(t('微信用户', 'WeChat user'), peer),
-            label(t('项目或 Bot', 'Project or Bot'), project),
+            label(t('项目或伙伴', 'Project or Buddy'), project),
             sessionField,
             label(t('接收方式', 'Receive'), replyMode)
         );
@@ -166,7 +166,7 @@
         function showTarget() {
             const bot = isBotTarget(project.value);
             sessionField.hidden = bot;
-            bindLabel.textContent = bot ? t('连接 Bot', 'Connect Bot') : t('绑定线程', 'Bind thread');
+            bindLabel.textContent = bot ? t('连接伙伴', 'Connect Buddy') : t('绑定线程', 'Bind thread');
         }
         async function loadSessions(chosen) {
             showTarget();
@@ -191,7 +191,7 @@
             const boundName = bound?.bot ? (botNames.get(bound.bot.profileId) || bound.name) : bound?.name || bound?.sessionId;
             bindHint.textContent = !snapshot?.accounts.length ? t('先扫码连接微信账号。', 'Connect a WeChat account first.')
                 : !users.length ? t('先在账号卡片里添加允许的微信用户并保存。', 'Add and save an allowed WeChat user on the account card first.')
-                : bound && isBotTarget(project.value) ? t(`此用户当前在和“${boundName}”聊；连接后改和所选 Bot 聊，已连接的 Bot 仍保留，可在微信发 /切换 换回。`, `This user is chatting with “${boundName}”. Connecting switches to the chosen Bot; connected Bots stay, and /切换 in WeChat switches back.`)
+                : bound && isBotTarget(project.value) ? t(`此用户当前在和“${boundName}”聊；连接后改和所选伙伴聊，已连接的伙伴仍保留，可在微信发 /切换 换回。`, `This user is chatting with “${boundName}”. Connecting switches to the chosen Buddy; connected Buddies stay, and /切换 in WeChat switches back.`)
                 : bound ? t(`此用户当前绑定到“${boundName}”，绑定新线程会替换它。`, `This user is bound to “${boundName}”. Binding again replaces it.`)
                 : t('绑定后可从微信继续提问，也能接收线程的最终结果。首次接收前，请先在微信发一条消息。', 'Continue in WeChat and receive final results after binding. Send a WeChat message first to enable delivery.');
             bindButton.dataset.unavailable = String(!snapshot?.accounts.length || !users.length || Boolean(snapshot?.error));
@@ -486,16 +486,16 @@
                         const row = el('div', null, 'channel-binding');
                         const info = el('div', null, 'channel-binding-info');
                         const route = el('p', null, 'channel-binding-route');
-                        const botName = id => botNames.get(id) || (id === b.bot?.profileId ? b.name : '') || t('Bot', 'Bot');
+                        const botName = id => botNames.get(id) || (id === b.bot?.profileId ? b.name : '') || t('伙伴', 'Buddy');
                         route.append(el('span', b.peerId, 'channel-binding-peer'), icon('fa-arrow-right-long'), el('strong', b.bot ? `${botName(b.bot.profileId)}${b.bot.main ? '' : t(' · 话题', ' · topic')}` : b.name || b.sessionId));
                         if (b.bot) row.dataset.botBinding = b.bot.profileId;
                         const others = (b.bots || []).filter(id => id !== b.bot?.profileId);
-                        info.append(route, el('small', b.bot ? (others.length ? t(`Bot 聊天 · 也连着 ${others.map(botName).join('、')}`, `Bot chat · also connected: ${others.map(botName).join(', ')}`) : t('Bot 聊天', 'Bot chat')) : b.cwd),
+                        info.append(route, el('small', b.bot ? (others.length ? t(`伙伴聊天 · 也连着 ${others.map(botName).join('、')}`, `Buddy chat · also connected: ${others.map(botName).join(', ')}`) : t('伙伴聊天', 'Buddy chat')) : b.cwd),
                             el('small', b.replyMode === 'wechat' ? t('仅微信问答', 'WeChat replies only')
                                 : b.bot ? t('接收它的全部回复、提醒和主动消息', 'All its replies, reminders and messages it starts') : t('接收全部最终结果 · 定时任务默认跟随', 'All final results · scheduled tasks follow by default')));
                         const actions = el('div', null, 'channel-binding-actions');
                         if (b.bot) {
-                            const openBot = button(t('打开 Bot', 'Open Bot'), () => window.PiWorkspaceRoute?.navigate('bot', { profileId: b.bot.profileId }));
+                            const openBot = button(t('打开伙伴', 'Open Buddy'), () => window.PiWorkspaceRoute?.navigate('bot', { profileId: b.bot.profileId }));
                             openBot.dataset.channelReadOnly = 'true'; openBot.prepend(icon('fa-arrow-up-right-from-square')); actions.append(openBot);
                             actions.append(menu(b.peerId, [...(b.bots || []).map(id => ({ label: t(`断开 ${botName(id)}`, `Disconnect ${botName(id)}`), icon: 'fa-link-slash', variant: 'danger',
                                 action: () => write('unbind-bot', { accountId: b.accountId, peerId: b.peerId, botProfileId: id, botName: botName(id) }) })),
@@ -626,7 +626,7 @@
                 // Bots are chat targets too (listed first).
                 const bots = await host.apiFetch('/api/pi/bots').then(result => result.bots || []).catch(() => []); if (!valid(n)) return;
                 botNames = new Map(bots.map(bot => [bot.id, bot.name]));
-                const botRows = bots.filter(bot => bot.enabled).map(bot => [BOT_PREFIX + bot.id, `${bot.name} · Bot`]);
+                const botRows = bots.filter(bot => bot.enabled).map(bot => [BOT_PREFIX + bot.id, `${bot.name} · ${t('伙伴', 'Buddy')}`]);
                 updateSelect(project, [...botRows, ...rows], chosen);
                 bindingList.dataset.signature = ''; if (snapshot) render();
                 await loadSessions(target?.sessionId);

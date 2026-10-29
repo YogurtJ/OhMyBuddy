@@ -1,6 +1,6 @@
 # OhMyBuddy 文档
 
-[项目首页](../README.zh-CN.md) · English: [project overview](../README.md) · [installation](en/INSTALL.md) · [user guide](en/USER_GUIDE.md)。详细功能和开发文档目前主要为中文。
+[项目首页](../README.zh-CN.md) · English: [project overview](../README.md) · [installation](en/INSTALL.md) · [user guide](en/USER_GUIDE.md) · [Buddies](en/BUDDY.md)。详细功能和开发文档目前主要为中文。
 
 ## 从哪里开始
 
@@ -13,7 +13,7 @@
 
 本目录随源码更新，可能包含尚未公开发布的功能；源码版本看 [package.json](../package.json)，实际能力看运行实例。正式公开版本、下载、校验和准确验收摘要以 [GitHub Releases](https://github.com/YogurtJ/pivane/releases) 为准。公开发布不自动切换已有实例；升级前按[安装与恢复](INSTALL_RECOVERY.md)保存草稿、停机备份并保留数据路径。完整变化见 [CHANGELOG](../CHANGELOG.md)。
 
-[1.11.0 版本说明](releases/1.11.0.md)涵盖 Bot 模式、微信操作与记忆、过程和状态回执、原生会话图片外置以及 macOS 完整平台包预览。OhMyBuddy原名Pivane。改名前的源码与三平台发布准备已完成；本次改名的安装／升级与兼容验证按新归档单独记录，原始失败、定向补验、有效复用及实际权限见[平台验证范围](RELEASE_INSTALL_VALIDATION.md)，公开状态仍以对应Release为准。
+[1.11.0 版本说明](releases/1.11.0.md)涵盖伙伴模式、微信操作与记忆、过程和状态回执、原生会话图片外置以及 macOS 完整平台包预览。OhMyBuddy原名Pivane。改名前的源码与三平台发布准备已完成；本次改名的安装／升级与兼容验证按新归档单独记录，原始失败、定向补验、有效复用及实际权限见[平台验证范围](RELEASE_INSTALL_VALIDATION.md)，公开状态仍以对应Release为准。
 
 此前Windows微信组件安装与静态翻译修复见[1.10.2说明](releases/1.10.2.md)。1.10.1的安全与兼容说明继续适用；从更早版本更新时，留意旧内置MiniMax TTS adapter已移除，配置和历史音频保留，详见[1.10.1说明](releases/1.10.1.md)。
 
@@ -56,7 +56,7 @@
 | Pi 原生 MCP、Codemode 和旧适配器迁移 | [原生 MCP](MCP.md) |
 | 内置子 Agent、记忆组件与旧安装兼容 | [内置能力包](BUNDLED_CAPABILITIES.md) |
 | 助手身份与档案记忆 | [助手档案](AGENT_PROFILES.md) · [记忆契约导航](PROFILE_MEMORY.md#read-by-task) |
-| 有名字和性格的私人助理 | [Bot 模式](BOT_MODE.md) |
+| 有名字和性格的私人助理 | [伙伴模式](BOT_MODE.md) |
 
 ## 媒体
 

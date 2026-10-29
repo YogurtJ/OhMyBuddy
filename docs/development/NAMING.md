@@ -6,7 +6,17 @@ Pi Coding Agent及其包名、原生SessionManager、JSONL格式和原生环境�
 
 ## 当前品牌与真实外部地址
 
-网页标题、PWA、通知、指南、安装包、服务描述和新图标使用OhMyBuddy。README首次说明“原Pivane”，以便旧用户识别同一项目。当前公开仓库仍是`YogurtJ/pivane`；在维护者真正改名之前，文档、问题链接与更新检查继续访问这个实际地址。源码修改不自动重命名GitHub仓库、域名、远端、系统服务或运行目录，也不推送或公开发行。
+网页标题、PWA、通知、指南、安装包、服务描述和新图标使用OhMyBuddy。README首次说明“原Pivane”，以便旧用户识别同一项目。公开仓库为`YogurtJ/OhMyBuddy`（原`YogurtJ/pivane`，GitHub保留旧地址跳转）。服务端统一从`server/ohmybuddy-compat.js`的`REPOSITORY`取得仓库地址；更新检查只跟随`https://api.github.com`同源跳转，其他来源仍拒绝跳转。1.10.x及更早版本的更新检查不跟随跳转，改名后需手动升级一次。历史版本说明、验收记录和旧CHANGELOG条目中的旧地址保留原文。不要再新建名为`pivane`的仓库，否则GitHub会停止旧地址跳转。源码修改不自动重命名域名、远端、系统服务或运行目录，也不推送或公开发行。
+
+## 界面名称与内部名称
+
+| 界面（中文／英文） | 原显示名 | 保持不变的内部名称 |
+|---|---|---|
+| 伙伴／Buddy | Bot | `data-tab="bot"`、`/api/pi/bots`、`pi-bot-*`模块、`ohmybuddy-bots`／`OhMyBuddyBots/bot-<ID>`目录、微信`/bot`（新增`/伙伴`、`/buddy`别名） |
+| 工作台／Workspace | Pi Agent | `data-tab="chat"`、会话与线程API |
+| OhMyBuddy（指整个实例） | 工作台／workspace | 访问、网络与通知设置的接口和存储 |
+
+只改显示文案和文档。服务端返回的英文API错误（如`Bot not found`）、开发文档中的模块说明和历史记录保留Bot。中文UI文案以`public/pi-i18n-catalog.js`的中文原文为键，修改时需同时更新源码字面量与目录键。
 
 ## 单一旧版数据位置
 
@@ -49,7 +59,7 @@ Pi Coding Agent及其包名、原生SessionManager、JSONL格式和原生环境�
 
 ## 源码归档与Mac完整平台包
 
-新源码包为`ohmybuddy-<version>.tar.gz`，manifest产品为OhMyBuddy，根包名为`ohmybuddy`。新代码可验证新旧两种已知源码归档，但根目录、产品、版本和包名必须一致，全部文件摘要及私有文件排除仍校验；不会根据远端提供的任意文件名或URL下载代码。公开源仍使用实际GitHub仓库。
+新源码包为`ohmybuddy-<version>.tar.gz`，manifest产品为OhMyBuddy，根包名为`ohmybuddy`。新代码可验证新旧两种已知源码归档，但根目录、产品、版本和包名必须一致，全部文件摘要及私有文件排除仍校验；不会根据远端提供的任意文件名或URL下载代码。公开源为`REPOSITORY`指向的GitHub仓库。
 
 新Mac包为`ohmybuddy-<version>-darwin-<arch>.tar.gz`，元数据为`OHMYBUDDY_BUNDLE.json`与`OHMYBUDDY_INSTALLATION.json`；包内使用`ohmybuddyBundle`／`ohmybuddyCompatibility`／`ohmybuddyManaged`。新读取器兼容原Pivane格式，拒绝冲突双元数据。签名分发清单的product同时绑定资产名和载荷产品，正常TLS、签名、来源、大小／哈希与运行时核验保持。
 

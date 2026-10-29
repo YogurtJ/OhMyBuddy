@@ -199,7 +199,7 @@ class WorkspaceAccessService extends EventEmitter {
                         'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS', 'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Pi-Access' });
                     return res.sendStatus(204);
                 }
-                if (!identity) throw failure('请登录工作台或提供有效访问 Token', 401);
+                if (!identity) throw failure('请登录 OhMyBuddy 或提供有效访问 Token', 401);
                 if (!this.csrf(req, identity)) throw failure('Origin or CSRF check failed', 403);
                 req.workspaceIdentity = identity;
                 res.set({ 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' });
@@ -216,7 +216,7 @@ class WorkspaceAccessService extends EventEmitter {
             try {
                 if (!this.originAllowed(req)) throw failure('Origin is not allowed', 403);
                 const identity = this.authenticate(req);
-                if (!publicRoute && !identity) throw failure('请先登录工作台', 401);
+                if (!publicRoute && !identity) throw failure('请先登录 OhMyBuddy', 401);
                 if (!this.csrf(req, identity, write)) throw failure('Origin or CSRF check failed', 403);
                 if (write && !req.is('application/json')) throw failure('访问写请求必须使用 JSON', 415);
                 if (req.headers.origin && !this.sameOrigin(req) && identity?.kind === 'token') res.set({ 'Access-Control-Allow-Origin': req.headers.origin, Vary: 'Origin' });

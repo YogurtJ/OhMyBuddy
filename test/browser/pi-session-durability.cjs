@@ -30,7 +30,7 @@ async function run(browser, base, width, locale) {
             if (endpoint.endsWith('/usage')) return json({ totalBytes: deleted ? 2048 : 6144, count: deleted ? 1 : 2, limits: { bytes: 2 * 1024 ** 3, count: 10000 }, complete: true,
                 items: [{ ...documentRef, sessionId: 'a', savedReference: body.draftIds.includes(documentRef.id) ? 'protected' : 'not-found' }, ...deleted ? [] : [orphan]] });
             if (endpoint.endsWith('/preview')) {
-                if (openRuntimes.size) return route.fulfill({ status: 409, json: { code: 'DOCUMENT_STORAGE_BUSY', error: '请先退出工作台中已打开的运行实例，再清理附件；用量仍可查看' } });
+                if (openRuntimes.size) return route.fulfill({ status: 409, json: { code: 'DOCUMENT_STORAGE_BUSY', error: '请先退出 OhMyBuddy 中已打开的运行实例，再清理附件；用量仍可查看' } });
                 return json({ ticket: 'ticket', revision: 'revision', item: orphan });
             }
             if (endpoint.endsWith('/cleanup')) {

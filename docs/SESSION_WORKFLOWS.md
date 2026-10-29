@@ -1,6 +1,6 @@
 # Pi Session Workflows
 
-实现日期：2026-09-07。只作用于 Pi Agent，媒体业务、参数和历史不变。生产后端是否已启用以 `/api/pi/status.sessionWorkflows === true` 为准；没有该标志时前端隐藏新入口。
+实现日期：2026-09-07。只作用于工作台，媒体业务、参数和历史不变。生产后端是否已启用以 `/api/pi/status.sessionWorkflows === true` 为准；没有该标志时前端隐藏新入口。
 
 ## 已实现
 

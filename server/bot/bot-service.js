@@ -222,7 +222,7 @@ class BotService extends EventEmitter {
         const readme = path.join(workspace, 'README.md');
         const note = language === 'en'
             ? `# Bot workspace\n\nFiles created by your OhMyBuddy Bot (${name}) live here. Bot ID: ${profileId}\n`
-            : `# Bot 工作目录\n\n这里存放你的 OhMyBuddy Bot（${name}）创建的文件。Bot ID：${profileId}\n`;
+            : `# 伙伴工作目录\n\n这里存放你的 OhMyBuddy 伙伴（${name}）创建的文件。伙伴 ID：${profileId}\n`;
         try { fs.writeFileSync(readme, note, { flag: 'wx', mode: 0o600 }); } catch (error) { if (error.code !== 'EEXIST') throw error; }
         return workspace;
     }

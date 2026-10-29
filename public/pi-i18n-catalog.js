@@ -790,8 +790,8 @@
         "Message text and text attachments must total at most 400000 characters"
     ],
     [
-        "请登录工作台",
-        "Sign in to the workspace"
+        "请登录 OhMyBuddy",
+        "Sign in to OhMyBuddy"
     ],
     [
         "线程已切换，请重新读取资源",
@@ -1258,8 +1258,8 @@
         "Stopped. Retrieved text is available in the runtime queue."
     ],
     [
-        "Pi Agent 已就绪",
-        "Pi Agent is ready"
+        "Agent 已就绪",
+        "Agent is ready"
     ],
     [
         "Agent 运行中：引导在本轮工具后送达，后续在任务完成后送达",
@@ -1370,8 +1370,8 @@
         "Generating"
     ],
     [
-        "Pi Agent 发生错误",
-        "Pi Agent encountered an error"
+        "Agent 发生错误",
+        "Agent encountered an error"
     ],
     [
         "自动重试失败",
@@ -1402,8 +1402,8 @@
         "Idle"
     ],
     [
-        "Pi Agent 已连接",
-        "Pi Agent connected"
+        "Agent 已连接",
+        "Agent connected"
     ],
     [
         "Pi 正在执行",
@@ -1586,12 +1586,12 @@
         "{0} request timed out"
     ],
     [
-        "Pi Agent 尚未连接",
-        "Pi Agent is not connected"
+        "Agent 尚未连接",
+        "Agent is not connected"
     ],
     [
-        "Pi Agent 连接失败",
-        "Pi Agent connection failed"
+        "Agent 连接失败",
+        "Agent connection failed"
     ],
     [
         "临时会话已结束",
@@ -1846,8 +1846,8 @@
         " Unread"
     ],
     [
-        "本工作台没有此会话的运行实例；不代表外部终端状态",
-        "This workspace has no runtime for this session. This does not indicate its state in an external terminal."
+        "本实例没有此会话的运行实例；不代表外部终端状态",
+        "This instance has no runtime for this session. This does not indicate its state in an external terminal."
     ],
     [
         "展开更多（{0} 条）",
@@ -1910,8 +1910,8 @@
         "Project"
     ],
     [
-        "正在连接 Pi Agent",
-        "Connecting to Pi Agent"
+        "正在连接 Agent",
+        "Connecting to Agent"
     ],
     [
         "需要 Pi Web 访问令牌",
@@ -3150,8 +3150,8 @@
         "All projects"
     ],
     [
-        "请先登录工作台，再启用通知。",
-        "Sign in to the workspace before enabling notifications."
+        "请先登录 OhMyBuddy，再启用通知。",
+        "Sign in to OhMyBuddy before enabling notifications."
     ],
     [
         "测试已提交给浏览器推送服务。实际显示还取决于系统通知权限、网络与勿扰模式。",
@@ -3222,12 +3222,12 @@
         "Sound is not unlocked yet. Click Test notification."
     ],
     [
-        "{0} 项任务有新的提醒，请查看工作台。",
-        "{0} tasks have new notifications. Check the workspace."
+        "{0} 项任务有新的提醒，请查看 OhMyBuddy。",
+        "{0} tasks have new notifications. Check OhMyBuddy."
     ],
     [
-        "任务未成功完成，请打开工作台查看。",
-        "A task did not finish successfully. Open the workspace to review it."
+        "任务未成功完成，请打开 OhMyBuddy 查看。",
+        "A task did not finish successfully. Open OhMyBuddy to review it."
     ],
     [
         "任务正在等待你的确认。",
@@ -5217,12 +5217,12 @@
         "Changing the token invalidates the old token and all signed-in devices, disconnecting their pages. Persistent tasks keep running; temporary sessions and side chats end. Change it?"
     ],
     [
-        "关闭访问验证后，能够连接此服务的客户端均可使用工作台。确认关闭？",
-        "With access authentication off, any client able to connect can use this workspace. Turn it off?"
+        "关闭访问验证后，能够连接此服务的客户端均可使用 OhMyBuddy。确认关闭？",
+        "With access authentication off, any client able to connect can use OhMyBuddy. Turn it off?"
     ],
     [
-        "登录工作台",
-        "Sign in to workspace"
+        "登录 OhMyBuddy",
+        "Sign in to OhMyBuddy"
     ],
     [
         "正在登录…",
@@ -5249,12 +5249,12 @@
         "Enforced by the server's PI_WEB_TOKEN. Change it in deployment configuration."
     ],
     [
-        "由此工作台管理，可随时修改。",
-        "Managed by this workspace; you can change it anytime."
+        "由 OhMyBuddy 管理，可随时修改。",
+        "Managed by OhMyBuddy; you can change it anytime."
     ],
     [
-        "无法连接工作台，请稍后重试",
-        "Cannot connect to the workspace. Try again later."
+        "无法连接 OhMyBuddy，请稍后重试",
+        "Cannot connect to OhMyBuddy. Try again later."
     ],
     [
         "无法确认访问状态，请稍后重试",
@@ -5273,8 +5273,8 @@
         "Expand navigation"
     ],
     [
-        "工作区",
-        "Workspace"
+        "主导航",
+        "Main navigation"
     ],
     [
         "多媒体实验室",
@@ -5325,8 +5325,8 @@
         "Low-light environments"
     ],
     [
-        "工作台设置",
-        "Workspace settings"
+        "OhMyBuddy 设置",
+        "OhMyBuddy settings"
     ],
     [
         "设置",
@@ -6213,8 +6213,8 @@
         "Models load when this tab opens"
     ],
     [
-        "管理这个工作台的登录与 API 访问",
-        "Manage workspace login and API access"
+        "管理这个 OhMyBuddy 的登录与 API 访问",
+        "Manage OhMyBuddy sign-in and API access"
     ],
     [
         "启用访问验证",
@@ -6225,8 +6225,8 @@
         "Loading settings"
     ],
     [
-        "关闭后，能够连接此服务的客户端均可使用工作台。请通过监听地址、防火墙或私有网络限制访问。开启后，网页登录一次即可访问，程序调用需携带 Token。",
-        "When off, any client that can connect can use this workspace. Restrict access with the listen address, firewall or private network. When on, sign in once in the browser; API clients must provide a token."
+        "关闭后，能够连接此服务的客户端均可使用 OhMyBuddy。请通过监听地址、防火墙或私有网络限制访问。开启后，网页登录一次即可访问，程序调用需携带 Token。",
+        "When off, any client that can connect can use OhMyBuddy. Restrict access with the listen address, firewall or private network. When on, sign in once in the browser; API clients must provide a token."
     ],
     [
         "设置或更换 Token",
@@ -6377,8 +6377,8 @@
         "Cannot find your token?"
     ],
     [
-        "使用部署此工作台时设置的访问 Token。忘记时，可在服务器按部署文档重置；由他人部署时，请联系部署者获取。",
-        "Use the access token set when this workspace was deployed. If forgotten, follow the deployment guide to reset it on the server. If someone else deployed it, ask them for the token."
+        "使用部署此 OhMyBuddy 时设置的访问 Token。忘记时，可在服务器按部署文档重置；由他人部署时，请联系部署者获取。",
+        "Use the access token set when OhMyBuddy was deployed. If forgotten, follow the deployment guide to reset it on the server. If someone else deployed it, ask them for the token."
     ],
     [
         "Provider 文档",
@@ -6637,12 +6637,12 @@
         "Too many authentication requests. Try again later."
     ],
     [
-        "请登录工作台或提供有效访问 Token",
-        "Sign in to the workspace or provide a valid access token"
+        "请登录 OhMyBuddy 或提供有效访问 Token",
+        "Sign in to OhMyBuddy or provide a valid access token"
     ],
     [
-        "请先登录工作台",
-        "Sign in to the workspace first"
+        "请先登录 OhMyBuddy",
+        "Sign in to OhMyBuddy first"
     ],
     [
         "访问写请求必须使用 JSON",
@@ -7737,7 +7737,7 @@
     ["解压到新的空目录，运行 npm ci 安装配套依赖，沿用原数据路径和启动配置，然后启动新版本。", "Extract to a new empty directory, run npm ci to install the bundled dependencies, keep your data paths and startup configuration, then start the new version."],
     ["核对版本与数据后再恢复预约；若更新失败，停止新服务，按平台指南恢复旧版本和配套备份。", "Verify versions and data before resuming scheduled messages. If the update fails, stop the new service and follow your platform guide to restore the old version and matching backup."],
     ["{0} 更新指南", "{0} update guide"],
-    ["Pi 随 OhMyBuddy 发布包的锁定依赖一起安装。全局安装的 Pi CLI 与此工作台独立；在 Packages 中更新扩展也不会更新 Pi 内核。", "Pi is installed with the dependencies locked in the OhMyBuddy release. A globally installed Pi CLI is separate from this workspace. Updating extensions in Packages does not update Pi itself."],
+    ["Pi 随 OhMyBuddy 发布包的锁定依赖一起安装。全局安装的 Pi CLI 与此 OhMyBuddy 独立；在 Packages 中更新扩展也不会更新 Pi 内核。", "Pi is installed with the dependencies locked in the OhMyBuddy release. A globally installed Pi CLI is separate from this workspace. Updating extensions in Packages does not update Pi itself."],
     ["尚未检查", "Not checked yet"],
     ["有可用更新", "Update available"],
     ["与可用版本一致", "Matches the available version"],
@@ -7756,7 +7756,7 @@
     ["上游最新正式版：{0}", "Latest upstream stable version: {0}"],
     ["此渠道可用版本：{0}", "Available version in this channel: {0}"],
     ["本版 OhMyBuddy 配套 Pi：{0}", "Pi bundled with this OhMyBuddy version: {0}"],
-    ["上游新版不代表已通过 OhMyBuddy 兼容验证。更新工作台使用的 Pi，请安装配套的新 OhMyBuddy 发布包。", "A new upstream version has not necessarily been tested with OhMyBuddy. To update the Pi used by this workspace, install a new OhMyBuddy release with its matching dependencies."],
+    ["上游新版不代表已通过 OhMyBuddy 兼容验证。更新 OhMyBuddy 使用的 Pi，请安装配套的新 OhMyBuddy 发布包。", "A new upstream version has not necessarily been tested with OhMyBuddy. To update the Pi used by OhMyBuddy, install a new OhMyBuddy release with its matching dependencies."],
     ["实际 Pi 版本与发布包声明不一致，请按锁定依赖核对安装。", "The installed Pi version differs from the release declaration. Check the installation against the locked dependencies."],
     ["Pi 官方页面", "Official Pi page"],
     ["发布说明", "Release notes"],
@@ -8379,7 +8379,7 @@
     ,['会话已不存在', 'Conversation no longer exists']
     ,['会话已有草稿或附件；未覆盖原内容', 'Conversation has a draft or attachments; existing content was not replaced']
     ,['对话', 'Conversations']
-    ,['在 Pi Agent 中打开当前线程', 'Open current thread in Pi Agent']
+    ,['在工作台中打开当前线程', 'Open current thread in Workspace']
     ,['导航已改变；会话未打开', 'Navigation changed; conversation was not opened']
     ,['正在读取项目', 'Loading projects']
     ,['项目已切换，请重新选择临时会话', 'Project changed; choose the temporary conversation again']
@@ -9010,7 +9010,7 @@
     ,['此类型暂不支持预览，可下载原文件', 'Preview is not supported for this type. You can download the original file.']
     ,['图片像素超过预览限制，可下载原文件', 'Image dimensions exceed the preview limit. You can download the original file.']
     ,['图片格式无效或不支持，可下载原文件', 'The image format is invalid or unsupported. You can download the original file.']
-    ,['隔离交互已运行；无法访问工作台。仅运行可信页面，脚本导航仍可能联网。', 'Interaction is isolated from the workbench. Only run trusted pages: script navigation may still access the network.']
+    ,['隔离交互已运行；无法访问 OhMyBuddy。仅运行可信页面，脚本导航仍可能联网。', 'Interaction is isolated from OhMyBuddy. Only run trusted pages: script navigation may still access the network.']
     ,['静态预览 · 脚本尚未运行。仅对可信页面启用交互；相对资源不自动加载。', 'Static preview · Scripts are not running. Enable interaction only for trusted pages. Relative assets are not loaded automatically.']
     ,['HTML 隔离预览', 'Isolated HTML preview']
     ,['当前会话尚不能读取交付物', 'Deliverables are not available for the current session']
@@ -9113,7 +9113,7 @@
         ['无法自动复制，已选中提示词，请手动复制。', 'Could not copy automatically. The prompt is selected; copy it manually.'],
         ['暂时无法读取版本信息，请稍后再试。', 'Could not read version information. Try again later.'],
         ['查看版本', 'View versions'],
-        ['请协助我更新部署机器上的 OhMyBuddy，并评估是否需要同步更新其使用的 Pi Coding Agent。先只读核对当前运行实例、源码/运行版本、官方仓库发布版本、Pi 实际版本和锁定依赖；阅读 https://github.com/YogurtJ/pivane 的 docs/AGENT_GUIDE.md、docs/INSTALL_RECOVERY.md 及目标版本说明；只有涉及修改源码时再遵循仓库 AGENTS.md，不要用旧发布包覆盖尚未发布的修复。先向我说明差异、兼容性、备份范围、实施及回退计划，等我明确确认后才执行。执行前确认所有任务、子 Agent、Shell、侧聊、预约及外部共用身份的写入已安全结束，保存草稿与附件；停机备份身份、会话、配置、媒体与项目数据，校验下载来源及包哈希，保留旧版并验证升级后的版本和数据。不要自动重试不确定的操作，不要删除用户数据。如果你本身运行在待更新的 OhMyBuddy 实例里，不要在当前会话中停止或重启承载你的服务；请让部署机器上的独立 Agent 或管理员在安全窗口执行，并从外部核对结果。', 'Help me update OhMyBuddy on its host machine, and assess whether its Pi Coding Agent also needs updating. First, read-only: verify the running instance, source/runtime versions, official repository releases, actual Pi version and locked dependencies. Read docs/AGENT_GUIDE.md, docs/INSTALL_RECOVERY.md and the target release notes at https://github.com/YogurtJ/pivane; follow the repository AGENTS.md if source changes are needed. Do not overwrite unpublished fixes with an older release. Explain the differences, compatibility, backup scope, execution and rollback plan, then wait for my explicit approval. Before execution, ensure all tasks, subagents, Shell sessions, side chats, schedules and external writers sharing the identity have safely finished; save drafts and attachments. Back up identity, sessions, configuration, media and project data while stopped; verify download origin and archive hash, retain the old version and check versions and data after updating. Do not retry uncertain operations automatically or delete user data. If you are running inside the OhMyBuddy instance being updated, do not stop or restart the service hosting this conversation. Ask an independent Agent or administrator on the host to act in a safe window and verify the result externally.']
+        ['请协助我更新部署机器上的 OhMyBuddy，并评估是否需要同步更新其使用的 Pi Coding Agent。先只读核对当前运行实例、源码/运行版本、官方仓库发布版本、Pi 实际版本和锁定依赖；阅读 https://github.com/YogurtJ/OhMyBuddy 的 docs/AGENT_GUIDE.md、docs/INSTALL_RECOVERY.md 及目标版本说明；只有涉及修改源码时再遵循仓库 AGENTS.md，不要用旧发布包覆盖尚未发布的修复。先向我说明差异、兼容性、备份范围、实施及回退计划，等我明确确认后才执行。执行前确认所有任务、子 Agent、Shell、侧聊、预约及外部共用身份的写入已安全结束，保存草稿与附件；停机备份身份、会话、配置、媒体与项目数据，校验下载来源及包哈希，保留旧版并验证升级后的版本和数据。不要自动重试不确定的操作，不要删除用户数据。如果你本身运行在待更新的 OhMyBuddy 实例里，不要在当前会话中停止或重启承载你的服务；请让部署机器上的独立 Agent 或管理员在安全窗口执行，并从外部核对结果。', 'Help me update OhMyBuddy on its host machine, and assess whether its Pi Coding Agent also needs updating. First, read-only: verify the running instance, source/runtime versions, official repository releases, actual Pi version and locked dependencies. Read docs/AGENT_GUIDE.md, docs/INSTALL_RECOVERY.md and the target release notes at https://github.com/YogurtJ/OhMyBuddy; follow the repository AGENTS.md if source changes are needed. Do not overwrite unpublished fixes with an older release. Explain the differences, compatibility, backup scope, execution and rollback plan, then wait for my explicit approval. Before execution, ensure all tasks, subagents, Shell sessions, side chats, schedules and external writers sharing the identity have safely finished; save drafts and attachments. Back up identity, sessions, configuration, media and project data while stopped; verify download origin and archive hash, retain the old version and check versions and data after updating. Do not retry uncertain operations automatically or delete user data. If you are running inside the OhMyBuddy instance being updated, do not stop or restart the service hosting this conversation. Ask an independent Agent or administrator on the host to act in a safe window and verify the result externally.']
     );
     rows.push(
         ['我的要求', 'My instructions'],
@@ -9294,7 +9294,7 @@
         ['{0}。未自动重试，请先核对来源与目标项目的线程列表。', '{0}. No automatic retry was made. Check the source and target thread lists first.'],
         ['线程已移动，列表暂未刷新，请稍后刷新。', 'The thread moved, but the lists did not refresh. Refresh them later.'],
         ['线程已移动，打开或刷新列表失败，请从目标项目重新打开。', 'The thread moved, but opening it or refreshing failed. Reopen it from the target project.'],
-        ['工作台有相关后台操作，请等待完成后再移动', 'Wait for related background operations before moving.'],
+        ['OhMyBuddy 有相关后台操作，请等待完成后再移动', 'Wait for related background operations before moving.'],
         ['线程有预约消息，请先处理或取消预约', 'Handle or cancel scheduled messages before moving.'],
         ['线程被定时任务或助手主对话引用，请先解除这些关联', 'Remove scheduled task and assistant main-thread references before moving.'],
         ['线程有侧聊，请先关闭侧聊后再移动', 'Close side chats before moving this thread.'],
@@ -9542,7 +9542,7 @@
         ['请等待会话与后台任务空闲后再更改分类', 'Wait until the conversation and background tasks are idle before changing category'],
         ['请关闭此会话的侧聊后再更改分类', 'Close this conversation’s side chat before changing category']);
     rows.push(['在当前会话中安排任务', 'Schedule a task in this conversation']);
-    rows.push(...[["网络与访问","Network & access"],["网络代理设置","Network proxy settings"],["管理工作台的访问方式与服务器网络连接。","Manage access to your workspace and its outbound connections."],["使用运行环境","Use runtime environment"],["直连","Direct connection"],["自定义代理","Custom proxy"],["仅本机访问","This computer only"],["允许其他设备连接","Allow other devices"],["登录验证已开启","Sign-in required"],["登录验证未开启","Sign-in is off"],["当前监听：{0}","Listening on: {0}"],["由部署配置 HOST 管理。需要在服务器修改后重启。","Managed by the deployment HOST setting. Change it on the server, then restart."],["沿用旧安装的监听范围；选择后可交由此页面管理。","Using the existing installation’s binding. Select a scope to manage it here."],["更改后重启生效，不会自动开放防火墙。","Changes take effect after restart. Firewall rules are not changed."],["当前使用：{0}","Currently using: {0}"],["检测到代理配置","Proxy configuration detected"],["更新源未使用代理","No proxy for update sources"],["检测到 Pi 原生代理。运行环境模式保留现有配置；直连或自定义仅覆盖 OhMyBuddy 受管请求。","A native Pi proxy is configured. Environment mode preserves it; direct or custom mode overrides OhMyBuddy-managed requests only."],["运行环境模式沿用服务器已有代理；未配置时直连。不会改变浏览器或系统 VPN。","Environment mode uses the server’s existing proxy, or connects directly if none is configured. Browser settings and system VPNs are unchanged."],["服务器本机","On the server"],["其他设备 · 待验证","Other devices · not verified"],["复制地址","Copy address"],["地址已复制","Address copied"],["无法复制，请手动选择地址","Unable to copy. Select the address manually."],["未发现可展示的访问地址，请核对部署配置。","No access address found. Check your deployment configuration."],["保存访问范围","Save access scope"],["保存代理","Save proxy"],["允许其他设备连接可能暴露到公网。请确认已启用登录验证，并自行限制防火墙和网络入口。保存不会重启服务。","Allowing other devices may expose this service to the internet. Enable sign-in and restrict firewall and network access. Saving will not restart the service."],["重启后，直接远程连接将不可用。请先保留服务器本机、SSH 或本机隧道的恢复方式。","Direct remote access will stop after restart. Keep a local, SSH or local-tunnel recovery path available."],["已保存，安全重启后生效。当前任务与网络连接未改变。","Saved for the next safe restart. Current tasks and connections are unchanged."],["已保存，当前无需重启。","Saved. No restart is currently needed."],["请刷新核对后再保存；未自动重试。","Refresh and verify before saving again. Nothing was retried automatically."],["正在测试草稿配置…","Testing draft settings…"],["已连接到目标（HTTP {0}，{1} ms）。未保存配置，也未调用生成模型。","Target reached (HTTP {0}, {1} ms). Settings were not saved and no generation model was called."],["未能连接。请检查服务器上的代理地址、端口与网络。","Connection failed. Check the proxy address, port and network on the server."],["网络设置暂不可用","Network settings are unavailable"],["正在读取网络状态","Reading network status"],["有配置等待重启生效","Changes pending restart"],["保存不会中断任务。请在任务结束、草稿保存后，由部署端安全重启整个服务。","Saving does not interrupt tasks. Finish tasks and save drafts before safely restarting the entire service from the deployment host."],["撤销待生效配置","Discard pending changes"],["访问安全","Access security"],["用登录验证保护工作台。已登录设备共享此实例的使用权限。","Protect your workspace with sign-in. Signed-in devices share access to this instance."],["访问安全说明","About access security"],["访问范围","Access scope"],["选择哪些设备可以直接连接这个工作台。","Choose which devices may connect directly to this workspace."],["允许连接的设备","Devices allowed to connect"],["候选地址不代表已连通。防火墙、路由和容器端口映射仍需自行配置。","Listed addresses are not connectivity checks. Configure firewalls, routing and container port mappings separately."],["允许其他设备连接不等于仅限局域网；公网接口也可能接受连接。IPv4 与 IPv6 应分别核对。","Allowing other devices is not limited to your LAN. Public interfaces may also accept connections. Check IPv4 and IPv6 separately."],["访问地址与部署说明","Addresses & deployment details"],["出站代理","Outbound proxy"],["用于更新检查与 OhMyBuddy 管理的模型请求。","For update checks and OhMyBuddy-managed model requests."],["连接方式","Connection mode"],["代理地址","Proxy address"],["这里的 localhost 指运行 OhMyBuddy 的服务器，不是打开网页的设备。","localhost refers to the OhMyBuddy server, not the device viewing this page."],["额外绕过代理的地址","Additional proxy bypass addresses"],["本机回环与内部连接默认直连。额外地址用逗号分隔；不支持 CIDR。","Loopback and internal connections bypass the proxy. Separate additional hosts with commas; CIDR is not supported."],["支持 HTTP/HTTPS 代理，暂不支持 SOCKS、PAC 或带账号密码的自定义地址。","HTTP/HTTPS proxies are supported. SOCKS, PAC and custom URLs with credentials are not supported yet."],["保存后重启整个服务生效。不会接管浏览器、独立 CLI、任意 Shell 或第三方扩展；系统 VPN/TUN 不受直连选项控制。","Restart the entire service to apply changes. This does not control the browser, independent CLIs, arbitrary shell commands or third-party extensions. Direct mode does not bypass system VPN/TUN routing."],["高级与适用范围","Advanced & scope"],["测试目标","Test target"],["测试连接","Test connection"],["测试草稿连接","Test draft connection"],["远程访问","Remote access"],["推荐私有网络或 HTTPS；无需在这里安装穿透工具。","Use a private network or HTTPS. No tunnel tools are installed here."],["Tailscale 私有访问","Private access with Tailscale"],["直接访问 Tailscale 地址需要相应监听；同机 Tailscale Serve 可转发到本机地址，无需开放全部接口。","Direct access to a Tailscale IP requires a matching listener. Tailscale Serve on the same machine can forward to loopback without opening all interfaces."],["HTTPS 反向代理","HTTPS reverse proxy"],["同机代理可连接本机监听。需要保留 Host、转发 WebSocket、配置 Secure Cookie，并限制后端直接入口。","A local reverse proxy can use loopback. Preserve Host, forward WebSockets, configure Secure cookies and restrict direct backend access."],["本机隧道与端口转发","Local tunnels & port forwarding"],["SSH 转发或同机隧道客户端可以访问回环监听。隧道可能扩大访问范围，仍应启用 Token；不自动创建公网入口。","SSH forwarding or a local tunnel client can reach loopback. Tunnels may expand access, so keep Token protection enabled. No public endpoint is created automatically."],["查看接入指引","View setup guide"],["请先在上方开启登录验证，再修改网络设置或测试代理。","Enable sign-in above before changing network settings or testing a proxy."],["刷新网络状态","Refresh network status"],["撤销已保存但尚未生效的网络配置？当前运行连接不会改变。","Discard saved network changes that have not taken effect? Current connections will remain unchanged."],["刷新会替换本页未保存的网络草稿，是否继续？","Refreshing will replace unsaved network edits. Continue?"],["请选择有效的代理方式","Choose a valid proxy mode"],["代理配置过长","Proxy configuration is too long"],["请输入完整的 HTTP 或 HTTPS 代理地址","Enter a complete HTTP or HTTPS proxy URL"],["代理仅支持 HTTP/HTTPS 地址；请勿填写账号、密码、路径或查询参数","Use an HTTP/HTTPS proxy URL without credentials, paths or query parameters"],["仅自定义模式需要代理地址","Only custom mode accepts a proxy URL"],["绕过地址请用逗号分隔的主机名或 IP，不支持路径和 CIDR","Use comma-separated hostnames or IP addresses for bypass rules; paths and CIDR are not supported"],["网络配置无法读取，请在服务器修复；未回退为开放访问或直连","Network configuration cannot be read. Repair it on the server; access was not opened and routing did not fall back to direct"],["无法核对原监听配置，请在部署配置中明确设置 HOST","Unable to verify the prior binding. Set HOST explicitly in deployment configuration"],["无法读取 Pi 网络配置，请先修复原生设置","Unable to read Pi network settings. Repair the native settings first"],["请先改为仅本机监听并重启生效，再关闭登录验证","Switch to local-only listening and restart before disabling sign-in"],["网络设置参数无效","Invalid network settings request"],["网络设置已变化，请刷新核对后再保存","Network settings changed. Refresh and verify before saving"],["监听地址由部署配置 HOST 管理，请在服务器修改","The listener is managed by deployment HOST; change it on the server"],["请选择访问范围","Choose an access scope"],["请先开启登录验证，再允许其他设备连接","Enable sign-in before allowing other devices"],["网络设置分区无效","Invalid network settings section"],["网络设置保存结果不确定，请刷新核对；未自动重试","The save outcome is uncertain. Refresh and verify; nothing was retried"],["请选择 GitHub 或 npm 测试目标","Choose GitHub or npm as the test target"],["连接测试过于频繁，请稍后再试","Too many connection tests. Try again later"],["网络设置请求来源无效","Invalid network settings request origin"],["请先开启登录验证，再修改网络设置","Enable sign-in before changing network settings"],["无法读取网络状态，请在服务器核对配置","Unable to read network status. Check the configuration on the server"]]);
+    rows.push(...[["网络与访问","Network & access"],["网络代理设置","Network proxy settings"],["管理 OhMyBuddy 的访问方式与服务器网络连接。","Manage access to OhMyBuddy and its outbound connections."],["使用运行环境","Use runtime environment"],["直连","Direct connection"],["自定义代理","Custom proxy"],["仅本机访问","This computer only"],["允许其他设备连接","Allow other devices"],["登录验证已开启","Sign-in required"],["登录验证未开启","Sign-in is off"],["当前监听：{0}","Listening on: {0}"],["由部署配置 HOST 管理。需要在服务器修改后重启。","Managed by the deployment HOST setting. Change it on the server, then restart."],["沿用旧安装的监听范围；选择后可交由此页面管理。","Using the existing installation’s binding. Select a scope to manage it here."],["更改后重启生效，不会自动开放防火墙。","Changes take effect after restart. Firewall rules are not changed."],["当前使用：{0}","Currently using: {0}"],["检测到代理配置","Proxy configuration detected"],["更新源未使用代理","No proxy for update sources"],["检测到 Pi 原生代理。运行环境模式保留现有配置；直连或自定义仅覆盖 OhMyBuddy 受管请求。","A native Pi proxy is configured. Environment mode preserves it; direct or custom mode overrides OhMyBuddy-managed requests only."],["运行环境模式沿用服务器已有代理；未配置时直连。不会改变浏览器或系统 VPN。","Environment mode uses the server’s existing proxy, or connects directly if none is configured. Browser settings and system VPNs are unchanged."],["服务器本机","On the server"],["其他设备 · 待验证","Other devices · not verified"],["复制地址","Copy address"],["地址已复制","Address copied"],["无法复制，请手动选择地址","Unable to copy. Select the address manually."],["未发现可展示的访问地址，请核对部署配置。","No access address found. Check your deployment configuration."],["保存访问范围","Save access scope"],["保存代理","Save proxy"],["允许其他设备连接可能暴露到公网。请确认已启用登录验证，并自行限制防火墙和网络入口。保存不会重启服务。","Allowing other devices may expose this service to the internet. Enable sign-in and restrict firewall and network access. Saving will not restart the service."],["重启后，直接远程连接将不可用。请先保留服务器本机、SSH 或本机隧道的恢复方式。","Direct remote access will stop after restart. Keep a local, SSH or local-tunnel recovery path available."],["已保存，安全重启后生效。当前任务与网络连接未改变。","Saved for the next safe restart. Current tasks and connections are unchanged."],["已保存，当前无需重启。","Saved. No restart is currently needed."],["请刷新核对后再保存；未自动重试。","Refresh and verify before saving again. Nothing was retried automatically."],["正在测试草稿配置…","Testing draft settings…"],["已连接到目标（HTTP {0}，{1} ms）。未保存配置，也未调用生成模型。","Target reached (HTTP {0}, {1} ms). Settings were not saved and no generation model was called."],["未能连接。请检查服务器上的代理地址、端口与网络。","Connection failed. Check the proxy address, port and network on the server."],["网络设置暂不可用","Network settings are unavailable"],["正在读取网络状态","Reading network status"],["有配置等待重启生效","Changes pending restart"],["保存不会中断任务。请在任务结束、草稿保存后，由部署端安全重启整个服务。","Saving does not interrupt tasks. Finish tasks and save drafts before safely restarting the entire service from the deployment host."],["撤销待生效配置","Discard pending changes"],["访问安全","Access security"],["用登录验证保护 OhMyBuddy。已登录设备共享此实例的使用权限。","Protect OhMyBuddy with sign-in. Signed-in devices share access to this instance."],["访问安全说明","About access security"],["访问范围","Access scope"],["选择哪些设备可以直接连接这个 OhMyBuddy。","Choose which devices may connect directly to OhMyBuddy."],["允许连接的设备","Devices allowed to connect"],["候选地址不代表已连通。防火墙、路由和容器端口映射仍需自行配置。","Listed addresses are not connectivity checks. Configure firewalls, routing and container port mappings separately."],["允许其他设备连接不等于仅限局域网；公网接口也可能接受连接。IPv4 与 IPv6 应分别核对。","Allowing other devices is not limited to your LAN. Public interfaces may also accept connections. Check IPv4 and IPv6 separately."],["访问地址与部署说明","Addresses & deployment details"],["出站代理","Outbound proxy"],["用于更新检查与 OhMyBuddy 管理的模型请求。","For update checks and OhMyBuddy-managed model requests."],["连接方式","Connection mode"],["代理地址","Proxy address"],["这里的 localhost 指运行 OhMyBuddy 的服务器，不是打开网页的设备。","localhost refers to the OhMyBuddy server, not the device viewing this page."],["额外绕过代理的地址","Additional proxy bypass addresses"],["本机回环与内部连接默认直连。额外地址用逗号分隔；不支持 CIDR。","Loopback and internal connections bypass the proxy. Separate additional hosts with commas; CIDR is not supported."],["支持 HTTP/HTTPS 代理，暂不支持 SOCKS、PAC 或带账号密码的自定义地址。","HTTP/HTTPS proxies are supported. SOCKS, PAC and custom URLs with credentials are not supported yet."],["保存后重启整个服务生效。不会接管浏览器、独立 CLI、任意 Shell 或第三方扩展；系统 VPN/TUN 不受直连选项控制。","Restart the entire service to apply changes. This does not control the browser, independent CLIs, arbitrary shell commands or third-party extensions. Direct mode does not bypass system VPN/TUN routing."],["高级与适用范围","Advanced & scope"],["测试目标","Test target"],["测试连接","Test connection"],["测试草稿连接","Test draft connection"],["远程访问","Remote access"],["推荐私有网络或 HTTPS；无需在这里安装穿透工具。","Use a private network or HTTPS. No tunnel tools are installed here."],["Tailscale 私有访问","Private access with Tailscale"],["直接访问 Tailscale 地址需要相应监听；同机 Tailscale Serve 可转发到本机地址，无需开放全部接口。","Direct access to a Tailscale IP requires a matching listener. Tailscale Serve on the same machine can forward to loopback without opening all interfaces."],["HTTPS 反向代理","HTTPS reverse proxy"],["同机代理可连接本机监听。需要保留 Host、转发 WebSocket、配置 Secure Cookie，并限制后端直接入口。","A local reverse proxy can use loopback. Preserve Host, forward WebSockets, configure Secure cookies and restrict direct backend access."],["本机隧道与端口转发","Local tunnels & port forwarding"],["SSH 转发或同机隧道客户端可以访问回环监听。隧道可能扩大访问范围，仍应启用 Token；不自动创建公网入口。","SSH forwarding or a local tunnel client can reach loopback. Tunnels may expand access, so keep Token protection enabled. No public endpoint is created automatically."],["查看接入指引","View setup guide"],["请先在上方开启登录验证，再修改网络设置或测试代理。","Enable sign-in above before changing network settings or testing a proxy."],["刷新网络状态","Refresh network status"],["撤销已保存但尚未生效的网络配置？当前运行连接不会改变。","Discard saved network changes that have not taken effect? Current connections will remain unchanged."],["刷新会替换本页未保存的网络草稿，是否继续？","Refreshing will replace unsaved network edits. Continue?"],["请选择有效的代理方式","Choose a valid proxy mode"],["代理配置过长","Proxy configuration is too long"],["请输入完整的 HTTP 或 HTTPS 代理地址","Enter a complete HTTP or HTTPS proxy URL"],["代理仅支持 HTTP/HTTPS 地址；请勿填写账号、密码、路径或查询参数","Use an HTTP/HTTPS proxy URL without credentials, paths or query parameters"],["仅自定义模式需要代理地址","Only custom mode accepts a proxy URL"],["绕过地址请用逗号分隔的主机名或 IP，不支持路径和 CIDR","Use comma-separated hostnames or IP addresses for bypass rules; paths and CIDR are not supported"],["网络配置无法读取，请在服务器修复；未回退为开放访问或直连","Network configuration cannot be read. Repair it on the server; access was not opened and routing did not fall back to direct"],["无法核对原监听配置，请在部署配置中明确设置 HOST","Unable to verify the prior binding. Set HOST explicitly in deployment configuration"],["无法读取 Pi 网络配置，请先修复原生设置","Unable to read Pi network settings. Repair the native settings first"],["请先改为仅本机监听并重启生效，再关闭登录验证","Switch to local-only listening and restart before disabling sign-in"],["网络设置参数无效","Invalid network settings request"],["网络设置已变化，请刷新核对后再保存","Network settings changed. Refresh and verify before saving"],["监听地址由部署配置 HOST 管理，请在服务器修改","The listener is managed by deployment HOST; change it on the server"],["请选择访问范围","Choose an access scope"],["请先开启登录验证，再允许其他设备连接","Enable sign-in before allowing other devices"],["网络设置分区无效","Invalid network settings section"],["网络设置保存结果不确定，请刷新核对；未自动重试","The save outcome is uncertain. Refresh and verify; nothing was retried"],["请选择 GitHub 或 npm 测试目标","Choose GitHub or npm as the test target"],["连接测试过于频繁，请稍后再试","Too many connection tests. Try again later"],["网络设置请求来源无效","Invalid network settings request origin"],["请先开启登录验证，再修改网络设置","Enable sign-in before changing network settings"],["无法读取网络状态，请在服务器核对配置","Unable to read network status. Check the configuration on the server"]]);
     rows.push(['费用由所选后端决定；当前无法提供可靠报价。', 'Pricing depends on the selected backend; a reliable estimate is not currently available.']);
     rows.push(
         ['Agent 辅助规划（可选）', 'Optional Agent planning'],
@@ -9879,7 +9879,7 @@
         ['正在核对或清理附件，请稍后再试', 'Attachments are being checked or cleaned up. Try again later.'],
         ['请等待消息、文件和后台操作完成后再清理附件', 'Wait for messages, files and background work to finish before attachment cleanup'],
         ['预约消息引用无法完整核对', 'Scheduled-message references could not be fully verified'],
-        ['请先退出工作台中已打开的运行实例，再清理附件；用量仍可查看', 'Exit all open workbench runtimes before attachment cleanup. Usage remains available.'],
+        ['请先退出 OhMyBuddy 中已打开的运行实例，再清理附件；用量仍可查看', 'Exit all open OhMyBuddy runtimes before attachment cleanup. Usage remains available.'],
         ['运行实例尚未退出，请等待停止完成', 'The runtime has not exited yet. Wait for shutdown to finish.'],
         ['只能暂停等待发送的消息', 'Only messages waiting to be sent can be paused'],
         ['会话已移除，但排队内容清理未完成，请核对恢复记录', 'The conversation was removed, but queue cleanup is incomplete. Check the recovery records.']
@@ -10322,30 +10322,30 @@
         ["正在忙…", "Working on it…"],
         ["等你确认", "Waiting for you"],
         ["暂时连不上", "Can't connect right now"],
-        ["这个 Bot 已停用，请在设置中重新启用", "This Bot is turned off. Turn it back on in settings."],
+        ["这个伙伴已停用，请在设置中重新启用", "This Buddy is turned off. Turn it back on in settings."],
         ["主聊天暂时无法准备好，请稍后重试", "The main chat isn't ready yet. Try again in a moment."],
-        ["Bot 列表刚刚有变化，请再试一次", "Your Bots just changed. Please try again."],
+        ["伙伴列表刚刚有变化，请再试一次", "Your Buddies just changed. Please try again."],
         ["给 {0} 发消息", "Message {0}"],
-        ["我的 Bot", "My Bots"],
+        ["我的伙伴", "My Buddies"],
         ["正在创建…", "Creating…"],
-        ["新建 Bot", "New Bot"],
+        ["新建伙伴", "New Buddy"],
         ["还在互相认识", "Still getting to know you"],
         ["你的私人助理", "Your personal assistant"],
         ["聊天", "Chats"],
         ["主聊天", "Main chat"],
         ["话题", "Topics"],
         ["{0} 的设置", "{0}'s settings"],
-        ["我的 Bot 与聊天", "My Bots and chats"],
-        ["认识你的 Bot", "Meet your Bot"],
+        ["我的伙伴与聊天", "My Buddies and chats"],
+        ["认识你的伙伴", "Meet your Buddy"],
         ["一个一直在的私人助理：记得你说过的话，帮你查、记、写、提醒。先花两三分钟互相认识一下。", "A personal assistant that's always here: it remembers what you've said and helps you look things up, take notes, write and remember. Let's spend two or three minutes getting to know each other."],
         ["开始", "Get started"],
         ["想聊什么都可以直接说。", "Say anything you like."],
-        ["这个 Bot 聊天已接续到新的会话文件，正在打开", "This Bot chat continues in a new session file. Opening it now."],
+        ["这个伙伴聊天已接续到新的会话文件，正在打开", "This Buddy chat continues in a new session file. Opening it now."],
         ["设置里选的模型暂时用不了，这次先用当前模型回复", "The model chosen in settings isn't available right now, so this reply uses the current model."],
-        ["Bot 设置的模型 {0} 暂时不可用，已沿用当前模型", "The Bot's model {0} is unavailable; the current model was kept."]
+        ["伙伴设置的模型 {0} 暂时不可用，已沿用当前模型", "The Buddy's model {0} is unavailable; the current model was kept."]
     );
     rows.push(
-        ["请先打开 Bot 的聊天", "Open the Bot's chat first"],
+        ["请先打开伙伴的聊天", "Open the Buddy's chat first"],
         ["关于你的内容这次没记下：{0}", "Notes about you weren't saved this time: {0}"],
         ["好呀", "Sure"],
         ["设置刚刚有变化，请再试一次", "Settings just changed. Please try again."],
@@ -10373,7 +10373,7 @@
         ["更早的聊天只能在这里回看", "Earlier conversation can only be read here"],
         ["嗨，我是新来的伙伴，还没有名字。", "Hi, I'm your new companion. I don't have a name yet."],
         ["{0} 已经知道你的这些事，要我也记住吗？不想让我知道的可以取消勾选。", "{0} already knows these things about you. Shall I remember them too? Untick anything you'd rather I didn't know."],
-        ["从哪个 Bot", "From which Bot"],
+        ["从哪个伙伴", "From which Buddy"],
         ["记住这 {0} 条", "Remember these {0}"],
         ["不用，重新认识", "No, let's start fresh"],
         ["内容刚刚有变化，请再选一次", "This just changed. Please choose again."],
@@ -10392,7 +10392,7 @@
         ["跟随默认（{0}）", "Use the default ({0})"],
         ["{0}（现在不可用）", "{0} (unavailable right now)"],
         ["思考程度", "Thinking"],
-        ["只影响 {0}，不改其他 Bot 和 Pi Agent。", "Only affects {0}, not your other Bots or Pi Agent."],
+        ["只影响 {0}，不改其他伙伴和工作台。", "Only affects {0}, not your other Buddies or Workspace."],
         ["暂时读不到模型列表，现在的选择会保留。", "The model list can't be read right now; the current choice is kept."],
         ["“稳妥”和“每次都问”会在动手前弹出确认；“放手”靠 {0} 自觉先问。这些都不是安全隔离：它能使用这台电脑上的工具。密码、密钥这类东西它一律不碰。", "“Careful” and “Ask every time” show an approval card before acting; in “Hands-off”, {0} decides when to ask. None of these is a security sandbox: it can use the tools on this computer. It never touches passwords, keys and the like."],
         ["记忆和关于你", "Memory and about you"],
@@ -10407,15 +10407,15 @@
         ["保存失败", "Couldn't save"],
         ["我们重新认识一下吧", "Let's get acquainted again"],
         ["名字不能为空", "The name can't be empty"],
-        ["还没有可用的聊天模型。Bot 要接入一个模型才能和你说话。", "There's no chat model yet. A Bot needs one before it can talk to you."],
+        ["还没有可用的聊天模型。伙伴要接入一个模型才能和你说话。", "There's no chat model yet. A Buddy needs one before it can talk to you."],
         ["{0} 用的模型现在登录失效了。请在“供应商与模型”里重新登录。", "The model {0} uses is signed out. Sign in again under Providers and models."],
         ["{0} 选的模型现在用不了。可以在 {0} 的设置里换一个。", "The model {0} picked isn't available right now. Choose another in {0}'s settings."],
         ["还没有可用的聊天模型。{0} 要接入一个模型才能回复你。", "There's no chat model yet. {0} needs one before it can reply."],
         ["正在打开最新的聊天", "Opening the latest chat"],
         ["这段聊天正在换到新的记录文件，请稍后再试", "This chat is moving to a new conversation file. Try again in a moment."],
         ["这段聊天已经换到新的记录文件", "This chat has moved to a new conversation file."],
-        ["Bot 的主线程就是它的主聊天，不能在这里更改", "A Bot's main thread is its main chat and can't be changed here."],
-        ["Bot 的主线程就是它的主聊天，定时任务会进入它当前的聊天。", "A Bot's main thread is its main chat. Scheduled tasks go to its current chat."],
+        ["伙伴的主线程就是它的主聊天，不能在这里更改", "A Buddy's main thread is its main chat and can't be changed here."],
+        ["伙伴的主线程就是它的主聊天，定时任务会进入它当前的聊天。", "A Buddy's main thread is its main chat. Scheduled tasks go to its current chat."],
         ["打开主聊天", "Open main chat"],
         ["{0} 想运行一条命令", "{0} wants to run a command"],
         ["{0} 想把这件事交给另一个助手", "{0} wants to hand this to another assistant"],
@@ -10519,8 +10519,8 @@
         ["截止时间（可不填）", "Due time (optional)"],
         ["截止", "Due"],
         ["还有修改没保存。再点一次就放弃这些修改并离开。", "There are unsaved changes. Click again to discard them and leave."],
-        ["Bot 聊天里没有侧聊，直接在这里问就好", "Bot chats have no side chat; just ask here"],
-        ["Bot 聊天不能分叉；以后可以为 Bot 另开话题", "Bot chats cannot be forked; separate topics for a Bot will come later"],
+        ["伙伴聊天里没有侧聊，直接在这里问就好", "Buddy chats have no side chat; just ask here"],
+        ["伙伴聊天不能分叉；以后可以为伙伴另开话题", "Buddy chats cannot be forked; separate topics for a Buddy will come later"],
         ["这个时间在这台设备的时区里不存在（夏令时调整），请换一个时间", "That time does not exist in this device's time zone (a daylight saving change); choose another time"],
         ["上传的图片已经是头像了；要换回可以在设置里改。", "The uploaded picture is already the face; you can change it back in settings."],
         ["头像图片没有保存成功，请再试一次", "The picture was not saved; please try again"],
@@ -10615,7 +10615,7 @@
         ["一直允许只对完全相同的命令（同一个目录）或同一个文件跳过确认，其他照常询问。它只在 OhMyBuddy 的工具层生效，不是系统沙箱：允许的命令以 OhMyBuddy 服务的权限运行。", "Always allow skips the confirmation only for exactly the same command (in the same folder) or the same file; everything else is still asked about. It works in OhMyBuddy's tool layer and is not an OS sandbox: allowed commands run with the OhMyBuddy service's permissions."],
         ["还有修改没保存。再点一次就放弃这些修改，接着移到回收站。", "You have unsaved changes. Click again to discard them and move to the trash."],
         ["把 {0} 移到回收站？", "Move {0} to the trash?"],
-        ["{0} 会从 Bot 列表里移走。它的名字、性格、记忆、聊天记录和工作目录里的文件都会保留，之后可以在“身份”页的回收站恢复。", "{0} will leave the Bot list. Its name, personality, memory, chat history and the files in its folder are all kept, and you can restore it later from the trash on the Profiles page."],
+        ["{0} 会从伙伴列表里移走。它的名字、性格、记忆、聊天记录和工作目录里的文件都会保留，之后可以在“身份”页的回收站恢复。", "{0} will leave the Buddy list. Its name, personality, memory, chat history and the files in its folder are all kept, and you can restore it later from the trash on the Profiles page."],
         ["正在移到回收站…", "Moving to the trash…"],
         ["{0} 已移到回收站，可以在“身份”页的回收站恢复。", "{0} was moved to the trash. You can restore it from the trash on the Profiles page."],
         ["设置刚刚在别处改过，还没有移到回收站。检查后可以再试一次。", "Settings were just changed elsewhere, so nothing was moved to the trash. Check and try again."],
@@ -10644,7 +10644,7 @@
         ["正在归档…", "Archiving…"],
         ["话题刚刚在别处改过，还没有归档。检查后可以再归档一次。", "The topic was just changed elsewhere and was not archived. Check it and archive again."],
         ["打开话题", "Open topic"],
-        ["找不到这个 Bot 了。", "This Bot can no longer be found."],
+        ["找不到这个伙伴了。", "This Buddy can no longer be found."],
         ["这个话题已经不在了。", "This topic no longer exists."],
         ["这个话题已归档，可以在话题列表的“已归档”里恢复。", "This topic is archived. You can restore it from Archived in the topic list."],
         ["这个话题暂时打不开，请稍后再试。", "This topic can't be opened right now. Try again shortly."],
@@ -10701,21 +10701,21 @@
         ["围绕这项功能讨论需求、实现思路和待解决的问题。", "Discuss the requirements, implementation approach and open questions for this feature."]
     );
     rows.push(
-        ["所有 Bot", "All Bots"],
-        ["所有 Bot，另有 {0} 个 Bot 有新回复或等你确认", "All Bots. {0} other Bots have new replies or are waiting for you", "All Bots. {0} other Bot has new replies or is waiting for you"],
+        ["所有伙伴", "All Buddies"],
+        ["所有伙伴，另有 {0} 个伙伴有新回复或等你确认", "All Buddies. {0} other Buddies have new replies or are waiting for you", "All Buddies. {0} other Buddy has new replies or is waiting for you"],
         ["另有 {0} 个有动静", "{0} others with news", "{0} other with news"],
         ["回到聊天", "Back to the chat"],
         ["{0} 个", "{0}"],
-        ["找 Bot 或话题", "Find a Bot or topic"],
+        ["找伙伴或话题", "Find a Buddy or topic"],
         ["筛选", "Filter"],
         ["有新回复", "New replies"],
         ["没有新回复", "No new replies"],
         ["现在没有等你确认的事", "Nothing is waiting for you right now"],
         ["没有找到“{0}”", "Nothing found for “{0}”"],
-        ["试试 Bot 的名字或话题名。", "Try a Bot's name or a topic name."],
-        ["有新的动静时会出现在这里。", "Bots with news will show up here."],
+        ["试试伙伴的名字或话题名。", "Try a Buddy's name or a topic name."],
+        ["有新的动静时会出现在这里。", "Buddies with news will show up here."],
         ["清除筛选", "Clear filters"],
-        ["Bot 列表", "Bots"],
+        ["伙伴列表", "Buddies"],
         ["{0} 个聊天有新回复", "{0} chats have new replies", "{0} chat has new replies"],
         ["等你确认 · {0}", "Waiting for you · {0}"],
         ["正在忙 · {0}", "Working · {0}"],
@@ -10752,32 +10752,32 @@
         ["主动跟进", "Follow-up"]
     );
     rows.push(
-        ["变成 Bot", "Make it a Bot"],
-        ["把“{0}”变成 Bot？", "Make “{0}” a Bot?"],
+        ["变成伙伴", "Make it a Buddy"],
+        ["把“{0}”变成伙伴？", "Make “{0}” a Buddy?"],
         ["保留原有设定与对话", "Keep existing settings and chats"],
-        ["定时任务自动承接", "Scheduled tasks move to Bot"],
+        ["定时任务自动承接", "Scheduled tasks move to Buddy"],
         ["首次引导与不可逆说明", "First chat & one-way conversion"],
-        ["使用工作台默认模型", "Use workbench default model"],
-        ["{0} 会保留名字、头像、性格、记忆和技能，并有自己的主聊天和工作目录，出现在 Bot 页面。以前用它进行的对话保留在 Pi Agent 的线程列表里。", "{0} keeps its name, avatar, personality, memory and skills, and gets its own main chat and workspace folder on the Bot page. Earlier conversations with it stay in the Pi Agent thread list."],
-        ["以它为目标的 {0} 个定时任务以后会发到 Bot 的主聊天。", "{0} scheduled tasks aimed at it will go to the Bot's main chat from now on.", "{0} scheduled task aimed at it will go to the Bot's main chat from now on."],
-        ["第一次打开时它会问问想让它主要帮你做什么、怎么做事。变成 Bot 后不能再变回普通身份，可以像其他 Bot 一样移到回收站。", "The first time you open it, it asks what you mainly want help with and how it should work. A Bot can't become a plain identity again; like other Bots, it can be moved to the trash."],
-        ["“{0}”已变成 Bot", "“{0}” is now a Bot"],
-        ["它已经是 Bot 了。", "It is already a Bot."],
+        ["使用全局默认模型", "Use global default model"],
+        ["{0} 会保留名字、头像、性格、记忆和技能，并有自己的主聊天和工作目录，出现在伙伴页面。以前用它进行的对话保留在工作台的线程列表里。", "{0} keeps its name, avatar, personality, memory and skills, and gets its own main chat and working folder on the Buddy page. Earlier conversations with it stay in the Workspace thread list."],
+        ["以它为目标的 {0} 个定时任务以后会发到伙伴的主聊天。", "{0} scheduled tasks aimed at it will go to the Buddy's main chat from now on.", "{0} scheduled task aimed at it will go to the Buddy's main chat from now on."],
+        ["第一次打开时它会问问想让它主要帮你做什么、怎么做事。变成伙伴后不能再变回普通身份，可以像其他伙伴一样移到回收站。", "The first time you open it, it asks what you mainly want help with and how it should work. A Buddy can't become a plain identity again; like other Buddies, it can be moved to the trash."],
+        ["“{0}”已变成伙伴", "“{0}” is now a Buddy"],
+        ["它已经是伙伴了。", "It is already a Buddy."],
         ["找不到这个身份了，请刷新核对。", "This identity can't be found anymore. Refresh to check."],
-        ["没有变成 Bot：{0}", "Not made a Bot: {0}"],
+        ["没有变成伙伴：{0}", "Not made a Buddy: {0}"],
         ["以身份新建…", "New thread as an identity…"],
         ["以身份新建线程", "New thread as an identity"],
-        ["在“{0}”里新开一个普通 Pi 线程，用所选身份的性格、记忆和技能。工具和权限与 Pi Agent 相同，不受 Bot 的做事方式限制；它不会出现在 Bot 的聊天里。", "Start an ordinary Pi thread in “{0}” that uses the chosen identity's personality, memory and skills. Tools and permissions are the same as Pi Agent's, not limited by a Bot's way of working, and it doesn't appear in the Bot's chats."],
+        ["在“{0}”里新开一个普通 Pi 线程，用所选身份的性格、记忆和技能。工具和权限与工作台相同，不受伙伴的做事方式限制；它不会出现在伙伴的聊天里。", "Start an ordinary Pi thread in “{0}” that uses the chosen identity's personality, memory and skills. Tools and permissions are the same as in Workspace, not limited by a Buddy's way of working, and it doesn't appear in the Buddy's chats."],
         ["去身份页", "Go to Identities"],
-        ["还没有可用的身份。可以在“身份”页新建，或先建一个 Bot。", "No identity is available yet. Create one on the Identities page, or create a Bot first."],
+        ["还没有可用的身份。可以在“身份”页新建，或先建一个伙伴。", "No identity is available yet. Create one on the Identities page, or create a Buddy first."],
         ["读取身份失败：{0}", "Couldn't read identities: {0}"],
-        ["请先在 Pi Agent 选择一个项目", "Choose a project in Pi Agent first"],
+        ["请先在工作台选择一个项目", "Choose a project in Workspace first"],
         ["没有新建线程：{0}", "No thread was created: {0}"],
         ["没有完成：{0}", "Not done: {0}"],
         ["打开消息渠道设置", "Open messaging channel settings"],
         ["暂时读不到微信连接。", "WeChat connections can't be read right now."],
         ["正在和 {0} 聊", "Chatting with {0}"],
-        ["正在和别的 Bot 聊；{0} 的提醒和消息也会发到这里", "Chatting with another Bot; {0}'s reminders and messages arrive here too"],
+        ["正在和别的伙伴聊；{0} 的提醒和消息也会发到这里", "Chatting with another Buddy; {0}'s reminders and messages arrive here too"],
         ["断开", "Disconnect"],
         ["断开微信：{0}", "Disconnect WeChat: {0}"],
         ["断开这个微信聊天？", "Disconnect this WeChat chat?"],
@@ -10788,11 +10788,11 @@
         ["选择微信用户", "Choose a WeChat user"],
         ["连接", "Connect"],
         ["让这个微信聊天改和 {0} 聊？", "Have this WeChat chat talk to {0} instead?"],
-        ["它现在在和“{0}”聊。连接后改和 {1} 聊，原来的 Bot 仍然连着，在微信里发 /切换 可以换回去。", "It is chatting with “{0}” now. After connecting it talks to {1}; the previous Bot stays connected, and /切换 in WeChat switches back."],
+        ["它现在在和“{0}”聊。连接后改和 {1} 聊，原来的伙伴仍然连着，在微信里发 /切换 可以换回去。", "It is chatting with “{0}” now. After connecting it talks to {1}; the previous Buddy stays connected, and /切换 in WeChat switches back."],
         ["它现在绑定在线程“{0}”。连接后改为和 {1} 聊，线程和记录都保留。", "It is bound to the thread “{0}” now. After connecting it talks to {1}; the thread and its history are kept."],
         ["已连接微信", "Connected to WeChat"],
-        ["在微信里发 /切换 换一个 Bot，发 /话题 换话题，发 /help 看全部。", "In WeChat, send /切换 to switch Bots, /话题 to switch topics, and /help for everything."],
-        ["在 Pi Agent 项目菜单中选“以身份新建…”，就能在那个项目里用此身份。", "Choose “New thread as an identity…” in a Pi Agent project menu to use this identity there."],
+        ["在微信里发 /切换 换一个伙伴，发 /话题 换话题，发 /help 看全部。", "In WeChat, send /切换 to switch Buddies, /话题 to switch topics, and /help for everything."],
+        ["在工作台项目菜单中选“以身份新建…”，就能在那个项目里用此身份。", "Choose “New thread as an identity…” in a Workspace project menu to use this identity there."],
         ["我是{0}，现在有了自己的主聊天和工作目录，记得的事都还在。花一两分钟说说想让我主要帮你做什么？随时可以说“先跳过”。", "I'm {0}. I now have my own main chat and workspace, and I still remember what I knew. Take a minute or two to tell me what you mainly want my help with? You can say “skip for now” any time."],
         ["话题指令（可不填）", "Topic instructions (optional)"],
         ["比如：先给结论再展开；改代码前先说明思路和影响。", "For example: give the conclusion first, then the details; explain the approach and its impact before changing code."],
@@ -10904,7 +10904,7 @@
         ["还有修改没保存，继续会放弃这些修改。","You have unsaved changes; continuing discards them."],
         ["回到主聊天","Go to main chat"],
         ["先不了","Not now"],
-        ["从 Bot 列表移走；聊天、记忆和文件都保留，可在“身份”页的回收站恢复。","Removes it from the Bot list; chats, memory and files are kept and can be restored from the trash on the Identities page."],
+        ["从伙伴列表移走；聊天、记忆和文件都保留，可在“身份”页的回收站恢复。","Removes it from the Buddy list; chats, memory and files are kept and can be restored from the trash on the Identities page."],
         ["不常用、但需要时找得到的操作。","Things you rarely need but can find when you do."],
         ["重新开始","Start over"],
         ["设置分区","Settings sections"],
@@ -10976,9 +10976,9 @@
         ["打开聊天", "Open chat"],
         ["查看任务", "View task"],
         ["查看渠道", "View channels"],
-        ["只读最近的有限记录（全局最近 {0} 次定时运行、{1} 条渠道记录），最多显示 {2} 项；聊天打开当前一代。", "Reads the latest {0} scheduled runs and {1} channel records globally; only matching Bot records are shown, up to {2} items. This is a bounded view, not the full history. Chat links open the current generation."],
-        ["此 Bot 今日主动推送：{0} / {1}（{2}，{3}）；安静时段暂存 {4} 条。", "This Bot's proactive pushes today: {0} / {1} ({2}, {3}); {4} messages held during quiet hours."],
-        ["全部用户定时任务今日共用额度（UTC）：运行 {0}/{1}，tokens {2}/{3}。不含 Bot 主动跟进和后台学习。", "Today's shared allowance for all user scheduled tasks (UTC): runs {0}/{1}, tokens {2}/{3}. Excludes Bot follow-ups and background learning."],
+        ["只读最近的有限记录（全局最近 {0} 次定时运行、{1} 条渠道记录），最多显示 {2} 项；聊天打开当前一代。", "Reads the latest {0} scheduled runs and {1} channel records globally; only matching Buddy records are shown, up to {2} items. This is a bounded view, not the full history. Chat links open the current generation."],
+        ["此伙伴今日主动推送：{0} / {1}（{2}，{3}）；安静时段暂存 {4} 条。", "This Buddy's proactive pushes today: {0} / {1} ({2}, {3}); {4} messages held during quiet hours."],
+        ["全部用户定时任务今日共用额度（UTC）：运行 {0}/{1}，tokens {2}/{3}。不含伙伴主动跟进和后台学习。", "Today's shared allowance for all user scheduled tasks (UTC): runs {0}/{1}, tokens {2}/{3}. Excludes Buddy follow-ups and background learning."],
         ["定时任务费用估算未知。", "Scheduled-task cost estimate is unknown."],
         ["定时任务费用估算：${0}；费用上限：{1}。", "Scheduled-task cost estimate: ${0}; cost limit: {1}."],
         ["未设置", "Not set"],
@@ -10987,19 +10987,19 @@
         ["最近活动与结果", "Recent activity & results"],
         ["模型调用与费用", "Model calls & costs"],
         ["推送条数不是费用上限", "Push counts are not spending limits"],
-        ["聊天和定时任务使用对话模型；空闲整理摘要也会调用这个 Bot 的模型，可能收费。", "Chat and scheduled tasks use the conversation model. Idle summaries also call this Bot's model and may incur charges."],
+        ["聊天和定时任务使用对话模型；空闲整理摘要也会调用这个伙伴的模型，可能收费。", "Chat and scheduled tasks use the conversation model. Idle summaries also call this Buddy's model and may incur charges."],
         ["后台学习另外调用辅助模型；关闭学习只暂停学习，不会停止聊天、空闲摘要或定时任务。", "Background learning separately calls an auxiliary model. Turning learning off only pauses learning; chat, idle summaries and scheduled tasks continue."],
-        ["关闭主动联系会暂停 Bot 自己的跟进和推送；你设置的定时任务仍按计划执行。安静时段和推送上限只控制通知，不限制模型花费。", "Turning proactive messages off pauses the Bot's own follow-ups and pushes. Tasks you scheduled still run. Quiet hours and push limits only control notifications, not model spending."],
+        ["关闭主动联系会暂停伙伴自己的跟进和推送；你设置的定时任务仍按计划执行。安静时段和推送上限只控制通知，不限制模型花费。", "Turning proactive messages off pauses the Buddy's own follow-ups and pushes. Tasks you scheduled still run. Quiet hours and push limits only control notifications, not model spending."],
         ["查看运行预算，暂停或取消你设置的任务", "See execution budgets, pause or cancel tasks you scheduled"],
         ["查看用量统计", "View usage statistics"],
         ["按现有统计范围查看模型用量；未报告的费用仍未知", "View model usage within the existing statistics scope. Unreported costs remain unknown."],
         ["此身份今日学习（UTC）：运行 {0}/{1}，预留 tokens {2}/{3}；实际 tokens：{4}。", "Today's learning for this identity (UTC): runs {0}/{1}, reserved tokens {2}/{3}; actual tokens: {4}."],
         ["暂无报告", "Not reported"],
         ["今日学习用量未知。", "Today's learning usage is unknown."],
-        ["关闭学习只暂停辅助模型的后台学习；聊天、空闲摘要和定时任务继续。次数与预留 tokens 额度不是整个 Bot 的费用上限。", "Turning learning off only pauses background learning by the auxiliary model; chat, idle summaries and scheduled tasks continue. Run and reserved-token allowances are not a spending limit for the whole Bot."],
+        ["关闭学习只暂停辅助模型的后台学习；聊天、空闲摘要和定时任务继续。次数与预留 tokens 额度不是整个伙伴的费用上限。", "Turning learning off only pauses background learning by the auxiliary model; chat, idle summaries and scheduled tasks continue. Run and reserved-token allowances are not a spending limit for the whole Buddy."],
         ["当前：{0} · 数据、权限与备份", "Current: {0} · Data, permissions & backup"],
-        ["“以身份新建线程”使用普通 Pi 的工具和权限，不受 Bot 的做事方式限制。", "“New thread as identity” uses ordinary Pi tools and permissions, outside Bot work-style limits."],
-        ["完整备份需要在空闲停机时保存实际 Pi 身份目录、Bot 工作目录及关联媒体/配置；聊天里的 /export 仅导出当前会话范围，不是整个 Bot 的备份。", "A full backup needs the actual Pi identity directory, Bot working directories and associated media/configuration, saved while idle and stopped. /export in chat only exports the current session scope, not the whole Bot."],
+        ["“以身份新建线程”使用普通 Pi 的工具和权限，不受伙伴的做事方式限制。", "“New thread as identity” uses ordinary Pi tools and permissions, outside Buddy work-style limits."],
+        ["完整备份需要在空闲停机时保存实际 Pi 身份目录、伙伴工作目录及关联媒体/配置；聊天里的 /export 仅导出当前会话范围，不是整个伙伴的备份。", "A full backup needs the actual Pi identity directory, Buddy working directories and associated media/configuration, saved while idle and stopped. /export in chat only exports the current session scope, not the whole Buddy."],
         ["查看备份与恢复指南", "Read the backup & recovery guide"]
     );
     rows.push(["聊天、记忆和工作文件保存在运行 OhMyBuddy 的服务机器上；回复时，相关上下文会发送给已配置的外部模型服务。", "Chats, memory and work files are stored on the machine running OhMyBuddy. Relevant context is sent to the configured external model service when replying."]);
@@ -11009,12 +11009,17 @@
         ["用户正在聊天，已跳过这次任务", "The user is chatting; this run was skipped"],
         ["执行实例已退出，结果待核对", "The worker exited; check the outcome"],
         ["学习调用上限暂不可用。", "The learning call limit is unavailable."],
-        ["只读最近的有限记录（全局最近 {0} 次定时运行、{1} 条渠道记录），最多显示 {2} 项；每个聊天核对最近 {3} 代，链接打开当前一代。", "Reads the latest {0} scheduled runs and {1} channel records globally; only matching Bot records are shown, up to {2} items. This is a bounded view, not the full history. Checks the last {3} generations per chat; links open the current generation."]
+        ["只读最近的有限记录（全局最近 {0} 次定时运行、{1} 条渠道记录），最多显示 {2} 项；每个聊天核对最近 {3} 代，链接打开当前一代。", "Reads the latest {0} scheduled runs and {1} channel records globally; only matching Buddy records are shown, up to {2} items. This is a bounded view, not the full history. Checks the last {3} generations per chat; links open the current generation."]
     );
     rows.push(
         ["这个话题已归档。设置和修改仍保留，请先在聊天列表恢复话题。", "This topic is archived. Your settings and edits are kept. Restore the topic from the chat list first."],
         ["暂时不能确认这个聊天仍可打开。设置和修改仍保留，请先查看聊天列表。", "This chat cannot be confirmed as available. Your settings and edits are kept. Check the chat list first."],
         ["查看聊天列表", "View chat list"]
+    );
+    rows.push(
+        ["伙伴", "Buddy"],
+        ["工作台", "Workspace"],
+        ["OhMyBuddy 自带的 Agent 工作台，由 Pi Coding Agent 驱动", "OhMyBuddy's agent workspace, powered by the Pi coding agent"]
     );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

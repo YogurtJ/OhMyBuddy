@@ -5,6 +5,9 @@ const PRODUCT = 'OhMyBuddy';
 const PACKAGE = 'ohmybuddy';
 const LEGACY_PRODUCT = 'Pivane';
 const LEGACY_PACKAGE = 'pivane';
+// Public source repository. GitHub keeps redirects from the former YogurtJ/pivane address.
+const REPOSITORY = 'YogurtJ/OhMyBuddy';
+const REPOSITORY_URL = `https://github.com/${REPOSITORY}`;
 const isProduct = value => value === PRODUCT || value === LEGACY_PRODUCT;
 const isPackage = value => value === PACKAGE || value === LEGACY_PACKAGE;
 
@@ -58,5 +61,5 @@ function privateReply(record) {
     }
     return record;
 }
-module.exports = { PRODUCT, PACKAGE, LEGACY_PRODUCT, LEGACY_PACKAGE, isProduct, isPackage, selectName,
+module.exports = { PRODUCT, PACKAGE, LEGACY_PRODUCT, LEGACY_PACKAGE, REPOSITORY, REPOSITORY_URL, isProduct, isPackage, selectName,
     INTERNAL_COMMAND, INTERNAL_COMMAND_PATTERN, isInternalCommand, customTypeIs, dataFile, runtimeDirectory, knowledgeFile, metadataFile, packageMetadata, privateReply };

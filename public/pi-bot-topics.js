@@ -100,7 +100,7 @@
         fill(base);
         const body = el('div', 'pi-bot-sheet-body');
         body.append(el('p', 'pi-bot-sheet-note pi-bot-topic-intro',
-            translateUi("话题是单独的聊天：{0} 在里面只专心聊这件事，“我记着的事”也分开记。主聊天不受影响。", options.name || 'Bot')),
+            translateUi("话题是单独的聊天：{0} 在里面只专心聊这件事，“我记着的事”也分开记。主聊天不受影响。", options.name || translateUi('伙伴'))),
         identity, field(translateUi("专注什么"), focus, translateUi("最多 {0} 字，可以以后再改。", LIMITS.focus)),
         field(translateUi("话题指令（可不填）"), instructions,
             translateUi("在这个话题里它要一直遵守的做法，比如回答格式、资料来源。最多 {0} KB（约 {1} 个汉字），可以以后再改。", INSTRUCTION_BYTES / 1024, 2700)));
@@ -299,7 +299,7 @@
                     if (!currentOperation()) return;
                     const bot = Array.isArray(data?.bots) ? data.bots.find(item => item.id === receipt.profileId) : null;
                     const now = bot?.windows?.find(item => item.id === topic.id);
-                    if (!bot || bot.enabled === false) state.textContent = translateUi("找不到这个 Bot 了。");
+                    if (!bot || bot.enabled === false) state.textContent = translateUi("找不到这个伙伴了。");
                     else if (!now) state.textContent = translateUi("这个话题已经不在了。");
                     else if (now.archivedAt) state.textContent = translateUi("这个话题已归档，可以在话题列表的“已归档”里恢复。");
                     else if (now.generation === null) state.textContent = translateUi("这个话题暂时打不开，请稍后再试。");

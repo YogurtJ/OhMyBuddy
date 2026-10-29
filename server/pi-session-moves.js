@@ -131,7 +131,7 @@ class PiSessionMoves {
     globalBlockers(session) {
         const reasons = [];
         try { this.channels?.assertUnbound(session.cwd, session.id); } catch (error) { reasons.push(error.message); }
-        if (this.isSuspended() || this.stopping || this.supervisor.disposing || this.busy()) reasons.push('工作台有相关后台操作，请等待完成后再移动');
+        if (this.isSuspended() || this.stopping || this.supervisor.disposing || this.busy()) reasons.push('OhMyBuddy 有相关后台操作，请等待完成后再移动');
         if (this.deferred?.list(session.cwd, session.id).some(job => !['sent', 'cancelled'].includes(job.status))) reasons.push('线程有预约消息，请先处理或取消预约');
         if (this.cron?.db.homes().some(home => home.cwd === session.cwd && home.sessionId === session.id)
             || this.cron?.db.jobs().some(job => !job.deleted && job.target.kind === 'thread' && job.target.cwd === session.cwd && job.target.sessionId === session.id))
@@ -156,7 +156,7 @@ class PiSessionMoves {
                 add('线程有任务回执或线程间消息关系，首版暂不支持移动');
             if (entry.type === 'custom' && ['pivane-assistant-project', 'pivane-profile-authoring', 'pivane-extension-assistant'].includes(entry.customType))
                 add('助手项目、档案编辑和扩展助手线程暂不支持移动');
-            if (entry.type === 'custom' && entry.customType === 'pivane-bot-window') add('Bot 聊天的会话属于它的窗口，不能移动');
+            if (entry.type === 'custom' && entry.customType === 'pivane-bot-window') add('伙伴聊天的会话属于它的窗口，不能移动');
             if (entry.type === 'custom' && entry.customType === 'pivane-agent-profile' && entry.data?.sessionId === session.id && entry.data.profileId)
                 add('线程绑定了助手档案与记忆来源，首版暂不支持移动');
         }

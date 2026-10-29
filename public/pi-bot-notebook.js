@@ -71,7 +71,7 @@
     function open(options) {
         dialog?.close();
         const { api, profileId, windowId } = options;
-        const name = options.name || 'Bot';
+        const name = options.name || translateUi('伙伴');
         const url = `/api/pi/bots/${encodeURIComponent(profileId)}/windows/${encodeURIComponent(windowId)}/notebook`;
         const sheet = el('dialog', 'pi-bot-sheet pi-bot-notes');
         dialog = sheet;

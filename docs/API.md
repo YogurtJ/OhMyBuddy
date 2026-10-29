@@ -250,6 +250,8 @@
 
 ### Bot 模式
 
+界面中显示为“伙伴”（英文 Buddy），接口、字段和错误信息保留 `bot` 命名。
+
 `GET /status.bots=true` 表示 Bot 接口已装配，用户行为见 [Bot 模式](BOT_MODE.md)。Bot 是带 `bot` 段的助手档案；档案写入沿用注册表 CAS（`expectedRevision` 为 `GET /bots` 的 `revision`），窗口元数据写入使用该 Bot 的 `windowsRevision`，修订冲突返回 409，所有响应 `Cache-Control: no-store`，失败不自动重试。
 
 - `GET /bots` → `{version:1,revision,bots:[{id,name,description,avatar,enabled,profileRevision,bot,chosen,windowsRevision,windows}]}`，按 `bot.order` 排序，不含回收站档案。`chosen:{name,avatar}` 表示名字、头像是否已由用户定下：在设置卡或 Bot 设置中保存过即记下（服务端字段 `bot.chosen`，重新访谈后保留）；较早的记录和身份页修改按名字／头像各自的访谈步骤（或旧版合并的身份步骤）是否完成、是否与初始占位值不同推断。旧默认表情仍按 `✨` 判断；新建记录带 `onboarding.defaultAvatar:'pivane-pebble'`，只有这类记录的未确认默认“小石”不算已选，老记录中已使用的小石继续算已选。设置卡据此默认保留。`bot` 为 `{version,enabled,order,job,model:null|{provider,id,thinking?},thinking:null|string,permissions:{preset:'free'|'balanced'|'ask',rules:<数量>},notify,onboarding,createdAt}`；`onboarding` 为 `{version:1,phase:'greeting'|'interview'|'done'|'skipped',firstBot,steps,startedAt,completedAt,flowVersion?,firstTaskChoice?,defaultAvatar?}`，`steps` 值为 `done|skipped`，分别记录 `name`、`avatar`、`job`、`personality`、`work`（`workStyle`）、`about`（`aboutUser`）；头像不再是必问的访谈项，主动修改仍可记录。`known` 记录是否已处理其他 Bot 的“关于你”，兼容旧版 `identity:'done'` 同时完成名字和头像步骤。窗口为 `{id,kind:'main'|'topic',title,emoji,focus,instructions,createdAt,updatedAt,archivedAt,generation,sessionId,generations}`，不暴露文件路径；`instructions` 是话题指令，主聊天和较早没有该字段的记录为空字符串。

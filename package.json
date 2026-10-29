@@ -48,13 +48,13 @@
     "llm",
     "pwa"
   ],
-  "homepage": "https://github.com/YogurtJ/pivane#readme",
+  "homepage": "https://github.com/YogurtJ/OhMyBuddy#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/YogurtJ/pivane.git"
+    "url": "git+https://github.com/YogurtJ/OhMyBuddy.git"
   },
   "bugs": {
-    "url": "https://github.com/YogurtJ/pivane/issues"
+    "url": "https://github.com/YogurtJ/OhMyBuddy/issues"
   },
   "author": "OhMyBuddy contributors",
   "license": "ISC",
