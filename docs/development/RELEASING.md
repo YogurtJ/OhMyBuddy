@@ -51,7 +51,7 @@ node scripts/refresh-platform-channel.cjs --channel-file /private/public-output/
 
 初次安装、升级、正常停机与失败恢复必须使用独立身份；无 GitHub/npm 网络的客户端仍应可完成基本安装和应用更新。分别检查启动器与子应用的运行时、固定数据目录、一次性票据、不确定提交和草稿／附件状态。未实际验证的架构、普通用户 Finder 首次打开、系统签名／公证、外部模型和第三方扩展范围分别记录，不冒称全部通过。
 
-完整包的隔离浏览器更新试验使用 `test/release/macos-platform-update.cjs`。需要本机合成 HTTPS 分发源时，可显式传 `--tls-ca /absolute/test-ca.pem`：仅把经解析确认的 CA 文件加入该试验子服务的 `NODE_EXTRA_CA_CERTS`，保留正常 TLS、签名、来源和哈希校验，不修改系统信任库。证书、签名私钥和测试源均放在独立私有目录，浏览器仍访问回环 HTTP 应用；真实公开下载、签名／公证及 Finder 首次打开另行验证。
+完整包的隔离浏览器更新试验使用 `test/release/macos-platform-update.cjs`。截图前等待页面的“当前版本”变为目标版本且卡片结束加载；“最新版本”提前显示目标值不能替代重连后的界面验证。需要本机合成 HTTPS 分发源时，可显式传 `--tls-ca /absolute/test-ca.pem`：仅把经解析确认的 CA 文件加入该试验子服务的 `NODE_EXTRA_CA_CERTS`，保留正常 TLS、签名、来源和哈希校验，不修改系统信任库。证书、签名私钥和测试源均放在独立私有目录，浏览器仍访问回环 HTTP 应用；真实公开下载、签名／公证及 Finder 首次打开另行验证。
 
 ## 候选包
 

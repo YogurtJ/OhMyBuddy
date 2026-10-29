@@ -390,29 +390,39 @@ test('recorded supervisor selection remains usable across eager reopen and reloa
     } finally { await current.close(); fs.rmSync(modeConfiguration, { force: true }); }
 });
 
-test('managed cron startup preserves a recorded supervisor tool registered later in session_start', async () => {
-    const fixture = await modeFixture('dynamic', 'active', 'cron-selected-supervisor');
-    fixture.session.setActiveToolsByName(['read', ...directDelegation, 'subagent_supervisor']);
-    await fixture.session.prompt('Persist explicit supervisor selection before managed reopen.');
-    const original = fs.readFileSync(fixture.manager.getSessionFile());
-    await fixture.close(); configureMode('eager');
-    const { pathToFileURL } = require('node:url');
-    const entry = path.join(root, 'cron-before-subagents.mjs');
-    fs.writeFileSync(entry, `import bundled from ${JSON.stringify(pathToFileURL(wrapper).href)};\nimport cron from ${JSON.stringify(pathToFileURL(require.resolve('../server/pi-cron-runtime')).href)};\nexport default pi => { cron.registerCron(pi); return bundled(pi); }\n`);
-    const prior = process.env.PI_WEB_NAVIGATION_TOKEN;
-    process.env.PI_WEB_NAVIGATION_TOKEN = 'synthetic-navigation';
-    let current;
-    try {
-        current = await open(sdk.SessionManager.open(fixture.manager.getSessionFile()), { entry, bindMode: 'rpc' });
+test('managed cron startup preserves recorded tools until late session_start registration completes', async t => {
+    for (const restoredSilent of [false, true]) await t.test(`recorded cron_silent: ${restoredSilent}`, async () => {
+        configureMode('dynamic');
+        const manager = sdk.SessionManager.create(cwd, path.join(root, `cron-selected-supervisor-${restoredSilent}`));
+        const fixture = await open(manager, { factories: [pi => pi.registerTool({ name: 'cron_silent', label: 'Synthetic scheduled tool',
+            defaultActive: false, description: 'Checkpoint-only fixture', parameters: require('typebox').Type.Object({}),
+            execute: async () => { throw new Error('This fixture must not execute'); } })] });
         const expected = ['read', ...directDelegation, 'subagent_supervisor'].sort();
-        assert.deepEqual(sorted(current.session), expected, 'ordinary startup must not discard pending native tool restoration');
-        await current.session.prompt('Continue without changing the recorded tools.');
-        assert.deepEqual(sorted(current.session), expected);
-        assert.ok(fs.readFileSync(fixture.manager.getSessionFile()).subarray(0, original.length).equals(original));
-    } finally {
-        await current?.close(); fs.rmSync(modeConfiguration, { force: true });
-        if (prior === undefined) delete process.env.PI_WEB_NAVIGATION_TOKEN; else process.env.PI_WEB_NAVIGATION_TOKEN = prior;
-    }
+        fixture.session.setActiveToolsByName([...expected, ...(restoredSilent ? ['cron_silent'] : [])]);
+        await fixture.session.prompt('Persist the scheduled-work native tool checkpoint.');
+        // Finishing a job restores the in-memory loadout without a provider turn/checkpoint.
+        fixture.session.setActiveToolsByName(expected);
+        const original = fs.readFileSync(manager.getSessionFile());
+        await fixture.close(); configureMode('eager');
+        const { pathToFileURL } = require('node:url');
+        const entry = path.join(root, `cron-before-subagents-${restoredSilent}.mjs`);
+        fs.writeFileSync(entry, `import bundled from ${JSON.stringify(pathToFileURL(wrapper).href)};\nimport cron from ${JSON.stringify(pathToFileURL(require.resolve('../server/pi-cron-runtime')).href)};\nexport default pi => { cron.registerCron(pi); return bundled(pi); }\n`);
+        const prior = process.env.PI_WEB_NAVIGATION_TOKEN;
+        process.env.PI_WEB_NAVIGATION_TOKEN = 'synthetic-navigation';
+        let current;
+        try {
+            current = await open(sdk.SessionManager.open(manager.getSessionFile()), { entry, bindMode: 'rpc' });
+            assert.ok(sorted(current.session).includes('subagent_supervisor'), 'startup must retain pending supervisor selection even when cron_silent was recorded');
+            assert.deepEqual(fs.readFileSync(manager.getSessionFile()), original);
+            await current.session.prompt('Continue an ordinary user turn with the recorded supervisor.');
+            assert.deepEqual(sorted(current.session), expected, 'ordinary turns remove the scheduled-only tool after startup registration');
+            assert.deepEqual(requests.at(-1).tools.map(tool => tool.function.name).sort(), expected);
+            assert.ok(fs.readFileSync(manager.getSessionFile()).subarray(0, original.length).equals(original));
+        } finally {
+            await current?.close(); fs.rmSync(modeConfiguration, { force: true });
+            if (prior === undefined) delete process.env.PI_WEB_NAVIGATION_TOKEN; else process.env.PI_WEB_NAVIGATION_TOKEN = prior;
+        }
+    });
 });
 
 test('notice markers affect only model context and coexist with prompt sections and Agent messages', async () => {

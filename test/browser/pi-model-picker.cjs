@@ -94,10 +94,10 @@ async function check(browser, base, width, language, theme) {
         await page.locator('#pi-mobile-thread-title').evaluate(node => { node.textContent = 'Model picker'; });
     }
     if (width <= 680) {
-        await page.screenshot({ path: `/tmp/pivane-composer-idle-${width}.png` });
+        await page.screenshot({ path: path.join(os.tmpdir(), `pivane-composer-idle-${width}.png`) });
         await page.locator('#pi-input').focus();
         assert.equal(await page.locator('#pi-mobile-composer-summary').isVisible(), true);
-        await page.screenshot({ path: `/tmp/pivane-composer-focused-${width}.png` });
+        await page.screenshot({ path: path.join(os.tmpdir(), `pivane-composer-focused-${width}.png`) });
         await page.setViewportSize({ width, height: 500 });
         const compact = await page.evaluate(() => {
             const input = document.querySelector('#pi-input').getBoundingClientRect();
@@ -107,7 +107,7 @@ async function check(browser, base, width, language, theme) {
             return { inputWidth: input.width, inputBottom: input.bottom, ringRight: ring.right, sendLeft: send.left, transcriptHeight: transcript.height, scrollWidth: document.body.scrollWidth, viewport: innerWidth };
         });
         assert.ok(compact.inputWidth >= 96 && compact.ringRight <= compact.sendLeft + 1 && compact.transcriptHeight >= 80 && compact.scrollWidth <= compact.viewport, JSON.stringify(compact));
-        await page.screenshot({ path: `/tmp/pivane-composer-keyboard-space-${width}.png` });
+        await page.screenshot({ path: path.join(os.tmpdir(), `pivane-composer-keyboard-space-${width}.png`) });
         await page.setViewportSize({ width, height: 900 });
     }
     await page.locator('#pi-input').fill('/model');
@@ -136,7 +136,7 @@ async function check(browser, base, width, language, theme) {
     await page.waitForFunction(() => document.querySelector('.pi-model-star')?.getAttribute('aria-pressed') === 'true');
     await search.fill('');
     assert.equal(await dialog.locator('.pi-model-option').count(), 3, 'favorites and current deduplicated');
-    await page.screenshot({ path: `/tmp/pivane-model-picker-${width}-${language}-${theme}.png` });
+    await page.screenshot({ path: path.join(os.tmpdir(), `pivane-model-picker-${width}-${language}-${theme}.png`) });
     await dialog.locator('.pi-model-all').click();
     assert.equal(await dialog.locator('.pi-model-option').count(), 60);
     await dialog.locator('.pi-model-more').click();
@@ -175,7 +175,7 @@ async function check(browser, base, width, language, theme) {
         assert.equal(await page.locator('#pi-send-button').isVisible(), true);
         assert.equal(await page.locator('#pi-stop-button').isVisible(), false);
         assert.equal(await page.locator('#pi-delivery-mode').isVisible(), false);
-        await page.screenshot({ path: `/tmp/pivane-composer-running-${width}.png` });
+        await page.screenshot({ path: path.join(os.tmpdir(), `pivane-composer-running-${width}.png`) });
     }
     running = false; socket.send(JSON.stringify({ type: 'agent_settled' }));
     await page.waitForFunction(() => !document.querySelector('#pi-model-select').disabled);
@@ -204,6 +204,13 @@ async function check(browser, base, width, language, theme) {
         assert.equal(await page.locator('#pi-mobile-files').count(), 0);
         assert.equal(await page.locator('#pi-mobile-history').count(), 0);
         await page.locator('#pi-mobile-thinking-trigger').click();
+        const layoutNotification = await page.evaluate(() => {
+            const size = [innerWidth, innerHeight];
+            window.dispatchEvent(new Event('resize'));
+            return { sameViewport: size[0] === innerWidth && size[1] === innerHeight,
+                open: document.getElementById('pi-mobile-thinking-dialog').open };
+        });
+        assert.deepEqual(layoutNotification, { sameViewport: true, open: true }, 'a sidebar layout notification must not dismiss the thinking choices');
         await page.locator('#pi-mobile-thinking-dialog [data-level="high"]').click();
         await page.waitForFunction(() => document.querySelector('#pi-mobile-composer-thinking').textContent.includes('高') || document.querySelector('#pi-mobile-composer-thinking').textContent.includes('High'));
         assert.equal(calls.filter(c => c.type === 'set_thinking_level').length, 1);
@@ -225,7 +232,7 @@ async function check(browser, base, width, language, theme) {
         const sheet = page.locator('#pi-mobile-session-dialog');
         const bounds = await sheet.evaluate(node => ({ width: node.scrollWidth, client: node.clientWidth, bottom: node.getBoundingClientRect().bottom }));
         assert.ok(bounds.width <= bounds.client + 1 && bounds.bottom <= 901, JSON.stringify(bounds));
-        await page.screenshot({ path: `/tmp/pivane-mobile-session-${width}-${language}.png` });
+        await page.screenshot({ path: path.join(os.tmpdir(), `pivane-mobile-session-${width}-${language}.png`) });
         await page.locator('#pi-mobile-context').click();
         assert.equal(await page.locator('#pi-inspector.open #pi-inspector-details').isVisible(), true);
         await page.locator('#pi-close-inspector').click();
@@ -279,7 +286,7 @@ async function check(browser, base, width, language, theme) {
     assert.equal(await page.locator('#pi-thinking-select-trigger').isDisabled(), true);
     assert.ok((await page.locator('#pi-composer-status').textContent()).includes(language === 'en' ? 'Switching model' : '正在切换模型'));
     if (width <= 680) assert.equal(await page.locator('#pi-mobile-composer-summary').getAttribute('aria-busy'), 'true');
-    await page.screenshot({ path: `/tmp/pivane-model-switch-${width}.png` });
+    await page.screenshot({ path: path.join(os.tmpdir(), `pivane-model-switch-${width}.png`) });
     if (width < 900) { await page.locator('#pi-toggle-sessions').click(); await page.locator('#pi-session-pane.open').waitFor(); }
     await page.locator('[data-session-id="two"] .pi-session-main').click();
     await page.waitForFunction(() => !document.querySelector('#pi-model-select').disabled);
@@ -299,7 +306,7 @@ async function check(browser, base, width, language, theme) {
     const menu = await thinkingMenu.evaluate(n => ({ height: n.clientHeight, scroll: n.scrollHeight, top: n.getBoundingClientRect().top, bottom: n.getBoundingClientRect().bottom,
         options: [...n.querySelectorAll('[role="option"]')].map(option => ({ level: option.dataset.level, top: option.getBoundingClientRect().top, bottom: option.getBoundingClientRect().bottom })) }));
     assert.equal(menu.options.length, 7); assert.ok(menu.scroll <= menu.height + 1, JSON.stringify(menu));
-    await page.screenshot({ path: `/tmp/pivane-thinking-menu-${width}.png` });
+    await page.screenshot({ path: path.join(os.tmpdir(), `pivane-thinking-menu-${width}.png`) });
     for (const item of menu.options) assert.ok(item.top >= menu.top && item.bottom <= menu.bottom, JSON.stringify(menu));
     await page.keyboard.press('End'); assert.equal(await page.locator(':focus').getAttribute('data-level'), 'max');
     holdThinking = true;
@@ -314,6 +321,12 @@ async function check(browser, base, width, language, theme) {
     finishThinking(); holdThinking = false;
     await page.waitForFunction(() => document.querySelector('#pi-thinking-select').value === 'xhigh' && !document.querySelector('#pi-thinking-select-trigger').disabled);
     assert.equal(thinkingLevel, 'xhigh');
+    if (width <= 680) await page.locator('#pi-mobile-context-trigger').click();
+    await thinkingTrigger.click();
+    await page.setViewportSize({ width, height: 899 });
+    await page.waitForFunction(() => !document.querySelector('.pi-thinking-dialog[open]'));
+    assert.equal(thinkingLevel, 'xhigh', 'a real viewport resize dismisses the menu without changing the selection');
+    await page.setViewportSize({ width, height: 900 });
     assert.deepEqual(errors, []);
     console.log(JSON.stringify({ width, language, theme, status: 'passed', models: models.length, overflow }));
     await context.close();
