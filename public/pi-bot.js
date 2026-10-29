@@ -16,7 +16,7 @@
     const button = (className, label) => { const b = el('button', className); b.type = 'button'; if (label) { b.title = label; b.setAttribute('aria-label', label); } return b; };
 
     function face(bot, size = 'md') {
-        const profile = bot?.avatar?.kind === 'preset' || bot?.avatar?.kind === 'image' ? bot : { ...bot, avatar: NEW_BOT_FACE };
+        const profile = ['preset', 'composed', 'image'].includes(bot?.avatar?.kind) ? bot : { ...bot, avatar: NEW_BOT_FACE };
         if (window.PiAvatar) return window.PiAvatar.render(profile, `pi-bot-face is-${size}`);
         const node = el('span', `pi-bot-face is-${size}`);
         node.setAttribute('aria-hidden', 'true');
@@ -39,8 +39,8 @@
     };
 
     class PiBotUi {
-        constructor({ api, toast, open, say, pane, header, input, onChange, draft, focusComposer }) {
-            Object.assign(this, { api, toast, open, say, pane, header, input, onChange, draft, focusComposer });
+        constructor({ api, toast, open, say, pane, header, input, onChange, draft, focusComposer, focusAttention }) {
+            Object.assign(this, { api, toast, open, say, pane, header, input, onChange, draft, focusComposer, focusAttention });
             this.bots = []; this.revision = null; this.profileId = null; this.windowId = null;
             this.active = false; this.epoch = 0; this.loaded = false; this.creating = false; this.error = null;
             this.statusKind = 'connecting';
@@ -48,6 +48,10 @@
             this.motion = window.PiBotMotion?.create({ paint: value => { this.motionValue = value; this.paintMotion(); } });
             this.visibility = () => this.motion?.visibility(document.hidden);
             document.addEventListener('visibilitychange', this.visibility);
+            this.visibility();
+            const interact = () => { if (this.active) this.motion?.interact(); };
+            document.addEventListener('pointerdown', interact, { passive: true });
+            document.addEventListener('keydown', interact);
             // Keep the floating identity inside the message viewport, below any confirmation banner.
             document.querySelector('.pi-transcript-viewport')?.prepend(header);
             this.placeholder = input.getAttribute('placeholder') || '';
@@ -513,7 +517,8 @@
             else if (action === 'notes') {
                 if (window.innerWidth <= 900) document.getElementById('pi-session-pane')?.classList.remove('open');
                 this.openNotebook();
-            } else if (action === 'settings') {
+            } else if (action === 'attention' && this.active && this.projection?.connected && this.projection?.waiting) this.focusAttention?.(this.projection.key);
+            else if (action === 'settings') {
                 if (window.innerWidth <= 900) document.getElementById('pi-session-pane')?.classList.remove('open');
                 this.openSettings();
             } else if (action === 'menu') {
@@ -702,7 +707,7 @@
             if (line) {
                 const pose = this.motionValue.state;
                 const label = pose === 'failed' ? translateUi("这轮回复未完成") : pose === 'done' ? translateUi("这轮回复结束")
-                    : this.projection?.label || STATUS[this.statusKind]();
+                    : pose === 'thinking' ? translateUi("正在思考") : pose === 'sleeping' ? translateUi("打盹中") : this.projection?.label || STATUS[this.statusKind]();
                 line.dataset.state = pose === 'failed' ? 'error' : this.statusKind;
                 // The name badge needs only a dot while idle; work, queues and interruptions stay explicit.
                 line.classList.toggle('is-quiet', this.statusKind === 'connected' && !this.projection?.queued && !this.projection?.stopping
@@ -710,6 +715,14 @@
                 line.title = label;
                 line.setAttribute('aria-label', label);
                 line.replaceChildren(el('i', 'pi-bot-status-dot'), document.createTextNode(label));
+            }
+            const attention = this.header.querySelector('.pi-bot-attention');
+            if (attention) {
+                const waiting = this.active && this.projection?.connected && this.projection?.waiting;
+                attention.hidden = !waiting;
+                const label = this.projection?.attentionLabel || translateUi("等你确认");
+                if (attention.textContent !== label) attention.textContent = label;
+                attention.disabled = !waiting;
             }
         }
         motionEvent(type, key, reason) {
@@ -887,7 +900,9 @@
             notes.hidden = !this.windowId;
             const identity = button('pi-bot-identity', translateUi("打开 {0} 的设置", bot.name)); identity.dataset.botAction = 'settings';
             identity.append(face(bot, 'xl'), who);
-            this.header.replaceChildren(menu, identity, notes);
+            const attention = button('pi-bot-attention'); attention.dataset.botAction = 'attention'; attention.hidden = true;
+            attention.setAttribute('aria-live', 'polite'); attention.setAttribute('aria-atomic', 'true');
+            this.header.replaceChildren(menu, identity, notes, attention);
             this.paintMotion();
         }
 

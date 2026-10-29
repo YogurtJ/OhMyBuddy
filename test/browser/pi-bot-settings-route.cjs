@@ -148,7 +148,7 @@ const deferred = () => { let resolve; const promise = new Promise(done => { reso
                 // Read-only English activity copy describes the actual global source windows.
                 await page.evaluate(() => PiI18n.save('en')); await page.reload(); await connected('a'); await open(); await settingsPage(sheet, 'notify');
                 const activity = await sheet.locator('[data-bot-activity]').innerText();
-                assert.match(activity, /globally/); assert.match(activity, /matching (?:this )?Bot records/); assert.doesNotMatch(activity, /across this identity/);
+                assert.match(activity, /globally/); assert.match(activity, /matching (?:this )?Buddy records/); assert.doesNotMatch(activity, /across this identity/);
                 assert.equal((await layout(page)).overflow, false); assert.deepEqual(errors, []); assert.deepEqual(world.prompts, []);
                 console.log(JSON.stringify({ width, route: 'guarded', hash: 'guarded', backForward: 'destinations retained', pendingSave: 'guarded', decode: 'guarded', lateOwner: 'isolated', EnglishScope: 'global', pageerrors: errors.length }));
             } finally { await context.close(); }

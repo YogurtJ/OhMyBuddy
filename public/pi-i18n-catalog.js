@@ -11023,6 +11023,58 @@
         ["：", ": "]
     );
     rows.push(
+        ["石形","Pebble"],
+        ["豆形","Bean"],
+        ["圆角方","Rounded square"],
+        ["水滴","Droplet"],
+        ["柔团","Puff"],
+        ["胶囊","Capsule"],
+        ["苔绿","Moss"],
+        ["暖杏","Apricot"],
+        ["莓桃","Peach"],
+        ["浅紫","Lilac"],
+        ["原版小石","Original Pebble"],
+        ["原版豆豆","Original Bean"],
+        ["原版方方","Original Tile"],
+        ["圆点眼","Dot eyes"],
+        ["椭圆眼","Oval eyes"],
+        ["胶囊眼","Capsule eyes"],
+        ["短屏眼","Display eyes"],
+        ["无嘴","No mouth"],
+        ["小微笑","Small smile"],
+        ["无装饰","No decoration"],
+        ["小芽","Sprout"],
+        ["小天线","Antenna"],
+        ["腮红","Blush"],
+        ["滴滴","Droplet"],
+        ["团团","Puff"],
+        ["软糖","Candy"],
+        ["奶团","Oat Puff"],
+        ["果冻","Jelly"],
+        ["信号","Signal"],
+        ["小桃","Peach"],
+        ["形象来源","Avatar source"],
+        ["预览形象状态","Preview avatar state"],
+        ["播放动作","Play motion"],
+        ["暂停动作","Pause motion"],
+        ["播放形象动画","Animate avatars"],
+        ["锁定","Lock"],
+        ["锁定{0}","Lock {0}"],
+        ["形状","Shape"],
+        ["配色","Palette"],
+        ["眼睛","Eyes"],
+        ["嘴部","Mouth"],
+        ["装饰","Decoration"],
+        ["帮我搭一个","Make a combination"],
+        ["恢复已保存形象","Restore saved avatar"],
+        ["调整这个形象","Customize this avatar"],
+        ["组合","Combine"],
+        ["自己的图片","Your image"],
+        ["等你回复","Waiting for your reply"],
+        ["等你处理","Needs your attention"],
+        ["打盹中","Dozing"]
+    );
+    rows.push(
         ["还有定时任务发到这个话题。先在“定时”页调整或取消它，再继续。", "Scheduled tasks still target this topic. Change or cancel them on the Schedule page first."],
         ["这个话题还有进行中或结果待核实的媒体任务，请先在媒体卡片中处理。", "This topic has media tasks running or awaiting verification. Resolve them on their media cards first."],
         ["伙伴正在整理学到的内容，等它结束后再试。", "Your Buddy is organizing what it learned. Try again when it finishes."],
@@ -11087,6 +11139,7 @@
     rows.push(
         ["这个话题还有等着稍后发送的消息。等它们发出或取消后再继续。", "This topic has messages waiting to be sent. Wait for them or cancel them first."],
         ["这个话题还在忙或有排队的消息，等它停下再继续。", "This topic is busy or has queued messages. Wait for it to become idle first."]
+
     );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();
