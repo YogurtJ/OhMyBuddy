@@ -35,6 +35,7 @@ function png(red = 255) {
 test('profile limits isolate contexts; revisions, document CAS and avatar ownership', async t => {
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
     const profiles = new PiProfileRegistry({ resolveProject: value => value });
+    const profileRoot = id => require('../server/pi-profile-documents').location(agent, id, false);
     const basic = { name: 'One', description: '', soul: '', enabled: true, memory: { enabled: true, autoLearn: false } };
     const first = await profiles.save({ expectedRevision: (await profiles.state()).revision, profile: basic });
     const second = await profiles.save({ expectedRevision: first.revision, profile: { ...basic, name: 'Two', memory: {
@@ -82,13 +83,13 @@ test('profile limits isolate contexts; revisions, document CAS and avatar owners
     const memory = (await read(first.profile.id, 'memory')).data;
     if (process.env.PIVANE_TEST_HERMES_BUNDLE) {
         assert.equal(memory.status, 'ready');
-        const before = await createMutationLock(path.join(agent, 'pivane-profiles', 'data', first.profile.id)).inspect(g => g);
+        const before = await createMutationLock(profileRoot(first.profile.id)).inspect(g => g);
         const result = await write(first.profile.id, 'memory', 'Fact 1\n§\nFact 2', memory);
         assert.equal(result.statusCode, 200, JSON.stringify(result.data));
         const immediateMemory = (await read(first.profile.id, 'memory')).data;
         assert.equal(immediateMemory.content, result.data.content);
         assert.equal(immediateMemory.revision, result.data.revision);
-        assert.equal((await createMutationLock(path.join(agent, 'pivane-profiles', 'data', first.profile.id)).run(undefined, () => 'should-not-write', before)).conflict, true,
+        assert.equal((await createMutationLock(profileRoot(first.profile.id)).run(undefined, () => 'should-not-write', before)).conflict, true,
             'stale autoLearn must lose after an editor write');
         assert.equal((await read(first.profile.id, 'memory')).data.usage.used, 'Fact 1\n§\nFact 2'.length);
     } else assert.equal(memory.status, 'unsupported');
@@ -108,7 +109,7 @@ test('profile limits isolate contexts; revisions, document CAS and avatar owners
     assert.equal((await request(r.routes, 'GET', upload, { id: first.profile.id, query: { version: response.data.profile.avatar.version } })).data.equals(image), true);
     assert.equal((await request(r.routes, 'GET', upload, { id: second.profile.id, query: { version: response.data.profile.avatar.version } })).statusCode, 404);
     if (process.platform !== 'win32') {
-        const asset = path.join(agent, 'pivane-profiles', 'data', first.profile.id, `avatar-${response.data.profile.avatar.version}.png`);
+        const asset = path.join(profileRoot(first.profile.id), `avatar-${response.data.profile.avatar.version}.png`);
         fs.renameSync(asset, asset + '.held'); fs.symlinkSync(asset + '.held', asset);
         try { assert.equal((await request(r.routes, 'GET', upload, { id: first.profile.id,
             query: { version: response.data.profile.avatar.version } })).statusCode, 409); }
@@ -121,7 +122,7 @@ test('profile limits isolate contexts; revisions, document CAS and avatar owners
     const narrowed = await profiles.save({ expectedRevision: response.data.revision,
         profile: { ...response.data.profile, memory: { ...response.data.profile.memory, userCharLimit: 256 } } });
     assert.equal((await write(first.profile.id, 'user', 'stale profile', previous)).statusCode, 409);
-    const file = path.join(agent, 'pivane-profiles', 'data', first.profile.id, 'USER.md');
+    const file = path.join(profileRoot(first.profile.id), 'USER.md');
     fs.writeFileSync(file, 'X'.repeat(300));
     const overLimit = (await read(first.profile.id, 'user')).data;
     assert.equal(overLimit.status, 'ready');
@@ -134,7 +135,7 @@ test('profile limits isolate contexts; revisions, document CAS and avatar owners
     const dormantBefore = (await read(dormant.profile.id, 'user')).data;
     const privateFiles = require('../server/pi-private-files'), originalMode = privateFiles.privateFileMode;
     privateFiles.privateFileMode = filename => {
-        if (filename === path.join(agent, 'pivane-profiles', 'data', dormant.profile.id, 'USER.md'))
+        if (filename === path.join(profileRoot(dormant.profile.id), 'USER.md'))
             throw Error('synthetic post-publication check failure');
         return originalMode(filename);
     };
@@ -145,7 +146,7 @@ test('profile limits isolate contexts; revisions, document CAS and avatar owners
     assert.deepEqual([partial.data.documentSaved, partial.data.indexSynced], [true, false]);
     assert.equal((await read(dormant.profile.id, 'user')).data.content, 'DormantFact');
     const replacement = png(123), nextVersion = createHash('sha256').update(replacement).digest('hex');
-    const nextFile = path.join(agent, 'pivane-profiles', 'data', first.profile.id, `avatar-${nextVersion}.png`);
+    const nextFile = path.join(profileRoot(first.profile.id), `avatar-${nextVersion}.png`);
     const uploadBody = { dataUrl: `data:image/png;base64,${replacement.toString('base64')}` };
     const stale = await request(r.routes, 'POST', upload, { id: first.profile.id,
         body: { ...uploadBody, expectedRevision: response.data.revision } });

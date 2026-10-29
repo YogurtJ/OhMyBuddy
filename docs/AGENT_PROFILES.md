@@ -58,7 +58,7 @@
 
 私有档案注册表位于 `<Pi agentDir>/ohmybuddy-profiles/profiles.json`，档案数据位于 `data/<id>/`。部署或迁移前备份完整 Pi 身份目录。SOUL 保存协作方式，长期记忆保存稳定事实，动态学习进度和知识收藏仍以项目资料为准。
 
-注册表可选 `avatar` 为 null、`{kind:'emoji',value}`、`{kind:'image',version}` 或 `{kind:'preset',id}`。内置预设支持小石（`pivane-pebble`）、豆豆（`pivane-bean`）和方方（`pivane-tile`）；只保存稳定 ID，不保存 SVG 或外部路径，不自动替换已有头像。格式合法但目录暂缺的预设仍可读取，修改其他字段或原样保存时保留引用；新选未知 ID 拒绝，完整校验见 [API](API.md#可选助手档案)。图片作为独立的私有 PNG 资产保存，不在注册表嵌入数据或引用外部 URL。可选 `memory.memoryCharLimit`、`memory.userCharLimit` 分别默认 16000 和 8000 字符，允许范围分别为 256..65536 和 256..32768。缩小上限不删除旧数据，旧内容仍可读取并如实显示超限；运行 worker 的旧上限在重新加载前继续生效。
+注册表可选 `avatar` 为 null、`{kind:'emoji',value}`、`{kind:'image',version}`、`{kind:'preset',id}` 或带 `version` 及部件 ID 的 `composed` 配置。内置十二款预设和组合共用版本化目录，组合设置位于伙伴资料页；旧小石（`pivane-pebble`）、豆豆（`pivane-bean`）和方方（`pivane-tile`）的引用与配色保留。只保存 ID 与受校验的配置，不保存 SVG 或外部路径，不自动替换已有头像。格式合法但目录暂缺的预设或组合仍可读取，修改其他字段或原样保存时保留引用；新选未知 ID 或不兼容组合拒绝，完整校验见 [API](API.md#可选助手档案)。图片作为独立的私有 PNG 资产保存，不在注册表嵌入数据或引用外部 URL。可选 `memory.memoryCharLimit`、`memory.userCharLimit` 分别默认 16000 和 8000 字符，允许范围分别为 256..65536 和 256..32768。缩小上限不删除旧数据，旧内容仍可读取并如实显示超限；运行 worker 的旧上限在重新加载前继续生效。
 
 身份可以移到可恢复的回收站，没有永久删除接口。注册表同时保存 ISO 时间 `trashedAt`、原启用状态 `trashedEnabled` 并设 `enabled:false`；恢复时移除这两个字段并还原原启用状态，原本停用的身份恢复后仍停用。回收站身份仍计入 50 个身份的上限。移入回收站在同一次原子保存中清除所有指向该身份的项目默认值，恢复不重新设置默认值。身份的设定、`data/<id>/` 下的记忆和技能、头像、学习状态、逻辑助手项目以及原生会话均保留，不移动或删除。已有会话继续显示原身份名称和 `available:false`；已经加载的 worker 不被打断，新建或重新加载不能使用该身份，后台学习不再为它加入新工作。
 

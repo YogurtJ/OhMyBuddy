@@ -138,7 +138,8 @@ function identitySnapshot(context: any, agentDir: string) {
     } catch { entries = []; }
     const avatar = profile?.avatar?.kind === 'emoji' ? profile.avatar.value
         : profile?.avatar?.kind === 'image' ? `(picture ${String(profile.avatar.version).slice(0, 8)})`
-        : profile?.avatar?.kind === 'preset' ? { kind: 'preset', id: profile.avatar.id } : null;
+        : profile?.avatar?.kind === 'preset' ? { kind: 'preset', id: profile.avatar.id }
+        : profile?.avatar?.kind === 'composed' ? { ...profile.avatar } : null;
     const bot = readBot(profile);
     return { name: profile?.name ?? null, avatar, job: bot?.job ?? null, personality: typeof profile?.soul === 'string' ? profile.soul : null,
         workStyle: bot?.permissions?.preset ?? null, phase: bot?.onboarding?.phase ?? null, steps: bot?.onboarding?.steps ?? {}, entries };

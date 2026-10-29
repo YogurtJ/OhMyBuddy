@@ -247,7 +247,7 @@
         window.addEventListener('beforeunload', onUnload);
         // picture: a picture chosen in this sheet (PNG data URL), uploaded when saving;
         // uploaded: the last one this sheet put up, so a retry does not upload it again.
-        let picture = null, uploaded = null, faceChoice = null, fileSerial = 0, decoding = false;
+        let picture = null, uploaded = null, faceChoice = null, fileSerial = 0, decoding = false, faceEditor = null;
         // Ids of "always allow" grants the user chose to revoke; saved with the other edits.
         let revoked = new Set();
         // The section shown (null on a phone: the overview), the folded details the user opened,
@@ -328,6 +328,7 @@
             activitySerial++; fileSerial++;
             window.removeEventListener('workspace:beforetabchange', onBeforeRoute);
             window.removeEventListener('beforeunload', onUnload);
+            faceEditor?.dispose();
             controls?.modelPicker?.dispose?.(); sheet.remove(); if (dialog === sheet) { dialog = null; closeDialog = null; }
         });
         sheet.addEventListener('input', () => { warned = null; status.textContent = ''; delete status.dataset.tone; refreshState(); });
@@ -405,7 +406,11 @@
             if (!controls) return;
             const pending = changes();
             save.disabled = saving || decoding || !pending || !Object.keys(pending).length;
-            for (const control of body.querySelectorAll('input,textarea,select,button')) control.disabled = saving;
+            for (const control of body.querySelectorAll('input,textarea,select,button')) {
+                if (control.closest('.pi-avatar-editor')) continue;
+                control.disabled = saving;
+            }
+            faceEditor?.setDisabled(saving || decoding);
             controls.modelPicker?.setDisabled(saving);
             controls.syncLearning?.();
             if (controls.thinking.dataset.for !== controls.model.value) fillThinking(modelLevels(data.models, controls.model.value), controls.thinking.value);
@@ -425,7 +430,7 @@
         }
 
         const DEFAULT_FACE = { kind: 'preset', id: 'pivane-pebble' };
-        const savedFace = avatar => avatar?.kind === 'preset' || avatar?.kind === 'image' ? avatar : DEFAULT_FACE;
+        const savedFace = avatar => ['preset', 'composed', 'image'].includes(avatar?.kind) ? avatar : DEFAULT_FACE;
 
         // Fields the user changed, against the latest saved settings; null on invalid input.
         function changes() {
@@ -471,6 +476,7 @@
         }
 
         function render() {
+            faceEditor?.dispose();
             controls?.modelPicker?.dispose?.();
             const bot = data.bot, current = bot.bot;
             const headFace = options.face(bot, 'md'); headFace.classList.add('pi-bot-sheet-face');
@@ -492,11 +498,7 @@
             const name = el('input'); name.type = 'text'; name.maxLength = LIMITS.name; name.value = bot.name; name.required = true; name.autocomplete = 'off';
             picture = null; faceChoice = structuredClone(savedFace(bot.avatar)); fileSerial++; decoding = false;
             // Preview stays local until Save; every source replaces the same draft.
-            const preview = el('span', 'pi-bot-sheet-avatar-face');
             const heroFace = el('span', 'pi-bot-sheet-hero-face');
-            const facePresets = window.PiAvatar?.choices(faceChoice, value => {
-                fileSerial++; decoding = false; picture = null; faceChoice = value; warned = null; showFace(); refreshState();
-            });
             const draftFace = size => {
                 if (!picture) return options.face({ ...bot, avatar: faceChoice }, size);
                 const img = el('img'); img.src = picture; img.alt = '';
@@ -504,9 +506,8 @@
                 return node;
             };
             const showFace = () => {
-                preview.replaceChildren(draftFace('xl'));
                 heroFace.replaceChildren(draftFace('lg'));
-                for (const item of facePresets?.children || []) item.setAttribute('aria-pressed', String(faceChoice?.kind === 'preset' && faceChoice.id === item.dataset.avatarPreset && !picture));
+                faceEditor?.sync(faceChoice, picture);
                 unpick.hidden = !picture;
                 remove.hidden = Boolean(picture || faceChoice?.kind !== 'image');
                 pick.replaceChildren(icon('fa-arrow-up-from-bracket'), el('span', null, picture || faceChoice?.kind === 'image' ? translateUi("换一张图片") : translateUi("上传图片")));
@@ -535,11 +536,12 @@
             });
             const actions = el('div', 'pi-bot-sheet-avatar-actions');
             actions.append(pick, unpick, remove, file);
-            const avatarSide = el('div', 'pi-bot-sheet-avatar-side');
-            if (facePresets) avatarSide.append(facePresets);
-            avatarSide.append(actions, el('p', 'pi-bot-sheet-hint', translateUi("图片支持 PNG、JPEG、WebP 或 GIF，最多 6 MiB；保存后才换上。")));
-            const avatarBox = el('div', 'pi-bot-sheet-avatar');
-            avatarBox.append(preview, avatarSide);
+            const pictureControls = el('div');
+            pictureControls.append(actions, el('p', 'pi-bot-sheet-hint', translateUi("图片支持 PNG、JPEG、WebP 或 GIF，最多 6 MiB；保存后才换上。")));
+            faceEditor = window.PiAvatar?.editor({ value: faceChoice, saved: structuredClone(savedFace(bot.avatar)), profile: bot, pictureControls,
+                onChange: value => { if (saving || decoding) return; fileSerial++; picture = null; faceChoice = value; warned = null; showFace(); refreshState(); } });
+            const avatarBox = el('div', 'pi-bot-sheet-avatar pi-bot-avatar-workshop');
+            avatarBox.append(faceEditor?.element || pictureControls);
             const job = el('textarea', 'pi-bot-sheet-long is-job'); job.rows = 2; job.maxLength = LIMITS.job; job.value = current.job;
             job.placeholder = translateUi("比如：帮我安排生活琐事、陪我练英语"); job.setAttribute('aria-label', translateUi("主要帮你做什么"));
             const soul = el('textarea', 'pi-bot-sheet-long is-soul'); soul.rows = 5; soul.maxLength = LIMITS.soul; soul.value = bot.soul || '';
@@ -600,7 +602,7 @@
                 });
                 syncModelPicker();
             }
-            const thinking = el('select');
+            const thinking = el('select'); thinking.dataset.sheetThinking = '';
             const thinkingWrap = field(translateUi("思考程度"), thinking, translateUi("越高越仔细，也越慢。"));
             const modelHint = data.models ? translateUi("用于 {0} 后续的回复；进行中的回复和已开始的定时任务保持原选择。", bot.name)
                 : translateUi("暂时读不到模型列表，现在的选择会保留。");

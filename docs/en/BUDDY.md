@@ -56,7 +56,7 @@ Click the avatar at the top of the chat, or "{name}'s settings" at the bottom of
 
 | Section | What you set |
 |---|---|
-| Profile | Name, built-in avatar (Pebble, Bean or Tile) or your own image, what it mainly helps with, and personality |
+| Profile | Name, twelve built-in avatars, a custom combination of shape/palette/eyes/decorations, or your own image; what it mainly helps with, and personality |
 | Model | Model and thinking level, saved separately; each can follow the default. Applies to the main chat and every topic. WeChat `/model` and `/thinking` share these settings |
 | How it works | Working style: Hands-off, Careful or Ask every time, plus the things you have chosen to always allow |
 | Reaching out | Proactive messages, quiet hours, daily push limit, planned follow-ups and recent activity |
@@ -65,6 +65,10 @@ Click the avatar at the top of the chat, or "{name}'s settings" at the bottom of
 | More | Data and permission notes, **Get acquainted again**, and **Move to trash** (restorable from the Identities page) |
 
 Unsaved changes are protected when you close settings or navigate away.
+
+Avatar presets and custom combinations share the same eight states. In **Combine**, pick a shape, palette, eyes, mouth and compatible decoration; lock the parts you like and choose **Make a combination**, undo or restore the saved avatar. Changes preview locally until saved. Existing Pebble, Bean and Tile references and colors stay intact. New parts do not randomly change saved faces. The selected preview stays still until **Play motion**; you can inspect all eight states. **Animate avatars** immediately saves a preference in this browser, and the system's reduced-motion preference still takes priority.
+
+A separate amber **Waiting for your reply / confirmation** button stays visible until the request is resolved and focuses the current question or approval without answering it. It also works with a static image. Thinking follows the model's waiting/thinking phase; tools and background work use the working pose. After five minutes of confirmed foreground idle without clicks or keys, the avatar may doze; work, queued tasks, pending requests, errors and disconnection prevent dozing. Lists stay static; the hidden page pauses motion and does not replay old completion or greeting effects. Photo-to-avatar generation is not included yet.
 
 ## Working styles
 
