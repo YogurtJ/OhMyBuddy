@@ -224,13 +224,11 @@ class PiSessionStore {
         const cwd = this.resolveProject(input);
         const { SessionManager } = await getSdk();
         const profiles = this.profiles;
-        const projects = this.projects;
         const profileSnapshot = profiles ? await profiles.state() : null;
-        const projectSnapshot = projects ? await projects.state() : null;
-        const revision = JSON.stringify([profileSnapshot?.revision, projectSnapshot?.revision]);
+        const revision = profileSnapshot?.revision;
         let read = this.sessionLists.get(cwd);
-        if (!read || read.revision !== revision || read.profiles !== profiles || read.projects !== projects) {
-            read = { revision, profiles, projects };
+        if (!read || read.revision !== revision || read.profiles !== profiles) {
+            read = { revision, profiles };
             // Reserve before starting the read, and remove on success or failure.
             read.promise = Promise.resolve().then(async () => {
                 const { sessionListRevision } = require('./pi-session-list-revision');
@@ -240,13 +238,12 @@ class PiSessionStore {
                 const sourceRevision = sessionListRevision(directory);
                 const cached = this.sessionListCache.get(cwd);
                 if (sourceRevision && cached?.sourceRevision === sourceRevision && cached.revision === revision
-                    && cached.profiles === profiles && cached.projects === projects) return cached.result;
+                    && cached.profiles === profiles) return cached.result;
                 this.sessionListCache.delete(cwd);
-                const result = await this._listSessions(cwd, SessionManager, profiles, projects,
-                    profileSnapshot?.state, projectSnapshot?.state, revision);
+                const result = await this._listSessions(cwd, SessionManager, profiles, profileSnapshot?.state, revision);
                 if (sourceRevision && sourceRevision === sessionListRevision(directory)) {
                     if (this.sessionListCache.size >= 32) this.sessionListCache.delete(this.sessionListCache.keys().next().value);
-                    this.sessionListCache.set(cwd, { sourceRevision, revision, profiles, projects, result });
+                    this.sessionListCache.set(cwd, { sourceRevision, revision, profiles, result });
                 }
                 return result;
             }).finally(() => {
@@ -273,22 +270,21 @@ class PiSessionStore {
         }
     }
 
-    async _listSessions(cwd, SessionManager, profiles, projects, profileState, projectState, revision) {
+    async _listSessions(cwd, SessionManager, profiles, profileState, revision) {
         const sessions = await this._nativeSessionMetadata(cwd, SessionManager);
         const result = [];
         for (const session of sessions) {
             const cached = this.sessionRows.get(session);
-            if (cached && cached.revision === revision && cached.profiles === profiles && cached.projects === projects) {
+            if (cached && cached.revision === revision && cached.profiles === profiles) {
                 result.push(cached.item); continue;
             }
-            const manager = profiles || projects ? this.profileManager(session, SessionManager) : null;
+            const manager = profiles ? this.profileManager(session, SessionManager) : null;
             const item = this._serializeSession(session, manager && profiles ? await profiles.describe(manager, profileState) : null,
-                manager && projects ? projects.describe(manager, cwd, projectState) : null,
                 manager ? require('./pi-profile-authoring').readProfileAuthoring(manager) : null);
             // The manager is already parsed for bindings; summarizing its current branch adds no extra file read.
             const stats = manager ? sessionStats(manager) : null;
             if (stats) item.stats = stats;
-            this.sessionRows.set(session, { revision, profiles, projects, item });
+            this.sessionRows.set(session, { revision, profiles, item });
             result.push(item);
         }
         return result.sort((a, b) => b.modified.localeCompare(a.modified));
@@ -319,10 +315,8 @@ class PiSessionStore {
         try {
             const agentProfile = this.profiles ? await this.profiles.describe(read.manager()) : null;
             read.validate();
-            const projectState = this.projects ? (await this.projects.state()).state : null;
             const manager = read.manager();
-            const assistantProject = this.projects ? this.projects.describe(manager, cwd, projectState) : null;
-            const session = { ...this._serializeSession(candidate, agentProfile, assistantProject), path: canonical,
+            const session = { ...this._serializeSession(candidate, agentProfile), path: canonical,
                 assistant: require('./pi-extension-assistant').assistantProfile(manager),
                 profileAuthoring: require('./pi-profile-authoring').readProfileAuthoring(manager) };
             await this.sessionMoves?.assertAvailable(cwd, id);
@@ -335,7 +329,7 @@ class PiSessionStore {
     }
 
     async createSession(cwdInput, name = '', { autoTitle = false, assistant = null, task = null, agentProfileId, inheritedProfileId,
-        assistantProjectId, initializeSession } = {}) {
+        initializeSession } = {}) {
         if (initializeSession !== undefined && typeof initializeSession !== 'function') throw new Error('Session initializer must be a server function');
         const cwd = this.resolveProject(cwdInput);
         const selectedProfileId = inheritedProfileId !== undefined ? inheritedProfileId
@@ -352,8 +346,6 @@ class PiSessionStore {
         const persisted = SessionManager.open(sessionPath, undefined, cwd);
         if (this.profiles) persisted.appendCustomEntry(require('./pi-profile-state').PROFILE_ENTRY,
             { version: 1, sessionId: persisted.getSessionId(), profileId: selectedProfileId });
-        if (assistantProjectId) persisted.appendCustomEntry(require('./pi-assistant-project-state').PROJECT_ENTRY,
-            { version: 1, sessionId: persisted.getSessionId(), projectId: assistantProjectId, cwd });
         if (initializeSession) initializeSession(persisted);
         const cleanName = String(name || '').trim().slice(0, 120);
         if (cleanName) persisted.appendSessionInfo(cleanName);
@@ -374,7 +366,6 @@ class PiSessionStore {
             assistant: assistant ? require('./pi-extension-assistant').assistantProfile(persisted) : null,
             profileAuthoring: require('./pi-profile-authoring').readProfileAuthoring(persisted),
             agentProfile: this.profiles ? await this.profiles.describe(persisted) : null,
-            assistantProject: this.projects ? this.projects.describe(persisted, cwd, (await this.projects.state()).state) : null,
             id: persisted.getSessionId(),
             path: fs.realpathSync.native(sessionPath),
             cwd,
@@ -394,7 +385,6 @@ class PiSessionStore {
         const source = this.profileManager(session, SessionManager);
         const sourceStamp = sessionStamp(fs.lstatSync(session.path, { bigint: true }));
         const sourceBinding = require('./pi-profile-state').readProfileBinding(source);
-        const groupBinding = require('./pi-assistant-project-state').readProjectBinding(source);
         const inheritedProfileId = sourceBinding?.profileId ?? null;
         if (source.getLeafId() !== snapshot.leafId) throw new Error('会话已变化，请刷新后重试');
         const entries = source.getEntries();
@@ -420,8 +410,6 @@ class PiSessionStore {
             require('./profile-memory/learning-history').markFork(source);
             if (this.profiles) source.appendCustomEntry(require('./pi-profile-state').PROFILE_ENTRY,
                 { version: 1, sessionId: source.getSessionId(), profileId: inheritedProfileId });
-            if (groupBinding) source.appendCustomEntry(require('./pi-assistant-project-state').PROJECT_ENTRY,
-                { version: 1, sessionId: source.getSessionId(), projectId: groupBinding.projectId, cwd: groupBinding.cwd });
             source.appendSessionInfo(`${session.name || '会话'} · 分叉`.slice(0, 120));
             publishAccess(source);
             this.sessionLists.delete(session.cwd);
@@ -434,8 +422,6 @@ class PiSessionStore {
             require('./profile-memory/learning-history').markFork(source);
             if (this.profiles) source.appendCustomEntry(require('./pi-profile-state').PROFILE_ENTRY,
                 { version: 1, sessionId: source.getSessionId(), profileId: inheritedProfileId });
-            if (groupBinding) source.appendCustomEntry(require('./pi-assistant-project-state').PROJECT_ENTRY,
-                { version: 1, sessionId: source.getSessionId(), projectId: groupBinding.projectId, cwd: groupBinding.cwd });
             source.appendSessionInfo(`${session.name || '会话'} · 分叉`.slice(0, 120));
             source.appendCustomEntry('pivane-web-fork-origin', { sessionId: session.id, entryId: targetId });
             if (!fs.existsSync(source.getSessionFile())) {
@@ -458,7 +444,7 @@ class PiSessionStore {
             result = await this.getSession(session.cwd, source.getSessionId());
         } else {
             result = await this.createSession(session.cwd, `${session.name || '会话'} · 分叉`,
-                { inheritedProfileId, assistantProjectId: groupBinding?.projectId });
+                { inheritedProfileId });
             const empty = this.profileManager(result, SessionManager);
             empty.appendCustomEntry('pivane-web-fork-origin', { sessionId: session.id, entryId: targetId });
             publishAccess(empty);
@@ -495,10 +481,9 @@ class PiSessionStore {
         } finally { this.sessionLists.delete(session.cwd); }
     }
 
-    _serializeSession(session, agentProfile = null, assistantProject = null, profileAuthoring = null) {
+    _serializeSession(session, agentProfile = null, profileAuthoring = null) {
         return {
             agentProfile,
-            assistantProject,
             profileAuthoring,
             id: session.id,
             path: session.path,

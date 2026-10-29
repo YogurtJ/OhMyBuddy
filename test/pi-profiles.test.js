@@ -307,9 +307,9 @@ test('trash and restore preserve identity data, CAS, defaults and disabled consu
     const disabled = (await call('PUT', '/profiles', { expectedRevision: saved.revision, profile: { ...basic, name: 'Already disabled', enabled: false } })).data;
     await profiles.saveDefault({ cwd: first, profileId: id, expectedRevision: disabled.revision });
     await profiles.saveDefault({ cwd: second, profileId: id, expectedRevision: (await profiles.state()).revision });
-    const project = (await call('PUT', '/assistant-projects', { expectedRevision: (await call('GET', '/assistant-projects')).data.revision,
-        project: { name: 'Retained logical project', cwd: first, description: '', instructions: '', profileIds: [id], archived: false } })).data.project;
-    const session = (await call('POST', '/sessions', { cwd: first, profileId: id, assistantProjectId: project.id })).data;
+    const legacyFile = path.join(agentDir, 'ohmybuddy-profiles', 'assistant-projects.json');
+    fs.writeFileSync(legacyFile, 'Retained legacy category bytes');
+    const session = (await call('POST', '/sessions', { cwd: first, profileId: id })).data;
     const { SessionManager, getAgentDir } = await import('@earendil-works/pi-coding-agent');
     const manager = SessionManager.open(session.path), context = await profiles.context(manager, first);
     const home = await gateway.cron.home(id, { revision: 0, requestId: 'trash-home-request', cwd: first, sessionId: session.id });
@@ -366,7 +366,7 @@ test('trash and restore preserve identity data, CAS, defaults and disabled consu
     assert.equal((await call('PUT', '/profiles', { expectedRevision: trashed.data.revision, profile: { ...trashed.data.profile, enabled: true } })).status, 409);
     assert.equal((await call('PUT', '/profiles/default', { cwd: first, profileId: id, expectedRevision: trashed.data.revision })).status, 400);
     assert.equal((await call('POST', '/sessions', { cwd: first, profileId: id })).status, 400);
-    assert.equal((await call('POST', '/sessions', { cwd: first, profileId: id, assistantProjectId: project.id })).status, 400);
+    assert.equal((await call('POST', '/sessions', { cwd: first, profileId: id, assistantProjectId: 'retired' })).status, 410);
     assert.equal((await call('POST', '/sessions', { cwd: first })).data.agentProfile, null, 'cleared default creates no identity');
     const description = await profiles.describe(manager);
     assert.deepEqual(description, { id, name: basic.name, enabled: false, available: false });
@@ -385,7 +385,7 @@ test('trash and restore preserve identity data, CAS, defaults and disabled consu
     await assert.rejects(gateway.cron.target({ kind: 'thread', cwd: first, sessionId: session.id }), /disabled|unavailable/);
     await assert.rejects(gateway.cron.home(id, { revision: home.revision, cwd: first, sessionId: session.id }), /unavailable/);
     assert.equal(gateway.cron.db.home(id).sessionId, session.id, 'main-thread reference is retained');
-    assert.deepEqual((await call('GET', '/assistant-projects?profileId=' + id)).data.projects, [project], 'logical project record is retained');
+    assert.equal(fs.readFileSync(legacyFile, 'utf8'), 'Retained legacy category bytes', 'retirement preserves obsolete storage without interpreting it');
     assert.equal((await call('POST', target + '/restore', { expectedRevision: before })).status, 409);
     profiles.maintenance.locked = true;
     try {

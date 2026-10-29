@@ -298,8 +298,8 @@ test('authenticated optional channel connects, binds and delivers once through t
         let announceReload, releaseReload;
         const reloadStarted = new Promise(resolve => { announceReload = resolve; });
         const reloadGate = new Promise(resolve => { releaseReload = resolve; });
-        const priorConfirmations = [worker.loadedAgentProfileConfirmed, worker.loadedAssistantProjectConfirmed];
-        worker.loadedAgentProfileConfirmed = true; worker.loadedAssistantProjectConfirmed = true;
+        const priorConfirmation = worker.loadedAgentProfileConfirmed;
+        worker.loadedAgentProfileConfirmed = true;
         worker.client.request = async (...args) => { if (args[0] === 'get_commands') { announceReload(); await reloadGate; } return nativeRequest(...args); };
         service.receive('bot-one', { msgs: [incoming('revoke-reload', '/reload')] }); service.pump(); await reloadStarted;
         await action('account', { accountId: 'bot-one', enabled: false, allowedUsers: ['owner'] });
@@ -307,8 +307,7 @@ test('authenticated optional channel connects, binds and delivers once through t
         worker.client.request = nativeRequest;
         assert.equal(service.db.value.jobs.at(-1).status, 'cancelled');
         assert.equal(worker.loadedAgentProfileConfirmed, true, 'cancelled reload preserves profile confirmation');
-        assert.equal(worker.loadedAssistantProjectConfirmed, true, 'cancelled reload preserves project confirmation');
-        [worker.loadedAgentProfileConfirmed, worker.loadedAssistantProjectConfirmed] = priorConfirmations;
+        worker.loadedAgentProfileConfirmed = priorConfirmation;
         await action('account', { accountId: 'bot-one', enabled: true, allowedUsers: ['owner'] });
         replyText = 'Long reply '.repeat(500);
         sendHold = new Promise(resolve => { releaseSend = resolve; });

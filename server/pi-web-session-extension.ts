@@ -26,7 +26,6 @@ import { buildSessionContext, getAgentDir, type ExtensionAPI } from '@earendil-w
 import { registerAgentProfile } from './pi-profile-runtime.js';
 import { registerBotContext, handleBotNotebook, prepareBotModel } from './bot/bot-context-extension.ts';
 import { registerProfileMemory } from './profile-memory/extension.ts';
-import { registerAssistantProject } from './pi-assistant-project-runtime.js';
 import { registerProfileAuthoring } from './pi-profile-authoring-extension.ts';
 import { registerSubagentHost, subagentControl } from './pi-subagent-host.ts';
 import { requestRegisteredNativeMcpControl } from './pi-native-mcp-control.mjs';
@@ -60,7 +59,6 @@ export default async function (pi: ExtensionAPI) {
     registerSubagentHost(pi);
     registerAgentProfile(pi, getAgentDir);
     registerBotContext(pi, getAgentDir);
-    registerAssistantProject(pi, getAgentDir);
     registerProfileAuthoring(pi, getAgentDir);
     await registerProfileMemory(pi);
     // A managed process is bound to one file. Native replacement must not bypass Supervisor.

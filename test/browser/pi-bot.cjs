@@ -12,7 +12,7 @@ const BOT = '11111111-1111-4111-8111-111111111111', MAIN = '22222222-2222-4222-8
 const BOT2 = '33333333-3333-4333-8333-333333333333', MAIN2 = '44444444-4444-4444-8444-444444444444';
 const workspace = '/fixture/OhMyBuddyBots/bot-11111111', geek = '/fixture/project';
 const row = id => ({ id, cwd: workspace, path: `${workspace}/${id}.jsonl`, name: '', firstMessage: '', messageCount: 2,
-    agentProfile: { id: BOT, name: '新伙伴' }, assistantProject: null, created: '2026-10-24T00:00:00Z', modified: '2026-10-24T00:00:00Z' });
+    agentProfile: { id: BOT, name: '新伙伴' }, created: '2026-10-24T00:00:00Z', modified: '2026-10-24T00:00:00Z' });
 const messages = [
     { role: 'user', content: '周六去杭州要带伞吗', timestamp: Date.parse('2026-10-24T06:02:00Z') },
     { role: 'assistant', content: [{ type: 'text', text: '大概率小雨，带把折叠伞就好。' }], model: 'fixture-model', provider: 'fixture',
@@ -67,7 +67,7 @@ const NEW_FACE = { kind: 'preset', id: 'pivane-pebble' };
             await page.route(/https:\/\/(fonts\.googleapis\.com|fonts\.gstatic\.com)\//, route => route.abort());
             await page.route('**/api/**', async route => {
                 const url = new URL(route.request().url()), pathname = url.pathname, method = route.request().method();
-                if (pathname === '/api/pi/status') return route.fulfill({ json: { ok: true, bots: true, agentProfiles: true, assistantProjects: true, deliverables: true, filePreviews: true, fileViewer: true, sessionWorkflows: true,
+                if (pathname === '/api/pi/status') return route.fulfill({ json: { ok: true, bots: true, agentProfiles: true, assistantProjects: false, deliverables: true, filePreviews: true, fileViewer: true, sessionWorkflows: true,
                     projectRoots: ['/fixture'], defaultProject: geek } });
                 if (pathname === '/api/pi/deliverables') return route.fulfill({ json: { name: '计划.md', mime: 'text/markdown', size: 40, kind: 'markdown',
                     createdAt: '2026-10-24T06:03:05Z', revision: 'f'.repeat(64),

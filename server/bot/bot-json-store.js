@@ -1,6 +1,6 @@
 'use strict';
 // Private, revisioned JSON documents for Bot Mode metadata (window registries).
-// Same protocol as the profile and assistant-project registries: descriptor-verified
+// Same protocol as the profile registry: descriptor-verified
 // reads, a lock directory, compare-and-swap on the raw-text revision, private atomic
 // replacement, post-write verification and a directory fsync. These files are
 // indexes; native session markers stay the source of truth.

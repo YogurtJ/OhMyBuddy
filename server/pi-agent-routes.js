@@ -76,8 +76,6 @@ function createPiAgentGateway(options = {}) {
     const store = new PiSessionStore();
     const profiles = new (require('./pi-profile-registry').PiProfileRegistry)(store);
     store.profiles = profiles;
-    const assistantProjects = new (require('./pi-assistant-project-registry').PiAssistantProjectRegistry)(store, profiles);
-    store.projects = assistantProjects;
     const profileMemory = new (require('./profile-memory/config').ProfileMemoryConfiguration)();
     const preferences = options.workspacePreferencesService || new WorkspacePreferencesService();
     const composer = new (require('./pi-composer-service').PiComposerService)(store);
@@ -194,7 +192,6 @@ function createPiAgentGateway(options = {}) {
         if (session.path !== sessionPath) throw new Error('Session path changed before runtime startup');
         const env = assistantEnvironment ? await assistantEnvironment({ cwd, sessionId }) : {};
         const context = await profiles.context(read.manager(), cwd);
-        const projectContext = await assistantProjects.context(read.manager(), cwd);
         read.validate();
         const authoringEnvironment = await require('./pi-profile-authoring').profileAuthoringEnvironment({ store, cwd, sessionId, read });
         read.validate();
@@ -205,7 +202,7 @@ function createPiAgentGateway(options = {}) {
         read.validate();
         return { ...env, PIVANE_AGENT_PROFILE_CONTEXT: context ? JSON.stringify(context) : undefined,
             PIVANE_BOT_CONTEXT: botContext ? JSON.stringify(botContext) : undefined,
-            PIVANE_ASSISTANT_PROJECT_CONTEXT: projectContext ? JSON.stringify(projectContext) : undefined,
+            PIVANE_ASSISTANT_PROJECT_CONTEXT: undefined,
             PIVANE_PROFILE_AUTHORING_CONTEXT: undefined, ...authoringEnvironment, ...memoryEnvironment };
     });
     const profileRoute = action => async (req, res) => {
@@ -219,10 +216,12 @@ function createPiAgentGateway(options = {}) {
     router.post('/profiles/:id/trash', profileRoute(async req => require('./bot/bot-settings').readBot(await profiles.getProfile(req.params.id))
         ? bots.trash(req.params.id, req.body) : profiles.trash(req.params.id, req.body)));
     router.post('/profiles/:id/restore', profileRoute(req => profiles.restore(req.params.id, req.body)));
-    router.get('/assistant-projects', profileRoute(req => assistantProjects.list(req.query.profileId)));
-    router.put('/assistant-projects', profileRoute(req => assistantProjects.save(req.body)));
-    router.delete('/assistant-projects/:id', profileRoute(req => assistantProjects.remove(req.params.id, req.body)));
-    router.get('/assistant-projects/:id/sessions', profileRoute(async req => ({ sessions: await assistantProjects.sessions(req.params.id, req.query.profileId) })));
+    // Tombstones for obsolete clients: never accept a write or reinterpret a
+    // legacy category request as a normal session/project operation.
+    const categoriesRetired = (req, res) => res.status(410).set('Cache-Control', 'no-store').json({
+        code: 'ASSISTANT_CATEGORIES_RETIRED', error: 'Assistant categories have been retired. Use Buddy topics or Workspace sessions.'
+    });
+    router.all(['/assistant-projects', '/assistant-projects/:id', '/assistant-projects/:id/sessions', '/sessions/:id/classification'], categoriesRetired);
     const getAgentDir = async () => fs.realpathSync.native((await require('./pi-session-store').getSdk()).getAgentDir());
     const profileResources = { profiles, getAgentDir,
         bundlePath: async () => (await profileMemory.snapshot()).bundlePath };
@@ -332,8 +331,8 @@ function createPiAgentGateway(options = {}) {
             messageChannels: true,
             agentProfiles: true,
             bots: true,
-            assistantProjects: true,
-            sessionClassification: true,
+            assistantProjects: false,
+            sessionClassification: false,
             profileDocuments: true,
             profileAuthoring: true,
             profileMemory: memoryConfiguration.capability,
@@ -625,10 +624,8 @@ function createPiAgentGateway(options = {}) {
         try {
             const createOptions = { autoTitle: preferences.getSessionTitles().enabled,
                 agentProfileId: Object.hasOwn(req.body, 'profileId') ? req.body.profileId : undefined };
-            const session = Object.hasOwn(req.body, 'assistantProjectId')
-                ? await assistantProjects.createSession(req.body.cwd, req.body.name,
-                    { ...createOptions, assistantProjectId: req.body.assistantProjectId })
-                : await store.createSession(req.body.cwd, req.body.name, createOptions);
+            if (Object.hasOwn(req.body, 'assistantProjectId')) return categoriesRetired(req, res);
+            const session = await store.createSession(req.body.cwd, req.body.name, createOptions);
             if (preferences.getHiddenProjects().includes(session.cwd)) preferences.setProjectHidden(session.cwd, false);
             res.status(201).json(session);
         } catch (error) {
@@ -667,8 +664,6 @@ function createPiAgentGateway(options = {}) {
         }
     });
 
-    const sessionClassificationListeners = new Set();
-    supervisor.on('sessionClassification', session => { for (const listener of sessionClassificationListeners) listener(session); });
     const windowRotationListeners = new Set();
     supervisor.on('botWindowRotated', event => { for (const listener of windowRotationListeners) listener(event); });
     const sessionMoveListeners = new Set();
@@ -708,7 +703,6 @@ function createPiAgentGateway(options = {}) {
         }
     });
 
-    require('./pi-session-classification').mountSessionClassification(router, { store, supervisor, profiles, projects: assistantProjects, sideChat });
     mountSessionWorkflows(router, { store, supervisor, deferred, preferences, assertDeferredSendable: session => bots.assertNativeSendable(session) });
     const sessionTransfer = require('./pi-session-transfer').mountSessionTransfer(router, { store, supervisor, preferences });
     const sessionMoves = require('./pi-session-moves').mountSessionMoves(router, { store, supervisor, preferences, usage, deferred, cron, sideChat, channels,
@@ -763,12 +757,6 @@ function createPiAgentGateway(options = {}) {
             let authenticated = false;
             let socketClosed = false;
             let opening = false;
-            const sessionClassification = session => {
-                if (session.path !== workerSessionPath) return;
-                safeSend(socket, { type: 'gateway_session_classified', session }, { code: 1012, reason: 'Session classification changed' });
-                socket.close(1012, 'Session classification changed');
-            };
-            sessionClassificationListeners.add(sessionClassification);
             const windowRotation = event => {
                 if (event.from.sessionPath !== workerSessionPath) return;
                 // 4007: the page must open the window's new generation, never reconnect to this one.
@@ -1047,14 +1035,7 @@ function createPiAgentGateway(options = {}) {
                     const actual = await source.getNativeResources();
                     const savedSession = source.noSession ? null : await store.getSession(source.cwd, source.sessionId);
                     const savedProfile = savedSession?.agentProfile ?? null;
-                    const savedProject = savedSession?.assistantProject ?? null;
-                    const profileRecords = (await profiles.state()).state.profiles;
-                    const projectRecords = (await assistantProjects.state()).state.projects;
-                    const savedProjectRevision = require('./pi-assistant-project-registry').projectRevision(projectRecords.find(record => record.id === savedProject?.id));
-                    const matchesSavedProject = source.loadedAssistantProjectConfirmed
-                        && (savedProject?.id ?? null) === source.loadedAssistantProjectId
-                        && (!savedProject || savedProjectRevision !== null && savedProjectRevision === source.loadedAssistantProjectRevision);
-                    const savedProfileRevision = require('./pi-profile-registry').profileRevision(profileRecords.find(record => record.id === savedProfile?.id));
+                    const savedProfileRevision = require('./pi-profile-registry').profileRevision((await profiles.state()).state.profiles.find(record => record.id === savedProfile?.id));
                     const matchesSavedProfile = source.loadedAgentProfileConfirmed
                         && (savedProfile?.id ?? null) === source.loadedAgentProfileId
                         && (!savedProfile || savedProfileRevision !== null && savedProfileRevision === source.loadedAgentProfileRevision);
@@ -1069,9 +1050,6 @@ function createPiAgentGateway(options = {}) {
                             loadedProfileId: source.loadedAgentProfileId, loadedProfileRevision: source.loadedAgentProfileRevision,
                             loadedConfirmed: source.loadedAgentProfileConfirmed, matchesSavedProfile },
                         memoryRead,
-                        assistantProject: { saved: savedProject, savedProjectRevision,
-                            loadedProjectId: source.loadedAssistantProjectId, loadedProjectRevision: source.loadedAssistantProjectRevision,
-                            loadedConfirmed: source.loadedAssistantProjectConfirmed, matchesSavedProject },
                         recoveries: source.controls.recoveries.length, drafts: source.controls.drafts.length } });
                     return;
                 }
@@ -1202,7 +1180,6 @@ function createPiAgentGateway(options = {}) {
 
             socket.on('close', () => {
                 sessionRemovalListeners.delete(sessionRemoval);
-                sessionClassificationListeners.delete(sessionClassification);
                 windowRotationListeners.delete(windowRotation);
                 sessionMoveListeners.delete(sessionMove);
                 socketClosed = true;

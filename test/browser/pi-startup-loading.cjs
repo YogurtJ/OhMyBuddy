@@ -35,7 +35,7 @@ async function fixture(browser, width, hash = '#/chat', options = {}) {
         }
         if (options.oauth && path === '/api/pi/settings/providers/fixture/login') return route.fulfill({ json: { id: 'fixture-login', revision: 1, finished: false, status: 'waiting', events: [], prompts: [] } });
         if (options.oauth && path === '/api/pi/settings/login/fixture-login') return route.fulfill({ json: { id: 'fixture-login', revision: 1, finished: false, status: 'waiting', events: [], prompts: [] } });
-        const data = path === '/api/pi/status' ? { ok: true, agentProfiles: true, assistantProjects: true, scheduledTasks: true, messageChannels: true, projectIdentity: true, defaultProject: cwd, projectRoots: ['/synthetic'] }
+        const data = path === '/api/pi/status' ? { ok: true, agentProfiles: true, assistantProjects: false, scheduledTasks: true, messageChannels: true, projectIdentity: true, defaultProject: cwd, projectRoots: ['/synthetic'] }
             : path === '/api/pi/projects/resolve' ? { cwd }
             : path === '/api/pi/projects' ? { projects: [{ cwd, name: 'Synthetic', sessionCount: 1 }], roots: ['/synthetic'] }
             : path === '/api/pi/sessions' ? { sessions: [session] }
