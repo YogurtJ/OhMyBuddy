@@ -56,7 +56,7 @@ async function main() {
                     if (p.endsWith('/restore')) { const index = trash.findIndex(row => p.includes(row.id)); rows.push(trash.splice(index, 1)[0]); revision++; return reply({ ok: true, revision: `r${revision}` }); }
                     return reply({ ok: true });
                 }
-                if (p === '/api/pi/status') return reply({ ok: true, agentProfiles: true, assistantProjects: true, profileMemory: true, projectRoots: ['/synthetic'], defaultProject: cwd });
+                if (p === '/api/pi/status') return reply({ ok: true, agentProfiles: true, assistantProjects: false, profileMemory: true, projectRoots: ['/synthetic'], defaultProject: cwd });
                 if (p === '/api/pi/projects') return reply({ projects: [{ cwd, name: 'Synthetic project', sessionCount: 0 }], roots: ['/synthetic'] });
                 if (p === '/api/pi/profiles') return reply({ version: 1, revision: `r${revision}`, cwd, profiles: rows, profileRevisions: { [rows[0].id]: 'p1' }, ...(width !== 900 ? { trash } : {}) });
                 if (p.endsWith('/documents')) return reply({ status: 'ready', target: url.searchParams.get('target'), content: '# Saved document', revision: 'd1', profileRevision: 'p1', usage: { used: 16, limit: 8000 } });
@@ -65,7 +65,7 @@ async function main() {
                     ? Array.from({ length: 18 }, (_, i) => ({ id: `memory-${i}`, kind: 'memory', content: `合成记忆 ${i + 1}：用于验证长列表中的就地展开。`, category: 'preference', state: 'active', scope: 'profile', revision: 's1' }))
                     : [{ id: 'skill-1', kind: 'skill', name: 'source-review', description: '核对引用、比较来源并整理可复用的研究方法。', state: 'active', scope: 'profile', revision: 's1' }], counts: { memory: { total: 42, user: 12, memory: 26, project: 4 }, skill: { total: 8, active: 6, draft: 2, disabled: 0 } }, receipts: [{ id: 'receipt-1', itemId: 'memory-1', kind: 'memory', operation: 'create', preview: '喜欢先了解整体思路，再逐步展开细节。', origin: 'learning', at: new Date().toISOString() }], hasMore: false, usage: { memory: { chars: 13800, limit: 16000 }, user: { chars: 396, limit: 8000 } }, capabilities: { memory: true, skill: true } });
                 if (p.endsWith('/learning')) return reply({ version: 1, revision: 1, health: { state: p.includes(profiles[1].id) ? 'off' : 'quota-exhausted', today: { runs: 20, maxRuns: 20, reservedTokens: 120000, maxTokens: 200000, exhaustedBy: 'runs' } }, drafts: { pending: 2 }, proposals: [], settings: { enabled: true, correctionEnabled: true, reviewEnabled: false, extractionEnabled: true, maxRunsPerDay: 20, maxTokensPerDay: 200000, periodicReviewMinutes: 0 }, jobs: [], recentRuns: [], capabilities: { settingsWrite: true, installed: true } });
-                if (p === '/api/pi/assistant-projects') return reply({ projects: [{ id: 'p1', name: '研究笔记 / Research notes', cwd: '/synthetic/research/long-project-directory-for-layout-checking', description: '记录研究过程、参考资料与后续问题。' }] });
+                if (p === '/api/pi/assistant-projects') return reply({ code: 'ASSISTANT_CATEGORIES_RETIRED' }, 410);
                 if (p === '/api/pi/sessions') return reply({ sessions: [] });
                 if (p === '/api/pi/activity') return reply({ runtimes: [], pinnedProjects: [], hiddenProjects: [], replyNotices: [] });
                 return reply({});
@@ -95,6 +95,8 @@ async function main() {
             await page.locator('#pi-profile-list-query').fill('');
             await page.locator('.pi-profile-row').first().click();
             await page.locator('.pi-id-stats').waitFor();
+            assert.equal(await page.locator('.pi-id-stat').count(), 3);
+            assert.equal(await page.locator('[data-projects-card]').count(), 0);
             await geometry(); await shot('overview');
             assert.equal(await page.locator('#pi-profiles-panel .settings-panel-header').isVisible(), false);
             if (width < 681) assert.equal(await page.locator('#pi-profiles-list').isVisible(), false);

@@ -52,12 +52,12 @@ const startNotes = () => [
                 windowsRevision: 'w', windows: [{ id: MAIN, kind: 'main', title: '主聊天', emoji: '💬', focus: '', createdAt: '2026-10-24T00:00:00Z',
                     updatedAt: '2026-10-24T00:00:00Z', archivedAt: null, generation: 0, sessionId: 'gen-0', generations: 1 }] };
             const row = { id: 'gen-0', cwd: workspace, path: `${workspace}/gen-0.jsonl`, name: '', firstMessage: '', messageCount: 5,
-                agentProfile: { id: BOT, name: '小狸' }, assistantProject: null, created: '2026-10-24T00:00:00Z', modified: '2026-10-24T00:00:00Z' };
+                agentProfile: { id: BOT, name: '小狸' }, created: '2026-10-24T00:00:00Z', modified: '2026-10-24T00:00:00Z' };
             page.on('pageerror', error => errors.push(error.message));
             await page.route(/https:\/\/(fonts\.googleapis\.com|fonts\.gstatic\.com)\//, route => route.abort());
             await page.route('**/api/**', async route => {
                 const url = new URL(route.request().url()), pathname = url.pathname, method = route.request().method();
-                if (pathname === '/api/pi/status') return route.fulfill({ json: { ok: true, bots: true, agentProfiles: true, assistantProjects: true, deliverables: true,
+                if (pathname === '/api/pi/status') return route.fulfill({ json: { ok: true, bots: true, agentProfiles: true, assistantProjects: false, deliverables: true,
                     filePreviews: true, fileViewer: true, projectRoots: ['/fixture'], defaultProject: geek } });
                 if (pathname === '/api/pi/bots/readiness') return route.fulfill({ json: { models: 1 } });
                 if (pathname === '/api/pi/bots') return route.fulfill({ json: { version: 1, revision: 'r1', bots: [bot] } });

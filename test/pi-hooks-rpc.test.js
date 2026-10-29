@@ -18,7 +18,7 @@ const { setPromptSection } = require('../server/pi-hook-prompt');
 const bundle = process.env.PIVANE_TEST_HERMES_BUNDLE;
 const profileId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const projectId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
-const ownedOrder = ['pivane_task_threads', 'pivane_agent_messages', 'assistant_profile_soul', 'assistant_project_instructions', 'pivane_profile_memory'];
+const ownedOrder = ['pivane_task_threads', 'pivane_agent_messages', 'assistant_profile_soul', 'pivane_profile_memory'];
 const controlFile = path.join(root, 'hook-control');
 const waitFor = async check => {
     const deadline = Date.now() + 15000;
@@ -48,9 +48,9 @@ test('named hook sections preserve ordering, exact forced prefixes and fresh per
         setPromptSection({ systemPromptOptions: next }, 'pivane_profile_memory', 'MEMORY');
         assert.equal(diffSystemPromptSections(buildSystemPromptSections(options), buildSystemPromptSections(next)), undefined);
         options.forceSystemPrompt = 'EXACT FORCED PREFIX';
-        setPromptSection(event, 'assistant_project_instructions', 'PROJECT', { wrapForced: true });
+        setPromptSection(event, 'fixture_instructions', 'PROJECT', { wrapForced: true });
         setPromptSection(event, 'pivane_agent_messages', 'PERMISSION GUIDE');
-        assert.equal(buildSystemPrompt(options), 'EXACT FORCED PREFIX\n\n<assistant_project_instructions>\nPROJECT\n</assistant_project_instructions>\n\nPERMISSION GUIDE');
+        assert.equal(buildSystemPrompt(options), 'EXACT FORCED PREFIX\n\n<fixture_instructions>\nPROJECT\n</fixture_instructions>\n\nPERMISSION GUIDE');
     }
     assert.deepEqual(base.sections, { existing: 'PREVIOUS EXTENSION' });
 });
@@ -164,7 +164,7 @@ test('reviewed Pi native RPC preserves owned hook payloads across task/message/c
                 PIVANE_HOOK_FIXTURE_CONTROL: controlFile, PIVANE_HERMES_BUNDLE: kind === 'task' ? bundle : undefined,
                 PIVANE_AGENT_PROFILE_CONTEXT: kind === 'task' ? JSON.stringify(profileContext) : undefined,
                 PIVANE_ASSISTANT_PROJECT_CONTEXT: kind === 'task' ? JSON.stringify({ version: 1, projectId, sessionId, sessionPath, cwd,
-                    revision: require('../server/pi-assistant-project-registry').projectRevision(project), instructions: project.instructions }) : undefined,
+                    revision: 'a'.repeat(64), instructions: project.instructions }) : undefined,
                 PIVANE_PROFILE_AUTHORING_CONTEXT: kind === 'authoring' ? JSON.stringify({ version: 1, sessionId, sessionPath, cwd, profileId: null, profileRevision: null }) : undefined } });
         clients.push(client);
         const events = [], starts = [];
@@ -195,13 +195,13 @@ test('reviewed Pi native RPC preserves owned hook payloads across task/message/c
     const checkPayloads = payloads => {
         for (const request of payloads) {
             const text = JSON.stringify(request.messages);
-            for (const marker of ['SOUL SCOPE:', 'LOGICAL PROJECT SCOPE:', 'MEMORY SCOPE:', 'OhMyBuddy task threads:', 'OhMyBuddy Agent messages:'])
+            for (const marker of ['SOUL SCOPE:', 'MEMORY SCOPE:', 'OhMyBuddy task threads:', 'OhMyBuddy Agent messages:'])
                 assert.equal(text.split(marker).length - 1, 1, `${marker} must appear once per provider payload`);
             assert.match(text, /PHYSICAL PROJECT SCOPE/);
             assert.ok(text.indexOf('PHYSICAL PROJECT SCOPE') < text.indexOf('OhMyBuddy task threads:'));
             assert.ok(text.indexOf('OhMyBuddy task threads:') < text.indexOf('OhMyBuddy Agent messages:'));
-            assert.ok(text.indexOf('SOUL SCOPE:') < text.indexOf('LOGICAL PROJECT SCOPE:'));
-            assert.ok(text.indexOf('LOGICAL PROJECT SCOPE:') < text.indexOf('MEMORY SCOPE:'));
+            assert.doesNotMatch(text, /LOGICAL PROJECT SCOPE:/, 'retired category context is inert even when supplied');
+            assert.ok(text.indexOf('SOUL SCOPE:') < text.indexOf('MEMORY SCOPE:'));
         }
     };
     checkPayloads(payloads);

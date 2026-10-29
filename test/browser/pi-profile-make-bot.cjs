@@ -41,7 +41,7 @@ async function main() {
                     }
                     return reply({ ok: true });
                 }
-                if (p === '/api/pi/status') return reply({ ok: true, agentProfiles: true, assistantProjects: true, profileMemory: true, projectRoots: ['/synthetic'], defaultProject: cwd });
+                if (p === '/api/pi/status') return reply({ ok: true, agentProfiles: true, assistantProjects: false, profileMemory: true, projectRoots: ['/synthetic'], defaultProject: cwd });
                 if (p === '/api/pi/projects') return reply({ projects: [{ cwd, name: 'Synthetic', sessionCount: 0 }], roots: ['/synthetic'] });
                 if (p === '/api/pi/profiles') return reply({ version: 1, revision: `r${revision}`, cwd, profiles: rows, trash: [], profileRevisions: {} });
                 if (p === '/api/pi/cron') return reply({ jobs: [{ id: 'j1', target: { kind: 'profile', profileId: TUTOR } }, { id: 'j2', deleted: true, target: { kind: 'profile', profileId: TUTOR } },

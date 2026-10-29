@@ -73,9 +73,6 @@ class AgentWorker extends EventEmitter {
         this.loadedAgentProfileId = null;
         this.loadedAgentProfileRevision = null;
         this.loadedAgentProfileConfirmed = false;
-        this.loadedAssistantProjectId = null;
-        this.loadedAssistantProjectRevision = null;
-        this.loadedAssistantProjectConfirmed = false;
         this.loadedBot = null;
         this.autoTitleEligible = false;
         this.titleResults = new Map();
@@ -625,7 +622,6 @@ class AgentWorker extends EventEmitter {
             try {
                 await rpc('prompt', { message: `/${before.name} ${JSON.stringify({ mode: 'reload', token: this.navigationToken })}` }, 120000, () => {
                     this.loadedAgentProfileConfirmed = false;
-                    this.loadedAssistantProjectConfirmed = false;
                 });
                 const raw = await this.client.request('get_commands');
                 const after = find(raw);
@@ -821,18 +817,8 @@ class AgentWorker extends EventEmitter {
                     }
                     return;
                 }
-                if (result && Object.hasOwn(result, 'pivaneAssistantProjectLoaded')) {
-                    if (this.managed && !this.noSession && result.sessionId === this.sessionId
-                        && (result.pivaneAssistantProjectLoaded === null && result.projectRevision === null
-                            || typeof result.pivaneAssistantProjectLoaded === 'string'
-                                && /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/.test(result.pivaneAssistantProjectLoaded)
-                                && typeof result.projectRevision === 'string' && /^[a-f0-9]{64}$/.test(result.projectRevision))) {
-                        this.loadedAssistantProjectId = result.pivaneAssistantProjectLoaded;
-                        this.loadedAssistantProjectRevision = result.projectRevision;
-                        this.loadedAssistantProjectConfirmed = true;
-                    }
-                    return;
-                }
+                // Consume stale private notices without reactivating retired state.
+                if (result && Object.hasOwn(result, 'pivaneAssistantProjectLoaded')) return;
                 if (result && Object.hasOwn(result, 'pivaneBot')) {
                     const value = result.pivaneBot;
                     if (this.managed && !this.noSession && result.sessionId === this.sessionId && value && typeof value === 'object') {

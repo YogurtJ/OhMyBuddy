@@ -96,19 +96,19 @@ test('assembled HTTP and real RPC isolate profile memory across projects without
     const ownedSkill = path.join(agentDir, 'pivane-profiles', 'data', study.id, 'skills', 'fixture-study-method');
     fs.mkdirSync(ownedSkill, { recursive: true });
     fs.writeFileSync(path.join(ownedSkill, 'SKILL.md'), '---\nname: fixture-study-method\ndescription: Synthetic study procedure used only by the study profile.\n---\nUse this synthetic study method.\n');
-    const makeProject = async name => {
-        const { revision } = await call('GET', '/assistant-projects');
-        return (await call('PUT', '/assistant-projects', { expectedRevision: revision, project: {
-            name, cwd: projects[0], description: '', instructions: `Synthetic group ${name}`,
-            profileIds: [study.id], archived: false } })).project;
-    };
-    const groupA = await makeProject('Analysis'), groupB = await makeProject('Planning');
-    const makeWorker = async (cwd, profileId, assistantProjectId) => {
-        const session = await call('POST', '/sessions', { cwd, profileId, ...(assistantProjectId ? { assistantProjectId } : {}) });
+    const legacyRegistry = path.join(agentDir, 'pivane-profiles', 'assistant-projects.json');
+    fs.writeFileSync(legacyRegistry, '{unreadable retired registry');
+    const makeWorker = async (cwd, profileId, legacy = false) => {
+        const session = await call('POST', '/sessions', { cwd, profileId });
+        if (legacy) {
+            const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+            SessionManager.open(session.path).appendCustomEntry('pivane-assistant-project', {
+                version: 1, sessionId: session.id, projectId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', cwd });
+        }
         const worker = await gateway.supervisor.getWorker({ cwd, sessionId: session.id, sessionPath: session.path });
         return { session, worker };
     };
-    const source = await makeWorker(projects[0], study.id, groupA.id);
+    const source = await makeWorker(projects[0], study.id, true);
     const same = await makeWorker(projects[1], study.id);
     const other = await makeWorker(projects[1], dev.id);
     const none = await makeWorker(projects[0], null);
@@ -124,14 +124,8 @@ test('assembled HTTP and real RPC isolate profile memory across projects without
     assert.equal(none.worker.client.env.PIVANE_HERMES_BUNDLE, undefined);
     assert.equal(none.worker.client.env.PIVANE_PROFILE_AUTHORING_CONTEXT, undefined);
     assert.equal(none.worker.client.env.PIVANE_ASSISTANT_PROJECT_CONTEXT, undefined);
-    assert.equal(source.worker.loadedAssistantProjectConfirmed, true);
-    assert.equal(source.worker.loadedAssistantProjectId, groupA.id);
     assert.equal(source.worker.loadedAgentProfileConfirmed, true);
-    const otherGroup = await call('POST', '/sessions', { cwd: projects[0], profileId: study.id, assistantProjectId: groupB.id });
-    const groupSessions = await call('GET', `/assistant-projects/${groupA.id}/sessions?profileId=${study.id}`);
-    assert.deepEqual(groupSessions.sessions.map(session => session.id), [source.session.id]);
-    assert.equal(groupSessions.sessions.some(session => session.id === otherGroup.id), false);
-    assert.deepEqual((await call('GET', `/assistant-projects/${groupA.id}/sessions?profileId=${dev.id}`)).sessions, []);
+    assert.equal('assistantProject' in (await call('GET', '/sessions?cwd=' + encodeURIComponent(projects[0]))).sessions[0], false);
     const prompt = async (worker, message) => {
         let timer, unsubscribe;
         const done = new Promise((resolve, reject) => {
@@ -145,7 +139,7 @@ test('assembled HTTP and real RPC isolate profile memory across projects without
     await prompt(source.worker, 'fixture remember');
     assert.match(await prompt(same.worker, 'fixture recall'), new RegExp(marker));
     assert.doesNotMatch(await prompt(other.worker, 'fixture recall'), new RegExp(marker));
-    assert.ok(calls.some(request => JSON.stringify(request.messages).includes('Synthetic group Analysis')));
+    assert.equal(fs.readFileSync(legacyRegistry, 'utf8'), '{unreadable retired registry', 'legacy storage is never read or rewritten');
     const beforeDraftCalls = calls.length;
     const authoring = await call('POST', '/profiles/authoring-sessions', { cwd: projects[0], profileId: study.id,
         language: 'en', draft: { name: study.name } });

@@ -9,7 +9,6 @@ import { registerAgentMessages } from '../../server/pi-agent-messages-extension.
 import { receiveAgentMessages } from '../../server/pi-agent-message-format.js';
 import { registerExtensionAssistant } from '../../server/pi-extension-assistant-extension.ts';
 import { registerAgentProfile } from '../../server/pi-profile-runtime.js';
-import { registerAssistantProject } from '../../server/pi-assistant-project-runtime.js';
 import { registerProfileAuthoring } from '../../server/pi-profile-authoring-extension.ts';
 import { registerProfileMemory } from '../../server/profile-memory/extension.ts';
 
@@ -38,7 +37,6 @@ export default async function (pi) {
     registerAgentThreads(ownedPi);
     registerAgentMessages(ownedPi);
     registerAgentProfile(ownedPi, getAgentDir);
-    registerAssistantProject(ownedPi, getAgentDir);
     registerProfileAuthoring(ownedPi, getAgentDir);
     await registerProfileMemory(ownedPi);
     pi.on('before_agent_start', async (event, ctx) => {

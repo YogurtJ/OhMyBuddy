@@ -238,15 +238,9 @@
 
 ### 逻辑助手项目
 
-`/status.assistantProjects=true` 标记逻辑项目后端。项目是独立命名分组，同一规范 cwd 可对应多个项目；分组的 `instructions` 作为额外上下文追加到已加载的助手提示词，不修改共享 AGENTS.md，也不改变 profile+物理 cwd 的记忆范围。归档仅阻止创建新线程，已保存的线程及其绑定不删除。档案不是文件权限沙箱。
+旧逻辑助手项目分类已退役，`/status.assistantProjects=false`、`sessionClassification=false`。`/assistant-projects`、`/assistant-projects/:id`、`/assistant-projects/:id/sessions` 以及 `/sessions/:id/classification` 的所有方法在正常鉴权后返回 HTTP 410、`{code:"ASSISTANT_CATEGORIES_RETIRED",error}`，不读取或修改旧注册表／会话。`POST /sessions` 只要包含 `assistantProjectId`（包括 null）同样返回 410，不静默退回普通新建。
 
-- `GET /assistant-projects[?profileId=UUID]` 返回 `{version:1,revision,projects}`。省略筛选返回全部记录；提供 ID 时仅返回关联该档案的组。
-- `PUT /assistant-projects` 接受 `{expectedRevision,project:{id?,name,cwd,description,instructions,profileIds,archived}}`，返回 `{ok,revision,project,requiresReload:true}`。新建省略 ID；更新必须给出已有 ID。name 非空且最多 80 字符、description 最多 500 字符、instructions 最多 8192 UTF-8 字节、profileIds 为不重复 UUID 数组，archived 为布尔值。新关联必须是已启用档案；cwd 经现有 realpath/允许根校验，创建后不可改变。
-- `DELETE /assistant-projects/:id` 接受严格 `{expectedRevision}` JSON，返回 `{ok:true,deletedId,revision}`。仅删除已核实为空的分类记录，不删除目录、文件、会话或身份。检查该 cwd 的全部原生会话（不限当前助手或启用状态），有当前绑定或相关冲突归属、无法完整读取、成员变化／修订过期／设置占用返回 409；不存在返回 404，非法参数返回 400。已有效转出分类的历史标记不阻止删除。结果不确定时重新读取列表核对，不自动重放。
-- `GET /assistant-projects/:id/sessions?profileId=UUID` 返回 `{sessions:[...]}`，只返回原生当前会话 ID 的项目绑定和实际档案绑定均匹配的线程；缺少 profileId 或无效 ID 拒绝。不按浏览器选中状态推断身份。
-- `POST /sessions` 可增加 `assistantProjectId`，此时必须同时显式提交关联、启用的 `profileId`，cwd 必须匹配项目且项目未归档。未知 ID、无效身份或 cwd 冲突在原生文件创建前拒绝，不回退到普通线程。省略 assistantProjectId 保持旧调用和项目默认档案行为。
-
-现有 `/sessions?cwd` 仍列出全部原生线程，新增 `assistantProject:null|{id,name,cwd,available}`；不存在的已绑定组仍显示 ID 和 available=false，不能自动归入另一组。旧有档案绑定但无项目标记的线程仍按真实 cwd 保持未分类。项目标记 `pivane-assistant-project` 保存 `{version:1,sessionId,projectId,cwd}`：初始标记只能有一个且匹配当前原生 ID/cwd；后续分类变更通过 `pivane-assistant-project-change` 的 previousRevision（前一原生 entry ID／无标记时 null）、previousProjectId 与 projectId（UUID／null）构成严格 CAS 链，重复初始标记或断裂链失效。复制导入的旧 ID 不生效；网页分叉给新 ID 追加当前有效归属。保存分组指令不自动重载当前 worker；`get_runtime_configuration.assistantProject` 分别返回 saved、savedProjectRevision、loadedProjectId、loadedProjectRevision、loadedConfirmed 与 matchesSavedProject。只有当前原生会话的运行实例确认后才标记已加载，保存值不能冒充运行配置。注册表保存在原生 agentDir 的私有 `ohmybuddy-profiles/assistant-projects.json`，项目和档案保存共用设置/维护忙碌互斥；过期修订和占用返回 409，未授权或非法输入按现有访问控制返回错误。
+会话列表、定点读取与 `get_runtime_configuration` 不再投影 assistantProject。历史 JSONL 的分类条目和注册表原件保持原字节，运行时不解析它们、不注入分类指令；分叉保留历史，但不向新会话追加分类归属。伙伴话题和工作台身份线程使用各自现有契约。
 
 ### Bot 模式
 
@@ -528,7 +522,7 @@ Body: `{ "cwd": "/workspace/demo" }`。先经过 token/Origin/realpath 根检查
 
 `/status.extensionAssistant=true` 时，`POST /extension-assistant/sessions` 接受 `{cwd,scope,language,returnSessionId?}`，创建独立原生会话并返回 `assistant` 元数据，不提交模型消息。`POST /extension-assistant/inventory` 和 `/extension-assistant/package` 为已打开的助手提供固定安装范围的配置读取与包操作，分别接受 `{cwd,sessionId}` 和附加的 `{action,source,expectedRevision,confirmed:true}`。包操作复用原生配置互斥、trust 和修订检查；独立进程凭据只授权这两个管理端点，不能用于其他 API，媒体规划凭据不能用于扩展管理。请求/响应、确认、取消、身份恢复和限制见[扩展助手契约](NATIVE_SETTINGS.md#扩展助手接口与持久化)。
 
-`/status.sessionClassification=true` 启用助手会话分类变更。GET `/sessions/:id/classification?cwd=...` 返回 `{session,projectId,revision,projectsRevision,projects}`：revision 为当前归属的原生 entry ID／null，projects 仅含同档案、同真实 cwd 的未归档分类。PUT 同路径接受 `{cwd,projectId,expectedRevision,expectedProjectsRevision}`，projectId 可为 null（未分类）；拒绝未知字段、无档案／起草／扩展助手会话、跨目录／跨身份／归档目标和冲突标记。保存在共享设置与 Supervisor editing 互斥下执行，会话、标题与后台任务不空闲或有关联侧聊时返回 409（忙碌 code=SESSION_BUSY），归属／分类注册表修订变化返回 409。成功 `{session,changed}`，同目标为无写入；原生历史和 ID 保留，只追加分类变更。打开该线程的 WS 收到 `{type:'gateway_session_classified',session}` 后关闭码 1012，重连加载新分类指令；页面保留草稿／附件，不抢占已切换线程。不确定结果不能自动重放，重新 GET 核对。
+旧会话分类读写接口已退役，统一返回 HTTP 410，见[逻辑助手项目](#逻辑助手项目)。不再发送 gateway_session_classified 事件或执行分类重连。
 
 ### 会话移动
 
@@ -608,7 +602,7 @@ POST `/sessions/:id/title` 接受 `{cwd}`，使用请求开始时冻结的标题
 
 每条浏览器命令包含 request ID。第一条消息必须是 `open_session`、`open_ephemeral`，或持有已准备票据的独立侧聊 `open_side_chat`；认证失败使用 WebSocket close code `4401`。同一socket在首次await前预占open，获取、完整快照和临时实例清理期间的并发open及其他命令返回 `success:false,errorCode:'SESSION_OPEN_PENDING'`，不改变已准入连接的身份；完成后可顺序切换。快照只读取该次打开的局部worker，失败/断线释放其临时实例并等待真实退出；持久worker继续由Supervisor持有。主聊和侧聊仍要求独立连接。
 
-出站发送按每个连接的总 `bufferedAmount` 检查积压，新帧计 UTF-8 字节并预留 14 字节帧开销。普通发送余量为 8 MiB，`gateway_shell` 为 1 MiB；允许一个更大的合法单帧及有界额外积压，大快照保持完整，因此该数值不是单帧长度上限。超过预算时关闭当前连接（1013），本策略发起的关闭在 1 秒后仍未完成则强制终止；关闭帧无法送达时客户端可能观察到 1006。发送时身份失效优先 4401；删除 4004、移动 4005、分类变化 1012 和主动结束侧聊 1000 保留原含义。
+出站发送按每个连接的总 `bufferedAmount` 检查积压，新帧计 UTF-8 字节并预留 14 字节帧开销。普通发送余量为 8 MiB，`gateway_shell` 为 1 MiB；允许一个更大的合法单帧及有界额外积压，大快照保持完整，因此该数值不是单帧长度上限。超过预算时关闭当前连接（1013），本策略发起的关闭在 1 秒后仍未完成则强制终止；关闭帧无法送达时客户端可能观察到 1006。发送时身份失效优先 4401；删除 4004、移动 4005 和主动结束侧聊 1000 保留原含义。
 
 压力关闭不会取消已接受的操作或停止共享持久 worker，也不重发失败／结果未知的请求。持久线程客户端可重新 `open_session`，从原生快照及其 `webLive` 序号边界恢复；其他连接独立处理。临时线程和侧聊仍遵循各自原有断线清理规则。
 

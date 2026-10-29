@@ -154,7 +154,7 @@
             if (next === 'soul') return ['persona', options];
             if (next === 'user') return ['memory', { ...options, target: 'user' }];
             if (next === 'memory') return ['memory', { target: 'memory', ...options }];
-            if (next === 'projects') return ['overview', { ...options, projects: true }];
+            if (next === 'projects') return ['overview', options];
             return [sections.some(([id]) => id === next) ? next : 'overview', options];
         }
         async function openSection(next, options = {}) {
@@ -166,7 +166,7 @@
             if (['memory', 'skills'].includes(previous) && !['memory', 'skills'].includes(next)) call(knowledge, 'close');
             if (previous === 'learning' && next !== 'learning') call(learning, 'close');
             const id = selected, request = openEpoch;
-            if (next === 'overview') { await loadOverview(); if (options.projects && id === selected) overviewRoot.querySelector('[data-projects-card]')?.scrollIntoView({ block: 'start' }); }
+            if (next === 'overview') await loadOverview();
             if (next === 'persona') renderPersona();
             if (next === 'memory' || next === 'skills') {
                 const pending = pendingReveal?.profileId === id ? pendingReveal : null;
@@ -196,18 +196,16 @@
             draft = null; selected = ''; ++editorVersion; ++overviewEpoch; ++proposalEpoch; ++openEpoch;
             reconcile = null; proposal = null; call(knowledge, 'close'); call(learning, 'close'); renderPersona(); showSection(); renderHeader(); renderList();
         }
-        // The assistant chat page is retired (M4-5c): a Bot opens its own chat; another identity gets
-        // a new Pi Agent thread in the current project, or in a related category's folder (keeping
-        // that category's instructions).
-        async function chat(project) {
+        // A Buddy opens its own chat; an ordinary identity starts a Workspace thread.
+        async function chat() {
             const id = selected, profile = savedProfile();
             if (!profile?.enabled || !await guard() || id !== selected) return;
             if (profile.bot) return void window.PiWorkspaceRoute?.navigate('bot', { profileId: id });
-            const target = project?.cwd || cwd();
+            const target = cwd();
             if (!target) { ui.toast(t('请先在工作台选择一个项目'), { tone: 'warning' }); return; }
             try {
                 const session = await apiFetch('/api/pi/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cwd: target, profileId: id, ...(project ? { assistantProjectId: project.id } : {}) }) });
+                    body: JSON.stringify({ cwd: target, profileId: id }) });
                 if (!active() || selected !== id) return;
                 window.PiWorkspaceRoute?.navigate('chat', { cwd: session.cwd, sessionId: session.id });
             } catch (error) { ui.toast(t('没有新建线程：{0}', error.message), { tone: 'error' }); }
@@ -319,9 +317,9 @@
             if (!selected || !active()) return;
             const id = selected, request = ++overviewEpoch; overviewData = null; renderOverview();
             const base = `/api/pi/profiles/${encodeURIComponent(id)}`;
-            const results = await Promise.allSettled([apiFetch(`${base}/knowledge?kind=memory&state=present`), apiFetch(`${base}/learning`), apiFetch(`/api/pi/assistant-projects?profileId=${encodeURIComponent(id)}`)]);
+            const results = await Promise.allSettled([apiFetch(`${base}/knowledge?kind=memory&state=present`), apiFetch(`${base}/learning`)]);
             if (request !== overviewEpoch || selected !== id || !active()) return;
-            overviewData = { knowledge: results[0], learning: results[1], projects: results[2] };
+            overviewData = { knowledge: results[0], learning: results[1] };
             if (results[1].status === 'fulfilled') { learningHealth.set(id, results[1].value); renderHeader(); renderList(); }
             renderOverview();
         }
@@ -334,16 +332,15 @@
                 return;
             }
             const result = key => overviewData[key].status === 'fulfilled' ? overviewData[key].value : null;
-            const knowledgeData = result('knowledge'), learningData = result('learning'), projectsData = result('projects');
+            const knowledgeData = result('knowledge'), learningData = result('learning');
             const counts = knowledgeData?.counts, usage = knowledgeData?.usage, health = learningData?.health;
-            const projectRows = projectsData?.projects || [], pending = learningData?.drafts?.pending || 0;
+            const pending = learningData?.drafts?.pending || 0;
             const proposals = (learningData?.proposals || []).filter(p => !p.status || ['pending', 'proposed', 'ready'].includes(p.status));
             const memoryOn = profile.memory?.enabled, skillsOn = profile.skills?.learnedEnabled !== false;
             const stats = el('div', { class: 'pi-id-stats' }, [
                 stat({ icon: 'brain', label: t('记忆'), value: memoryOn ? U.number(counts?.memory?.total) : t('未启用'), detail: counts ? t('关于你 {0} · 长期 {1} · 项目 {2}', U.number(counts.memory?.user), U.number(counts.memory?.memory), U.number(counts.memory?.project)) : t('助手跨对话记住的信息'), tone: memoryOn ? 'accent' : 'off', onClick: () => void openSection(memoryOn ? 'memory' : 'persona') }),
                 stat({ icon: 'toolbox', label: t('技能'), value: skillsOn ? U.number(counts?.skill?.active) : t('未启用'), badge: pending ? t('{0} 待审', U.number(pending)) : undefined, detail: t('审核后才会启用。'), tone: skillsOn ? 'blue' : 'off', onClick: () => void openSection(skillsOn ? 'skills' : 'persona', { drafts: pending > 0 }) }),
-                stat({ icon: 'seedling', label: t('后台学习'), value: health ? t(healthShort[health.state] || '不可用') : '—', detail: health?.today ? t('今日 {0} / {1} 次', U.number(health.today.runs), U.number(health.today.maxRuns)) : t('对话之后整理记忆与技能草稿'), tone: healthTone[health?.state] || 'off', onClick: () => void openSection('learning') }),
-                stat({ icon: 'folder', label: t('关联项目'), value: projectsData ? U.number(projectRows.length) : '—', detail: t('共享此身份的协作方式'), tone: 'violet', onClick: () => overviewRoot.querySelector('[data-projects-card]')?.scrollIntoView({ block: 'start' }) })]);
+                stat({ icon: 'seedling', label: t('后台学习'), value: health ? t(healthShort[health.state] || '不可用') : '—', detail: health?.today ? t('今日 {0} / {1} 次', U.number(health.today.runs), U.number(health.today.maxRuns)) : t('对话之后整理记忆与技能草稿'), tone: healthTone[health?.state] || 'off', onClick: () => void openSection('learning') })]);
             const attention = el('div', { class: 'pi-id-attention' });
             const addAttention = (title, text, label, onClick, tone = 'amber', name = 'triangle-exclamation') => attention.append(el('div', { class: 'pi-id-attention-row', dataset: { tone } }, [icon(name), el('div', { class: 'pi-id-attention-copy' }, [el('strong', { text: title }), el('small', { text })]), button({ label, size: 'sm', onClick })]));
             if (!profile.enabled) addAttention(t('此身份已停用'), t('启用后可用于新对话。'), t('前往设定'), () => void openSection('persona'), 'neutral', 'circle-pause');
@@ -374,11 +371,7 @@
                     el('small', {}, [origin, ' · ', U.time(receipt.at || receipt.createdAt)])])]));
             }
             const changes = card({ title: t('最近变化'), icon: 'clock-rotate-left', actions: receipts.length > 6 && receiptLimit === 6 ? [button({ label: t('显示更多'), size: 'sm', variant: 'ghost', onClick: () => { receiptLimit = 30; renderOverview(); } })] : [] }, [!knowledgeData ? notice(t('{0}读取失败：{1}', t('记忆'), overviewData.knowledge.reason?.message || ''), [button({ label: t('重试'), size: 'sm', onClick: () => void loadOverview() })]) : receipts.length ? timeline : empty({ icon: 'clock', title: t('还没有变化记录'), compact: true })]);
-            const projectsCard = card({ title: t('关联项目'), icon: 'folder-open', subtitle: t('这些项目中的新对话会使用此身份。') }, [
-                projectsData ? projectRows.length ? el('div', { class: 'pi-id-entries' }, projectRows.map(project => el('div', { class: 'pi-id-entry pi-profile-project' }, [el('div', { class: 'pi-id-entry-main' }, [el('span', { class: 'pi-id-entry-title' }, [icon('folder'), ' ', project.name]), el('span', { class: 'pi-id-entry-meta pi-profile-project-path', title: project.cwd, text: project.cwd }), el('span', { class: 'pi-id-entry-text', text: project.description || '' })]), button({ label: t('在此项目对话'), icon: 'arrow-right', variant: 'quiet', size: 'sm', onClick: () => void chat(project) })]))) : empty({ icon: 'folder-open', title: t('没有关联项目'), text: t('在工作台项目菜单中选“以身份新建…”，就能在那个项目里用此身份。'), compact: true })
-                    : notice(t('关联项目读取失败：{0}', overviewData.projects.reason?.message || ''), [button({ label: t('重试'), size: 'sm', onClick: () => void loadOverview() })])]);
-            projectsCard.dataset.projectsCard = '';
-            overviewRoot.replaceChildren(stats, el('div', { class: 'pi-id-grid-2' }, [card({ title: t('需要处理'), icon: 'list-check' }, [attention]), changes]), projectsCard,
+            overviewRoot.replaceChildren(stats, el('div', { class: 'pi-id-grid-2' }, [card({ title: t('需要处理'), icon: 'list-check' }, [attention]), changes]),
                 card({ title: t('主线程与定时任务'), icon: 'calendar-check', actions: [button({ label: t('管理定时任务'), variant: 'quiet', size: 'sm', onClick: () => window.PiWorkspaceRoute?.navigate('cron', { profileId: selected }) })] }, [el('p', { class: 'pi-id-help', text: t('主线程按需创建，也可以指定已有线程作为定时任务的默认目标。') })]));
         }
         async function loadLearningHealth() {

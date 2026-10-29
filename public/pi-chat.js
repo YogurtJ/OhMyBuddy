@@ -483,7 +483,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!isCurrentNavigation(navigation, result.session.cwd)) return;
             invalidateSessionList(result.session.cwd);
             await loadSessions(result.session.cwd);
-            sessionClassified(result.session);
+            upsertSession(result.session);
             if (!await navigateToSession(result.session, navigation)) return;
             if (result.draft && state.cwd === result.session.cwd && state.session?.id === result.session.id) {
                 const draft = attachments.fromPayload(result.draft);
@@ -1710,7 +1710,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return request;
     }
 
-    function sessionClassified(session) {
+    function upsertSession(session) {
         if (!session?.id || !session.cwd) return;
         const rows = state.projectSessions.get(session.cwd) || [];
         const current = state.cwd === session.cwd && state.session?.id === session.id;
@@ -2162,13 +2162,13 @@ document.addEventListener('DOMContentLoaded', () => {
             await new Promise(resolve => window.addEventListener('workspace:settings-closed', resolve, { once: true }));
             if (window.PiWorkspaceRoute?.current().tab !== 'assistant') return;
         }
-        const profileId = params?.get('profileId'), projectId = params?.get('projectId'), sessionId = params?.get('sessionId');
+        const profileId = params?.get('profileId'), sessionId = params?.get('sessionId');
         let tab = 'chat', target = {};
         try {
-            if (sessionId && projectId) {
-                const data = await apiFetch(`/api/pi/assistant-projects${profileId ? `?profileId=${encodeURIComponent(profileId)}` : ''}`);
-                const project = data?.projects?.find(item => item.id === projectId);
-                if (project?.cwd) target = { cwd: project.cwd, sessionId };
+            if (sessionId) {
+                // Only a real directory can identify an old thread now. A legacy
+                // category ID is not a project and must not reactivate its registry.
+                if (params?.get('cwd')) target = { cwd: params.get('cwd'), sessionId };
             } else if (profileId) {
                 const data = await apiFetch('/api/pi/profiles');
                 const profile = data?.profiles?.find(item => item.id === profileId);
@@ -3517,9 +3517,6 @@ document.addEventListener('DOMContentLoaded', () => {
         switch (event.type) {
             case 'gateway_runtime_ended':
                 if (event.reason === 'quit') finishRuntimeExit(Boolean(state.session?.ephemeral));
-                break;
-            case 'gateway_session_classified':
-                sessionClassified(event.session);
                 break;
             case 'gateway_window_rotated':
                 state.windowRotation = { profileId: event.profileId, windowId: event.windowId };
@@ -4997,7 +4994,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!await navigateToSession(session)) return;
                     await workflows.openClone();
                 }, { disabled: session.ephemeral })] : []),
-                ...(!session.agentProfile && !session.assistantProject && transfer.movesEnabled
+                ...(!session.agentProfile && transfer.movesEnabled
                     ? [command(translateUi("移动到项目…"), 'fa-folder-open', () => transfer.openMove(session, cwd), { disabled: session.ephemeral })] : []),
                 ...(state.manualUnread ? [command(translateUi("标记为未读"), 'fa-envelope', () => markThreadUnread(session, cwd),
                     { disabled: session.ephemeral || state.unreadRequests.has(activityKey(cwd, session.id)) })] : []),

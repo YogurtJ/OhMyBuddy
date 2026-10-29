@@ -18,7 +18,7 @@
 | 系统边界、数据流、设计取舍与已知技术债 | [架构](ARCHITECTURE.md) |
 | 模块协作、具体生命周期、缓存与失败边界 | [运行与界面实现细节](RUNTIME.md) |
 | 开发步骤、验证范围、文档责任 | [开发流程](WORKFLOW.md) |
-| 助手身份、分类与档案记忆的实现边界 | [助手档案实现](AGENT_PROFILES.md) |
+| 助手身份、旧分类退役与档案记忆的实现边界 | [助手档案实现](AGENT_PROFILES.md) |
 | OhMyBuddy 名称、旧版本兼容、项目迁移 | [命名与迁移](NAMING.md) |
 | Pi/第三方依赖、公开 API 和升级验证 | [依赖与上游适配](DEPENDENCIES.md) |
 | 候选包、发布与恢复演练 | [发布流程](RELEASING.md) |
