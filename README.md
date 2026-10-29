@@ -4,12 +4,10 @@
 
 # OhMyBuddy
 
-**A self-hosted AI buddy for conversations, coding and everyday tasks.**
+**A self-hosted AI buddy that remembers you and gets real work done, from any browser, your phone or WeChat.**
 
-Formerly **Pivane**. Existing installations keep their data and settings; see the [rename and upgrade guide](docs/development/NAMING.md).
-
-Run the [Pi coding agent](https://pi.dev) on your own machine and use it from any browser on your desktop, tablet or phone.<br>
-Subagents, scheduled tasks, MCP, long-term memory, rich file previews and a built-in image, video and speech lab work with your own models and keys.
+An open-source personal AI agent with a full coding-agent workspace, built on the [Pi coding agent](https://pi.dev).<br>
+Bring your own models: Claude, GPT, Gemini, DeepSeek, Qwen, Kimi and more. Your chats, memory and keys stay on your machine.
 
 [![Latest release](https://img.shields.io/github/v/release/YogurtJ/pivane?style=flat-square&label=release)](https://github.com/YogurtJ/pivane/releases/latest)
 [![License: ISC](https://img.shields.io/badge/license-ISC-blue?style=flat-square)](LICENSE)
@@ -21,106 +19,114 @@ Subagents, scheduled tasks, MCP, long-term memory, rich file previews and a buil
 
 [Download](https://github.com/YogurtJ/pivane/releases/latest) · [Install](docs/en/INSTALL.md) · [User guide](docs/en/USER_GUIDE.md) · [Changelog](CHANGELOG.md) · [Report an issue](https://github.com/YogurtJ/pivane/issues/new/choose) · [Discussions](https://github.com/YogurtJ/pivane/discussions)
 
-<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/hero-en.webp" alt="OhMyBuddy on the desktop: a personal Bot conversation, folded process and reviewable memory receipts" width="100%">
+<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/hero-en.webp" alt="OhMyBuddy, a self-hosted AI assistant, on the desktop: a Bot conversation with a folded process summary and memory receipts" width="100%">
 
 </div>
 
+> Formerly **Pivane**. Existing installations keep their data and settings; see the [rename notes](docs/development/NAMING.md).
+
+## What is OhMyBuddy?
+
+OhMyBuddy is a self-hosted web app that turns the Pi coding agent into a personal AI assistant you can reach from anywhere. Install it on a computer you own (Linux, macOS, Windows or even a Raspberry Pi), then use it from any browser on your desktop, tablet or phone, or message it from WeChat.
+
+It has two sides that share the same runtime, models and tools:
+
+- **Bot: your personal buddy.** A Bot has a name, a look and a personality. It keeps one ongoing conversation with you, remembers what matters across chats, and handles everyday questions, plans, notes, research, reminders and small jobs on your computer.
+- **Pi Agent: your agent workspace.** For project work in real folders, you get threads, streaming tool calls, diffs, subagents, side chats and session trees. Sessions stay compatible with Pi CLI.
+
 ## Why OhMyBuddy
 
-- **Uses Pi's own runtime.** OhMyBuddy runs Pi's native runtime and reads and writes Pi's own session files. You get streaming replies, tool calls, file diffs, shell commands, steering and context compaction in a UI that is easy to read on any screen.
-- **Start on your desktop and check in from your phone.** Sessions are stored on your server. When you open a thread on another device, the same agent process serves it. You can add OhMyBuddy to your home screen and get notified when a reply finishes. With the optional WeChat connector, you can also hand tasks to the agent from a WeChat chat and get the files back there.
-- **Run many agents from one workspace.** You can use subagents, task threads that agents create for themselves, messages between threads, side chats and cron-scheduled tasks. A live view shows what each one is doing.
-- **Your models, your keys, your machine.** You can use any provider Pi supports, including Anthropic, OpenAI, Google Gemini, GitHub Copilot, OpenRouter, DeepSeek, Qwen, Kimi, MiniMax, xAI and Mistral. Sign in with an API key or OAuth, or add your own OpenAI-compatible endpoint. Credentials and history stay on your machine.
-- **Extends the same way Pi does.** Pi packages, skills, prompt templates and MCP servers can be installed from the browser. You can also ask the built-in extension assistant to find and set them up for you.
-- **Media generation and voice are built in.** Connect your own image, video and speech services. An agent turns your idea into parameters you can edit; per-type settings control automatic execution in chat, while video asks for confirmation by default. You can also dictate messages and have replies read aloud.
+- **It remembers you, and you can see what it remembers.** Each Bot keeps notes about you, long-term memory, learned skills and a notebook for every chat. When a reply saves something, a receipt appears under it, and every memory and skill can be reviewed, edited or undone.
+- **One buddy on every screen.** Sessions live on your server, so your desktop, phone and WeChat continue the same conversation. Install it to your home screen and get notified when a reply finishes.
+- **It does real work.** Bots and agents can read and write files, run commands, use the web and MCP tools, start subagents and run scheduled tasks on your machine. Bots offer three working styles: Hands-off, Careful and Ask every time.
+- **Your models, your keys, your machine.** Use any provider Pi supports, including Anthropic, OpenAI, Google Gemini, GitHub Copilot, OpenRouter, DeepSeek, Qwen, Kimi, MiniMax, xAI and Mistral, with an API key, OAuth or your own OpenAI-compatible endpoint. Credentials and history stay on your machine.
+- **Grows with Pi's ecosystem.** Install Pi packages, skills, prompt templates and MCP servers from the browser, or ask the built-in extension assistant to find and set them up.
+- **Images, video and voice built in.** Connect your own image, video and speech services, describe what you want and get editable parameters. Dictate messages and have replies read aloud.
 
-### A conversation that leaves useful results
+### Who it's for
 
-Ask your Buddy to remember a plan and a preference. The conversation keeps one final reply, while the process and changes stay available for review.
-
-<sub>Current screenshots use synthetic conversations and local fixtures; no real provider or WeChat message was sent.</sub>
+- You want an assistant like ChatGPT that runs on your own computer, uses your own API keys and remembers you across conversations.
+- You use Pi or another coding agent and want to start a long task at your desk and check on it from your phone.
+- You live in WeChat and want to hand tasks to an agent at home, then get the finished files back in the chat.
+- You want one place for chat, agents, scheduled jobs and media generation instead of several tools.
 
 ## Features
 
-### Agent workspace
+### Bots: a personal buddy
+
+- Give a Bot a name, an avatar, a personality and a working folder. An optional two-to-three-minute interview covers how it should address you, what it helps with and how it should work.
+- Each Bot has one ongoing main chat and up to 100 topics. Every chat has its own notebook, "Things I'm keeping in mind", for decisions, promises, deadlines and open questions. Topics share the Bot's memory and skills.
+- Long chats stay usable. Old tool output is trimmed and summaries are written while the chat is idle. Earlier parts of the chat stay readable, and the Bot can search their original wording.
+- Each turn shows one reply and a one-line summary of the process, which you can expand. Memory, notebook, skill, settings and schedule changes appear as receipts you can open.
+- Run several Bots side by side, each with separate memory. A new Bot can copy the "About you" notes you select from another Bot.
+- Proactive messages and background learning have their own switches and budgets in the Bot settings. See the [Bot guide (Chinese)](docs/BOT_MODE.md).
+
+### Pi Agent: the agent workspace
 
 - Threads are organized by project and run directly in folders on the server.
 - Replies stream in with thinking, tool calls and the files changed in each turn. The default compact view folds each finished turn into a one-line "time · tool calls" summary.
-- You can attach images and files by paste or drag-and-drop, reference project files with `@`, or quote a text selection into your next message. DOCX, XLSX, PPTX and PDF uploads keep their originals, and the agent reads selected ranges on demand.
+- Attach images and files by paste or drag-and-drop, reference project files with `@`, or quote a text selection into your next message. DOCX, XLSX, PPTX and PDF uploads keep their originals, and the agent reads selected ranges on demand.
 - While a task runs, you can steer it or queue a follow-up. You can also stop, retry or compact the context.
 - `!command` runs a shell command on the server, and `!!command` keeps its output out of the model context.
-- The model picker has search, favorites that sync across devices, per-model thinking levels and a context usage meter.
-- A progress card shows the plan the agent is following.
+- The model picker has search, favorites that sync across devices, per-model thinking levels and a context usage meter. A progress card shows the plan the agent is following.
+- Start a thread in any project as one of your Bots to bring its personality, memory and skills into project work.
 
 ### Sessions and history
 
 - Sessions use Pi's native JSONL files, so they stay compatible with Pi CLI and are never copied into a separate chat database.
-- You can search the full text of all threads, bookmark messages, browse the session tree, fork a conversation, or edit and retry a message.
-- You can import Pi sessions and export them as HTML or JSONL.
-- Projects and threads can be archived, and a thread can be moved to another project. New threads get generated titles automatically.
+- Search the full text of all threads, bookmark messages, browse the session tree, fork a conversation, or edit and retry a message.
+- Import Pi sessions and export them as HTML or JSONL.
+- Archive projects and threads, or move a thread to another project. New threads get generated titles automatically.
 
 ### Multi-agent and automation
-
 
 - Subagents are built in through [pi-subagents](https://pi.dev/packages/pi-subagents). A live panel shows each run's status and models, lets you steer, stop or continue it, and reports token usage and cost.
 - An agent can start a new task thread or message another thread in the same project.
 - A side chat lets you ask a quick question without derailing the main task. It can read files and, with your approval for that reply, make small edits.
 - Scheduled tasks can be cron-based or one-time. They support time zones, previews of upcoming runs, budgets and run history.
 
-### Personal Bot conversations
+### Memory and learning
 
-<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/bot-en.png" alt="A personal Bot conversation with topics, a compact process summary and a visible memory receipt" width="100%">
-
-- Give a Bot a name, personality and working folder. Its main chat and topics keep their own conversations and notebooks, with shared memory and skills within that Bot.
-- Model and thinking preferences are saved independently. Web settings and WeChat use the same preferences.
-- A compact process line keeps the conversation readable, while memory, skill and settings changes remain visible and reviewable.
-- Review permissions, proactive activity and learning budgets in the Bot settings. Tool permissions are not an operating-system sandbox. See the [Bot guide](docs/BOT_MODE.md).
-
-### Profiles and memory
-
-- Assistant profiles each have their own persona, notes about you and long-term memory, powered by [pi-hermes-memory](https://pi.dev/packages/pi-hermes-memory?name=memory). Overview, Settings, Memories, Skills and Learning have separate pages for reviewing changes and budgets.
-- Optional background learning picks up your corrections and preferences. It runs within daily budgets, and every memory and learned skill can be reviewed, edited or undone.
+- Bots and assistant profiles each have their own persona, notes about you and long-term memory, powered by [pi-hermes-memory](https://pi.dev/packages/pi-hermes-memory?name=memory). Overview, Settings, Memories, Skills and Learning have separate pages for reviewing changes and budgets.
+- Optional background learning picks up your corrections and preferences within daily budgets.
 - Several logical projects with their own instructions can point to the same directory.
 
-### Messaging channels
+### WeChat
 
-- Install the optional WeChat connector when needed, sign in with a QR code, allow specific users and bind a private chat to an OhMyBuddy thread.
-- Exchange text, images and delivered files, use common slash commands, and receive scheduled notifications. Connection status and delivery receipts are available in the browser.
+- Install the optional WeChat connector, sign in with a QR code and allow specific users. It connects a WeChat ClawBot (iLink) bot identity and does not take over your personal account's chats.
+- Chat with a Bot in WeChat, or bind a private chat to a Pi Agent thread. Send text and images; get final replies, delivered files and scheduled notifications back.
+- Slash commands switch Bots (`/bot`) and topics (`/topic`), change the model or thinking level, and check status, stop or confirm work. Connection status and delivery receipts are shown in the browser. See [messaging channels (Chinese)](docs/MESSAGE_CHANNELS.md).
 
 ### Files and rendering
 
-- You can browse and search project files, review each turn's diff and compare it with the current file.
+- Browse and search project files, review each turn's diff and compare it with the current file.
 - Previews cover Markdown, code, images, PDF, CSV/TSV, SVG, audio and sandboxed HTML. Full-screen reading keeps your position; images support pan and zoom, and PDFs keep the page and zoom level.
 - Agents can publish finished files as unchangeable snapshots that you can open and download from the chat.
 - Markdown is rendered with syntax highlighting, LaTeX math (KaTeX) and Mermaid diagrams.
 
 ### Extensions and MCP
 
-
-- You can manage Pi packages, skills, extensions, prompt templates and themes globally or for a single project.
+- Manage Pi packages, skills, extensions, prompt templates and themes globally or for a single project.
 - MCP uses Pi's native support, including Codemode and tool search. Servers and OAuth sign-ins are managed in the browser.
-- A discovery page filters recommended packages by type and installation state, with requirements and examples inside each card. An extension assistant checks sources and installs them only after you ask. Installed packages and skills show versions and offer explicit update checks.
-- You can edit the system prompt and inspect the full prompt that any thread receives.
+- A discovery page filters recommended packages by type and installation state, with requirements and examples inside each card. The extension assistant checks sources and installs only after you ask. Installed packages and skills show versions and offer explicit update checks.
+- Edit the system prompt and inspect the full prompt that any thread receives.
 
 ### Media lab and voice
 
-
-<sub>Example images were generated by GPT Image 2.5.</sub>
-
-- You can add image, video, text-to-speech and speech-to-text services. Presets cover OpenAI, Google Gemini, Volcengine Ark (Seedream and Seedance) and Alibaba Cloud Model Studio, and any compatible HTTP API can be added manually.
-- An agent drafts editable parameters from a plain-language request in chat or the lab. Per-type chat preferences decide whether a card executes automatically or asks for confirmation; video requires confirmation by default. Busy requests queue, and the same status returns after a refresh. Reference images or videos can be attached when the model supports them.
+- Add image, video, text-to-speech and speech-to-text services. Presets cover OpenAI, Google Gemini, Volcengine Ark (Seedream and Seedance) and Alibaba Cloud Model Studio, and any compatible HTTP API can be added manually.
+- An agent drafts editable parameters from a plain-language request in chat or the lab. Per-type chat preferences decide whether a card runs automatically or asks for confirmation; video requires confirmation by default. Reference images or videos can be attached when the model supports them.
 - Generation history lets you preview, reuse and download earlier results.
-- You can dictate messages into the composer and have replies or selected text read aloud.
+- Dictate messages into the composer and have replies or selected text read aloud.
 
 ### Everyday use
 
-<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/mobile-en.webp" alt="OhMyBuddy on a phone: a personal Bot conversation, process summary and memory receipts" width="100%">
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/mobile-en.webp" alt="OhMyBuddy on a phone: a Bot conversation with a process summary and memory receipts" width="280"></p>
 
 - Layouts adapt to desktop, tablet and phone screens, and OhMyBuddy can be installed to your home screen.
 - In-page notifications and sounds are available, with optional Web Push for background alerts.
 - A usage dashboard breaks down tokens and estimated cost by day, provider, model, project and session.
 - Light and dark color themes, adjustable font sizes, and an English or Simplified Chinese interface are available.
-- An access token protects the workspace. OhMyBuddy runs as a background service with a desktop shortcut. It checks for new releases and gives you an upgrade prompt to hand to an agent on the host.
+- An access token protects the workspace. OhMyBuddy runs as a background service with a desktop shortcut, checks for new releases and gives you an upgrade prompt to hand to an agent on the host.
 
 ## Quick start
 
@@ -138,13 +144,20 @@ node scripts/install.cjs
 npm start
 ```
 
-Open <http://127.0.0.1:11408>, check **Settings → Providers and models**, pick a project folder and start a new chat.
+Open <http://127.0.0.1:11408>, check **Settings → Providers and models**, then open **Bot** to meet your first buddy, or pick a project folder in **Pi Agent**.
 
 For everyday use, follow the [installation guide](docs/en/INSTALL.md) to keep your data outside the app directory, then run `node scripts/install-service.cjs`. This keeps OhMyBuddy running in the background and starts it when you log in. On macOS and Windows, it also adds a desktop shortcut.
 
+**Let your coding agent install it.** Paste this into Claude Code, Codex, Pi or another agent on the target computer:
+
+```text
+Install OhMyBuddy from https://github.com/YogurtJ/pivane on this computer.
+Follow docs/AGENT_GUIDE.md and the installation guide for this platform:
+use the latest release, verify its checksum, install it as a background service,
+and tell me the URL, version and data paths. Never print or copy my API keys.
+```
+
 > **Already using Pi CLI?** OhMyBuddy uses the same Pi identity by default, so your models, logins, settings and sessions are available right away. Avoid writing to the same session from the CLI and the browser at the same time. See [existing Pi users](docs/en/INSTALL.md#existing-pi-cli-users).
->
-> **Want an agent to set it up?** Give your coding agent this repository and the [agent operations guide](docs/AGENT_GUIDE.md). It covers installation, configuration, upgrades and troubleshooting.
 
 ## Platforms
 
@@ -157,6 +170,7 @@ OhMyBuddy listens on localhost by default. To reach it from your phone or anothe
 ```mermaid
 flowchart LR
     B["Browsers<br/>desktop · tablet · phone"] <-->|HTTP + WebSocket| S["OhMyBuddy server<br/>Node.js"]
+    C["WeChat<br/>optional"] <--> S
     S <-->|RPC| W["Pi agent workers<br/>one per open thread"]
     W --> D[("Pi sessions and settings<br/>native JSONL")]
     W --> P["Your project folders"]
@@ -165,17 +179,24 @@ flowchart LR
 ```
 
 - A Node.js server (Express and WebSocket) serves a plain JavaScript frontend, so there is no build step.
-- Each persistent thread is served by exactly one Pi worker process, and every browser that opens the thread connects to that worker.
+- Each persistent thread, including every Bot chat and topic, is served by exactly one Pi worker process, and every browser that opens it connects to that worker.
 - Pi's SessionManager and JSONL files are the only record of each conversation. Usage statistics are kept in a separate ledger that stores no message content.
 - Each OhMyBuddy release bundles a tested version of Pi, which is upgraded together with OhMyBuddy.
 
 ## Security model
 
 - OhMyBuddy is meant for **personal, single-user** instances. Everyone who has the access token shares the same instance, and there are no separate user accounts.
-- Project roots limit which folders you can browse, but they are **not a sandbox**. The agent, shell, packages and extensions all run with the permissions of the server's user account, so install only extensions you trust.
+- Project roots limit which folders you can browse, but they are **not a sandbox**. Bots, agents, the shell, packages and extensions all run with the permissions of the server's user account. A Bot's working style controls when it asks first; it is not an operating-system sandbox either. Install only extensions you trust.
+- Only allowed WeChat users can reach a bound chat, and they can use that chat's tools, so add only people you trust.
 - Media execution follows your per-type chat settings and confirmation policy. OhMyBuddy never automatically replays failed or uncertain submissions.
 
 ## FAQ
+
+**What is the difference between Bot and Pi Agent?** A Bot is one ongoing, personal conversation that hides projects, models and context controls. Pi Agent is the full workspace for project folders. Both use the same Pi runtime, and you can start a Pi Agent thread as a Bot to bring its memory along.
+
+**Is OhMyBuddy just a web UI for Pi?** It started that way, as Pivane. It still runs Pi's own runtime and session files, but Bots, visible memory, WeChat, scheduled tasks and the media lab make it a personal agent you can use every day without opening a terminal.
+
+**How does it compare with OpenClaw or Hermes Agent?** All of them run an agent on your own hardware with your own models. OhMyBuddy is browser-first: memory changes appear as receipts you can review, the Pi coding workspace is included, and WeChat works through ClawBot. If you mainly want one assistant inside many chat apps, OpenClaw's channel list is wider.
 
 **Is it a replacement for Pi CLI?** No, it is a companion. Both share the same Pi identity, so you can use whichever fits the moment.
 
@@ -185,12 +206,23 @@ flowchart LR
 
 **Which languages are supported?** The interface is available in English and Simplified Chinese. Your conversations can be in any language your model supports.
 
+## For AI agents
+
+If you are an AI agent helping someone install, configure, upgrade or troubleshoot OhMyBuddy, start with the [agent operations guide](docs/AGENT_GUIDE.md). Read [AGENTS.md](AGENTS.md) only when you are asked to change the source code.
+
+- **What it is:** a self-hosted personal AI agent (Bots with memory) and coding-agent workspace (Pi Agent), formerly named Pivane. ISC license.
+- **Runtime:** Node.js 22.x (22.19.0 or later), npm, `bash` and ripgrep. No build step, GPU, Docker or global Pi installation.
+- **Default address:** `http://127.0.0.1:11408`. It listens on localhost by default; turn on the access token before allowing other devices.
+- **Engine:** a pinned [Pi coding agent](https://pi.dev) runtime. Conversations are Pi-native JSONL sessions, compatible with Pi CLI.
+- **Interfaces:** [REST and WebSocket API](docs/API.md), [background service](docs/BACKGROUND_SERVICE.md), [Pi CLI coexistence](docs/PI_CLI.md).
+
 ## Documentation
 
 | Topic | Where to start |
 |---|---|
 | Install, upgrade and recover | [Installation guide](docs/en/INSTALL.md) · [Background service](docs/BACKGROUND_SERVICE.md) |
 | Daily use | [User guide](docs/en/USER_GUIDE.md) |
+| Bots | [Bot guide (Chinese)](docs/BOT_MODE.md) |
 | All features, in detail (mostly in Chinese) | [Documentation index](docs/README.md) |
 | REST and WebSocket API | [API reference](docs/API.md) |
 | Help from your own agent | [Agent operations guide](docs/AGENT_GUIDE.md) |
@@ -207,6 +239,8 @@ Feedback of any kind is welcome. Start with the [welcome post](https://github.co
 Remove credentials and private content from logs and screenshots first.
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [development docs](docs/development/README.md), then run `node scripts/install.cjs` to set up development. Choose targeted tests and checks from the [validation matrix](docs/development/WORKFLOW.md#验证矩阵); documentation-only changes need fact checking and `npm run check:docs`. Coding agents should also read [AGENTS.md](AGENTS.md).
+
+If OhMyBuddy is useful to you, a star helps other people find it.
 
 ## License
 

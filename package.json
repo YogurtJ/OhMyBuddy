@@ -1,7 +1,7 @@
 {
   "name": "ohmybuddy",
   "version": "1.11.0",
-  "description": "OhMyBuddy: a personal AI workspace powered by Pi Coding Agent with a media laboratory",
+  "description": "Self-hosted AI buddy that remembers you: personal AI agent with visible long-term memory, WeChat access and a full Pi coding-agent workspace for any browser",
   "main": "server.js",
   "private": true,
   "ohmybuddyCompatibility": {
@@ -31,7 +31,31 @@
     "@earendil-works/pi-codemode": "1.4.0",
     "@earendil-works/pi-mcp": "1.4.0"
   },
-  "keywords": [],
+  "keywords": [
+    "ai-assistant",
+    "personal-assistant",
+    "ai-agent",
+    "self-hosted",
+    "agent-memory",
+    "long-term-memory",
+    "coding-agent",
+    "pi-coding-agent",
+    "web-ui",
+    "chatbot",
+    "wechat",
+    "mcp",
+    "subagents",
+    "llm",
+    "pwa"
+  ],
+  "homepage": "https://github.com/YogurtJ/pivane#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YogurtJ/pivane.git"
+  },
+  "bugs": {
+    "url": "https://github.com/YogurtJ/pivane/issues"
+  },
   "author": "OhMyBuddy contributors",
   "license": "ISC",
   "type": "commonjs",
