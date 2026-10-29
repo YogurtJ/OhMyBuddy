@@ -296,9 +296,9 @@ class ProfileLearningService {
     // idle(job): with a job, its source session and the maintenance lock must be
     // free; without one, the whole service must be idle.
     // auxiliaryModels and legacyReviewModel serve legacy auto-learning adoption.
-    constructor({ profiles, store, preferences, knowledge, getAgentDir, createModelRuntime, idle = () => true,
+    constructor({ profiles, store, preferences, knowledge, getAgentDir, createModelRuntime, idle = () => true, sourceAllowed = async () => true,
         auxiliaryModels = null, legacyReviewModel = async () => null }) {
-        Object.assign(this, { profiles, store, preferences, knowledge, getAgentDir, createModelRuntime, idle,
+        Object.assign(this, { profiles, store, preferences, knowledge, getAgentDir, createModelRuntime, idle, sourceAllowed,
             auxiliaryModels, legacyReviewModel });
         this.active = new Map(); this.closed = false; this.recovering = false; this.pending = new Set(); this.retries = new Map(); this.enrolling = new Set();
         this.mutations = new Set(); this.scans = new Set();
@@ -648,7 +648,7 @@ class ProfileLearningService {
             const { SessionManager } = await require('../pi-session-store').getSdk();
             const manager = SessionManager.open(session.path);
             const context = await this.profiles.context(manager, session.cwd);
-            if (!context?.memory.enabled || !scope.verifyNativeSession(context, manager)) return;
+            if (!context?.memory.enabled || !scope.verifyNativeSession(context, manager) || !await this.sourceAllowed(manager)) return;
             const branch = manager.getBranch(), completed = pairs(branch, manager.getSessionId());
             const stateBefore = this.read(await this.location(context.profileId));
             const nativeKey = history.sessionKey(manager);
@@ -847,7 +847,7 @@ class ProfileLearningService {
         const { SessionManager } = await require('../pi-session-store').getSdk();
         const manager = SessionManager.open(session.path);
         const context = await this.profiles.context(manager, session.cwd);
-        if (context?.profileId !== id || !scope.verifyNativeSession(context, manager)) return null;
+        if (context?.profileId !== id || !scope.verifyNativeSession(context, manager) || !await this.sourceAllowed(manager)) return null;
         const branch = manager.getBranch(), completed = pairs(branch, manager.getSessionId());
         const state = this.read(await this.location(id));
         const fork = history.forkBoundary(manager, context, state.forks?.[history.sessionKey(manager)]);

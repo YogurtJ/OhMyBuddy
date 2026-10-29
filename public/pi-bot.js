@@ -180,7 +180,7 @@
                     main = bot?.windows.find(item => item.kind === 'main' && item.generation !== null);
                     if (!main) throw new Error(translateUi("主聊天暂时无法准备好，请稍后重试"));
                 }
-                const windowId = bot.windows.some(item => item.id === params.get('windowId') && item.generation !== null && !item.archivedAt)
+                const windowId = bot.windows.some(item => item.id === params.get('windowId') && item.generation !== null && !item.archivedAt && !item.trashedAt)
                     ? params.get('windowId') : main.id;
                 this.profileId = bot.id; this.windowId = windowId;
                 localStorage.setItem(LAST_KEY, bot.id);
@@ -237,7 +237,7 @@
         async loadTopicIndex() {
             const bot = this.bot(), serial = ++this.topicIndexSerial;
             if (!bot || !window.PiBotTopics || this.topicIndexMissing
-                || !bot.windows.some(item => item.kind === 'topic' && !item.archivedAt && item.generation !== null)) {
+                || !bot.windows.some(item => item.kind === 'topic' && !item.archivedAt && !item.trashedAt && item.generation !== null)) {
                 if (this.topicIndex && this.topicIndex.botId !== bot?.id) { this.topicIndex = null; if (this.active) this.renderPane(); }
                 return;
             }
@@ -509,6 +509,7 @@
             else if (action === 'topic-add') void this.createTopic();
             else if (action === 'topic-edit') this.editTopic(target.dataset.windowId);
             else if (action === 'topic-restore') void this.restoreTopic(target.dataset.windowId);
+            else if (action === 'topic-trash') this.trashArchivedTopic(target.dataset.windowId);
             else if (action === 'notes') {
                 if (window.innerWidth <= 900) document.getElementById('pi-session-pane')?.classList.remove('open');
                 this.openNotebook();
@@ -538,7 +539,7 @@
             this.creatingTopic = true; this.renderPane();
             const post = revision => this.api(`/api/pi/bots/${encodeURIComponent(profileId)}/windows`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ expectedRevision: revision })
+                body: JSON.stringify({ expectedRevision: revision, groupId: window.PiBotTopicManager?.selectedGroup(profileId) || null })
             });
             try {
                 let result;
@@ -574,7 +575,7 @@
         editTopic(windowId) {
             const bot = this.bot();
             if (!bot || !window.PiBotTopics) return;
-            const topic = windowId ? bot.windows.find(item => item.id === windowId && item.kind === 'topic' && !item.archivedAt) : null;
+            const topic = windowId ? bot.windows.find(item => item.id === windowId && item.kind === 'topic' && !item.archivedAt && !item.trashedAt) : null;
             if (windowId && !topic) return;
             if (window.innerWidth <= 900) document.getElementById('pi-session-pane')?.classList.remove('open');
             const profileId = bot.id, epoch = this.epoch;
@@ -587,18 +588,37 @@
                     if (action === 'created') {
                         const id = result?.window?.id || result?.id;
                         if (id) this.go(profileId, id);
-                    } else if (action === 'archived') {
-                        this.toast(translateUi("话题已归档，聊天记录都保留着"), 'success');
+                    } else if (action === 'archived' || action === 'trashed') {
+                        this.toast(action === 'trashed' ? translateUi("话题已移到回收站") : translateUi("话题已归档，聊天记录都保留着"), 'success');
                         const main = this.bot()?.windows.find(item => item.kind === 'main');
                         if (topic.id === this.windowId && main) this.go(profileId, main.id);
                     } else this.toast(translateUi("已保存"), 'success');
                 } });
         }
 
+        manageTopics(view = 'move') {
+            const bot = this.bot(); if (!bot || !window.PiBotTopicManager) return;
+            const profileId = bot.id;
+            if (window.innerWidth <= 900) document.getElementById('pi-session-pane')?.classList.remove('open');
+            window.PiBotTopicManager.open({ bot, api: this.api, current: () => this.active && this.profileId === profileId,
+                latest: async () => { await this.load(); return this.bots.find(item => item.id === profileId); },
+                onSaved: async () => { await this.refresh(); } }, view);
+        }
+
+        trashArchivedTopic(windowId) {
+            const bot = this.bot(), topic = bot?.windows.find(item => item.id === windowId && item.archivedAt && !item.trashedAt);
+            if (!topic || !window.PiBotTopics) return;
+            // Restore controls stay in the archive; the standard editor provides the trash confirmation.
+            window.PiBotTopics.edit({ bot, window: topic, profileId: bot.id, name: bot.name, api: this.api,
+                current: () => this.active && this.profileId === bot.id,
+                latest: async () => { await this.load(); return this.bots.find(item => item.id === bot.id); },
+                onSaved: async () => { await this.refresh(); } });
+        }
+
         // An archived topic comes back with all its history; it is opened from the list again.
         async restoreTopic(windowId) {
             const bot = this.bot();
-            const topic = bot?.windows.find(item => item.id === windowId && item.kind === 'topic' && item.archivedAt);
+            const topic = bot?.windows.find(item => item.id === windowId && item.kind === 'topic' && item.archivedAt && !item.trashedAt);
             if (!topic || !window.PiBotTopics || this.restoring.has(windowId)) return;
             const profileId = bot.id;
             this.restoring.add(windowId); this.renderPane();
@@ -622,11 +642,11 @@
                     const target = bot?.windows?.find(item => item.id === windowId);
                     if (!target || target.generation === null || !target.sessionId) return 'unavailable';
                     this.bots = data.bots; this.revision = data.revision;
-                    return target.archivedAt ? 'archived' : 'available';
+                    return target.trashedAt ? 'unavailable' : target.archivedAt ? 'archived' : 'available';
                 },
                 onChat: windowId => {
                     const target = this.bot()?.windows.find(item => item.id === windowId);
-                    if (this.active && this.profileId === profileId && target && !target.archivedAt && target.sessionId && target.generation !== null) this.go(profileId, windowId);
+                    if (this.active && this.profileId === profileId && target && !target.archivedAt && !target.trashedAt && target.sessionId && target.generation !== null) this.go(profileId, windowId);
                 },
                 onWindows: async () => {
                     await this.refresh();
@@ -756,21 +776,17 @@
                 copy.append(el('span', null, onboarding ? translateUi("还在互相认识") : bot.bot?.job || translateUi("你的私人助理")));
                 head.append(face(bot, 'lg'), copy);
                 const list = el('nav', 'pi-bot-windows'); list.setAttribute('aria-label', translateUi("聊天"));
-                const windows = bot.windows.filter(item => item.generation !== null && !item.archivedAt);
+                const windows = bot.windows.filter(item => item.generation !== null && !item.archivedAt && !item.trashedAt);
                 const main = windows.find(item => item.kind === 'main');
                 if (main) list.append(this.windowItem(main, 'fa-comment', translateUi("主聊天")));
                 const topics = windows.filter(item => item.kind === 'topic');
-                // Topics: separate focused chats. Archived ones keep their history and can come back.
-                const heading = el('div', 'pi-bot-section-row');
-                const add = button('pi-bot-topic-add', translateUi("新话题")); add.dataset.botAction = 'topic-add';
-                add.disabled = Boolean(this.creatingTopic);
-                add.append(this.creatingTopic ? el('span', 'pi-spinner') : icon('fa-plus'));
-                heading.append(el('p', 'pi-bot-section', translateUi("话题")), add);
-                list.append(heading);
-                for (const topic of topics) list.append(this.topicItem(bot, topic));
-                if (!topics.length) list.append(el('p', 'pi-bot-topic-empty', translateUi("想专心聊某件事时，可以单独开一个话题。")));
-                const archived = bot.windows.filter(item => item.kind === 'topic' && item.archivedAt);
+                if (window.PiBotTopicManager) list.append(window.PiBotTopicManager.list({ bot, creating: Boolean(this.creatingTopic),
+                    topicItem: topic => this.topicItem(bot, topic), create: () => { void this.createTopic(); }, manage: view => this.manageTopics(view) }));
+                else for (const topic of topics) list.append(this.topicItem(bot, topic));
+                const archived = bot.windows.filter(item => item.kind === 'topic' && item.archivedAt && !item.trashedAt);
                 if (archived.length) list.append(this.archivedList(archived));
+                const trash = button('pi-bot-topic-trash-link'); trash.textContent = translateUi("回收站（{0}）", bot.windows.filter(item => item.trashedAt).length);
+                trash.addEventListener('click', () => this.manageTopics('trash')); list.append(trash);
                 const foot = el('footer', 'pi-bot-side-foot');
                 const notes = button('pi-bot-notes-link'); notes.dataset.botAction = 'notes';
                 notes.append(icon('fa-thumbtack'), el('span', null, translateUi("我记着的事")));
@@ -845,7 +861,8 @@
                 const restore = button('pi-bot-chip pi-bot-topic-restore', translateUi("恢复话题“{0}”", topic.title));
                 restore.dataset.botAction = 'topic-restore'; restore.dataset.windowId = topic.id; restore.disabled = restoring;
                 restore.textContent = restoring ? translateUi("正在恢复…") : translateUi("恢复");
-                row.append(mark, el('span', 'pi-bot-window-title', topic.title), restore);
+                const remove = button('pi-bot-topic-edit', translateUi("删除话题“{0}”", topic.title)); remove.dataset.botAction = 'topic-trash'; remove.dataset.windowId = topic.id; remove.append(icon('fa-trash-can'));
+                row.append(mark, el('span', 'pi-bot-window-title', topic.title), restore, remove);
                 box.append(row);
             }
             return box;

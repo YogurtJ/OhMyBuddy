@@ -56,7 +56,7 @@ export function botSection(context: any, manager: any, cwd: string, agentDir: st
         const bot = readBot(profile);
         if (!profile?.enabled || profile.trashedAt !== undefined || !bot?.enabled || bot.workspace !== context.cwd) return null;
         const window = readWindowRecord(agentDir, context.profileId, context.windowId);
-        if (!window || window.archivedAt || window.current?.sessionId !== context.sessionId) return null;
+        if (!window || window.archivedAt || window.trashedAt || window.current?.sessionId !== context.sessionId) return null;
         return { binding, window, model: bot.model, soul: typeof profile.soul === 'string' ? profile.soul : '', profile, bot,
             text: botPreamble({ name: profile.name, bot, cwd: context.cwd, window }) };
     } catch { return null; }

@@ -32,7 +32,7 @@
         return parts.sort().join('|');
     }
 
-    const open = item => item.generation !== null && !item.archivedAt;
+    const open = item => item.generation !== null && !item.archivedAt && !item.trashedAt;
 
     // One chat's state: waiting for the user, a reply not yet seen, working, or nothing to say.
     function windowState(item, state) {
