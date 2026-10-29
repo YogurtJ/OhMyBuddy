@@ -1,6 +1,6 @@
 # macOS 原生安装与运行
 
-OhMyBuddy 在 macOS 上原生运行，原生组件同时包含 Apple Silicon 与 Intel 架构，使用 Node 22.x 并通过浏览器访问。各版本实际验收过的系统、硬件与浏览器见[验证范围](RELEASE_INSTALL_VALIDATION.md)；在其他环境遇到问题，欢迎通过 [Issues](https://github.com/YogurtJ/pivane/issues) 反馈。
+OhMyBuddy 在 macOS 上原生运行，原生组件同时包含 Apple Silicon 与 Intel 架构，使用 Node 22.x 并通过浏览器访问。各版本实际验收过的系统、硬件与浏览器见[验证范围](RELEASE_INSTALL_VALIDATION.md)；在其他环境遇到问题，欢迎通过 [Issues](https://github.com/YogurtJ/OhMyBuddy/issues) 反馈。
 
 ## macOS 完整平台包（预览）
 
