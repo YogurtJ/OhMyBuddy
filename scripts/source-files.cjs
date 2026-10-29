@@ -54,7 +54,7 @@ function distributionFiles(root) {
         'native/pi-darwin-fd.c', 'native/pi-darwin-fd.node', 'native/darwin-fd-manifest.json',
         'package.json', 'package-lock.json', 'LICENSE', 'server.js', '.env.example', '.gitignore',
         'public/vendor/mermaid-11.17.2-dompurify-3.4.17.min.js', 'public/vendor/mermaid-LICENSE.txt',
-        'scripts/mermaid-build/package.json', 'scripts/mermaid-build/package-lock.json',
+        'scripts/mermaid-build/package.json', 'scripts/mermaid-build/package-lock.json', 'scripts/windows-installer.cs',
         'public/vendor/katex-0.18.7/katex.min.js', 'public/vendor/katex-0.18.7/katex.min.css', 'public/vendor/katex-0.18.7/LICENSE',
         'public/brand/fontawesome-6.4.0/css/all.min.css', 'public/brand/fontawesome-6.4.0/LICENSE.txt',
         ...['fa-brands-400', 'fa-regular-400', 'fa-solid-900', 'fa-v4compatibility'].flatMap(name => ['woff2', 'ttf'].map(ext => `public/brand/fontawesome-6.4.0/webfonts/${name}.${ext}`)),

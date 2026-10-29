@@ -53,6 +53,20 @@ node scripts/refresh-platform-channel.cjs --channel-file /private/public-output/
 
 完整包的隔离浏览器更新试验使用 `test/release/macos-platform-update.cjs`。截图前等待页面的“当前版本”变为目标版本且卡片结束加载；“最新版本”提前显示目标值不能替代重连后的界面验证。需要本机合成 HTTPS 分发源时，可显式传 `--tls-ca /absolute/test-ca.pem`：仅把经解析确认的 CA 文件加入该试验子服务的 `NODE_EXTRA_CA_CERTS`，保留正常 TLS、签名、来源和哈希校验，不修改系统信任库。证书、签名私钥和测试源均放在独立私有目录，浏览器仍访问回环 HTTP 应用；真实公开下载、签名／公证及 Finder 首次打开另行验证。
 
+## Linux / Windows 完整平台包
+
+`scripts/package-platform.cjs` 在目标 Linux/Windows 架构原生运行，沿用固定输入摘要、独立构建身份和完整包元数据。Linux 输入与 Mac 一样为 Node/rg/fd 归档；Windows 使用三者的 x64 ZIP，并另提供带 SHA256 的官方 Portable Git 自解压输入。Windows 用系统 .NET Framework 编译 asInvoker、longPathAware 的安装程序与隐藏服务宿主。构建者不把私有身份、npm 配置或签名私钥放入包中。
+
+Linux 交付带 `Install.sh` 的 tar.gz；Windows 交付可双击 exe，更新传输仍为独立 tar.gz。Windows/Linux 的归档由 `platform-archive.cjs` 流式写成有界 ustar，保留清单中的执行位，不依赖 Windows 文件权限位或允许链接；输出再交给同一客户端解析器回读校验。初次安装核心在 `platform-bootstrap.cjs`，Mac 保留独立桌面入口。
+
+发布器接受各平台回执，将安装入口的文件名/大小/SHA256 与更新包一起纳入签名清单，按平台保存不可覆盖的构建回执。一个版本的各平台须使用相同源码身份和 Pi 版本。下载页由 `download-site.cjs` 根据真实回执生成；旧品牌渠道独立保留，新品牌命名空间可通过 `--asset-prefix` 指定页面资产前缀，不能混写两个 product。
+
+```sh
+node scripts/package-platform.cjs --inputs /private/build-inputs.json --version VERSION --work /private/new-build --output /private/new-output
+```
+
+平台更新演练使用 `test/release/platform-bundle-update.cjs`，显式传入准确 payload、独立新 output、目标版本和本机 Playwright/浏览器路径。通过生成 runner 的 stop-request 触发统一正常停机，Windows 不用强杀冒充 SIGTERM。除原生会话、媒体和配置外，核对外置图片对象字节与恢复。普通用户安装和 Windows Limited token、后台服务、系统首次安全确认分列，不由编译成功或 SSH 管理员 token 代替。各发行结果绑定真实包摘要；明确复用和本次实机执行范围。
+
 ## 候选包
 
 1. 从明确的源码提交准备候选，核对 Git 跟踪清单与未提交改动，冻结随包文档，列清本次执行与复用范围。源码阶段先做受影响专项和必要集成、集中处理已知失败；需要的全量安排一次，不在同一环境的源码和包内机械执行两轮。记录源码提交、实际运行版本和候选之间的差异。

@@ -27,14 +27,16 @@ function plan({ root, home, node, platform, executablePath, url, desktop, user }
         if (desktop) result.files.push({ path: path.join(desktop, `OhMyBuddy-${id.slice(10)}.webloc`), content: `<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>URL</key><string>${xml(url)}</string></dict></plist>\n` });
     } else if (platform === 'win32') {
         result.service = path.join(directory, 'task.xml');
+        const host = path.join(root, 'runtime/OhMyBuddyHost.exe'), useHost = fs.existsSync(host);
+        const command = useHost ? host : node, argumentsText = useHost ? `"${node}" "${runner}" "${log}"` : `"${runner}"`;
         // InteractiveToken means the existing user's profile/identity, without a saved password.
-        result.files.push({ path: result.service, content: `<?xml version="1.0" encoding="UTF-16"?>\n<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Triggers><LogonTrigger><Enabled>true</Enabled><UserId>${xml(user)}</UserId></LogonTrigger></Triggers><Principals><Principal id="User"><UserId>${xml(user)}</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals><Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><AllowHardTerminate>false</AllowHardTerminate><StartWhenAvailable>true</StartWhenAvailable><ExecutionTimeLimit>PT0S</ExecutionTimeLimit><RestartOnFailure><Interval>PT1M</Interval><Count>3</Count></RestartOnFailure></Settings><Actions Context="User"><Exec><Command>${xml(node)}</Command><Arguments>${xml('"' + runner + '"')}</Arguments><WorkingDirectory>${xml(root)}</WorkingDirectory></Exec></Actions></Task>\n`, encoding: 'utf16le' });
+        result.files.push({ path: result.service, content: `<?xml version="1.0" encoding="UTF-16"?>\n<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Triggers><LogonTrigger><Enabled>true</Enabled><UserId>${xml(user)}</UserId></LogonTrigger></Triggers><Principals><Principal id="User"><UserId>${xml(user)}</UserId><LogonType>InteractiveToken</LogonType><RunLevel>LeastPrivilege</RunLevel></Principal></Principals><Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries><StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><AllowHardTerminate>false</AllowHardTerminate><StartWhenAvailable>true</StartWhenAvailable><ExecutionTimeLimit>PT0S</ExecutionTimeLimit><RestartOnFailure><Interval>PT1M</Interval><Count>3</Count></RestartOnFailure></Settings><Actions Context="User"><Exec><Command>${xml(command)}</Command><Arguments>${xml(argumentsText)}</Arguments><WorkingDirectory>${xml(root)}</WorkingDirectory></Exec></Actions></Task>\n`, encoding: 'utf16le' });
         if (desktop) result.files.push({ path: path.join(desktop, `OhMyBuddy-${id.slice(10)}.url`), content: `[InternetShortcut]\r\nURL=${url}\r\n` });
     } else throw Error('Supported platforms: Linux, macOS and Windows');
     return result;
 }
 function powershell(command) {
-    return execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from('$ErrorActionPreference = "Stop"; ' + command, 'utf16le').toString('base64')], { encoding: 'utf8', windowsHide: true, timeout: 30000 }).trim();
+    return execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from('$ProgressPreference = "SilentlyContinue"; [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); $ErrorActionPreference = "Stop"; ' + command, 'utf16le').toString('base64')], { encoding: 'utf8', windowsHide: true, timeout: 30000 }).trim();
 }
 async function install({ root = path.resolve(__dirname, '..'), noShortcut = false } = {}) {
     root = fs.realpathSync.native(root);
@@ -58,7 +60,7 @@ async function install({ root = path.resolve(__dirname, '..'), noShortcut = fals
     fs.writeFileSync(value.runner, value.runnerText, { flag: 'wx', mode: 0o600 });
     for (const file of value.files) {
         fs.mkdirSync(path.dirname(file.path), { recursive: true });
-        fs.writeFileSync(file.path, file.content, { flag: 'wx', mode: 0o600, encoding: file.encoding || 'utf8' });
+        fs.writeFileSync(file.path, (file.encoding === 'utf16le' ? '\ufeff' : '') + file.content, { flag: 'wx', mode: 0o600, encoding: file.encoding || 'utf8' });
     }
     const receipt = path.join(value.directory, 'installation.json');
     fs.writeFileSync(receipt, JSON.stringify({ id: value.id, platform: value.platform, url: value.url, service: value.service, files: value.files.map(f => f.path), log: value.platform === 'linux' ? `journalctl --user -u ${value.id}` : value.platform === 'win32' ? 'Task Scheduler history / LastTaskResult; foreground npm start for application output' : value.log, phase: 'prepared' }, null, 2), { flag: 'wx', mode: 0o600 });
@@ -83,4 +85,4 @@ if (require.main === module) {
     if (args.some(a => a !== '--no-shortcut')) { console.error('Usage: node scripts/install-service.cjs [--no-shortcut]'); process.exitCode = 1; }
     else install({ noShortcut: args.includes('--no-shortcut') }).catch(error => { console.error(error.message); process.exitCode = 1; });
 }
-module.exports = { plan, install };
+module.exports = { plan, install, powershell };
