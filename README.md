@@ -19,7 +19,7 @@ Bring your own models: Claude, GPT, Gemini, DeepSeek, Qwen, Kimi and more. Your 
 
 [Download](https://github.com/YogurtJ/OhMyBuddy/releases/latest) · [Install](docs/en/INSTALL.md) · [User guide](docs/en/USER_GUIDE.md) · [Changelog](CHANGELOG.md) · [Report an issue](https://github.com/YogurtJ/OhMyBuddy/issues/new/choose) · [Discussions](https://github.com/YogurtJ/OhMyBuddy/discussions)
 
-<img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/hero-en.webp" alt="OhMyBuddy, a self-hosted AI assistant, on the desktop: a Buddy conversation with a folded process summary and memory receipts" width="100%">
+<img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/hero-en.webp" alt="OhMyBuddy, a self-hosted AI assistant, on the desktop: a Buddy remembers that you are vegetarian and a dinner booking you promised, with receipts for About you and Things I’m keeping in mind" width="100%">
 
 </div>
 
@@ -120,7 +120,7 @@ It has two sides that share the same runtime, models and tools:
 
 ### Everyday use
 
-<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/mobile-en.webp" alt="OhMyBuddy on a phone: a Buddy conversation with a process summary and memory receipts" width="280"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/mobile-en.webp" alt="OhMyBuddy on a phone: the same Buddy conversation with memory receipts and Buddy / Workspace navigation" width="280"></p>
 
 - Layouts adapt to desktop, tablet and phone screens, and OhMyBuddy can be installed to your home screen.
 - In-page notifications and sounds are available, with optional Web Push for background alerts.

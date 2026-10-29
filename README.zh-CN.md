@@ -19,7 +19,7 @@
 
 [下载](https://github.com/YogurtJ/OhMyBuddy/releases/latest) · [安装](docs/INSTALL_RECOVERY.md) · [用户指南](docs/USER_GUIDE.md) · [变更记录](CHANGELOG.md) · [反馈问题](https://github.com/YogurtJ/OhMyBuddy/issues/new/choose) · [讨论区](https://github.com/YogurtJ/OhMyBuddy/discussions)
 
-<img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/hero-zh.webp" alt="自托管私人 AI 助理 OhMyBuddy 的电脑界面：伙伴对话、折叠的过程摘要和记忆回执" width="100%">
+<img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/hero-zh.webp" alt="自托管私人 AI 助理 OhMyBuddy 的电脑界面：伙伴记下你吃素和答应别人的订位，并附上“关于你”和“我记着的事”的回执" width="100%">
 
 </div>
 
@@ -121,7 +121,7 @@ OhMyBuddy 是一个自托管的网页应用，把 Pi Coding Agent 变成随时�
 
 ### 日常使用
 
-<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/mobile-zh.webp" alt="手机上的 OhMyBuddy：伙伴对话、过程摘要与记忆回执" width="280"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/mobile-zh.webp" alt="手机上的 OhMyBuddy：同一段伙伴对话、记忆回执和伙伴 / 工作台导航" width="280"></p>
 
 - 布局会适应电脑、平板和手机屏幕，OhMyBuddy 也可以添加到手机主屏幕。
 - 提供页面通知和提示音，并可选开启 Web Push 后台提醒。
