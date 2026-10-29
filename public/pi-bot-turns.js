@@ -49,7 +49,7 @@
                     const labels = { user: { added: '新增关于你', updated: '更新了关于你', removed: '删掉了关于你' }, memory: { added: '新增长期记忆', updated: '更新了长期记忆', removed: '删掉了长期记忆' },
                         skill: { added: '新增技能', updated: '更新技能', removed: '删掉技能' }, settings: { added: '改了设置', updated: '改了设置', removed: '改了设置' } };
                     const detail = change.area === 'settings' ? fields(names) : change.area === 'skill' ? names.join(t('、')) :
-                        [Number.isSafeInteger(change.count) && change.count > 0 ? t('{0} 条', change.count) : '', preview].filter(Boolean).join('：');
+                        [Number.isSafeInteger(change.count) && change.count > 0 ? t('{0} 条', change.count) : '', preview].filter(Boolean).join(t('：'));
                     changes.push({ area: change.area, text: [t(labels[change.area][change.action]), detail].filter(Boolean).join(' · ') });
                 }
                 if (!changes.length) return null;

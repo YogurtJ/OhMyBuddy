@@ -11019,7 +11019,8 @@
     rows.push(
         ["伙伴", "Buddy"],
         ["工作台", "Workspace"],
-        ["OhMyBuddy 自带的 Agent 工作台，由 Pi Coding Agent 驱动", "OhMyBuddy's agent workspace, powered by the Pi coding agent"]
+        ["OhMyBuddy 自带的 Agent 工作台，由 Pi Coding Agent 驱动", "OhMyBuddy's agent workspace, powered by the Pi coding agent"],
+        ["：", ": "]
     );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();
