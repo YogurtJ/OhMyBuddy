@@ -266,7 +266,7 @@ test('the setup tool reports only what the Bot page actually saved', { timeout: 
     assert.equal(avatarSchema[0].type, 'string', 'legacy clients can still propose an emoji');
     assert.equal(avatarSchema[1].additionalProperties, false);
     assert.equal(avatarSchema[1].properties.kind.const, 'preset');
-    assert.deepEqual(avatarSchema[1].properties.id.anyOf.map(item => item.const), ['pivane-pebble', 'pivane-bean', 'pivane-tile']);
+    assert.deepEqual(avatarSchema[1].properties.id.anyOf.map(item => item.const), require('../public/pi-avatar-presets').presets.map(item => item.id));
     const appendPresetCall = (id, avatar) => manager.appendMessage({ role: 'assistant', content: [{ type: 'toolCall', id, name: setup.SETUP_TOOL, arguments: { avatar } }],
         api: 'openai-completions', provider: 'fixture', model: 'small', usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
             cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } }, stopReason: 'toolUse', timestamp: Date.now() });

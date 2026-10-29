@@ -28,6 +28,7 @@ function normalizedMemory(memory) {
     return limits;
 }
 function validAvatar(avatar) {
+    if (object(avatar) && avatar.kind === 'composed') return avatarPresets.validComposition(avatar);
     if (object(avatar) && avatar.kind === 'preset') return Object.keys(avatar).length === 2
         && Object.keys(avatar).every(key => ['kind', 'id'].includes(key)) && avatarPresets.validId(avatar.id);
     return avatar === null || object(avatar) && Object.keys(avatar).every(key => ['kind', 'value', 'version'].includes(key))
@@ -99,7 +100,8 @@ function validateProfile(input, previous) {
     normalizedMemory(memory);
     const avatar = input.avatar === undefined ? previous?.avatar ?? null : input.avatar;
     if (!validAvatar(avatar) || avatar?.kind === 'preset' && !avatarPresets.find(avatar.id)
-        && !(previous?.avatar?.kind === 'preset' && previous.avatar.id === avatar.id)) throw fail('Invalid avatar');
+        && !(previous?.avatar?.kind === 'preset' && previous.avatar.id === avatar.id)
+        || avatar?.kind === 'composed' && !avatarPresets.knownComposition(avatar) && !avatarPresets.same(avatar, previous?.avatar)) throw fail('Invalid avatar');
     return { name: input.name.trim(), description: input.description, soul: input.soul, enabled: input.enabled,
         ...(avatar !== null || input.avatar !== undefined || previous?.avatar !== undefined ? { avatar } : {}),
         memory: { ...previous?.memory, ...memory, enabled: memory.enabled ?? false, autoLearn: memory.autoLearn ?? false },

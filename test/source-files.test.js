@@ -66,15 +66,21 @@ test('release inventory includes its own discovery and checking tools and exclud
 
 test('built-in SVG sources contain only the catalog geometry, solid colors and two fixed eyes', () => {
     const { presets, validId } = require('../public/pi-avatar-presets');
-    assert.deepEqual(presets.map(preset => preset.id), ['pivane-pebble', 'pivane-bean', 'pivane-tile']);
-    assert.deepEqual(presets.map(preset => preset.asset), ['bot-avatars/pebble.svg', 'bot-avatars/bean.svg', 'bot-avatars/tile.svg']);
+    assert.deepEqual(presets.slice(0, 3).map(preset => preset.id), ['pivane-pebble', 'pivane-bean', 'pivane-tile']);
+    assert.equal(presets.length, 12);
+    assert.equal(new Set(presets.map(preset => preset.asset)).size, presets.length);
     for (const preset of presets) {
         assert.equal(validId(preset.id), true);
         assert.match(preset.name, /^[\p{L}]+$/u);
         assert.match(preset.path, /^[MmLlHhVvCcSsQqTtAaZz0-9 .,\-]+$/);
         for (const color of [preset.body, preset.eyes, preset.darkBody, preset.darkEyes]) assert.match(color, /^#[a-f0-9]{6}$/);
         const svg = fs.readFileSync(path.resolve(__dirname, '../public', preset.asset), 'utf8');
-        assert.equal(svg.trim(), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="OhMyBuddy ${preset.name}"><title>OhMyBuddy ${preset.name} · 极简原型</title><path fill="${preset.body}" d="${preset.path}"/><g fill="${preset.eyes}"><rect x="61" y="63" width="8" height="19" rx="4"/><rect x="91" y="63" width="8" height="19" rx="4"/></g></svg>`, preset.asset);
+        if (preset.id.startsWith('pivane-')) assert.equal(svg.trim(), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="OhMyBuddy ${preset.name}"><title>OhMyBuddy ${preset.name} · 极简原型</title><path fill="${preset.body}" d="${preset.path}"/><g fill="${preset.eyes}"><rect x="61" y="63" width="8" height="19" rx="4"/><rect x="91" y="63" width="8" height="19" rx="4"/></g></svg>`, preset.asset);
+        else {
+            assert.ok(svg.includes(`d="${preset.path}"`));
+            assert.doesNotMatch(svg, /<script|<foreignObject|<image|\son[a-z]+=|href=|url\(/i);
+            assert.match(svg, /viewBox="0 0 160 160"/);
+        }
     }
 });
 
