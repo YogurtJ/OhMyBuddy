@@ -11,9 +11,11 @@
 | 协助用户安装、配置或排障的 Agent | [用户 Agent 操作指南](AGENT_GUIDE.md) |
 | 修改 Pivane 源码的开发者或 Agent | [开发文档](development/README.md) 与根目录 [AGENTS.md](../AGENTS.md) |
 
-本目录随源码更新，可能包含尚未公开发布的功能；源码版本看 [package.json](../package.json)，实际能力看运行实例。当前正式版为 **1.10.2**（Pi 1.4.0），见 [1.10.2 版本说明](releases/1.10.2.md)；下载、校验和准确验收摘要以 [GitHub Releases](https://github.com/YogurtJ/pivane/releases) 为准。本补丁修复Windows微信组件安装失败，以及静态翻译导致的助手身份导航、消息显示和引导／后续说明串位；依赖与原生版本保持，三平台定向检查、Windows环境补验和未变范围复用见[平台验证范围](RELEASE_INSTALL_VALIDATION.md)。1.10.1的安全与兼容说明继续适用；从更早版本更新时，留意旧内置MiniMax TTS adapter已移除，配置和历史音频保留，详见[1.10.1说明](releases/1.10.1.md)。公开发布不自动切换已有实例；升级前按[安装与恢复](INSTALL_RECOVERY.md)保存草稿、停机备份并保留数据路径。完整变化见 [CHANGELOG](../CHANGELOG.md)。
+本目录随源码更新，可能包含尚未公开发布的功能；源码版本看 [package.json](../package.json)，实际能力看运行实例。正式公开版本、下载、校验和准确验收摘要以 [GitHub Releases](https://github.com/YogurtJ/pivane/releases) 为准。公开发布不自动切换已有实例；升级前按[安装与恢复](INSTALL_RECOVERY.md)保存草稿、停机备份并保留数据路径。完整变化见 [CHANGELOG](../CHANGELOG.md)。
 
-正在准备 [1.11.0 候选版](releases/1.11.0.md)，包括 Bot 模式、微信操作与记忆、过程和状态回执、原生会话图片外置以及 macOS 完整平台包预览。候选验收尚未完成，不代表已公开发布。
+[1.11.0 版本说明](releases/1.11.0.md)涵盖 Bot 模式、微信操作与记忆、过程和状态回执、原生会话图片外置以及 macOS 完整平台包预览。源码与三平台发布准备已完成；原始失败、定向补验、有效复用及实际权限见[平台验证范围](RELEASE_INSTALL_VALIDATION.md)，发布状态仍以对应Release为准。
+
+此前Windows微信组件安装与静态翻译修复见[1.10.2说明](releases/1.10.2.md)。1.10.1的安全与兼容说明继续适用；从更早版本更新时，留意旧内置MiniMax TTS adapter已移除，配置和历史音频保留，详见[1.10.1说明](releases/1.10.1.md)。
 
 下面按主题列出功能文档。每篇前半部分讲使用，后半部分可能包含接口字段和限额，供高级用户、集成者和用户 Agent 查询。模型能力来自实际配置与运行实例；文档中的示例不代表服务已经配置好。
 
@@ -54,7 +56,7 @@
 | Pi 原生 MCP、Codemode 和旧适配器迁移 | [原生 MCP](MCP.md) |
 | 内置子 Agent、记忆组件与旧安装兼容 | [内置能力包](BUNDLED_CAPABILITIES.md) |
 | 助手身份与档案记忆 | [助手档案](AGENT_PROFILES.md) · [记忆契约导航](PROFILE_MEMORY.md#read-by-task) |
-| 有名字和性格的私人助理（未发布） | [Bot 模式](BOT_MODE.md) |
+| 有名字和性格的私人助理 | [Bot 模式](BOT_MODE.md) |
 
 ## 媒体
 
