@@ -26,7 +26,7 @@ OhMyBuddy 媒体和预约数据按实例保存，Pi 身份默认与 CLI 共用�
 
 ## 2. 从源码发布包安装
 
-以下以 1.6.0 归档为例，安装其他版本时替换版本号，可下载版本以 [Releases](https://github.com/YogurtJ/pivane/releases) 为准。先下载 `ohmybuddy-1.6.0.tar.gz` 及同名 .sha256 到 Downloads，核对发布来源，然后检查哈希：
+以下以 1.6.0 归档为例，安装其他版本时替换版本号，可下载版本以 [Releases](https://github.com/YogurtJ/OhMyBuddy/releases) 为准。先下载 `ohmybuddy-1.6.0.tar.gz` 及同名 .sha256 到 Downloads，核对发布来源，然后检查哈希：
 
 ```bash
 ARCHIVE="$HOME/Downloads/ohmybuddy-1.6.0.tar.gz"

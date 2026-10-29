@@ -4,7 +4,7 @@
 
 package.json的应用版本、Pi依赖版本和快照时间戳是不同概念。npm run pack:release生成按应用版本命名的包，TRIAL_MANIFEST.json含appVersion/piVersion，保留原文件名与version=1格式。`/api/pi/status.version`表示加载的Pi版本；它不能单独证明网页和后端属于同一候选包。用压缩包SHA256及TRIAL_MANIFEST逐文件核对构建内容。
 
-发布包绑定源码提交和归档 SHA256。主分支文档可以补记发布结果，不改变冻结标签或归档；本地打包成功不表示已经[公开发布](https://github.com/YogurtJ/pivane/releases)。名称兼容与目录迁移见[命名与迁移](NAMING.md)。
+发布包绑定源码提交和归档 SHA256。主分支文档可以补记发布结果，不改变冻结标签或归档；本地打包成功不表示已经[公开发布](https://github.com/YogurtJ/OhMyBuddy/releases)。名称兼容与目录迁移见[命名与迁移](NAMING.md)。
 
 ## 本机部署与公开发布的边界
 

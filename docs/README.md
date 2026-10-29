@@ -11,7 +11,7 @@
 | 协助用户安装、配置或排障的 Agent | [用户 Agent 操作指南](AGENT_GUIDE.md) |
 | 修改 OhMyBuddy 源码的开发者或 Agent | [开发文档](development/README.md) 与根目录 [AGENTS.md](../AGENTS.md) |
 
-本目录随源码更新，可能包含尚未公开发布的功能；源码版本看 [package.json](../package.json)，实际能力看运行实例。正式公开版本、下载、校验和准确验收摘要以 [GitHub Releases](https://github.com/YogurtJ/pivane/releases) 为准。公开发布不自动切换已有实例；升级前按[安装与恢复](INSTALL_RECOVERY.md)保存草稿、停机备份并保留数据路径。完整变化见 [CHANGELOG](../CHANGELOG.md)。
+本目录随源码更新，可能包含尚未公开发布的功能；源码版本看 [package.json](../package.json)，实际能力看运行实例。正式公开版本、下载、校验和准确验收摘要以 [GitHub Releases](https://github.com/YogurtJ/OhMyBuddy/releases) 为准。公开发布不自动切换已有实例；升级前按[安装与恢复](INSTALL_RECOVERY.md)保存草稿、停机备份并保留数据路径。完整变化见 [CHANGELOG](../CHANGELOG.md)。
 
 [1.11.0 版本说明](releases/1.11.0.md)涵盖伙伴模式、微信操作与记忆、过程和状态回执、原生会话图片外置以及 macOS 完整平台包预览。OhMyBuddy原名Pivane。改名前的源码与三平台发布准备已完成；本次改名的安装／升级与兼容验证按新归档单独记录，原始失败、定向补验、有效复用及实际权限见[平台验证范围](RELEASE_INSTALL_VALIDATION.md)，公开状态仍以对应Release为准。
 
