@@ -2,6 +2,12 @@
 
 本页概括用户可见变化与升级要点。安装步骤见[安装与恢复](docs/INSTALL_RECOVERY.md)；每版完整说明和验收附件见 [Releases](https://github.com/YogurtJ/OhMyBuddy/releases)。历史行为不代表当前功能，当前用法以[用户指南](docs/USER_GUIDE.md)为准。
 
+## 未发布
+
+- 修复收起侧栏时英文导航短标签 “Workspace” 被截断成省略号：收起状态的导航左右内边距由 8px 调为 6px。
+- 英文界面伙伴记事回执中的记事本名称由 Things I’m keeping in mind 改为 What I’m keeping in mind，与记事本标题和英文指南一致。
+- README 补回并更新演示图：伙伴记忆和工作台（任务进度、并行子 Agent、代码差异）两段动图，子 Agent 与侧聊截图，微信流程图，GPT Image 2.5 实际生成的图片组合，以及三联手机图。
+
 ## 1.11.0（已发布）
 
 - Pivane更名为OhMyBuddy：网页、PWA、通知、新图标及源码／Mac完整包的默认名称更新；新配置采用OHMYBUDDY_，既有PIVANE_及公开PI_别名继续兼容。旧配置、运行根和用户数据原位读取，双位置冲突明确拒绝；历史消息、协议字段和浏览器偏好不改写。Mac旧更新器使用显式Pivane格式过渡包，不混用签名渠道；实例迁移仍是独立操作。

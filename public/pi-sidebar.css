@@ -421,7 +421,8 @@
 
     .app-container.sidebar-collapsed .nav-menu {
         gap: 4px;
-        padding-inline: 8px;
+        /* Room for the longest short label, "Workspace", without an ellipsis. */
+        padding-inline: 6px;
     }
 
     .app-container.sidebar-collapsed .nav-btn {

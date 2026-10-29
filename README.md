@@ -19,7 +19,7 @@ Bring your own models: Claude, GPT, Gemini, DeepSeek, Qwen, Kimi and more. Your 
 
 [Download](https://github.com/YogurtJ/OhMyBuddy/releases/latest) · [Install](docs/en/INSTALL.md) · [User guide](docs/en/USER_GUIDE.md) · [Changelog](CHANGELOG.md) · [Report an issue](https://github.com/YogurtJ/OhMyBuddy/issues/new/choose) · [Discussions](https://github.com/YogurtJ/OhMyBuddy/discussions)
 
-<img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/hero-en.webp" alt="OhMyBuddy, a self-hosted AI assistant, on the desktop: a Buddy remembers that you are vegetarian and a dinner booking you promised, with receipts for About you and Things I’m keeping in mind" width="100%">
+<img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/hero-en.webp" alt="OhMyBuddy, a self-hosted AI assistant, on the desktop: a Buddy remembers that you are vegetarian and a dinner booking you promised, with receipts for About you and What I’m keeping in mind" width="100%">
 
 </div>
 
@@ -54,14 +54,18 @@ It has two sides that share the same runtime, models and tools:
 
 ### Buddies: personal assistants that remember you
 
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/buddy-en.gif" alt="Telling a Buddy something once: it notes that you are vegetarian and a dinner booking you promised, receipts appear under the reply, and its notebook opens with the new note and the words it came from" width="100%"></p>
+
 - Give a Buddy a name, an avatar, a personality and a working folder. An optional two-to-three-minute interview covers how it should address you, what it helps with and how it should work.
-- Each Buddy has one ongoing main chat and up to 100 topics. Every chat has its own notebook, "Things I'm keeping in mind", for decisions, promises, deadlines and open questions. Topics share the Buddy's memory and skills.
+- Each Buddy has one ongoing main chat and up to 100 topics. Every chat has its own notebook, "What I'm keeping in mind", for decisions, promises, deadlines and open questions. Topics share the Buddy's memory and skills.
 - Long chats stay usable. Old tool output is trimmed and summaries are written while the chat is idle. Earlier parts of the chat stay readable, and the Buddy can search their original wording.
 - Each turn shows one reply and a one-line summary of the process, which you can expand. Memory, notebook, skill, settings and schedule changes appear as receipts you can open.
 - Run several Buddies side by side, each with separate memory. A new Buddy can copy the "About you" notes you select from another Buddy.
 - Proactive messages and background learning have their own switches and budgets in the Buddy settings. See the [Buddy guide](docs/en/BUDDY.md).
 
 ### Workspace: projects, threads and tools
+
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/workspace-en.gif" alt="A pre-release review in the Workspace: the agent follows a task plan, runs three subagents in parallel, fixes three files, runs the tests, and the diff opens beside the chat" width="100%"></p>
 
 - Threads are organized by project and run directly in folders on the server.
 - Replies stream in with thinking, tool calls and the files changed in each turn. The default compact view folds each finished turn into a one-line "time · tool calls" summary.
@@ -80,6 +84,8 @@ It has two sides that share the same runtime, models and tools:
 
 ### Multi-agent and automation
 
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/agents-en.webp" alt="Three subagents on different models review a change in parallel while the task progress card tracks the plan and a side chat answers a quick question" width="100%"></p>
+
 - Subagents are built in through [pi-subagents](https://pi.dev/packages/pi-subagents). A live panel shows each run's status and models, lets you steer, stop or continue it, and reports token usage and cost.
 - An agent can start a new task thread or message another thread in the same project.
 - A side chat lets you ask a quick question without derailing the main task. It can read files and, with your approval for that reply, make small edits.
@@ -92,6 +98,10 @@ It has two sides that share the same runtime, models and tools:
 - Several logical projects with their own instructions can point to the same directory.
 
 ### WeChat
+
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/wechat-flow-zh.webp" alt="Three real WeChat screenshots with a Chinese interface: one message returns an expense report as PDF and Excel, a photo of a receipt is added to it, and a scheduled task sends AI news every evening" width="100%"></p>
+
+<p align="center"><sub>Real WeChat screenshots (Chinese interface). The demo data is synthetic.</sub></p>
 
 - Install the optional WeChat connector, sign in with a QR code and allow specific users. It connects a WeChat ClawBot (iLink) bot identity and does not take over your personal account's chats.
 - Chat with a Buddy in WeChat, or bind a private chat to a Workspace thread. Send text and images; get final replies, delivered files and scheduled notifications back.
@@ -113,6 +123,8 @@ It has two sides that share the same runtime, models and tools:
 
 ### Media lab and voice
 
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/media-en.webp" alt="A media card in chat with a bakery poster generated by GPT Image 2.5, next to a product photo, a reference edit of it, an app icon and a Chinese poster made with the same model" width="100%"></p>
+
 - Add image, video, text-to-speech and speech-to-text services. Presets cover OpenAI, Google Gemini, Volcengine Ark (Seedream and Seedance) and Alibaba Cloud Model Studio, and any compatible HTTP API can be added manually.
 - An agent drafts editable parameters from a plain-language request in chat or the lab. Per-type chat preferences decide whether a card runs automatically or asks for confirmation; video requires confirmation by default. Reference images or videos can be attached when the model supports them.
 - Generation history lets you preview, reuse and download earlier results.
@@ -120,7 +132,7 @@ It has two sides that share the same runtime, models and tools:
 
 ### Everyday use
 
-<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/mobile-en.webp" alt="OhMyBuddy on a phone: the same Buddy conversation with memory receipts and Buddy / Workspace navigation" width="280"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/phones-en.webp" alt="OhMyBuddy on phones: the Buddy home screen, dark mode with math, and the model picker with favorite models" width="100%"></p>
 
 - Layouts adapt to desktop, tablet and phone screens, and OhMyBuddy can be installed to your home screen.
 - In-page notifications and sounds are available, with optional Web Push for background alerts.
