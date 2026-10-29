@@ -24,7 +24,7 @@ function extractInput(input, destination) {
     if (dirs.length !== 1 || !fs.lstatSync(path.join(destination, dirs[0])).isDirectory()) throw Error('Unexpected upstream archive layout');
     return path.join(destination, dirs[0]);
 }
-function collect(root) {
+function collect(root, platform = process.platform) {
     const files = [], folded = new Set(); let total = 0;
     function visit(relative) {
         for (const name of fs.readdirSync(path.join(root, relative)).sort()) {
@@ -44,7 +44,7 @@ function collect(root) {
                         fs.chmodSync(temporary, stat.mode & 0o777); fs.renameSync(temporary, absolute);
                     } finally { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); }
                 }
-                const proof = hashFileSafe(absolute, 128 * 1024 ** 2), mode = stat.mode & 0o111 ? 0o755 : 0o644;
+                const proof = hashFileSafe(absolute, 128 * 1024 ** 2), mode = stat.mode & 0o111 || platform === 'win32' && /\.(?:exe|cmd|bat|sh)$/i.test(file) ? 0o755 : 0o644;
                 if (proof.bytes !== stat.size) throw Error('Platform payload changed during collection');
                 fs.chmodSync(absolute, mode);
                 files.push({ path: file, ...proof, mode });

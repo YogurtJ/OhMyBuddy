@@ -112,11 +112,11 @@ class ManagedLauncher {
         const markerFile = path.join(root, 'PI_INSTALL_COMPLETE.json');
         const marker = fs.existsSync(markerFile) ? JSON.parse(readSafe(markerFile)) : null;
         const executable = require('./pi-platform-bundle').runtimeNode(root, marker);
-        const privatePath = marker?.runtimeNodeSha256 ? [path.join(root, 'bin'), path.join(root, 'runtime/bin'), this.env.PATH || ''].join(path.delimiter) : this.env.PATH;
+        const privateEnv = marker?.runtimeNodeSha256 ? require('./pi-bundle-layout').runtimeEnvironment(root, this.env) : this.env;
         return new Promise((resolve, reject) => {
             const child = this.forkServer(path.join(root, 'server.js'), [], {
                 cwd: this.root, execPath: executable, execArgv: [],
-                env: { ...this.env, ...(privatePath ? { PATH: privatePath } : {}), PI_MANAGED_LAUNCHER: this.nonce, PI_MANAGED_BASE: this.root,
+                env: { ...privateEnv, PI_MANAGED_LAUNCHER: this.nonce, PI_MANAGED_BASE: this.root,
                     PI_CODING_AGENT_DIR: this.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.pi/agent'),
                     PI_MEDIA_DATA_DIR: this.env.PI_MEDIA_DATA_DIR || this.root },
                 stdio: ['inherit', 'inherit', 'inherit', 'ipc'], windowsHide: true

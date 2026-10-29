@@ -31,7 +31,7 @@ function bundleName(version, platform, arch, product = 'OhMyBuddy') {
     return `${product === 'OhMyBuddy' ? 'ohmybuddy' : 'pivane'}-${version}-${platform}-${arch}.tar.gz`;
 }
 function assetUrl(config, version, platform, arch, product = 'OhMyBuddy') {
-    if (!VERSION.test(version) || version.length > 79 || platform !== 'darwin' || !['arm64', 'x64'].includes(arch)) throw Error('Unsupported platform release');
+    if (!VERSION.test(version) || version.length > 79 || !require('./pi-bundle-layout').supported(platform, arch)) throw Error('Unsupported platform release');
     return new URL(`releases/v${version}/${bundleName(version, platform, arch, product)}`, baseUrl(config.url)).href;
 }
 function signedManifest(envelope, config, { now = Date.now() } = {}) {
@@ -54,9 +54,20 @@ function signedManifest(envelope, config, { now = Date.now() } = {}) {
         if (release.product !== undefined && release.product !== data.product) throw Error('Release product mismatch');
         release.product = data.product;
         for (const [target, bundle] of Object.entries(release.bundles)) {
-            if (!['darwin-arm64', 'darwin-x64'].includes(target) || !/^[a-f0-9]{64}$/.test(bundle.sha256)
+            if (!Object.entries(require('./pi-bundle-layout').TARGETS).some(([platform, arches]) => arches.some(arch => target === platform + '-' + arch)) || !/^[a-f0-9]{64}$/.test(bundle.sha256)
                 || !Number.isSafeInteger(bundle.bytes) || bundle.bytes < 1 || bundle.bytes > MAX_BUNDLE
                 || !/^22\.(?:\d+)\.(?:\d+)$/.test(bundle.nodeVersion) || Number(bundle.nodeVersion.split('.')[1]) < 19) throw Error('Invalid platform bundle metadata');
+        }
+        if (release.installers !== undefined) {
+            if (!release.installers || typeof release.installers !== 'object' || Array.isArray(release.installers)) throw Error('Invalid installer metadata');
+            for (const [target, installer] of Object.entries(release.installers)) {
+                const split = target.lastIndexOf('-'), platform = target.slice(0, split), arch = target.slice(split + 1);
+                const kind = platform === 'darwin' ? 'dmg' : platform === 'win32' ? 'exe' : 'tar.gz';
+                const expected = bundleName(release.version, platform, arch, data.product).replace(/\.tar\.gz$/, '.' + kind);
+                if (!release.bundles[target] || installer.kind !== kind || installer.file !== expected || !/^[a-f0-9]{64}$/.test(installer.sha256)
+                    || !Number.isSafeInteger(installer.bytes) || installer.bytes < 1 || installer.bytes > 1024 ** 3 || typeof installer.codeSigned !== 'boolean') throw Error('Invalid installer metadata');
+                if (kind === 'tar.gz' && (installer.sha256 !== release.bundles[target].sha256 || installer.bytes !== release.bundles[target].bytes)) throw Error('Installer archive identity mismatch');
+            }
         }
     }
     return data;
