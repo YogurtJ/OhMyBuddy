@@ -432,7 +432,11 @@
                 const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
                 items[next]?.focus();
             });
-            window.addEventListener('resize', () => this.close(), { signal: this.events.signal });
+            window.addEventListener('resize', () => {
+                if (!this.dialog.open) return;
+                if (innerWidth !== this.openWidth || innerHeight !== this.openHeight) this.close();
+                else this.position(); // Sidebar layout notifications do not resize the viewport.
+            }, { signal: this.events.signal });
             this.sync();
         }
         dispose() {
@@ -466,15 +470,19 @@
                 });
                 this.list.append(button);
             }
-            this.dialog.style.removeProperty('left'); this.dialog.style.removeProperty('top');
             this.dialog.showModal();
+            this.openWidth = innerWidth; this.openHeight = innerHeight;
+            this.position();
+            this.button.setAttribute('aria-expanded', 'true');
+            this.list.querySelector('[aria-selected="true"]')?.focus({ preventScroll: true });
+        }
+        position() {
+            this.dialog.style.removeProperty('left'); this.dialog.style.removeProperty('top');
             if (innerWidth > 680) {
                 const r = this.button.getBoundingClientRect(), height = this.dialog.offsetHeight;
                 this.dialog.style.left = `${Math.max(8, Math.min(r.left, innerWidth - this.dialog.offsetWidth - 8))}px`;
                 this.dialog.style.top = `${Math.max(8, r.top >= height + 8 ? r.top - height - 8 : Math.min(r.bottom + 8, innerHeight - height - 8))}px`;
             }
-            this.button.setAttribute('aria-expanded', 'true');
-            this.list.querySelector('[aria-selected="true"]')?.focus({ preventScroll: true });
         }
         close() { if (this.dialog.open) this.dialog.close(); }
     }

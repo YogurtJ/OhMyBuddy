@@ -94,7 +94,11 @@ async function main() {
         const after = await api('settings/updates'); assert.equal(after.appVersion, values['--expected']); assert.equal(after.piVersion, versions.piVersion);
         assert.deepEqual(hashFileSafe(session.path), snapshot); assert.deepEqual(hashFileSafe(fixtureMedia), mediaProof);
         require('../../server/pi-maintenance-backup').inspectBackupContents(state.job.backup.directory);
-        await page.waitForFunction(expected => [...document.querySelectorAll('#updates-pivane .updates-version strong')].some(node => node.textContent === expected), values['--expected'], { timeout: 30000 });
+        await page.waitForFunction(expected => {
+            const card = document.getElementById('updates-pivane');
+            const current = card?.querySelector('.updates-versions > .updates-version:first-child > strong');
+            return current?.textContent.trim() === expected && card.closest('.updates-cards')?.getAttribute('aria-busy') === 'false';
+        }, values['--expected'], { timeout: 30000 });
         await page.screenshot({ path: path.join(output, 'updated-mac.png') });
         // The page can report a connection error during the intentional restart;
         // JavaScript errors are recorded separately for diagnosis, never hidden.

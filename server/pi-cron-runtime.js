@@ -28,7 +28,7 @@ function usageSince(manager, state) {
     return { usage, replyEntryId: last?.id || null, stopReason: last?.message.stopReason };
 }
 function registerCron(pi) {
-    let active = null, timer = null;
+    let active = null, timer = null, silentToolRegistered = false;
     const report = ctx => ctx.ui.notify(JSON.stringify({ pivaneCron: { sessionId: ctx.sessionManager.getSessionId(),
         runId: active?.runId, active: Boolean(active && !['completed', 'silent', 'skipped', 'error', 'stopped'].includes(active.status)),
         status: active?.status, silent: active?.silent === true } }));
@@ -50,13 +50,19 @@ function registerCron(pi) {
                 persist(context, { silent: true, reason: params.reason });
                 return { content: [{ type: 'text', text: 'Scheduled task finished silently.' }], details: { silent: true }, terminate: true };
             } });
-        // Ordinary startup must not replace the loadout while other extensions still
-        // have recorded tools waiting for registration (for example supervisor replies).
-        const tools = pi.getActiveTools();
-        if (tools.includes('cron_silent')) pi.setActiveTools(tools.filter(name => name !== 'cron_silent'));
+        silentToolRegistered = true;
     });
     pi.on('before_agent_start', (event) => {
-        if (!active || active.status !== 'running') return;
+        if (!active || active.status !== 'running') {
+            // A restored scheduled checkpoint can explicitly include cron_silent.
+            // Wait until session_start handlers have registered all pending native tools
+            // before narrowing the ordinary turn's loadout; never rebuild it from all tools.
+            if (silentToolRegistered) {
+                const tools = pi.getActiveTools();
+                if (tools.includes('cron_silent')) pi.setActiveTools(tools.filter(name => name !== 'cron_silent'));
+            }
+            return;
+        }
         if (active.origin === 'bot') {
             setPromptSection(event, 'pivane_scheduled_task', 'This turn is a follow-up you started yourself, not a request from the user. '
                 + 'Send at most one short, natural message in your usual voice, or use cron_silent and finish when there is nothing useful to say. '
