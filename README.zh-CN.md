@@ -55,6 +55,8 @@ OhMyBuddy 是一个自托管的网页应用，把 Pi Coding Agent 变成随时�
 
 ### 伙伴：记得你的私人助理
 
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/buddy-zh.gif" alt="对伙伴说一次就记住：它记下你吃素和答应 Mia 的订位，回复下方出现回执，打开“我记着的事”能看到这条记录和原话出处" width="100%"></p>
+
 - 给伙伴起名字、选头像、定性格和工作目录。可选的两三分钟“互相认识”会问清怎么称呼你、主要帮你做什么、该怎么做事，也可以跳过。
 - 每个伙伴有一个一直聊下去的主聊天和最多 100 个话题。每个聊天都有自己的“我记着的事”，记下定好的事、答应的事、截止时间和待回答的问题；话题共用这个伙伴的记忆与技能。
 - 长聊天一直好用：旧工具输出会被省略，空闲时在后台整理摘要；更早的聊天可以只读回看，伙伴也能按原话翻找。
@@ -63,6 +65,8 @@ OhMyBuddy 是一个自托管的网页应用，把 Pi Coding Agent 变成随时�
 - 主动联系和后台学习在伙伴设置里各有开关和额度。详见 [伙伴模式](docs/BOT_MODE.md)。
 
 ### 工作台：项目、线程与工具
+
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/workspace-zh.gif" alt="工作台里的发布前检查：Agent 按任务计划推进，三个子 Agent 并行检查，修改三个文件并跑通测试，最后在聊天旁打开代码差异" width="100%"></p>
 
 - 线程按项目组织，直接在服务器上的文件夹里工作。
 - 回复会流式显示思考过程、工具调用和本轮修改的文件。默认的简洁视图会把每个已完成的轮次收成一行“用时 · 工具调用”摘要。
@@ -81,6 +85,8 @@ OhMyBuddy 是一个自托管的网页应用，把 Pi Coding Agent 变成随时�
 
 ### 多 Agent 与自动化
 
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/agents-zh.webp" alt="三个使用不同模型的子 Agent 并行检查改动，当前进度卡片跟踪计划，右侧侧聊回答一个临时问题" width="100%"></p>
+
 - 内置 [pi-subagents](https://pi.dev/packages/pi-subagents) 子 Agent。实时面板显示每次运行的状态和所用模型，可以引导、停止或继续运行，并统计 token 用量和费用。
 - Agent 可以新开任务线程，也可以给同一项目里的其他线程发消息。
 - 侧聊可以让你临时问个问题，不打断主任务。它可以读取文件；在你为当次回复授权后，也可以做小范围修改。
@@ -93,6 +99,8 @@ OhMyBuddy 是一个自托管的网页应用，把 Pi Coding Agent 变成随时�
 - 多个逻辑项目可以指向同一个目录，并各自带有项目指令。
 
 ### 微信
+
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/wechat-flow-zh.webp" alt="三张真实微信截图：一句话拿到报销单 PDF 和 Excel、拍小票补进报销单、定时任务每晚推送 AI 新闻" width="100%"></p>
 
 - 按需安装可选的微信连接组件，扫码登录，只允许指定用户。连接的是微信 ClawBot（iLink）机器人身份，不会接管你个人微信号的聊天。
 - 可以在微信里和伙伴聊天，也可以把私聊绑定到工作台线程。支持发送文字和图片，最终回复、交付文件和定时通知都会发回微信。
@@ -114,6 +122,8 @@ OhMyBuddy 是一个自托管的网页应用，把 Pi Coding Agent 变成随时�
 
 ### 多媒体实验室与语音
 
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/media-zh.webp" alt="聊天里的媒体卡片：GPT Image 2.5 生成的面包店海报；右侧是同一模型生成的产品照、参考图编辑、App 图标和英文海报" width="100%"></p>
+
 - 可以接入图像、视频、语音合成和语音转写服务。预设包括 OpenAI、Google Gemini、火山方舟（Seedream 和 Seedance）和阿里云百炼，其他兼容的 HTTP API 可以手动添加。
 - Agent 会在聊天或实验室里根据自然语言描述起草可编辑的参数。对话按媒体类型设置自动执行或等待确认；视频默认需要确认。模型支持时，还可以附上参考图片或视频。
 - 生成历史可以预览、复用和下载以前的结果。
@@ -121,7 +131,7 @@ OhMyBuddy 是一个自托管的网页应用，把 Pi Coding Agent 变成随时�
 
 ### 日常使用
 
-<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/mobile-zh.webp" alt="手机上的 OhMyBuddy：同一段伙伴对话、记忆回执和伙伴 / 工作台导航" width="280"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/phones-zh.webp" alt="手机上的 OhMyBuddy：伙伴首页、深色模式下的公式，以及带常用模型的模型选择器" width="100%"></p>
 
 - 布局会适应电脑、平板和手机屏幕，OhMyBuddy 也可以添加到手机主屏幕。
 - 提供页面通知和提示音，并可选开启 Web Push 后台提醒。
