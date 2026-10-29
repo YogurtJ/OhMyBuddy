@@ -38,7 +38,7 @@ class DeliverableStore {
     constructor(store) { this.store = store; this.jobs = new Set(); this.limits = fileLimits(); }
     async root(create = false) {
         const { getAgentDir } = await getSdk();
-        const root = path.join(fs.realpathSync.native(getAgentDir()), 'pivane-deliverables');
+        const root = require('./ohmybuddy-compat').dataFile(fs.realpathSync.native(getAgentDir()), 'ohmybuddy-deliverables');
         if (create) return privateDir(root);
         const stat = fs.lstatSync(root);
         if (!stat.isDirectory() || stat.isSymbolicLink() || fs.realpathSync.native(root) !== root) throw fail('交付存储位置无效', 409, 'DELIVERY_CHANGED');

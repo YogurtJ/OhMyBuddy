@@ -164,7 +164,7 @@ class PiProfileRegistry {
     }
 
     // Synchronous from revision comparison through replacement. The lock also
-    // rejects another Pivane process using this native identity.
+    // rejects another OhMyBuddy process using this native identity.
     async mutate(expectedRevision, update) {
         if (typeof expectedRevision !== 'string') throw fail('Expected revision is required');
         const { file, root } = await this.paths(true);

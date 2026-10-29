@@ -23,8 +23,8 @@
 .sidebar {
     --pv-nav-hover: color-mix(in srgb, var(--text-main) 6%, transparent);
     --pv-nav-press: color-mix(in srgb, var(--text-main) 10%, transparent);
-    width: 184px;
-    flex: 0 0 184px;
+    width: 208px;
+    flex: 0 0 208px;
     min-height: 0;
     display: flex;
     flex-direction: column;

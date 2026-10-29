@@ -10,7 +10,7 @@ const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { BOT, BOT2, MAIN2, APPROVAL, say, serve, botRecord, windowRecord, botPage, newWorld, layout, settingsPage } = require('./pi-bot-fixture.js');
 
-const CWD = '/fixture/PivaneBots/bot-11111111';
+const CWD = '/fixture/OhMyBuddyBots/bot-11111111';
 const grant = (id, tool, value) => ({ v: 1, id, tool, value, cwd: CWD });
 const R1 = grant('r1aaaaaaaaaaaaaaaaaaaaaa', 'bash', 'npm test'), R2 = grant('r2bbbbbbbbbbbbbbbbbbbbbb', 'write', '/home/me/notes.md');
 const R3 = grant('r3cccccccccccccccccccccc', 'bash', 'ls -la'), R4 = grant('r4dddddddddddddddddddddd', 'edit', '/home/me/plan.md');

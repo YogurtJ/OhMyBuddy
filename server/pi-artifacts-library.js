@@ -43,7 +43,7 @@ function text(value, max = 160) {
 class ArtifactLibrary {
     constructor(options = {}) { this.directory = options.directory; this.mutating = false; }
     async root(create = false) {
-        if (!this.directory) { const { getAgentDir } = await getSdk(); this.directory = path.join(fs.realpathSync.native(getAgentDir()), 'pivane-artifacts'); }
+        if (!this.directory) { const { getAgentDir } = await getSdk(); this.directory = require('./ohmybuddy-compat').dataFile(fs.realpathSync.native(getAgentDir()), 'ohmybuddy-artifacts'); }
         const root = path.resolve(this.directory);
         if (create) privateDir(root);
         const stat = fs.lstatSync(root);

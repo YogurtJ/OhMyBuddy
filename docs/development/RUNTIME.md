@@ -78,7 +78,7 @@ PiRpcClient 使用 StringDecoder 并严格按 LF 分帧，不能使用会拆分 
 
 ## 外部消息渠道
 
-`channels/service` 在服务端维护一个账号一个轮询连接，与 `channels/store` 的私有配置、游标、待发送意图及回执配合；消息正文在进入原生会话后移除，不建立平行聊天历史。`channels/weixin-component` 仅在用户安装时获取锁定哈希的上游归档，在有界内存解析后装配审查过的模块；账户、私密日志和受限网络边界由 Pivane 提供，上游原件与许可保留。默认用户不创建渠道数据或周期任务。
+`channels/service` 在服务端维护一个账号一个轮询连接，与 `channels/store` 的私有配置、游标、待发送意图及回执配合；消息正文在进入原生会话后移除，不建立平行聊天历史。`channels/weixin-component` 仅在用户安装时获取锁定哈希的上游归档，在有界内存解析后装配审查过的模块；账户、私密日志和受限网络边界由 OhMyBuddy 提供，上游原件与许可保留。默认用户不创建渠道数据或周期任务。
 
 `channels/turn-results` 从原生分支证明任务开始、输入、最终回复和结算边界，共用微信和定时结果收集；只识别已有生产者的非新输入通知，不扫描后续轮次。`channels/thread-results` 为全部受管轮次追加原生起止标记，通过带 worker nonce 的私有结算事件让渠道同步固定接收绑定及持久原生引用；普通网页结果不复制正文，延迟发送和恢复重读原生边界。原微信发送者沿用原 job，定时结果沿用 cron 的持久通知，其他全部结果绑定各自去重。绑定记录生效时间与最近完成轮次，包含当前未结束任务而不补发历史。`channels/commands`、`bot-commands` 与 `command-control` 管理普通 Pi／Bot 各自的命令语义、持久占位、提交前权限重验及原生互斥，原生压缩／重载／媒体确认共用 `native-commands`；worker 的可选 `beforeSend` 在最后同步 RPC 边界检查准入。`channels/typing` 管理本次运行票据和单飞心跳，诊断为有界内存投影。
 
@@ -94,7 +94,7 @@ cron 将终态和固定收件绑定的通知意图原子保存在同一 run 行�
 
 ## 实例网络
 
-`WorkspaceNetworkService` 拥有私有 pivane-network.json 的监听与代理草稿修订、启动快照和固定目标诊断；访问认证仍由 WorkspaceAccessService 负责。配置保存不热切换网络；HOST 部署覆盖优先，新实例回环默认在首次启动持久化，已识别旧受管安装保留原默认。网络 API 经过现有认证、CSRF 和维护 HTTP 占用。
+`WorkspaceNetworkService` 拥有私有 ohmybuddy-network.json 的监听与代理草稿修订、启动快照和固定目标诊断；访问认证仍由 WorkspaceAccessService 负责。配置保存不热切换网络；HOST 部署覆盖优先，新实例回环默认在首次启动持久化，已识别旧受管安装保留原默认。网络 API 经过现有认证、CSRF 和维护 HTTP 占用。
 
 `workspace-network-transport` 在启动时解析代理环境，供 node-fetch 代理 agent、Pi HTTP dispatcher、侧聊/子运行及主服务 SDK 使用。发布下载复用同一路由解析；启动器下载环境与业务子进程的部署环境分开，避免直连模式残留小写代理或把启动快照误当部署覆盖。原生 httpProxy 不写回。未知代理协议拒绝，不新增自动换线路重发或任意 URL 诊断。
 
@@ -104,7 +104,7 @@ Pi Provider 身份与工作台访问身份独立。登录/退出使用公开 Mod
 
 文件服务、搜索、用量、备份与恢复复用原生描述符边界。Linux 使用 /proc，macOS 使用 F_GETPATH，Windows 查询 HANDLE 的最终路径和完整身份。打开对象的类型、预算、路径和前后变化均需核对；原生后端不可用时不能回退到未经验证的请求路径。
 
-POSIX 私密权限和目录刷盘、Windows 受保护 DACL 和写透替换分别处理。Pivane 自有原生组件的源码、二进制和 manifest 成批分发，普通安装不现场编译这些组件；SQLite 平台依赖另按内置能力安装规则处理。详见 [native](../../native/README.md)。
+POSIX 私密权限和目录刷盘、Windows 受保护 DACL 和写透替换分别处理。OhMyBuddy 自有原生组件的源码、二进制和 manifest 成批分发，普通安装不现场编译这些组件；SQLite 平台依赖另按内置能力安装规则处理。详见 [native](../../native/README.md)。
 
 项目全文读取与目录浏览共用 `pi-file-scope` 的项目范围和私密根规则。`pi-file-browser` 只枚举受控元数据，父目录与返回条目分别验证打开描述符；文件名搜索有扫描、结果、时间与并发预算，不维护持久文件索引，不调用模型。
 

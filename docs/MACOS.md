@@ -1,12 +1,12 @@
 # macOS 原生安装与运行
 
-Pivane 在 macOS 上原生运行，原生组件同时包含 Apple Silicon 与 Intel 架构，使用 Node 22.x 并通过浏览器访问。各版本实际验收过的系统、硬件与浏览器见[验证范围](RELEASE_INSTALL_VALIDATION.md)；在其他环境遇到问题，欢迎通过 [Issues](https://github.com/YogurtJ/pivane/issues) 反馈。
+OhMyBuddy 在 macOS 上原生运行，原生组件同时包含 Apple Silicon 与 Intel 架构，使用 Node 22.x 并通过浏览器访问。各版本实际验收过的系统、硬件与浏览器见[验证范围](RELEASE_INSTALL_VALIDATION.md)；在其他环境遇到问题，欢迎通过 [Issues](https://github.com/YogurtJ/pivane/issues) 反馈。
 
 ## macOS 完整平台包（预览）
 
 新的平台包构建入口可生成自带 Node 22、锁定 Pi／依赖及 rg、fd 的 DMG；该能力仍在预览，正式发行与实机范围另行记录，不代表已有正式包已经切换。
 
-从可信下载站取得对应 Apple Silicon／Intel 包和校验信息，打开 DMG，将 Pivane 拖到“应用程序”，再打开 Pivane。首次启动会校验并复制运行文件到 `~/Library/Application Support/Pivane/desktop`，生成固定数据配置并注册当前用户 LaunchAgent，随后打开浏览器。已有 Pi 身份按原生规则识别复用；只有新身份需要首次配置模型。安装不修改系统 Node 或全局 Pi。端口 11408 或安装目录被已有未知实例占用时停止并报告，不覆盖已有安装。
+从可信下载站取得对应 Apple Silicon／Intel 包和校验信息，打开 DMG，将 OhMyBuddy 拖到“应用程序”，再打开 OhMyBuddy。首次启动会校验并复制运行文件到 `~/Library/Application Support/OhMyBuddy/desktop`，生成固定数据配置并注册当前用户 LaunchAgent，随后打开浏览器。已有 Pi 身份按原生规则识别复用；只有新身份需要首次配置模型。安装不修改系统 Node 或全局 Pi。端口 11408 或安装目录被已有未知实例占用时停止并报告，不覆盖已有安装。
 
 预览包暂未做 Developer ID 签名与 Apple 公证，下载后可能被 macOS 拦截；只在核对来源后通过“系统设置 → 隐私与安全性”确认打开，不关闭系统保护。Intel 包须单独构建和实机验证；Apple Silicon 通过不代表 Intel 已验收。
 
@@ -40,9 +40,9 @@ rg --version
 先将发布包和同名.sha256下载到Downloads，并核对下载来源。以下为新实例示例，BASE必须尚不存在：
 
 ```sh
-ARCHIVE="$HOME/Downloads/pivane-1.6.0.tar.gz"
+ARCHIVE="$HOME/Downloads/ohmybuddy-1.6.0.tar.gz"
 (cd "$(dirname "$ARCHIVE")" && shasum -a 256 -c "$(basename "$ARCHIVE").sha256")
-BASE="$HOME/pivane"
+BASE="$HOME/ohmybuddy"
 test ! -e "$BASE" || { echo "此目录已存在，请按更新流程操作或选择新的BASE"; exit 1; }
 umask 077
 mkdir -p "$BASE/releases/1.6.0" "$BASE/data/media" "$BASE/projects/demo" "$BASE/backups"
@@ -73,7 +73,7 @@ PI_WORKSPACE_BASE_URL=http://127.0.0.1:11408
 PI_CODING_AGENT_DIR=$AGENT_DIR
 PI_MEDIA_CONFIG_DIR=$BASE/data/media-lab
 PI_MEDIA_DATA_DIR=$BASE/data/media
-PI_WEB_DEFERRED_FILE=$BASE/data/pivane-deferred-messages.json
+PI_WEB_DEFERRED_FILE=$BASE/data/ohmybuddy-deferred-messages.json
 PI_PROJECT_ROOTS=/
 EOF
 chmod 600 "$BASE/instance.env"
@@ -83,7 +83,7 @@ node scripts/install-service.cjs
 
 常驻服务不会自动继承安装终端中的 Provider Key、代理或 NODE_OPTIONS。若认证依赖环境变量或外部命令，需向本实例显式提供相同依赖，或通过网页原生登录保存认证；不要输出 Key。以后登录后自动启动，不需要重复安装依赖。
 
-打开`http://127.0.0.1:11408`或桌面 Pivane 入口，安装终端可以关闭；以后登录时自动启动。端口已被占用时先核对现有服务，不重复启动。
+打开`http://127.0.0.1:11408`或桌面 OhMyBuddy 入口，安装终端可以关闭；以后登录时自动启动。端口已被占用时先核对现有服务，不重复启动。
 
 另一个终端先用 `curl -fsS http://127.0.0.1:11408/api/access/status` 核对访问状态；需要认证时先在浏览器完成认证，再检查 Pi 状态。没有访问验证阻挡时，可用 `curl -fsS http://127.0.0.1:11408/api/pi/status` 检查 `ok=true`、Pi 版本与实际 `projectRoots`。网页可打开、只读状态正常即完成基础启动；普通安装无需运行全量测试、浏览器回归或打包。模型登录与真实请求另行验证。
 

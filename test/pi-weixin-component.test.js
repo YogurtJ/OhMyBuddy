@@ -50,7 +50,7 @@ test('reviewed bundle loads with an absolute native file URL and reloads its rec
     const component = new WeixinComponent(directory, { get: () => { throw Error('Installed receipts must not download'); } });
     const transport = async url => ({ url, synthetic: true });
     const reloaded = await component.load(transport);
-    assert.deepEqual(reloaded.qrMatrix('Pivane'), [[true]]);
+    assert.deepEqual(reloaded.qrMatrix('OhMyBuddy'), [[true]]);
     assert.deepEqual(await reloaded.api.getUpdates(), { url: 'https://synthetic.invalid/updates', synthetic: true });
     assert.equal((await component.install(new AbortController().signal)).installed, true);
     component.uninstall(); assert.equal(component.status().installed, false);

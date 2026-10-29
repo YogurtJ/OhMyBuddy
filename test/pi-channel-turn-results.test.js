@@ -217,7 +217,7 @@ test('completed rejects aborted/error replies and preserves length replies with 
     }
     const m = manager(); channel(m); channelPrompt(m);
     channel(m, { status: 'completed', replyEntryId: assistant(m, 'x'.repeat(60001), 'length') });
-    assert.equal(outcome(m, turnId).body, 'x'.repeat(60000) + '\n\n[回复较长，请在 Pivane 网页查看完整内容。]');
+    assert.equal(outcome(m, turnId).body, 'x'.repeat(60000) + '\n\n[回复较长，请在 OhMyBuddy 网页查看完整内容。]');
 });
 
 test('registerChannelTurns settles the owned reply and reuses completion without sending a second prompt', () => {

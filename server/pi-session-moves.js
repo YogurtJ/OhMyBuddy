@@ -5,7 +5,7 @@ const { getSdk } = require('./pi-session-store');
 const { privateDir, atomicJson, readSafe, hash } = require('./pi-maintenance-files');
 const { writePrivateFileSync } = require('./pi-private-files');
 const { decodeSession, relocateSessionBytes } = require('./pi-session-relocation');
-const { customTypeIs } = require('./pivane-compat');
+const { customTypeIs } = require('./ohmybuddy-compat');
 const io = require('./pi-file-io');
 const { descriptorPathSync } = require('./pi-file-descriptor');
 const { scanSessionReferences } = require('./pi-session-move-references');
@@ -48,7 +48,7 @@ class PiSessionMoves {
     }
     async journal() {
         const { getAgentDir } = await getSdk();
-        const root = path.join(getAgentDir(), 'pivane-session-moves');
+        const root = require('./ohmybuddy-compat').dataFile(getAgentDir(), 'ohmybuddy-session-moves');
         const file = path.join(root, 'records.json');
         let document;
         try { document = JSON.parse(readSafe(file, 4 * 1024 * 1024)); }

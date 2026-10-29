@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="OhMyBuddy">
+  <defs><linearGradient id="buddy" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#2563eb"/><stop offset="1" stop-color="#0d9488"/></linearGradient></defs>
+  <rect x="40" y="40" width="944" height="944" rx="230" fill="url(#buddy)"/>
+  <path d="M386 238h252c92 0 166 74 166 166v150c0 92-74 166-166 166H445L278 814l12-164c-44-30-70-71-70-120V404c0-92 74-166 166-166Z" fill="#fff"/>
+  <rect x="390" y="414" width="38" height="82" rx="19" fill="#17446b"/>
+  <rect x="596" y="414" width="38" height="82" rx="19" fill="#17446b"/>
+  <path d="M415 570q97 112 195 0" fill="none" stroke="#17446b" stroke-width="34" stroke-linecap="round"/>
+</svg>

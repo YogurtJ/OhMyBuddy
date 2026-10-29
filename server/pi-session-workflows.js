@@ -1,4 +1,4 @@
-const { customTypeIs } = require('./pivane-compat');
+const { customTypeIs } = require('./ohmybuddy-compat');
 const { promptFromEntry, replyText, isReplyForkPoint, validateMessage, assertSendable } = require('./pi-message-payload');
 
 function workflowSnapshot(snapshot) {

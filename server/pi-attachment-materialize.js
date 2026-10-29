@@ -13,7 +13,7 @@ const { fail } = require('./pi-file-scope');
 async function materialize(service, worker, input, authorized, signal) {
     signal?.throwIfAborted();
     const cwd = service.store.resolveProject(worker.cwd);
-    const root = path.join(cwd, '.pivane-attachments'), folder = path.join(root, authorized.reference.id);
+    const root = require('./ohmybuddy-compat').dataFile(cwd, '.ohmybuddy-attachments'), folder = path.join(root, authorized.reference.id);
     const directories = [cwd];
     for (const directory of [root, folder]) {
         if (!fs.existsSync(directory)) {

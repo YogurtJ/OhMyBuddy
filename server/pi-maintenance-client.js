@@ -81,7 +81,7 @@ class MaintenanceClient {
     assertAvailable(action, idle) {
         if (!this.managed || !this.state.supported) throw fail('请通过 npm start 启用独立维护启动器', 503);
         if (this.locked || this.referenceLocked || this.state.busy || this.active || !idle()) throw fail('实例仍有任务、侧聊、临时会话、配置或请求正在处理，请完成后再试');
-        if (action === 'application' && !this.state.appUpdateSupported) throw fail('当前启动器不支持 Pivane 应用更新，请先加载新版启动器');
+        if (action === 'application' && !this.state.appUpdateSupported) throw fail('当前启动器不支持 OhMyBuddy 应用更新，请先加载新版启动器');
         if (action === 'update' && !this.state.updateSupported) throw fail('Pi 更新需要 Node 22 或 24 和默认的本地 Pi 安装');
     }
     review({ action, version, release }, idle) {

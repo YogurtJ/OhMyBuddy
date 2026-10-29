@@ -8,16 +8,16 @@
 const ASK_OTHER = 'sending anything to other people, notable spending, or changing your own permissions';
 const PRESET_GUIDANCE = Object.freeze({
     free: 'Hands-off mode (full access). Act without asking: reading, web search, memory, images and speech, reading or writing ordinary files and '
-        + 'Pivane/Pi state paths (.pi/agent, pivane-profiles, pivane-bots, .pivane), and running commands, scripts and installs. Tool-layer checks still '
+        + 'OhMyBuddy/Pi state paths (.pi/agent, ohmybuddy-profiles, ohmybuddy-bots, .ohmybuddy; legacy pivane-profiles, pivane-bots, .pivane), and running commands, scripts and installs. Tool-layer checks still '
         + 'ask before a short list: sudo, recursive or disk-level deletes, shutdown, killing processes or controlling services, git push / reset --hard / '
         + 'clean -f / branch -D, publishing packages or releases, sending mail, scheduled or autostart jobs, credential or private-key files, and anything '
-        + 'under Pivane\'s own .pivane-runtime directory. Call the tool directly; '
+        + 'under OhMyBuddy\'s own .ohmybuddy-runtime or legacy .pivane-runtime directory. Call the tool directly; '
         + `do not duplicate its approval in prose. Ask first before ${ASK_OTHER}.`,
     balanced: 'Careful mode. Act without asking on reading ordinary files, web search, memory, images and speech, and writing files inside your '
-        + 'workspace. Every command, every hand-off to another agent, creating or cancelling a scheduled task, every file write outside your workspace, and reading or writing Pivane/Pi state paths is shown to the user on an '
+        + 'workspace. Every command, every hand-off to another agent, creating or cancelling a scheduled task, every file write outside your workspace, and reading or writing OhMyBuddy/Pi state paths is shown to the user on an '
         + 'approval card automatically when you call the tool, so just call it (do not ask in a separate message first); if it is not approved, '
         + `do not retry or work around it. Also ask first before ${ASK_OTHER}.`,
-    ask: 'Ask-every-time mode. Reading ordinary files and answering need no confirmation. Every other tool call (including Pivane/Pi state paths) is shown to the user on an approval card '
+    ask: 'Ask-every-time mode. Reading ordinary files and answering need no confirmation. Every other tool call (including OhMyBuddy/Pi state paths) is shown to the user on an approval card '
         + 'automatically, so just call the tool when it is the right step (do not ask in a separate message first); if it is not approved, '
         + 'do not retry or work around it.'
 });
@@ -84,7 +84,7 @@ function botPreamble({ name, bot, cwd, window }) {
     const displayName = oneLine(name, 80) || 'Assistant';
     const job = oneLine(bot?.job, 500);
     const lines = [
-        `You are ${displayName}, the user's personal assistant in Pivane.` + (job ? ` Your main job: ${job}` : ''),
+        `You are ${displayName}, the user's personal assistant in OhMyBuddy.` + (job ? ` Your main job: ${job}` : ''),
         'The coding-assistant introduction above lists your abilities (files, commands, tools); it is not your persona. '
             + 'Your personality, if defined, is in the assistant profile section.',
         '',

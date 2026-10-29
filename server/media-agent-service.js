@@ -322,7 +322,7 @@ class MediaAgentService {
                 '--no-prompt-templates',
                 '--no-context-files',
                 '--tools', `${capabilityTool},${toolName}`,
-                '--append-system-prompt', 'You are the Pivane media planner. Finish by calling the requested media_plan_* tool. Never generate media directly.'
+                '--append-system-prompt', 'You are the OhMyBuddy media planner. Finish by calling the requested media_plan_* tool. Never generate media directly.'
             ],
             env: {
                 PI_MEDIA_KIND: kind,

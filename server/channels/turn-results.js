@@ -72,7 +72,7 @@ function collect(state, entries, reply) {
         }
     }
     return { ...state, deliverables, mediaPlans,
-        body: body.length > 60000 ? body.slice(0, 60000) + '\n\n[回复较长，请在 Pivane 网页查看完整内容。]' : body };
+        body: body.length > 60000 ? body.slice(0, 60000) + '\n\n[回复较长，请在 OhMyBuddy 网页查看完整内容。]' : body };
 }
 function channelMarkers(manager, branch, id) {
     const rows = markers(branch, STATE, 'id', id);

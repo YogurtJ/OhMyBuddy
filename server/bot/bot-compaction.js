@@ -326,7 +326,7 @@ function indexSources(chunk, sessionId) {
 }
 
 function summaryText(sections, state, now) {
-    const lines = ['[Chat memory, maintained by Pivane. Earlier messages of this chat were condensed into this.]', '', '## What this chat is about',
+    const lines = ['[Chat memory, maintained by OhMyBuddy. Earlier messages of this chat were condensed into this.]', '', '## What this chat is about',
         sections.topic || '(not stated yet)', '', '## Notebook', ledger.renderLedger(state, { now }), '', '## What happened (oldest first)'];
     lines.push(...(sections.episodes.length ? sections.episodes.map(item => `- ${item}`) : ['- (nothing yet)']));
     lines.push('', '## Where things stand');

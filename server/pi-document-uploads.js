@@ -44,7 +44,7 @@ class DocumentUploads {
     }
     async root(create = false) {
         const agent = fs.realpathSync.native((await getSdk()).getAgentDir());
-        const root = this.storageRoot || path.join(agent, 'pivane-uploads');
+        const root = this.storageRoot || require('./ohmybuddy-compat').dataFile(agent, 'ohmybuddy-uploads');
         if (create) { if (privateDir(root) !== root) throw fail('文档存储位置已变化', 409, 'DOCUMENT_CHANGED'); }
         const stat = fs.lstatSync(root);
         if (!stat.isDirectory() || stat.isSymbolicLink() || fs.realpathSync.native(root) !== root) throw fail('文档存储位置已变化', 409, 'DOCUMENT_CHANGED');

@@ -1,6 +1,6 @@
 # 数学公式渲染
 
-Pivane 主聊天、侧聊回复与 Markdown 文件预览共用本地 KaTeX；会话保留原始 Markdown，浏览器负责排版。版本与许可证见[第三方声明](../THIRD_PARTY_NOTICES.md)。
+OhMyBuddy 主聊天、侧聊回复与 Markdown 文件预览共用本地 KaTeX；会话保留原始 Markdown，浏览器负责排版。版本与许可证见[第三方声明](../THIRD_PARTY_NOTICES.md)。
 
 网页排版不修改 Pi 依赖或原生 JSONL；HTML 导出是否支持公式由上游模板决定。
 

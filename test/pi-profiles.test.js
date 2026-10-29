@@ -209,7 +209,7 @@ test('revisioned HTTP, native immutable bindings, fork/import, and verified runt
     assert.equal(readProfileBinding(malformed), null);
     assert.equal((await registryService.describe(malformed)), null);
     if (process.platform !== 'win32') {
-        const registry = path.join(agentDir, 'pivane-profiles', 'profiles.json');
+        const registry = path.join(agentDir, 'ohmybuddy-profiles', 'profiles.json');
         const directory = path.dirname(registry), moved = registry + '.synthetic';
         const originalRead = fs.readSync;
         let switched = false;
@@ -318,7 +318,7 @@ test('trash and restore preserve identity data, CAS, defaults and disabled consu
     const avatar = await call('POST', `/profiles/${id}/avatar`, { expectedRevision: (await profiles.state()).revision,
         dataUrl: 'data:image/png;base64,' + image.toString('base64') });
     assert.equal(avatar.status, 200);
-    const dataRoot = path.join(agentDir, 'pivane-profiles', 'data', id);
+    const dataRoot = path.join(agentDir, 'ohmybuddy-profiles', 'data', id);
     for (const [file, content] of [['USER.md', 'Retained user'], ['MEMORY.md', 'Retained memory'], ['skills/retained/SKILL.md', 'Retained skill']]) {
         const location = path.join(dataRoot, file); fs.mkdirSync(path.dirname(location), { recursive: true }); fs.writeFileSync(location, content);
     }

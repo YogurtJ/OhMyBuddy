@@ -111,10 +111,10 @@ test('Bot workspaces never land in the service directory, even when it is inside
     const bots = new BotService({ store, profiles, supervisor: { on() {}, off() {} } });
     assert.equal(bots.workspaceBase(), projects);
     const workspace = bots.prepareWorkspace('12345678-0000-4000-8000-000000000000', 'Test', 'en');
-    assert.equal(path.dirname(workspace), path.join(projects, 'PivaneBots'));
-    assert.equal(fs.existsSync(path.join(app, 'PivaneBots')), false);
-    // The service runs from <root>/PivaneBots itself: workspaces there would be inside it.
-    process.chdir(path.join(projects, 'PivaneBots'));
+    assert.equal(path.dirname(workspace), path.join(projects, 'OhMyBuddyBots'));
+    assert.equal(fs.existsSync(path.join(app, 'OhMyBuddyBots')), false);
+    // The service runs from <root>/OhMyBuddyBots itself: workspaces there would be inside it.
+    process.chdir(path.join(projects, 'OhMyBuddyBots'));
     assert.equal(bots.workspaceBase(), other, 'the next root is used');
-    assert.equal(path.dirname(bots.prepareWorkspace('22345678-0000-4000-8000-000000000000', 'Test', 'en')), path.join(other, 'PivaneBots'));
+    assert.equal(path.dirname(bots.prepareWorkspace('22345678-0000-4000-8000-000000000000', 'Test', 'en')), path.join(other, 'OhMyBuddyBots'));
 });

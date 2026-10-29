@@ -83,7 +83,7 @@ async function run(browser, base, width, locale, noProject = false) {
     assert.equal(await page.locator('.extensions-card').count(), 7);
     assert.equal(await page.locator('#extension-pivane-weixin [data-installation="optional"]').count(), 1, 'messaging connectors use their dedicated optional installation flow');
     await page.locator('#extension-pi-subagents [data-installation="installed"]').waitFor();
-    assert.match(await page.locator('#extension-pi-subagents [data-installation]').textContent(), /Pivane/);
+    assert.match(await page.locator('#extension-pi-subagents [data-installation]').textContent(), /OhMyBuddy/);
     assert.equal(await page.locator('#extension-pi-subagents .extensions-version').textContent(), 'v0.74.0', 'bundled components show their version');
     assert.equal(await page.locator('#extension-pi-web-access [data-installation="installed"]').count(), 1);
     assert.equal(await page.locator('#extension-pi-web-access .extensions-version').textContent(), 'v1.0.4', 'installed packages show the installed version');

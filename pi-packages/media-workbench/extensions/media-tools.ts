@@ -5,9 +5,9 @@ import { Type } from "typebox";
 const mediaKind = StringEnum(["image", "video", "tts"] as const);
 
 function workspaceSetting(suffix: 'BASE_URL' | 'ACCESS_TOKEN'): string | undefined {
-  const current = process.env[`PIVANE_WORKSPACE_${suffix}`], legacy = process.env[`PI_WORKSPACE_${suffix}`];
-  if (current && legacy && current !== legacy) throw new Error(`Conflicting Pivane workspace ${suffix} configuration`);
-  return current || legacy;
+  const values = ['OHMYBUDDY', 'PIVANE', 'PI'].map(prefix => process.env[`${prefix}_WORKSPACE_${suffix}`]).filter(Boolean);
+  if (new Set(values).size > 1) throw new Error(`Conflicting OhMyBuddy workspace ${suffix} configuration`);
+  return values[0];
 }
 
 function workspaceBaseUrl(): string {
@@ -36,7 +36,7 @@ async function requestJson(path: string, options: RequestInit = {}): Promise<any
   const response = await fetch(target, { ...options, redirect: 'error',
     headers: { ...options.headers, ...(token ? { Authorization: `Bearer ${token}` } : {}) } });
   const data = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(data?.error || `Pivane HTTP ${response.status}`);
+  if (!response.ok) throw new Error(data?.error || `OhMyBuddy HTTP ${response.status}`);
   return data;
 }
 
@@ -83,8 +83,8 @@ export default function mediaWorkbench(pi: ExtensionAPI) {
   pi.registerTool({
     name: "media_get_capabilities",
     label: "Media Capabilities",
-    description: "Get the current Pivane image, video, or TTS models, presets, controls, defaults, and limits before making a media plan.",
-    promptSnippet: "Read current Pivane media capabilities before planning image, video, or speech work",
+    description: "Get the current OhMyBuddy image, video, or TTS models, presets, controls, defaults, and limits before making a media plan.",
+    promptSnippet: "Read current OhMyBuddy media capabilities before planning image, video, or speech work",
     promptGuidelines: ["Read media_get_capabilities before generation planning tools; read media_get_connection_schema before media_plan_connection."],
     parameters: Type.Object({ kind: mediaKind }),
     async execute(_toolCallId, params, signal) {
@@ -162,7 +162,7 @@ export default function mediaWorkbench(pi: ExtensionAPI) {
   pi.registerTool({
     name: "media_plan_tts",
     label: "Speech Plan",
-    description: "Create and validate a Pivane speech plan using the current dynamic TTS Provider registry. This does not synthesize audio.",
+    description: "Create and validate a OhMyBuddy speech plan using the current dynamic TTS Provider registry. This does not synthesize audio.",
     parameters: Type.Object({
       summary: Type.String(),
       text: Type.Optional(Type.String()),

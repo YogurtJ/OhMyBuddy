@@ -5,7 +5,7 @@ const { renew } = require('../scripts/refresh-platform-channel.cjs');
 const { signedManifest } = require('../server/pi-distribution');
 test('maintainer refresh renews an expired approval without changing its releases or unknown metadata', () => {
     const key = generateKeyPairSync('ed25519'), now = Date.now(), before = now - 60 * 86400000;
-    const data = { version: 1, product: 'Pivane', channel: 'preview', generatedAt: new Date(before).toISOString(), expiresAt: new Date(before + 30 * 86400000).toISOString(), releases: [], publicationNote: 'synthetic approval' };
+    const data = { version: 1, product: 'OhMyBuddy', channel: 'preview', generatedAt: new Date(before).toISOString(), expiresAt: new Date(before + 30 * 86400000).toISOString(), releases: [], publicationNote: 'synthetic approval' };
     const bytes = Buffer.from(JSON.stringify(data)), envelope = { version: 1, keyId: 'fixture', payload: bytes.toString('base64'), signature: sign(null, bytes, key.privateKey).toString('base64') };
     const config = { keys: [{ id: 'fixture', pem: key.publicKey.export({ format: 'pem', type: 'spki' }).toString() }] };
     assert.throws(() => signedManifest(envelope, config, { now }), /expired/);

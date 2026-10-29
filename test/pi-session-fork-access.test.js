@@ -57,7 +57,7 @@ test('moved deliveries survive Web forks, nested copies, parent removal, restart
     assert.equal((await read(copy)).content, 'Immutable delivery');
     assert.equal((await service().request({ cwd: copy.cwd, sessionId: copy.id })).items[0].id, receipt.reference.id);
     assert.equal((await service().request({ cwd: copy.cwd, sessionId: copy.id, path: path.join(f.source, 'snapshot.txt') })).items[0].id, receipt.reference.id);
-    const accessFile = path.join(process.env.PI_CODING_AGENT_DIR, 'pivane-session-moves', 'forks', hash(copy.id) + '.json');
+    const accessFile = path.join(process.env.PI_CODING_AGENT_DIR, 'ohmybuddy-session-moves', 'forks', hash(copy.id) + '.json');
     require('./private-file-helper.cjs').assertPrivateFile(accessFile);
     assert.ok(!fs.readFileSync(accessFile, 'utf8').includes('PRIVATE QUESTION'));
     const early = (await f.fork(copy, question, 'before')).session;
@@ -125,7 +125,7 @@ test('altered native prefixes, marker revisions, private receipts and unrecorded
     const q = manager.appendMessage({ role: 'user', content: upload.marker, timestamp: 1 }); manager.appendMessage(assistant);
     const child = (await f.fork(session, q, 'before')).session;
     const native = fs.readFileSync(child.path), access = await readForkAccess(f.store, child);
-    const receiptFile = path.join(process.env.PI_CODING_AGENT_DIR, 'pivane-session-moves', 'forks', hash(child.id) + '.json');
+    const receiptFile = path.join(process.env.PI_CODING_AGENT_DIR, 'ohmybuddy-session-moves', 'forks', hash(child.id) + '.json');
     const receipt = fs.readFileSync(receiptFile);
     fs.writeFileSync(child.path, native.toString().replace(access.revision, '0'.repeat(64)));
     await assert.rejects(readForkAccess(f.store, child), { code: 'FORK_ACCESS_CHANGED' }); fs.writeFileSync(child.path, native);
@@ -246,7 +246,7 @@ function publishV1(manager, source, document) {
     const receipt = { version: 1, target, created: parsed.header.timestamp,
         source: { id: source.id, cwd: source.cwd }, tailLength: parsed.tail.length, tailSha256: hash(parsed.tail), deliveries: [], documents: [document] };
     const bytes = Buffer.from(JSON.stringify(receipt) + '\n');
-    const parent = privateDir(path.join(process.env.PI_CODING_AGENT_DIR, 'pivane-session-moves'));
+    const parent = privateDir(path.join(process.env.PI_CODING_AGENT_DIR, 'ohmybuddy-session-moves'));
     const folder = privateDir(path.join(parent, 'forks'));
     require('../server/pi-private-files').writePrivateFileSync(path.join(folder, hash(target.id) + '.json'), bytes, true);
     manager.appendCustomEntry(ACCESS_ENTRY, { version: 1, sessionId: target.id, revision: hash(bytes) });

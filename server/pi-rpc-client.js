@@ -11,7 +11,7 @@ const DEFAULT_REQUEST_TIMEOUT = 30000;
 // upper bound leaves room for the first snapshot after startup.
 const DEFAULT_STARTUP_TIMEOUT = 120000;
 const STARTUP_TIMEOUT_RANGE = Object.freeze({ min: 20000, max: 170000 });
-const STARTUP_TIMEOUT_MESSAGE = 'Pi 运行实例启动超时，请重试连接；如经常出现，可调大 PIVANE_WEB_STARTUP_TIMEOUT_MS';
+const STARTUP_TIMEOUT_MESSAGE = 'Pi 运行实例启动超时，请重试连接；如经常出现，可调大 OHMYBUDDY_WEB_STARTUP_TIMEOUT_MS';
 function startupTimeoutMs(value = process.env.PI_WEB_STARTUP_TIMEOUT_MS) {
     if (value === undefined || value === null || String(value).trim() === '') return DEFAULT_STARTUP_TIMEOUT;
     const number = Number(value);

@@ -124,7 +124,7 @@
             progressNode.textContent = total ? `${done}/${total}` : '';
             progressNode.title = total ? t('运行中工作流的子任务：已完成 {0} / 共 {1}', done, total) : '';
             // The retention badge only stands in for runs the plugin has not reported.
-            const keepText = t('后台子 Agent 未结束，Pivane 会保留此会话，以便结果返回后主 Agent 自动继续。');
+            const keepText = t('后台子 Agent 未结束，OhMyBuddy 会保留此会话，以便结果返回后主 Agent 自动继续。');
             const keepBadge = this.root.querySelector('.sa-runs-keep');
             keepBadge.hidden = !keep || runs.length > 0; keepBadge.querySelector('span').textContent = t('会话保持中'); keepBadge.title = keepText;
             summary.title = keep && runs.length ? keepText : '';

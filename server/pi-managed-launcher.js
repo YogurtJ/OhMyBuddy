@@ -13,7 +13,7 @@ const retention = require('./pi-managed-retention');
 class ManagedLauncher {
     constructor({ root, env = process.env, networkEnvironment = env, stage = stagePi, stageApp = stageApplication, backup = backupRoots, forkServer = fork } = {}) {
         this.root = fs.realpathSync.native(root);
-        this.directory = privateDir(path.join(this.root, '.pivane-runtime'));
+        this.directory = privateDir(path.join(require('./ohmybuddy-compat').runtimeDirectory(this.root)));
         this.stateFile = path.join(this.directory, 'state.json');
         this.env = { ...env };
         this.networkEnvironment = { ...networkEnvironment };
@@ -80,7 +80,7 @@ class ManagedLauncher {
         }).catch(() => {
             this.lastRetention = { at: new Date().toISOString(), phase: controller.signal.aborted ? 'cancelled' : 'failed', error: 'cleanup-incomplete' };
             if (job) this.log(job, 'system', 'Retention did not complete; preserved remaining items.');
-            else console.error('Pivane retention did not complete; preserved remaining items.');
+            else console.error('OhMyBuddy retention did not complete; preserved remaining items.');
         }).finally(() => {
             this.cleaning = null; this.cleanupController = null;
             this.send({ type: 'maintenance-status', status: this.status() });
@@ -141,7 +141,7 @@ class ManagedLauncher {
                 clearTimeout(timer);
                 if (this.child === child) this.child = null;
                 if (!ready) reject(new Error('Service exited before becoming ready'));
-                else if (!this.closed && !this.operation) { console.error('Pivane child exited; launcher will not replay tasks'); void this.close().finally(() => process.exit(code || 1)); }
+                else if (!this.closed && !this.operation) { console.error('OhMyBuddy child exited; launcher will not replay tasks'); void this.close().finally(() => process.exit(code || 1)); }
             });
         });
     }
@@ -180,7 +180,7 @@ class ManagedLauncher {
         // Reserve before awaiting installation, shutdown or backup work.
         this.operation = Promise.resolve().then(async () => {
             job.fromVersion = message.action === 'application' ? JSON.parse(readSafe(path.join(this.releasePath(previous), 'package.json'))).version : JSON.parse(readSafe(require('node:fs').realpathSync.native(path.join(this.releasePath(previous), 'node_modules/@earendil-works/pi-coding-agent/package.json')))).version;
-            this.log(job, 'system', message.action === 'update' ? `Updating Pivane's Pi: ${job.fromVersion} -> ${message.version}` : `Pivane operation: ${message.action}`);
+            this.log(job, 'system', message.action === 'update' ? `Updating OhMyBuddy's Pi: ${job.fromVersion} -> ${message.version}` : `OhMyBuddy operation: ${message.action}`);
             this.save(); this.send({ type: 'maintenance-accepted', id: message.id });
             let next = previous;
             if (message.action === 'update' || message.action === 'application') {
@@ -219,7 +219,7 @@ class ManagedLauncher {
             if (!this.child || this.closed) throw Object.assign(new Error('Service stopped before maintenance completed'), { maintenancePhase: 'starting' });
             job.phase = 'succeeded'; job.finishedAt = new Date().toISOString(); job.exitCode = 0;
             job.installedVersion = message.action === 'application' ? message.release.version : message.action === 'update' ? message.version : job.fromVersion;
-            this.log(job, 'system', `Completed. Running ${message.action === 'application' ? 'Pivane' : 'Pi'} ${job.installedVersion}.`); this.save();
+            this.log(job, 'system', `Completed. Running ${message.action === 'application' ? 'OhMyBuddy' : 'Pi'} ${job.installedVersion}.`); this.save();
         }).catch(async error => {
             const failedPhase = error?.maintenancePhase || job.phase;
             job.exitCode = Number.isInteger(error?.exitCode) ? error.exitCode : null;
@@ -233,7 +233,7 @@ class ManagedLauncher {
                     try { await this.stopChild(); } catch { /* The process has exited; record failure, do not reuse it. */ }
                 }
                 if (!this.child) {
-                    try { await this.boot(previous); } catch { console.error('Pivane recovery startup failed; use the retained installation and backup'); }
+                    try { await this.boot(previous); } catch { console.error('OhMyBuddy recovery startup failed; use the retained installation and backup'); }
                 }
             }
         }).finally(() => {

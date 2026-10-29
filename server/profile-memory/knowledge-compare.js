@@ -1,6 +1,6 @@
 'use strict';
 
-// Pivane-owned comparison primitives. No upstream store or model call is used here.
+// OhMyBuddy-owned comparison primitives. No upstream store or model call is used here.
 const { scanKnowledgeContent } = require('./content-scan');
 const LIMITS = Object.freeze({ scannedItems: 400, candidates: 12, promptBytes: 1800, previewChars: 240 });
 const fail = message => { throw Object.assign(new Error(message), { status: 409, code: 'knowledge-comparison' }); };

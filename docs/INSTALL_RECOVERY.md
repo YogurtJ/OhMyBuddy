@@ -1,6 +1,6 @@
 # 干净安装、更新与数据恢复
 
-本指南的命令以 **Linux Bash** 为主，面向个人安装；[macOS](MACOS.md)与[Windows](WINDOWS.md)另有原生步骤。Pivane 支持 Linux、macOS 与 Windows，统一使用 Node 22.x；各版本实际验收过的系统、磁盘与浏览器见[平台验证](RELEASE_INSTALL_VALIDATION.md)。不要把POSIX命令直接粘贴到Windows cmd，Windows项目路径列表使用分号。
+本指南的命令以 **Linux Bash** 为主，面向个人安装；[macOS](MACOS.md)与[Windows](WINDOWS.md)另有原生步骤。OhMyBuddy 支持 Linux、macOS 与 Windows，统一使用 Node 22.x；各版本实际验收过的系统、磁盘与浏览器见[平台验证](RELEASE_INSTALL_VALIDATION.md)。不要把POSIX命令直接粘贴到Windows cmd，Windows项目路径列表使用分号。
 
 ## 1. 安装前提
 
@@ -14,7 +14,7 @@
 
 ## 选择项目范围
 
-Pivane 媒体和预约数据按实例保存，Pi 身份默认与 CLI 共用；`PI_PROJECT_ROOTS` 决定网页可以选择哪些服务器项目，两者分别配置。普通安装默认开放电脑上系统用户可访问的目录，Linux/macOS 使用 `/`，Windows 使用各盘符根目录。无需让用户先选择最小范围，也不要自行限制到 Documents 或 demo 目录；用户明确要求缩小时再配置：
+OhMyBuddy 媒体和预约数据按实例保存，Pi 身份默认与 CLI 共用；`PI_PROJECT_ROOTS` 决定网页可以选择哪些服务器项目，两者分别配置。普通安装默认开放电脑上系统用户可访问的目录，Linux/macOS 使用 `/`，Windows 使用各盘符根目录。无需让用户先选择最小范围，也不要自行限制到 Documents 或 demo 目录；用户明确要求缩小时再配置：
 
 | 使用范围 | Linux/macOS 配置示例 |
 |---|---|
@@ -26,17 +26,17 @@ Pivane 媒体和预约数据按实例保存，Pi 身份默认与 CLI 共用；`P
 
 ## 2. 从源码发布包安装
 
-以下以 1.6.0 归档为例，安装其他版本时替换版本号，可下载版本以 [Releases](https://github.com/YogurtJ/pivane/releases) 为准。先下载 `pivane-1.6.0.tar.gz` 及同名 .sha256 到 Downloads，核对发布来源，然后检查哈希：
+以下以 1.6.0 归档为例，安装其他版本时替换版本号，可下载版本以 [Releases](https://github.com/YogurtJ/pivane/releases) 为准。先下载 `ohmybuddy-1.6.0.tar.gz` 及同名 .sha256 到 Downloads，核对发布来源，然后检查哈希：
 
 ```bash
-ARCHIVE="$HOME/Downloads/pivane-1.6.0.tar.gz"
+ARCHIVE="$HOME/Downloads/ohmybuddy-1.6.0.tar.gz"
 (cd "$(dirname "$ARCHIVE")" && sha256sum -c "$(basename "$ARCHIVE").sha256")
 ```
 
 采用固定的媒体/预约路径与独立版本目录，Pi 身份沿用当前用户的原生目录。以下为新实例，BASE必须尚不存在；已有实例使用更新流程：
 
 ```bash
-BASE="$HOME/pivane"
+BASE="$HOME/ohmybuddy"
 test ! -e "$BASE" || { echo "此目录已存在，请按更新流程操作或选择新的BASE"; exit 1; }
 umask 077
 mkdir -p "$BASE/releases/1.6.0" "$BASE/data/media" "$BASE/projects/demo" "$BASE/backups"
@@ -66,7 +66,7 @@ PI_CODING_AGENT_DIR=$AGENT_DIR
 PI_MEDIA_CONFIG_DIR=$BASE/data/media-lab
 PI_MEDIA_DATA_DIR=$BASE/data/media
 PI_PROJECT_ROOTS=/
-PI_WEB_DEFERRED_FILE=$BASE/data/pivane-deferred-messages.json
+PI_WEB_DEFERRED_FILE=$BASE/data/ohmybuddy-deferred-messages.json
 PI_WORKSPACE_BASE_URL=http://127.0.0.1:11408
 EOF
 chmod 600 "$BASE/instance.env"
@@ -93,7 +93,7 @@ curl -fsS http://127.0.0.1:11408/api/pi/status
 
 `node scripts/install.cjs` 安装锁定依赖并准备随包子 Agent 与档案记忆组件，失败返回非零结果；不会启动任务或启用身份记忆。旧归档没有该脚本时使用 `npm ci`。
 
-子 Agent 模型与角色设置沿用原生配置，资源可在扩展页停用；档案记忆按助手身份启用。旧 CLI 包声明、过滤、记忆数据和独立安装路径保留，Pivane 优先加载自己的版本。旧跳过变量与安装尝试记录不再控制内置组件。SQLite 平台依赖、跳过脚本后的补全步骤和旧安装兼容见[内置能力包](BUNDLED_CAPABILITIES.md)。
+子 Agent 模型与角色设置沿用原生配置，资源可在扩展页停用；档案记忆按助手身份启用。旧 CLI 包声明、过滤、记忆数据和独立安装路径保留，OhMyBuddy 优先加载自己的版本。旧跳过变量与安装尝试记录不再控制内置组件。SQLite 平台依赖、跳过脚本后的补全步骤和旧安装兼容见[内置能力包](BUNDLED_CAPABILITIES.md)。
 
 ## 3. 首次网页使用
 
@@ -131,7 +131,7 @@ curl -fsS http://127.0.0.1:11408/api/pi/status
 | Pi 会话 | 实际 `PI_CODING_AGENT_DIR` 下的 `sessions/` 原生 JSONL | 完整原生树与活动位置；网页当前分支导出不等于完整备份 |
 | Pi 凭据/模型/设置 | 整个实际 Pi 身份目录，通常在 BASE 之外 | 含 auth、models、settings、trust 等；不要只挑 auth.json 或手工改写它 |
 | 工作台配置 | Agent 目录内所选的 workspace、access、notifications 配置（新名称为 `pivane-*`，既有 `pi5-*` 沿用） | 偏好、访问校验/登录、通知订阅；均作为私人数据处理 |
-| 预约 | 明确指定的预约 JSON 文件，例如 `pivane-deferred-messages.json` | 包含未发送内容；备份前暂停，恢复后核对，禁止自动补发 |
+| 预约 | 明确指定的预约 JSON 文件，例如 `ohmybuddy-deferred-messages.json` | 包含未发送内容；备份前暂停，恢复后核对，禁止自动补发 |
 | 媒体配置与 Key | `data/media-lab/` + 实际 Pi 身份的凭据库 | 配方、connections、registry、说明文件和 Key 必须配套 |
 | 媒体历史与文件 | 整个 `data/media/` | 三类 history JSON、prompts.json 与 public/images、videos、audio 必须同批恢复 |
 | 项目和项目资源 | `projects/` | 源码、未提交修改、`.pi`、项目模板/Package；会话不会替你备份项目文件 |
@@ -146,7 +146,7 @@ curl -fsS http://127.0.0.1:11408/api/pi/status
 3. 对已停止的数据做一次完整快照，备份文件放在 data/projects 以外：
 
 ```bash
-BASE="$HOME/pivane"
+BASE="$HOME/ohmybuddy"
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 BACKUP="$BASE/backups/data-$STAMP.tar.gz"
 umask 077
@@ -178,7 +178,7 @@ chmod 600 "$AGENT_BACKUP.sha256"
 
 可先在设置 → [版本与更新](UPDATES.md)检查版本。配置签名分发源的完整平台包提供“更新到…”确认入口，由独立启动器执行；macOS 预览安装方式见[macOS 指南](MACOS.md)。源码归档及旧安装继续使用官方发布页或独立 Agent 提示词，并按本节在安全停机窗口操作；网页不提供通用备份、重启或任意下载执行入口。全局 Pi CLI 的更新不改变工作台内核。
 
-受管 Pi 版本位于原安装目录的 `.pivane-runtime` 中，始终从原目录启动。升级 Pivane 应用采用新的发布目录并沿用原数据配置，不将旧受管快照覆盖到新发布目录。备份、恢复及源码开发与受管快照的关系见[维护说明](UPDATES.md)。
+受管 Pi 版本位于原安装目录的 `.ohmybuddy-runtime` 中，始终从原目录启动。升级 OhMyBuddy 应用采用新的发布目录并沿用原数据配置，不将旧受管快照覆盖到新发布目录。备份、恢复及源码开发与受管快照的关系见[维护说明](UPDATES.md)。
 
 更新前阅读目标版本的迁移和兼容说明，不假设任意降级兼容。项目路径迁移属于独立维护操作，见[命名与迁移](development/NAMING.md)。
 
@@ -186,7 +186,7 @@ chmod 600 "$AGENT_BACKUP.sha256"
 2. 解压目标包到**新的空目录**，安装其锁定依赖：
 
 ```bash
-BASE="$HOME/pivane"
+BASE="$HOME/ohmybuddy"
 NEXT_ARCHIVE="/absolute/path/to/new-release.tar.gz"
 mkdir "$BASE/releases/r2"
 tar -xzf "$NEXT_ARCHIVE" -C "$BASE/releases/r2" --strip-components=1

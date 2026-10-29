@@ -78,7 +78,7 @@ class PiUsageService {
         return new Promise((resolve, reject) => {
             const worker = new Worker(path.join(__dirname, 'pi-usage-worker.js'), {
                 workerData: { root: path.join(getAgentDir(), 'sessions'), roots: this.store.roots, filter,
-                    ledgerPath: path.join(getAgentDir(), 'pivane-usage', 'ledger.sqlite'), onlyFile, sideBatch, move },
+                    ledgerPath: path.join(require('./ohmybuddy-compat').dataFile(getAgentDir(), 'ohmybuddy-usage'), 'ledger.sqlite'), onlyFile, sideBatch, move },
                 resourceLimits: { maxOldGenerationSizeMb: 192 }
             });
             let finished = false;

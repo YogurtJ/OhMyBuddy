@@ -75,7 +75,7 @@ function projectSettings(config, base, { global = false } = {}) {
 }
 function defaultToolSelection(settings) {
     // Pi 0.99 merges an empty project modifier list with inherited tools;
-    // Pivane's existing explicit-empty contract means no built-in tools.
+    // OhMyBuddy's existing explicit-empty contract means no built-in tools.
     const project = settings.getProjectSettings().defaultTools;
     if (settings.isProjectTrusted() && Array.isArray(project) && project.length === 0) return [];
     const global = settings.getGlobalSettings().defaultTools;

@@ -10,7 +10,7 @@ const { settingsPage } = require('./pi-bot-fixture.js');
 
 const BOT = '11111111-1111-4111-8111-111111111111', MAIN = '22222222-2222-4222-8222-222222222222';
 const BOT2 = '33333333-3333-4333-8333-333333333333', MAIN2 = '44444444-4444-4444-8444-444444444444';
-const workspace = '/fixture/PivaneBots/bot-11111111', geek = '/fixture/project';
+const workspace = '/fixture/OhMyBuddyBots/bot-11111111', geek = '/fixture/project';
 const row = id => ({ id, cwd: workspace, path: `${workspace}/${id}.jsonl`, name: '', firstMessage: '', messageCount: 2,
     agentProfile: { id: BOT, name: '新伙伴' }, assistantProject: null, created: '2026-10-24T00:00:00Z', modified: '2026-10-24T00:00:00Z' });
 const messages = [

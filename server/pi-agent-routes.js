@@ -11,7 +11,7 @@ const { PiSettingsService } = require('./pi-settings-service');
 const { WorkspacePreferencesService } = require('./workspace-preferences-service');
 const { PiDeferredMessages } = require('./pi-deferred-messages');
 const { mountSessionWorkflows } = require('./pi-session-workflows');
-const { INTERNAL_COMMAND_PATTERN } = require('./pivane-compat');
+const { INTERNAL_COMMAND_PATTERN } = require('./ohmybuddy-compat');
 const { descriptorBackendAvailable } = require('./pi-file-descriptor');
 const { PiSideChatService } = require('./pi-side-chat');
 

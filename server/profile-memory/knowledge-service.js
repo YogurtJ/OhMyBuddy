@@ -54,8 +54,8 @@ const HISTORY_HEADROOM = 1024 * 1024;
 const MAX_RECORDS = 16384;
 const MAX_TOMBSTONES = 32768;
 const MAX_SPENT = 32768;
-const ledgerFile = root => path.join(root, '.pivane-knowledge.json');
-const pendingFile = root => path.join(root, '.pivane-knowledge.pending');
+const ledgerFile = root => require('../ohmybuddy-compat').knowledgeFile(root, '.json');
+const pendingFile = root => require('../ohmybuddy-compat').knowledgeFile(root, '.pending');
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 const keys = (value, allowed) => Object.keys(value).every(key => allowed.includes(key));
 

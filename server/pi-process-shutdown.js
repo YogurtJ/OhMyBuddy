@@ -5,7 +5,7 @@ function registerProcessShutdown(dispose) {
     function shutdown() {
         if (!pending) {
             pending = Promise.resolve().then(dispose).then(() => process.exit(0), error => {
-                console.error('Pivane shutdown failed:', error?.message || String(error));
+                console.error('OhMyBuddy shutdown failed:', error?.message || String(error));
                 process.exit(1);
             });
         }

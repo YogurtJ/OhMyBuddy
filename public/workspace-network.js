@@ -48,7 +48,7 @@
         $('network-proxy-url').value = data.saved.proxy.url;
         $('network-no-proxy').value = data.saved.proxy.noProxy;
         $('network-proxy-current').textContent = t('当前使用：{0}', modeLabel(data.current.proxyMode)) + (data.current.proxyMode === 'environment' ? ' · ' + t(data.current.usesProxy ? '检测到代理配置' : '更新源未使用代理') : '');
-        $('network-environment-note').textContent = t(data.nativeProxy ? '检测到 Pi 原生代理。运行环境模式保留现有配置；直连或自定义仅覆盖 Pivane 受管请求。' : '运行环境模式沿用服务器已有代理；未配置时直连。不会改变浏览器或系统 VPN。');
+        $('network-environment-note').textContent = t(data.nativeProxy ? '检测到 Pi 原生代理。运行环境模式保留现有配置；直连或自定义仅覆盖 OhMyBuddy 受管请求。' : '运行环境模式沿用服务器已有代理；未配置时直连。不会改变浏览器或系统 VPN。');
         $('network-addresses').replaceChildren();
         for (const item of data.addresses) {
             const row = el('div', undefined, { class: 'network-address' });
@@ -142,11 +142,11 @@
         const addresses = el('div', undefined, { id: 'network-addresses', class: 'network-addresses' });
         const accessHelp = el('div'); accessHelp.append(addresses, paragraph('候选地址不代表已连通。防火墙、路由和容器端口映射仍需自行配置。'), paragraph('允许其他设备连接不等于仅限局域网；公网接口也可能接受连接。IPv4 与 IPv6 应分别核对。'));
         listen.append(fold('访问地址与部署说明', accessHelp), button('network-listen-save', '保存访问范围', true), el('p', undefined, { id: 'network-listen-status', hidden: '' }));
-        const proxy = card('network-proxy', 'fa-route', '出站代理', '用于更新检查与 Pivane 管理的模型请求。');
+        const proxy = card('network-proxy', 'fa-route', '出站代理', '用于更新检查与 OhMyBuddy 管理的模型请求。');
         const current = paragraph(''); current.id = 'network-proxy-current'; proxy.append(current);
         proxy.append(field('连接方式', select('network-proxy-mode', [['environment', '使用运行环境'], ['direct', '直连'], ['custom', '自定义代理']])));
         const input = el('input', undefined, { id: 'network-proxy-url', type: 'url', placeholder: 'http://127.0.0.1:7890', autocomplete: 'off', spellcheck: 'false', maxlength: '2048' });
-        const custom = el('div', undefined, { id: 'network-custom-proxy', hidden: '' }); custom.append(field('代理地址', input), paragraph('这里的 localhost 指运行 Pivane 的服务器，不是打开网页的设备。')); proxy.append(custom);
+        const custom = el('div', undefined, { id: 'network-custom-proxy', hidden: '' }); custom.append(field('代理地址', input), paragraph('这里的 localhost 指运行 OhMyBuddy 的服务器，不是打开网页的设备。')); proxy.append(custom);
         const advanced = el('div'); const environment = paragraph(''); environment.id = 'network-environment-note';
         advanced.append(environment, field('额外绕过代理的地址', el('input', undefined, { id: 'network-no-proxy', type: 'text', placeholder: 'localhost,192.168.1.10,.example.com', maxlength: '2048', autocomplete: 'off' })),
             paragraph('本机回环与内部连接默认直连。额外地址用逗号分隔；不支持 CIDR。'),

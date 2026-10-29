@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 
 // pi-subagents keeps detached work alive after the parent turn settles. Its
 // optional host integration asks for this versioned process-global registry.
-// A managed Pivane worker hosts the registry and reports only the aggregate
+// A managed OhMyBuddy worker hosts the registry and reports only the aggregate
 // state to the Supervisor, which decides retention and maintenance safety.
 const REGISTRY_KEY = Symbol.for('@agegr/pi-web/session-liveness/v1');
 const PIVANE_PROVIDERS = Symbol.for('pivane.session-liveness.providers.v1');

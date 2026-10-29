@@ -2,8 +2,9 @@ const MIB = 1024 * 1024;
 // Manifest validity is independent of a later reduction in configured quotas.
 const MAX_STORED_FILE_BYTES = 2048 * MIB;
 function setting(env, key, fallback, maximum) {
-    if (env[key] === undefined || env[key] === '') return fallback * MIB;
-    const value = Number(env[key]);
+    const configured = require('./pi-local-env').environmentValue(env, key.replace(/^PIVANE_/, ''), false);
+    if (configured === undefined) return fallback * MIB;
+    const value = Number(configured);
     if (!Number.isSafeInteger(value) || value < 1 || value > maximum) throw new Error(`${key} must be an integer from 1 to ${maximum} MiB`);
     return value * MIB;
 }

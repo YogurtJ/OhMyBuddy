@@ -1,10 +1,12 @@
 <div align="center">
 
-<img src="public/brand/logo-192.png" alt="Pivane logo" width="96" height="96">
+<img src="public/brand/logo-192.png" alt="OhMyBuddy logo" width="96" height="96">
 
-# Pivane
+# OhMyBuddy
 
-**自托管的 AI 编程 Agent 网页工作台，电脑、平板、手机都能接着用。**
+原名 **Pivane**。旧安装的数据与设置继续兼容，详见[改名与升级说明](docs/development/NAMING.md)。
+
+**一个自托管的 AI 伙伴：聊天、记忆、办事与编程，电脑、平板和手机都能接着用。**
 
 把 [Pi Coding Agent](https://pi.dev) 部署在自己的机器上，用任何设备的浏览器使用它。<br>
 子 Agent、定时任务、MCP、长期记忆、丰富的文件预览，以及内置的图像、视频、语音实验室，都用你自己的模型和 Key。
@@ -19,40 +21,32 @@
 
 [下载](https://github.com/YogurtJ/pivane/releases/latest) · [安装](docs/INSTALL_RECOVERY.md) · [用户指南](docs/USER_GUIDE.md) · [变更记录](CHANGELOG.md) · [反馈问题](https://github.com/YogurtJ/pivane/issues/new/choose) · [讨论区](https://github.com/YogurtJ/pivane/discussions)
 
-<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/hero-zh.webp" alt="电脑上的 Pivane：项目与线程列表、刚完成的编程任务（预算超支提醒，7 项测试通过）和右侧的代码差异" width="100%">
+<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/hero-zh.webp" alt="电脑上的 OhMyBuddy：私人 Bot 对话、折叠过程和可查看的记忆回执" width="100%">
 
 </div>
 
-## 为什么选择 Pivane
+## 为什么选择 OhMyBuddy
 
-- **直接使用 Pi 自己的运行时。** Pivane 运行 Pi 的原生运行时，直接读写 Pi 自己的会话文件。流式回复、工具调用、文件差异、Shell 命令、任务引导和上下文压缩都可以使用，界面在任何屏幕上都便于阅读。
-- **在电脑上开始，在手机上查看进度。** 会话保存在你的服务器上。在另一台设备上打开同一个线程时，仍由同一个 Agent 进程提供服务。Pivane 可以添加到手机主屏幕，回复完成时会通知你。
+- **直接使用 Pi 自己的运行时。** OhMyBuddy 运行 Pi 的原生运行时，直接读写 Pi 自己的会话文件。流式回复、工具调用、文件差异、Shell 命令、任务引导和上下文压缩都可以使用，界面在任何屏幕上都便于阅读。
+- **在电脑上开始，在手机上查看进度。** 会话保存在你的服务器上。在另一台设备上打开同一个线程时，仍由同一个 Agent 进程提供服务。OhMyBuddy 可以添加到手机主屏幕，回复完成时会通知你。
 - **出门在外，也能在微信里派活。** 装上可选的微信连接组件并扫码绑定后，在微信里发一句话或一张图片，家里电脑上的 Agent 就会读文件、跑工具，做完把文件发回微信。
 - **在一个工作台里同时运行多个 Agent。** 你可以使用子 Agent、Agent 自己创建的任务线程、线程间消息、侧聊和按 cron 运行的定时任务，并实时查看每个 Agent 正在做什么。
 - **模型、Key 和机器都由你掌控。** Pi 支持的供应商都可以使用，包括 Anthropic、OpenAI、Google Gemini、GitHub Copilot、OpenRouter、DeepSeek、通义千问、Kimi、MiniMax、xAI 和 Mistral。可以用 API Key 或 OAuth 登录，也可以添加自己的 OpenAI 兼容服务。凭据和历史都保存在你自己的机器上。
 - **扩展方式和 Pi 一样。** Pi 的 Packages、Skills、提示词模板和 MCP 服务器都可以在浏览器里安装。也可以让内置的扩展助手帮你查找和配置。
 - **内置媒体生成和语音。** 可以接入自己的图像、视频和语音服务。Agent 会把你的想法整理成可编辑的参数，可按媒体类型设置对话自动执行；视频默认需要确认。也可以用语音输入消息，或让回复朗读出来。
 
-### 实际运行效果
+### 对话之外，也留下可用的结果
 
-一句话交代任务：Agent 读代码、修改、补测试并运行，进度卡随之更新。完成后执行过程收成一行摘要，点开本轮文件就能看差异。
+让 Buddy 记住一件安排和一个回复偏好。对话里保留一个最终回复，过程和记忆变更则可以展开核对。
 
-<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/demo-zh.gif" alt="在 Pivane 里给记账项目加预算超支提醒：Agent 读代码、修改、补测试并运行，完成后打开文件差异" width="100%"></p>
-
-<sub>截图和录屏使用合成的演示项目和对话；录屏中的代码修改和测试是实际执行的。</sub>
+<sub>当前截图使用合成对话和本地夹具，没有发送真实模型或微信业务消息。</sub>
 
 ### 在微信里派活
 
-不在电脑前也能交代任务。微信私聊绑定到 Pivane 的一个线程后，发一句话或一张照片，家里电脑上的 Agent 就会读你的文件、跑脚本，做完把 PDF、Excel 等文件直接发回微信；定时任务的结果也能推送到这里。
-
-<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/wechat-zh.gif" alt="在微信里让 Agent 整理出差报销单：家里电脑上的同一线程读票据、跑脚本，PDF 和 Excel 发回微信；再发一张小票，自动补进报销单" width="100%"></p>
-
-<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/wechat-flow-zh.webp" alt="三张微信截图：一句话拿到报销单、拍小票补进报销单、定时任务每晚推送 AI 新闻" width="100%"></p>
-
+不在电脑前也能交代任务。微信私聊绑定到 OhMyBuddy 的一个线程后，发一句话或一张照片，家里电脑上的 Agent 就会读你的文件、跑脚本，做完把 PDF、Excel 等文件直接发回微信；定时任务的结果也能推送到这里。
 - 支持私聊文字、图片、交付文件、常用斜杠指令（如 `/status`、`/resume`）和定时通知。
-- 需要自己部署 Pivane，并按需安装微信连接组件，详见[消息渠道](docs/MESSAGE_CHANNELS.md)。
+- 需要自己部署 OhMyBuddy，并按需安装微信连接组件，详见[消息渠道](docs/MESSAGE_CHANNELS.md)。
 
-<sub>微信画面为真实截图，等待过程已加速；电脑一侧是同一线程在演示实例中的展示；项目、票据和金额均为合成数据。</sub>
 
 ## 功能
 
@@ -75,7 +69,6 @@
 
 ### 多 Agent 与自动化
 
-<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/agents-zh.webp" alt="三个子 Agent 并行检查实现边界、测试缺口和文档，右侧侧聊回答一个临时问题" width="100%">
 
 - 内置 [pi-subagents](https://pi.dev/packages/pi-subagents) 子 Agent。实时面板显示每次运行的状态和所用模型，可以引导、停止或继续运行，并统计 token 用量和费用。
 - Agent 可以新开任务线程，也可以给同一项目里的其他线程发消息。
@@ -99,7 +92,7 @@
 
 ### 消息渠道
 
-- 按需安装可选的微信连接组件，扫码登录，允许指定用户，并把私聊绑定到 Pivane 线程。
+- 按需安装可选的微信连接组件，扫码登录，允许指定用户，并把私聊绑定到 OhMyBuddy 线程。
 - 支持文字、图片、交付文件、常用斜杠指令和定时通知；浏览器中可查看连接状态与投递回执。
 
 ### 文件与渲染
@@ -111,7 +104,6 @@
 
 ### 扩展与 MCP
 
-<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/extensions-zh.webp" alt="手机扩展发现页：按范围和安装状态筛选，可选微信消息渠道及使用前提与示例" width="393"></p>
 
 - 可以在全局或单个项目范围内管理 Pi 的 Packages、Skills、扩展、提示词模板和主题。
 - MCP 使用 Pi 的原生支持，包括 Codemode 和工具搜索。MCP 服务器和 OAuth 登录都在浏览器里管理。
@@ -120,7 +112,6 @@
 
 ### 多媒体实验室与语音
 
-<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/media-zh.webp" alt="聊天里的媒体卡片：GPT Image 2.5 生成的秋季新品海报；右侧是同一模型生成的产品图、参考图编辑、插画和 App 图标" width="100%">
 
 <sub>示例图片均由 GPT Image 2.5 实际生成。</sub>
 
@@ -131,22 +122,22 @@
 
 ### 日常使用
 
-<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/mobile-zh.webp" alt="手机上的 Pivane：任务结果、深色模式下的公式，以及包含 Claude、GPT、Gemini、DeepSeek、Kimi、MiniMax 的常用模型列表" width="100%">
+<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/mobile-zh.webp" alt="手机上的 OhMyBuddy：私人 Bot 对话、过程摘要与记忆回执" width="100%">
 
-- 布局会适应电脑、平板和手机屏幕，Pivane 也可以添加到手机主屏幕。
+- 布局会适应电脑、平板和手机屏幕，OhMyBuddy 也可以添加到手机主屏幕。
 - 提供页面通知和提示音，并可选开启 Web Push 后台提醒。
 - 用量统计按日期、供应商、模型、项目和会话汇总 token 和估算费用。
 - 提供浅色和深色主题，可以调整字号，界面可选英文或简体中文。
-- 工作台用访问 Token 保护。Pivane 作为后台服务运行，并提供桌面入口。它会检查新版本，并生成升级提示词，你可以交给部署机器上的 Agent 执行。
+- 工作台用访问 Token 保护。OhMyBuddy 作为后台服务运行，并提供桌面入口。它会检查新版本，并生成升级提示词，你可以交给部署机器上的 Agent 执行。
 
 ## 快速开始
 
 当前锁定依赖要求使用 **Node.js 22.x（22.19.0 或更新的 22.x，含 npm）**、`bash` 和 [ripgrep](https://github.com/BurntSushi/ripgrep)（Windows 上可以通过 Git for Windows 获得 Bash），以及一个模型供应商的账户。不需要全局安装 Pi，不需要构建前端，也不需要 GPU。
 
 ```bash
-# 1. 从 Releases 下载 pivane-<version>.tar.gz 及其 .sha256 文件，然后校验压缩包
-sha256sum -c pivane-<version>.tar.gz.sha256    # macOS：shasum -a 256 -c …
-tar -xzf pivane-<version>.tar.gz && cd pivane-<version>
+# 1. 从 Releases 下载 ohmybuddy-<version>.tar.gz 及其 .sha256 文件，然后校验压缩包
+sha256sum -c ohmybuddy-<version>.tar.gz.sha256    # macOS：shasum -a 256 -c …
+tar -xzf ohmybuddy-<version>.tar.gz && cd ohmybuddy-<version>
 
 # 2. 安装锁定版本的依赖，其中包括固定版本的 Pi 运行时
 node scripts/install.cjs
@@ -157,23 +148,23 @@ npm start
 
 打开 <http://127.0.0.1:11408>，检查 **设置 → 供应商与模型**，选择一个项目文件夹，然后开始新聊天。
 
-日常使用时，请按[安装指南](docs/INSTALL_RECOVERY.md)（另有 [macOS](docs/MACOS.md) 和 [Windows](docs/WINDOWS.md) 版本）把数据放在应用目录之外，然后运行 `node scripts/install-service.cjs`。这样 Pivane 会在后台运行，并在你登录时自动启动；在 macOS 和 Windows 上还会添加桌面入口。
+日常使用时，请按[安装指南](docs/INSTALL_RECOVERY.md)（另有 [macOS](docs/MACOS.md) 和 [Windows](docs/WINDOWS.md) 版本）把数据放在应用目录之外，然后运行 `node scripts/install-service.cjs`。这样 OhMyBuddy 会在后台运行，并在你登录时自动启动；在 macOS 和 Windows 上还会添加桌面入口。
 
-> **已经在用 Pi CLI？** Pivane 默认使用同一个 Pi 身份，你的模型、登录、设置和会话都能直接使用。请不要同时从 CLI 和网页写入同一个会话。详见[已有 Pi 接入](docs/PI_CLI.md)。
+> **已经在用 Pi CLI？** OhMyBuddy 默认使用同一个 Pi 身份，你的模型、登录、设置和会话都能直接使用。请不要同时从 CLI 和网页写入同一个会话。详见[已有 Pi 接入](docs/PI_CLI.md)。
 >
 > **想让 Agent 帮你部署？** 把这个仓库和[用户 Agent 操作指南](docs/AGENT_GUIDE.md)交给你的编程 Agent。指南涵盖安装、配置、升级和排障。
 
 ## 支持平台
 
-Pivane 可以**直接在 Linux、macOS 和 Windows 上运行**，不需要 WSL 或 Docker。它足够轻量，可以部署在树莓派上，并且可以用任何现代浏览器访问。
+OhMyBuddy 可以**直接在 Linux、macOS 和 Windows 上运行**，不需要 WSL 或 Docker。它足够轻量，可以部署在树莓派上，并且可以用任何现代浏览器访问。
 
-Pivane 默认只监听本机。如果要从手机或其他电脑访问，请先开启访问 Token，然后通过局域网、Tailscale 等 VPN，或 HTTPS 反向代理连接。详见[网络与访问](docs/ACCESS_CONTROL.md)。
+OhMyBuddy 默认只监听本机。如果要从手机或其他电脑访问，请先开启访问 Token，然后通过局域网、Tailscale 等 VPN，或 HTTPS 反向代理连接。详见[网络与访问](docs/ACCESS_CONTROL.md)。
 
 ## 工作原理
 
 ```mermaid
 flowchart LR
-    B["浏览器<br/>电脑 · 平板 · 手机"] <-->|HTTP + WebSocket| S["Pivane 服务<br/>Node.js"]
+    B["浏览器<br/>电脑 · 平板 · 手机"] <-->|HTTP + WebSocket| S["OhMyBuddy 服务<br/>Node.js"]
     S <-->|RPC| W["Pi Agent worker<br/>每个打开的线程一个"]
     W --> D[("Pi 会话与配置<br/>原生 JSONL")]
     W --> P["你的项目文件夹"]
@@ -184,11 +175,11 @@ flowchart LR
 - Node.js 服务（Express 和 WebSocket）提供纯 JavaScript 前端，不需要构建步骤。
 - 每个持久线程只由一个 Pi worker 进程提供服务，打开这个线程的所有浏览器都连接到同一个 worker。
 - Pi 的 SessionManager 和 JSONL 文件是每段对话唯一的记录。用量统计保存在单独的账本里，不保存消息内容。
-- 每个 Pivane 版本都内置一个经过测试的 Pi 版本，Pi 随 Pivane 一起升级。
+- 每个 OhMyBuddy 版本都内置一个经过测试的 Pi 版本，Pi 随 OhMyBuddy 一起升级。
 
 ## 安全模型
 
-- Pivane 面向**个人、单用户**的实例。拿到访问 Token 的人共用同一个实例，没有单独的用户账户。
+- OhMyBuddy 面向**个人、单用户**的实例。拿到访问 Token 的人共用同一个实例，没有单独的用户账户。
 - 项目根目录限制了可以浏览的文件夹，但它**不是沙箱**。Agent、Shell、Packages 和扩展都以服务器用户的权限运行，请只安装你信任的扩展。
 - 媒体按你设置的各类型对话自动执行偏好和确认策略运行。失败或结果不确定的提交不会自动重放。
 
@@ -217,7 +208,7 @@ flowchart LR
 
 欢迎各种反馈，可以先看看[欢迎帖](https://github.com/YogurtJ/pivane/discussions/4)。
 
-- **Bug 和功能建议**：[新建 issue](https://github.com/YogurtJ/pivane/issues/new/choose)。报告 Bug 时请写明 Pivane 版本和最短的复现步骤。
+- **Bug 和功能建议**：[新建 issue](https://github.com/YogurtJ/pivane/issues/new/choose)。报告 Bug 时请写明 OhMyBuddy 版本和最短的复现步骤。
 - **使用问题、交流和分享**：到 [Discussions](https://github.com/YogurtJ/pivane/discussions) 发帖，或直接在欢迎帖下留言。不确定发哪里也没关系，随便发，我都会看到。
 - **PR**：非常欢迎，可以从带 [`good first issue`](https://github.com/YogurtJ/pivane/labels/good%20first%20issue) 标签的任务开始。
 
@@ -227,4 +218,4 @@ flowchart LR
 
 ## 许可证
 
-Pivane 使用 [ISC 许可证](LICENSE)。Pi、Font Awesome、KaTeX、Mermaid 等内置组件保留各自的许可证，详见[第三方声明](THIRD_PARTY_NOTICES.md)。
+OhMyBuddy 使用 [ISC 许可证](LICENSE)。Pi、Font Awesome、KaTeX、Mermaid 等内置组件保留各自的许可证，详见[第三方声明](THIRD_PARTY_NOTICES.md)。

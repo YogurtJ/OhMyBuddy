@@ -92,11 +92,11 @@ test('bots are profiles with a private workspace and a native-marked main window
     assert.equal(profile.memory.enabled, true);
     const workspace = profile.bot.workspace;
     assert.equal(path.dirname(path.dirname(workspace)), root);
-    assert.equal(path.basename(path.dirname(workspace)), 'PivaneBots');
+    assert.equal(path.basename(path.dirname(workspace)), 'OhMyBuddyBots');
     assert.match(fs.readFileSync(path.join(workspace, 'README.md'), 'utf8'), new RegExp(botId));
     if (process.platform !== 'win32') {
         assert.equal(fs.statSync(workspace).mode & 0o777, 0o700);
-        assert.equal(fs.statSync(path.join(agentDir, 'pivane-bots', botId, 'windows.json')).mode & 0o777, 0o600);
+        assert.equal(fs.statSync(path.join(agentDir, 'ohmybuddy-bots', botId, 'windows.json')).mode & 0o777, 0o600);
     }
 
     const resolved = await call('GET', `/bots/${botId}/windows/${entry.windows[0].id}/session`);
@@ -183,7 +183,7 @@ test('bots are profiles with a private workspace and a native-marked main window
     // An interrupted creation (native session written, index missing) is adopted, not duplicated.
     const secondId = second.data.bot.id;
     const secondMain = (await call('GET', '/bots')).data.bots.find(bot => bot.id === secondId).windows[0];
-    fs.rmSync(path.join(agentDir, 'pivane-bots', secondId, 'windows.json'));
+    fs.rmSync(path.join(agentDir, 'ohmybuddy-bots', secondId, 'windows.json'));
     const repaired = await call('POST', `/bots/${secondId}/main-window`);
     assert.equal(repaired.status, 200, JSON.stringify(repaired.data));
     assert.equal(repaired.data.id, secondMain.id); assert.equal(repaired.data.sessionId, secondMain.sessionId);

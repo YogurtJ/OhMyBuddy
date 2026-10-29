@@ -61,7 +61,7 @@ async function run(browser, base, viewport, preferences = {}, { touch = viewport
     assert.ok(before.composer.bottom <= viewport.height + 1, JSON.stringify(before));
     if (viewport.width <= 680) assert.ok(await page.locator('#pi-input').evaluate(node => parseFloat(getComputedStyle(node).fontSize) >= 16));
     if (viewport.width <= 900) assert.equal(await page.locator('#pi-session-pane').evaluate(node => node.inert), true, 'closed drawer cannot receive keyboard focus');
-    if (viewport.width > 900) assert.equal(before.nav.width, preferences['pi.workspace.sidebarCollapsed'] === false ? 184 : 72);
+    if (viewport.width > 900) assert.equal(before.nav.width, preferences['pi.workspace.sidebarCollapsed'] === false ? 208 : 72);
     // Sidebar: one reachable collapse control per layout, focus follows it, tablets always use the rail
     // without overwriting the desktop choice, and the phone bar has five equal cells.
     const sidebar = () => page.evaluate(() => ({ collapsed: document.querySelector('.app-container').classList.contains('sidebar-collapsed'),
@@ -75,7 +75,7 @@ async function run(browser, base, viewport, preferences = {}, { touch = viewport
             await page.locator(current.collapsed ? '#workspace-brand-toggle' : '#workspace-sidebar-toggle').focus();
             await page.keyboard.press('Enter');
             const next = await sidebar();
-            assert.ok(next.collapsed === !current.collapsed && next.saved === String(next.collapsed) && next.width === (next.collapsed ? 72 : 184), JSON.stringify(next));
+            assert.ok(next.collapsed === !current.collapsed && next.saved === String(next.collapsed) && next.width === (next.collapsed ? 72 : 208), JSON.stringify(next));
             assert.equal(next.focus, next.collapsed ? 'workspace-brand-toggle' : 'workspace-sidebar-toggle', 'focus stays on the visible toggle');
         }
         await page.waitForTimeout(250);

@@ -1,7 +1,7 @@
 const { createHash, timingSafeEqual } = require('node:crypto');
 const { getSdk } = require('./pi-session-store');
 
-const { customTypeIs } = require('./pivane-compat');
+const { customTypeIs } = require('./ohmybuddy-compat');
 const TASK_ENTRY = 'pivane-agent-task';
 const TASK_MESSAGE = 'pivane-agent-task-message';
 const TASK_RECEIPT = 'pivane-agent-task-receipt';

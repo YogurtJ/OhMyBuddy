@@ -80,7 +80,7 @@ test('runner removes inherited package and child metadata before native SDK impo
         console.log(VERSION);
     `], { cwd: root, env, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout.trim(), require('../package.json').pivaneCompatibility.piVersion);
+    assert.equal(result.stdout.trim(), require('../package.json').ohmybuddyCompatibility.piVersion);
     assert.equal(input.PI_PACKAGE_DIR, directory, 'caller metadata remains intact');
     assert.equal(input.PI_SUBAGENT_CHILD, '1');
 });

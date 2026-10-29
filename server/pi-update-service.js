@@ -45,7 +45,7 @@ class UpdateService {
         this.now = options.now || Date.now;
         this.appVersion = options.appVersion || application.version;
         this.piVersion = options.piVersion || installedPi;
-        this.bundledPiVersion = application.pivaneManaged?.baselinePi || application.dependencies['@earendil-works/pi-coding-agent'];
+        this.bundledPiVersion = require('./ohmybuddy-compat').packageMetadata(application, 'Managed')?.baselinePi || application.dependencies['@earendil-works/pi-coding-agent'];
         this.platform = options.platform || process.platform;
         this.arch = options.arch || process.arch;
         this.distribution = options.distribution === undefined ? require('./pi-distribution').configuration(this.env) : options.distribution;
@@ -62,11 +62,11 @@ class UpdateService {
             ? { version: automatic.version, status: relation(this.piVersion, automatic.version), releasesUrl: PI_PAGE }
             : cached?.pi;
         return {
-            channel, platform: this.platform, installMode: this.distribution && application.pivaneBundle ? 'managed-bundle' : 'manual',
+            channel, platform: this.platform, installMode: this.distribution && require('./ohmybuddy-compat').packageMetadata(application, 'Bundle') ? 'managed-bundle' : 'manual',
             distributionUrl: this.distribution?.url || null,
             appVersion: this.appVersion, piVersion: this.piVersion, bundledPiVersion: this.bundledPiVersion,
-            dependencyMatches: this.piVersion === (application.pivaneManaged?.piVersion || this.bundledPiVersion),
-            managedPi: Boolean(application.pivaneManaged),
+            dependencyMatches: this.piVersion === (require('./ohmybuddy-compat').packageMetadata(application, 'Managed')?.piVersion || this.bundledPiVersion),
+            managedPi: Boolean(require('./ohmybuddy-compat').packageMetadata(application, 'Managed')),
             checkedAt: cached?.checkedAt || null,
             cacheUntil: cached ? new Date(cached.expires).toISOString() : null,
             pivane: cached?.pivane || { status: 'unchecked', releasesUrl: this.distribution?.url || RELEASE_PAGE },
@@ -81,7 +81,7 @@ class UpdateService {
             agent = proxyFor(url, this.env);
             const response = await this.fetch(url, {
                 method: 'GET', redirect: 'error', size: 2 * 1024 * 1024, signal: controller.signal, agent,
-                headers: { Accept: 'application/json', 'User-Agent': 'Pivane-Update-Check' }
+                headers: { Accept: 'application/json', 'User-Agent': 'OhMyBuddy-Update-Check' }
             });
             if (!response.ok) throw new Error('Remote lookup failed');
             return await response.json();
@@ -106,8 +106,8 @@ class UpdateService {
             const bundle = release.bundles[`${this.platform}-${this.arch}`];
             return { version: release.version, piVersion: release.piVersion, notes: release.notes, prerelease: release.version.includes('-'),
                 status: relation(this.appVersion, release.version), releasesUrl: this.distribution.url,
-                downloadUrl: require('./pi-distribution').assetUrl(this.distribution, release.version, this.platform, this.arch),
-                release: { version: release.version, sha256: bundle.sha256, bundle: { platform: this.platform, arch: this.arch, bytes: bundle.bytes } } };
+                downloadUrl: require('./pi-distribution').assetUrl(this.distribution, release.version, this.platform, this.arch, data.product),
+                release: { version: release.version, sha256: bundle.sha256, bundle: { platform: this.platform, arch: this.arch, bytes: bundle.bytes, product: data.product } } };
         }
         const releases = await this.json(RELEASES);
         if (!Array.isArray(releases) || releases.length > 100) throw new Error('Invalid release list');
@@ -118,8 +118,8 @@ class UpdateService {
             if (!parsed || (channel === 'stable' && (release.prerelease || parsed.pre.length))) return [];
             // Only expose fixed official asset paths. Remote HTML/URLs never become executable UI.
             const base = `${RELEASE_PAGE}/download/${encodeURIComponent(release.tag_name)}/`;
-            const archive = `pivane-${version}.tar.gz`;
             const assets = Array.isArray(release.assets) ? release.assets : [];
+            const archive = [`ohmybuddy-${version}.tar.gz`, `pivane-${version}.tar.gz`].find(name => assets.some(a => a?.name === name)) || `ohmybuddy-${version}.tar.gz`;
             const asset = name => assets.some(a => a?.name === name && a.state === 'uploaded' && a.browser_download_url === base + name) ? base + name : null;
             return [{ version, prerelease: Boolean(release.prerelease || parsed.pre.length),
                 releasesUrl: `${RELEASE_PAGE}/tag/${encodeURIComponent(release.tag_name)}`,
@@ -193,18 +193,18 @@ function mountUpdateRoutes(router, service = new UpdateService(), hooks = {}) {
                 const channel = req.body.channel || service.distribution?.channel || (service.appVersion.includes('-') ? 'preview' : 'stable');
                 service.snapshot(channel);
                 const candidate = await service.pivane(channel);
-                if (candidate.status !== 'available' || !candidate.downloadUrl || !candidate.release && !candidate.checksumUrl) throw Object.assign(new Error('此渠道没有可安装的 Pivane 新版本'), { status: 409 });
+                if (candidate.status !== 'available' || !candidate.downloadUrl || !candidate.release && !candidate.checksumUrl) throw Object.assign(new Error('此渠道没有可安装的 OhMyBuddy 新版本'), { status: 409 });
                 version = candidate.version;
                 if (candidate.release) release = candidate.release;
                 else {
                     const bytes = await require('./pi-application-installer').download(candidate.checksumUrl, { env: service.env, maxBytes: 1024 });
                     const match = /^([a-f0-9]{64})  (pivane-[^\r\n]+\.tar\.gz)\r?\n?$/.exec(bytes.toString());
-                    if (!match || match[2] !== `pivane-${candidate.version}.tar.gz`) throw Error('Invalid release checksum');
-                    release = { version, sha256: match[1] };
+                    if (!match || ![`ohmybuddy-${candidate.version}.tar.gz`, `pivane-${candidate.version}.tar.gz`].includes(match[2]) || !candidate.downloadUrl.endsWith('/' + match[2])) throw Error('Invalid release checksum');
+                    release = { version, sha256: match[1], assetName: match[2] };
                 }
             }
             if (action === 'update') {
-                if (require('../package.json').pivaneCompatibility?.piVersion) throw Object.assign(new Error('当前 Pivane 与已验证 Pi 版本绑定，请一起更新 Pivane 及原生适配，不单独升级 Pi'), { status: 409 });
+                if (require('./ohmybuddy-compat').packageMetadata(require('../package.json'), 'Compatibility')?.piVersion) throw Object.assign(new Error('当前 OhMyBuddy 与已验证 Pi 版本绑定，请一起更新 OhMyBuddy 及原生适配，不单独升级 Pi'), { status: 409 });
                 const upstream = await service.pi(); version = upstream.version;
                 if (compareVersions(service.piVersion, version) !== -1) throw Object.assign(new Error('没有高于当前版本的 Pi 正式版'), { status: 409 });
             }

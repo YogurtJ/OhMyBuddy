@@ -14,7 +14,7 @@ export function registerTaskProgress(pi: ExtensionAPI) {
         if (!enabled(ctx)) return;
         pi.registerTool({
             name: 'update_plan', label: 'Update task progress',
-            description: 'Create or replace the current task plan shown in Pivane. Submit the complete list each time: 0–20 steps, each up to 200 characters, with pending, in_progress or completed status; at most one in_progress. Use an empty list to clear a stale plan. Optional explanation (up to 1000 characters) describes a change or blocker. This records Agent-reported progress; it does not execute work.',
+            description: 'Create or replace the current task plan shown in OhMyBuddy. Submit the complete list each time: 0–20 steps, each up to 200 characters, with pending, in_progress or completed status; at most one in_progress. Use an empty list to clear a stale plan. Optional explanation (up to 1000 characters) describes a change or blocker. This records Agent-reported progress; it does not execute work.',
             promptSnippet: 'Maintain the current task plan and its progress card',
             promptGuidelines: [
                 'Use update_plan for substantial multi-step tasks when a clear plan helps the user follow progress; skip simple questions and small one-step edits.',
@@ -28,7 +28,7 @@ export function registerTaskProgress(pi: ExtensionAPI) {
                 explanation: Type.Optional(Type.String({ maxLength: MAX_EXPLANATION_LENGTH }))
             }),
             execute: async (_id, params, signal, _onUpdate, context) => {
-                if (!enabled(context)) throw new Error('A managed Pivane session is required');
+                if (!enabled(context)) throw new Error('A managed OhMyBuddy session is required');
                 signal?.throwIfAborted();
                 const progress = { version: 1, id: randomUUID(), ...validatePlan(params) };
                 // No await between validation, native append and publication. This

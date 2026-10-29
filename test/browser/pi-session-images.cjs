@@ -78,13 +78,13 @@ async function run(browser, origin, width) {
         await page.locator('[data-tool-id="image-tool"] img').scrollIntoViewIfNeeded();
         await page.waitForFunction(() => document.querySelector('[data-tool-id="image-tool"] img')?.naturalWidth > 0);
         assert.ok(imageReads.some(url => url.includes('b'.repeat(64))));
-        const live = { role: 'user', timestamp: 5, content: [{ type: 'text', text: '新引用图片' }, { type: 'text', text: '[图片已单独保存；Pivane 会在看图时自动读取]',
+        const live = { role: 'user', timestamp: 5, content: [{ type: 'text', text: '新引用图片' }, { type: 'text', text: '[图片已单独保存；OhMyBuddy 会在看图时自动读取]',
             pivaneImage: { version: 1, sha256: 'c'.repeat(64), bytes: png.length, image: { type: 'image', mimeType: 'image/png' } } }] };
         socket.send(JSON.stringify({ type: 'message_end', message: live }));
         await page.locator('.pi-message.user img').last().scrollIntoViewIfNeeded();
         await page.waitForFunction(() => [...document.querySelectorAll('.pi-message.user img')].at(-1)?.naturalWidth > 0);
         assert.ok(imageReads.some(url => url.includes('c'.repeat(64))));
-        assert.ok(!await page.locator('#pi-transcript-content').textContent().then(value => value.includes('Pivane 会在看图')));
+        assert.ok(!await page.locator('#pi-transcript-content').textContent().then(value => value.includes('OhMyBuddy 会在看图')));
         const upload = await page.evaluate(() => {
             const canvas = document.createElement('canvas'); canvas.width = 2400; canvas.height = 1600;
             canvas.getContext('2d').fillRect(0, 0, canvas.width, canvas.height);

@@ -1,3 +1,4 @@
+import compat from '../ohmybuddy-compat.js';
 import { setPromptSection } from '../pi-hook-prompt.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -50,7 +51,7 @@ export async function registerProfileMemory(pi: ExtensionAPI): Promise<void> {
     let activeIdentity: any = null;
     const memoryMutation = mutation.createMutationLock(root);
     const knowledgePath = path.join(__dirname, 'knowledge-service.js');
-    const registryPath = path.join(context.agentDir, 'pivane-profiles', 'profiles.json');
+    const registryPath = path.join(compat.dataFile(context.agentDir, 'ohmybuddy-profiles'), 'profiles.json');
     const knowledge = fs.existsSync(knowledgePath) ? new (require(knowledgePath).ProfileKnowledgeService)({
         profiles: { getProfile: async (id: string) => {
             if (id !== context.profileId) return null;
@@ -121,12 +122,12 @@ export async function registerProfileMemory(pi: ExtensionAPI): Promise<void> {
                 const wrapped = { ...tool,
                     parameters: creates ? { ...tool.parameters, properties: { ...tool.parameters.properties,
                         comparisonToken: Type.String({ maxLength: 1024,
-                            description: 'Pivane token returned with existing candidates on the first create attempt. Pass it with unchanged create arguments only after comparing those entries and deciding this information is independently new.' }) } } : tool.parameters,
+                            description: 'OhMyBuddy token returned with existing candidates on the first create attempt. Pass it with unchanged create arguments only after comparing those entries and deciding this information is independently new.' }) } } : tool.parameters,
                     description: tool.name === 'session_search'
                         ? `${tool.description}\n\nProject filters use the full canonical cwd. Results cover only indexed, verified native sessions; backfill may be partial.`
                         : knowledge && ['memory_replace', 'memory_remove'].includes(tool.name)
                             ? `${tool.description}\n\nFor profile MEMORY/USER, old_text must exactly match one complete active memory entry. A knowledge receipt confirms the result; do not retry uncertain writes without checking the receipt.`
-                            : creates ? `${tool.description}\n\nPivane create calls first return existing candidates without saving. Compare them, then use an existing-entry update or submit unchanged create arguments with the returned comparisonToken. This internal comparison needs no additional user approval.` : tool.description,
+                            : creates ? `${tool.description}\n\nOhMyBuddy create calls first return existing candidates without saving. Compare them, then use an existing-entry update or submit unchanged create arguments with the returned comparisonToken. This internal comparison needs no additional user approval.` : tool.description,
                     promptGuidelines: tool.name === 'skill_manage' ? [
                         ...(tool.promptGuidelines || []).filter((guideline: string) => guideline !==
                             'Use the skill_manage tool after completing complex tasks that required trial and error or multiple tool calls.'),
@@ -209,7 +210,7 @@ export async function registerProfileMemory(pi: ExtensionAPI): Promise<void> {
     const db = context.memory.enabled ? new upstream.DatabaseManager(root) : null;
     if (db) {
         upstream.registerMemoryTool(guarded, store, () => projectStore, db, () => context.cwd);
-        // Upstream 0.9.10 records hit_count/last_hit_at inside memory_search. Pivane keeps the
+        // Upstream 0.9.10 records hit_count/last_hit_at inside memory_search. OhMyBuddy keeps the
         // search itself read-only on the RPC loop and records the rows it returned through the
         // index thread instead (see runSearch/recalledIds/recordHits above).
         upstream.registerMemorySearchTool(guarded, searchView(db), { usageTrackingEnabled: false });

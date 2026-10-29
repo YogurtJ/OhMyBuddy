@@ -1,5 +1,5 @@
 const { randomUUID } = require('node:crypto');
-const { isInternalCommand, privateReply } = require('./pivane-compat');
+const { isInternalCommand, privateReply } = require('./ohmybuddy-compat');
 const { validateSpeed, LEVELS } = require('./pi-model-speed');
 class PiModelSpeedControl {
     constructor(worker) { this.worker = worker; this.value = null; this.pending = new Map(); }

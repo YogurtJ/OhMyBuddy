@@ -12,10 +12,10 @@ const release = process.argv[2] === '--release';
 if (process.argv.length > (release ? 3 : 2)) throw new Error('Usage: node scripts/package-trial.cjs [--release]');
 const application = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
-if (application.name !== 'pivane' || !/^\d+\.\d+\.\d+(?:-[a-z0-9]+(?:\.[a-z0-9]+)*)?$/.test(application.version)
+if (application.name !== 'ohmybuddy' || !/^\d+\.\d+\.\d+(?:-[a-z0-9]+(?:\.[a-z0-9]+)*)?$/.test(application.version)
     || lock.version !== application.version || lock.packages[''].version !== application.version
     || lock.name !== application.name || lock.packages[''].name !== application.name) throw new Error('Application/lockfile release identity mismatch');
-const releaseMetadata = { product: 'Pivane', appVersion: application.version, piVersion: application.dependencies['@earendil-works/pi-coding-agent'], channel: application.version.includes('-') ? 'prerelease' : 'stable' };
+const releaseMetadata = { product: 'OhMyBuddy', appVersion: application.version, piVersion: application.dependencies['@earendil-works/pi-coding-agent'], channel: application.version.includes('-') ? 'prerelease' : 'stable' };
 const files = distributionFiles(root);
 checkDocumentation(root, files);
 if (application.license !== 'ISC' || !fs.readFileSync(path.join(root, 'LICENSE'), 'utf8').startsWith('ISC License\n')) throw new Error('Project license declaration mismatch');
@@ -42,7 +42,7 @@ for (const line of envExample.split(/\r?\n/)) {
     if (/^[A-Z_]*(?:KEY|TOKEN|SECRET|PASSWORD)\s*=\s*\S/.test(line)) throw new Error('Environment example contains a credential value');
 }
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-trial-package-'));
-const packageName = release ? `pivane-${application.version}` : 'pivane-trial';
+const packageName = release ? `ohmybuddy-${application.version}` : 'ohmybuddy-trial';
 const packageDir = path.join(temporary, packageName);
 const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
 const outputDir = path.join(root, 'dist');

@@ -195,11 +195,11 @@ test('reviewed Pi native RPC preserves owned hook payloads across task/message/c
     const checkPayloads = payloads => {
         for (const request of payloads) {
             const text = JSON.stringify(request.messages);
-            for (const marker of ['SOUL SCOPE:', 'LOGICAL PROJECT SCOPE:', 'MEMORY SCOPE:', 'Pivane task threads:', 'Pivane Agent messages:'])
+            for (const marker of ['SOUL SCOPE:', 'LOGICAL PROJECT SCOPE:', 'MEMORY SCOPE:', 'OhMyBuddy task threads:', 'OhMyBuddy Agent messages:'])
                 assert.equal(text.split(marker).length - 1, 1, `${marker} must appear once per provider payload`);
             assert.match(text, /PHYSICAL PROJECT SCOPE/);
-            assert.ok(text.indexOf('PHYSICAL PROJECT SCOPE') < text.indexOf('Pivane task threads:'));
-            assert.ok(text.indexOf('Pivane task threads:') < text.indexOf('Pivane Agent messages:'));
+            assert.ok(text.indexOf('PHYSICAL PROJECT SCOPE') < text.indexOf('OhMyBuddy task threads:'));
+            assert.ok(text.indexOf('OhMyBuddy task threads:') < text.indexOf('OhMyBuddy Agent messages:'));
             assert.ok(text.indexOf('SOUL SCOPE:') < text.indexOf('LOGICAL PROJECT SCOPE:'));
             assert.ok(text.indexOf('LOGICAL PROJECT SCOPE:') < text.indexOf('MEMORY SCOPE:'));
         }
@@ -235,7 +235,7 @@ test('reviewed Pi native RPC preserves owned hook payloads across task/message/c
     fs.writeFileSync(controlFile + '.force', '');
     payloads = await run(target, () => command(target, { action: 'custom', text: 'Forced custom wake.' }));
     assert.equal(target.starts.at(-1).forced, true);
-    assert.ok(payloads[0].messages[0].content.startsWith('EXACT FORCED PREFIX\n\nPivane task threads:'));
+    assert.ok(payloads[0].messages[0].content.startsWith('EXACT FORCED PREFIX\n\nOhMyBuddy task threads:'));
     assert.match(payloads[0].messages[0].content, /<assistant_profile_soul>\nSOUL SCOPE:/);
     const forcedText = payloads[0].messages[0].content;
     payloads = await run(target, () => command(target, { action: 'custom', text: 'Repeat forced custom wake.' }));

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { plan } = require('../scripts/install-service.cjs');
-const base = { root: '/tmp/Pivane space & name', home: '/tmp/user', node: '/opt/node/bin/node', executablePath: '/opt/node/bin:/usr/bin', url: 'http://127.0.0.1:3001/', desktop: '/tmp/Desktop', user: 'DOMAIN\\user' };
+const base = { root: '/tmp/OhMyBuddy space & name', home: '/tmp/user', node: '/opt/node/bin/node', executablePath: '/opt/node/bin:/usr/bin', url: 'http://127.0.0.1:3001/', desktop: '/tmp/Desktop', user: 'DOMAIN\\user' };
 test('resident service plans bind the original managed launcher without embedding credentials', () => {
     for (const platform of ['linux', 'darwin', 'win32']) {
         const value = plan({ ...base, platform });

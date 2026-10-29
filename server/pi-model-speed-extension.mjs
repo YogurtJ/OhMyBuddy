@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { finalizeSpeedUsage } from './pi-model-speed-runtime.mjs';
 import speed from './pi-model-speed.js';
-import compat from './pivane-compat.js';
+import compat from './ohmybuddy-compat.js';
 
 // Project-owned hooks apply to managed sessions, isolated side chat and children.
 // No timers, remote capability probes or changes to upstream provider adapters.
@@ -65,7 +65,7 @@ export function registerModelSpeed(pi, { agentDir, inherited, bridge = false, co
         // Recalculate from tokens: upstream may have applied an older multiplier.
         return { message: finalizeSpeedUsage(message, request.model, request.capability, request.requested, request.actual) };
     });
-    if (command) pi.registerCommand(compat.INTERNAL_COMMAND, { description: 'Pivane internal speed-v1', handler: async (args, ctx) => {
+    if (command) pi.registerCommand(compat.INTERNAL_COMMAND, { description: 'OhMyBuddy internal speed-v1', handler: async (args, ctx) => {
         const request = JSON.parse(args);
         if (ctx.mode !== 'rpc' || request.token !== process.env.PI_WEB_NAVIGATION_TOKEN || request.mode !== 'speed') throw new Error('Invalid speed request');
         try { ctx.ui.notify(JSON.stringify({ pivaneSpeedReply: request.id, success: true, data: control(ctx, request.input) })); }

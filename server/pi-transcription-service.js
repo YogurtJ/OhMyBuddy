@@ -38,7 +38,7 @@ function audioBytes(audio) {
     return bytes;
 }
 function multipart(model, audio, bytes, language) {
-    const boundary = `pivane-${randomUUID()}`;
+    const boundary = `ohmybuddy-${randomUUID()}`;
     const fields = { model, response_format: 'json', ...(language === 'auto' ? {} : { language }) };
     const parts = Object.entries(fields).map(([name, value]) => Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`));
     parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="recording.${audio.format}"\r\nContent-Type: ${audio.format === 'wav' ? 'audio/wav' : 'audio/mpeg'}\r\n\r\n`), bytes, Buffer.from(`\r\n--${boundary}--\r\n`));

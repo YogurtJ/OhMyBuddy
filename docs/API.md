@@ -84,17 +84,17 @@
 
 运行能力包括 liveRecovery/extensionDrafts/sessionSearch/runtimeConfiguration 标记。主连接 get_messages.webLive 为有界partial/tool展示快照；Pi 1.3 最终工具参数解析失败时保留 argumentsError，恢复预览最多8192字符并计入原有预算，最终原生记录保持完整。网页只按文本展示错误，原生 validation 拒绝执行损坏参数。广播增加webRuntimeId/webSequence；主WS新增 ack_extension_draft、get_runtime_configuration、restart_runtime（空闲持久线程，runtimeId/expectedRevision/confirmed）。GET /sessions/search?q&cwd?&offset?&searchId? 提供受保护、可取消、有界原生正文跨线程检索。完整字段、预算、实际信任、配置修订、重开互斥与接受ACK语义见 [NATIVE_COMPLETION.md](NATIVE_COMPLETION.md)。不添加裸导航/工具权限、不存持久聊天副本。
 
-原生设置：GET `/api/pi/settings/native` schema 提供 `defaultTools`（type=tools、choices/defaults/platform、maxEntries=1024/maxNameLength=500）、`codemode.mode`（on/only）、`codemode.inlineBudget`（0–1000000）与 `defaultProjectTrust`（ask/always/never、globalOnly）。PUT 接受普通／自定义工具名和顺序 +/- 条目；普通名称替换，只有修饰符时修改继承选择，重复修饰符保留，重复普通名拒绝。null 删除本层覆盖，Pivane [] 不默认启用内置工具，扩展工具可能仍自动激活；受信项目修饰符叠加全局 [] 不恢复默认。信任策略仅全局写入，项目范围即使 null 也拒绝。保存返回 requiresRuntimeRestart=true，不改变现有实例或逐项目信任决定；完整语义见 [NATIVE_SETTINGS.md](NATIVE_SETTINGS.md)。
+原生设置：GET `/api/pi/settings/native` schema 提供 `defaultTools`（type=tools、choices/defaults/platform、maxEntries=1024/maxNameLength=500）、`codemode.mode`（on/only）、`codemode.inlineBudget`（0–1000000）与 `defaultProjectTrust`（ask/always/never、globalOnly）。PUT 接受普通／自定义工具名和顺序 +/- 条目；普通名称替换，只有修饰符时修改继承选择，重复修饰符保留，重复普通名拒绝。null 删除本层覆盖，OhMyBuddy [] 不默认启用内置工具，扩展工具可能仍自动激活；受信项目修饰符叠加全局 [] 不恢复默认。信任策略仅全局写入，项目范围即使 null 也拒绝。保存返回 requiresRuntimeRestart=true，不改变现有实例或逐项目信任决定；完整语义见 [NATIVE_SETTINGS.md](NATIVE_SETTINGS.md)。
 
 `browserNotifications=true` 标记设备Web Push订阅与任务通知后端。`GET /notifications`、`POST /notifications/key`、`POST /notifications/status`、`PUT/DELETE /notifications/subscription`、`POST /notifications/test` 复用认证和Origin，响应no-store；只公开VAPID公钥，订阅绑定当前访问身份，关闭/撤销停止后续推送。参数、限额和HTTPS/手机要求见 [NOTIFICATIONS.md](NOTIFICATIONS.md)。
 
-`/settings/subagents` 提供内置 pi-subagents 的状态与模型/思考配置，返回 `plugin.managedBy:"pivane"`、`canInstall:false`、`upgradeFrom:null`。旧 `/settings/subagents/install` 和 `/settings/subagents/upgrade` 保留确认和修订检查，但返回 400，提示组件随 Pivane 安装或更新。未安装、停用或版本不匹配时不能保存，ready 不代表已加载进当前 worker。原生资源清单的内置包增加 `managedBy/name/version`，内置资源开关保存到 `pivaneBuiltins.subagents`；内置包不允许通过通用包操作独立安装、移除或更新。字段、修订和范围见[子 Agent 专属设置](NATIVE_SETTINGS.md#子-agent-专属设置)。
+`/settings/subagents` 提供内置 pi-subagents 的状态与模型/思考配置，返回 `plugin.managedBy:"pivane"`、`canInstall:false`、`upgradeFrom:null`。旧 `/settings/subagents/install` 和 `/settings/subagents/upgrade` 保留确认和修订检查，但返回 400，提示组件随 OhMyBuddy 安装或更新。未安装、停用或版本不匹配时不能保存，ready 不代表已加载进当前 worker。原生资源清单的内置包增加 `managedBy/name/version`，内置资源开关保存到 `pivaneBuiltins.subagents`；内置包不允许通过通用包操作独立安装、移除或更新。字段、修订和范围见[子 Agent 专属设置](NATIVE_SETTINGS.md#子-agent-专属设置)。
 
-当前绑定 Pi 的应用对 `POST /settings/updates/review {action:'update'}` 返回 409，需同时更新 Pivane 与已验证适配；备份、重启和应用票据保留原语义。
+当前绑定 Pi 的应用对 `POST /settings/updates/review {action:'update'}` 返回 409，需同时更新 OhMyBuddy 与已验证适配；备份、重启和应用票据保留原语义。
 
 保存的线程模型／新线程默认不在当前可用目录或缺少认证时，受管启动保持可连接的原生 unknown 模型状态；`get_available_models` 仍返回真实目录，使用既有 `set_model` 明确恢复。不会写入替代默认／model_change 或自动发请求。本次显式 CLI／用户选择、合法扩展／虚拟模型与从未选择过的原生发现保持原生语义，详见 [模型选择](PROVIDER_SETTINGS.md#会话模型快速选择)。
 
-原生资源清单包含 `builtin:mcp`、`builtin:codemode`、`builtin:tool-search`、`builtin:llama.cpp`，沿用 `path/enabled/override` 开关语义；它们不是可独立安装的 npm 包。新增或更新可识别的旧 `pi-mcp-adapter` 包返回 400 管理说明，移除旧声明仍可执行。原生 MCP/Codemode 不新增 Pivane MCP HTTP 网关；嵌套工具事件沿用原生 `parentToolCallId`，当前工具调用仍受权限钩子。旧配置的显式停机迁移见 [MCP.md](MCP.md)。
+原生资源清单包含 `builtin:mcp`、`builtin:codemode`、`builtin:tool-search`、`builtin:llama.cpp`，沿用 `path/enabled/override` 开关语义；它们不是可独立安装的 npm 包。新增或更新可识别的旧 `pi-mcp-adapter` 包返回 400 管理说明，移除旧声明仍可执行。原生 MCP/Codemode 不新增 OhMyBuddy MCP HTTP 网关；嵌套工具事件沿用原生 `parentToolCallId`，当前工具调用仍受权限钩子。旧配置的显式停机迁移见 [MCP.md](MCP.md)。
 
 `nativeMcpManagement=true` 标记 MCP 网页接口：
 
@@ -165,7 +165,7 @@
 - 同接口加 `id`：核对引用、描述符及 SHA256 后返回原始字节，使用 attachment、application/octet-stream、nosniff、no-store、sandbox CSP 与同源资源策略。未发送原件可由原上传线程下载；移动后须用已提交 source/target 链、原始原生备份及目标前缀证明同一上传来源，并在读取后核对证明修订与当前 worker。缺失、变化或伪造 header 拒绝；新旧上传格式均支持已证明的移动。新建网页分叉可按服务器登记的来源证明下载其回填问题的精确文档引用，仍核对证明修订、原生文件前缀和线程身份。此例外仅用于下载，不扩展分支列表或 read_document 的资格。浏览器不使用公开静态目录或 URL Token。
 - `POST /api/pi/uploads/read`：只允许当前活跃持久 worker 的受限内部凭据；普通工作台 Cookie/Bearer 不能调用。JSON 为 `{id,action?:inspect|read,start?,count?,sheet?,column?,columns?}`，默认 inspect/start=1/count=20/column=1/columns=20。Word start 为正文段落／表格行，Excel 为行，PPT/PDF 为页；全部从 1 开始。count 1–200，PPT/PDF 实际最多 10 页；column 1–16384、columns 1–50。sheet 为准确工作表名，省略取首张表。读取前后核对同一 worker 与当前分支；不存在于分支返回 DOCUMENT_SCOPE，变化返回 DOCUMENT_CONTEXT。原生 `read_document` 工具复用此接口，其结果存入原生 toolResult。
 
-- 同一受限 `/uploads/read` 接口也接受 `{id,action:"materialize"}`，其余读取范围字段不允许；由原生 `get_attachment` 工具调用。服务在当前项目私有 `.pivane-attachments/<id>/<name>` 排他发布原件副本，返回 `{reference,path,copied:true,instruction}`。每次核对当前分支、原件与目标目录／文件身份、SHA256 和大小；已有相同副本可复用，修改后的副本拒绝覆盖，工作台普通凭据不能调用。原始文件不被执行或解压。操作沿用 document-read 生命周期和维护门禁。
+- 同一受限 `/uploads/read` 接口也接受 `{id,action:"materialize"}`，其余读取范围字段不允许；由原生 `get_attachment` 工具调用。服务在当前项目私有 `.ohmybuddy-attachments/<id>/<name>` 排他发布原件副本，返回 `{reference,path,copied:true,instruction}`。每次核对当前分支、原件与目标目录／文件身份、SHA256 和大小；已有相同副本可复用，修改后的副本拒绝覆盖，工作台普通凭据不能调用。原始文件不被执行或解压。操作沿用 document-read 生命周期和维护门禁。
 
 原生用户消息使用规范 `<pivane_document ... />`（DOCX/XLSX/PPTX/PDF）或 `<pivane_attachment ... />`（`format=file|image`）标记保留原件引用，不存二进制或另一份会话。每条消息最多八个原件引用，其中办公/PDF 最多五个。仅用户消息中的有效引用参与分支授权；助手／工具输出不授予读取资格。继承或显式携带原引用的分支可以读取同一身份存储中的原件；单独导入到其他实例不会复制原件。分支属于授权输入，标记本身不是服务器文件路径。
 
@@ -246,7 +246,7 @@
 - `GET /assistant-projects/:id/sessions?profileId=UUID` 返回 `{sessions:[...]}`，只返回原生当前会话 ID 的项目绑定和实际档案绑定均匹配的线程；缺少 profileId 或无效 ID 拒绝。不按浏览器选中状态推断身份。
 - `POST /sessions` 可增加 `assistantProjectId`，此时必须同时显式提交关联、启用的 `profileId`，cwd 必须匹配项目且项目未归档。未知 ID、无效身份或 cwd 冲突在原生文件创建前拒绝，不回退到普通线程。省略 assistantProjectId 保持旧调用和项目默认档案行为。
 
-现有 `/sessions?cwd` 仍列出全部原生线程，新增 `assistantProject:null|{id,name,cwd,available}`；不存在的已绑定组仍显示 ID 和 available=false，不能自动归入另一组。旧有档案绑定但无项目标记的线程仍按真实 cwd 保持未分类。项目标记 `pivane-assistant-project` 保存 `{version:1,sessionId,projectId,cwd}`：初始标记只能有一个且匹配当前原生 ID/cwd；后续分类变更通过 `pivane-assistant-project-change` 的 previousRevision（前一原生 entry ID／无标记时 null）、previousProjectId 与 projectId（UUID／null）构成严格 CAS 链，重复初始标记或断裂链失效。复制导入的旧 ID 不生效；网页分叉给新 ID 追加当前有效归属。保存分组指令不自动重载当前 worker；`get_runtime_configuration.assistantProject` 分别返回 saved、savedProjectRevision、loadedProjectId、loadedProjectRevision、loadedConfirmed 与 matchesSavedProject。只有当前原生会话的运行实例确认后才标记已加载，保存值不能冒充运行配置。注册表保存在原生 agentDir 的私有 `pivane-profiles/assistant-projects.json`，项目和档案保存共用设置/维护忙碌互斥；过期修订和占用返回 409，未授权或非法输入按现有访问控制返回错误。
+现有 `/sessions?cwd` 仍列出全部原生线程，新增 `assistantProject:null|{id,name,cwd,available}`；不存在的已绑定组仍显示 ID 和 available=false，不能自动归入另一组。旧有档案绑定但无项目标记的线程仍按真实 cwd 保持未分类。项目标记 `pivane-assistant-project` 保存 `{version:1,sessionId,projectId,cwd}`：初始标记只能有一个且匹配当前原生 ID/cwd；后续分类变更通过 `pivane-assistant-project-change` 的 previousRevision（前一原生 entry ID／无标记时 null）、previousProjectId 与 projectId（UUID／null）构成严格 CAS 链，重复初始标记或断裂链失效。复制导入的旧 ID 不生效；网页分叉给新 ID 追加当前有效归属。保存分组指令不自动重载当前 worker；`get_runtime_configuration.assistantProject` 分别返回 saved、savedProjectRevision、loadedProjectId、loadedProjectRevision、loadedConfirmed 与 matchesSavedProject。只有当前原生会话的运行实例确认后才标记已加载，保存值不能冒充运行配置。注册表保存在原生 agentDir 的私有 `ohmybuddy-profiles/assistant-projects.json`，项目和档案保存共用设置/维护忙碌互斥；过期修订和占用返回 409，未授权或非法输入按现有访问控制返回错误。
 
 ### Bot 模式
 
@@ -254,7 +254,7 @@
 
 - `GET /bots` → `{version:1,revision,bots:[{id,name,description,avatar,enabled,profileRevision,bot,chosen,windowsRevision,windows}]}`，按 `bot.order` 排序，不含回收站档案。`chosen:{name,avatar}` 表示名字、头像是否已由用户定下：在设置卡或 Bot 设置中保存过即记下（服务端字段 `bot.chosen`，重新访谈后保留）；较早的记录和身份页修改按名字／头像各自的访谈步骤（或旧版合并的身份步骤）是否完成、是否与初始占位值不同推断。旧默认表情仍按 `✨` 判断；新建记录带 `onboarding.defaultAvatar:'pivane-pebble'`，只有这类记录的未确认默认“小石”不算已选，老记录中已使用的小石继续算已选。设置卡据此默认保留。`bot` 为 `{version,enabled,order,job,model:null|{provider,id,thinking?},thinking:null|string,permissions:{preset:'free'|'balanced'|'ask',rules:<数量>},notify,onboarding,createdAt}`；`onboarding` 为 `{version:1,phase:'greeting'|'interview'|'done'|'skipped',firstBot,steps,startedAt,completedAt,flowVersion?,firstTaskChoice?,defaultAvatar?}`，`steps` 值为 `done|skipped`，分别记录 `name`、`avatar`、`job`、`personality`、`work`（`workStyle`）、`about`（`aboutUser`）；头像不再是必问的访谈项，主动修改仍可记录。`known` 记录是否已处理其他 Bot 的“关于你”，兼容旧版 `identity:'done'` 同时完成名字和头像步骤。窗口为 `{id,kind:'main'|'topic',title,emoji,focus,instructions,createdAt,updatedAt,archivedAt,generation,sessionId,generations}`，不暴露文件路径；`instructions` 是话题指令，主聊天和较早没有该字段的记录为空字符串。
 - `GET /bots/readiness` → `{models:<可用聊天模型数>|null,error?}`；null 表示无法确定，不等于没有模型。
-- `POST /bots` `{expectedRevision,language?}` 创建 Bot、工作目录 `<默认项目>/PivaneBots/bot-<ID前8位>/` 与主聊天，返回 `{ok,revision,bot,window}`。新建头像为 `{kind:'preset',id:'pivane-pebble'}`，同时记录上述默认标记，不改已有 Bot。最多 50 个 Bot，且计入档案 50 个上限。
+- `POST /bots` `{expectedRevision,language?}` 创建 Bot、工作目录 `<默认项目>/OhMyBuddyBots/bot-<ID前8位>/` 与主聊天，返回 `{ok,revision,bot,window}`。新建头像为 `{kind:'preset',id:'pivane-pebble'}`，同时记录上述默认标记，不改已有 Bot。最多 50 个 Bot，且计入档案 50 个上限。
 - `GET /bots/:id/settings` → `{revision,bot:{id,name,avatar,soul,bot},models:null|{defaults,effectiveDefault:null|{provider,modelId},models:[{provider,id,name,thinkingLevels}]},modelsError?}`；模型目录按该 Bot 工作目录读取，失败时 `models:null`；这里的 `bot.bot.permissions.rules` 是完整规则数组，列表接口仍是规则数量。`models.defaults` 保留原目录默认值，`effectiveDefault` 是按实际可用模型和锁定 SDK 解析的有效默认；未保存全局默认时可返回 SDK 自动选择，不落盘，无法核实或已配置默认不可用时为 null。UI 优先使用该字段，只有旧服务缺少字段时兼容 `defaults`，不猜目录第一项。
 - `PATCH /bots/:id` `{expectedRevision,changes:{name?,description?,soul?,avatar?,bot?}}`；`avatar` 沿用上述 `profile.avatar` 契约；`bot` 只接受 `job`、`model`（null 为跟随默认）、`thinking`（null 为跟随原生默认思考等级，字符串为独立偏好）、`permissions:{preset?,rules?}`、`notify`、`order`。图片头像需先经头像接口上传。仅在访谈阶段为 `greeting|interview` 时，将实际改动的名字、头像、职责、性格和做事方式对应步骤记为 `done`（旧版 `identity:'done'` 已完成名字和头像）；上传图片后再通过 PATCH 保存该图片头像，即使版本未变，也计为已选头像，并在 `greeting|interview` 阶段完成头像步骤。
 
@@ -263,7 +263,7 @@
 - `POST /bots/:id/trash` `{expectedRevision}` 将 Bot 可恢复地移入身份回收站，返回 `{ok,revision,trashed:true,bot:{id,name,trashedAt},stoppedSessions,recoverable:true,profile}`；历史、工作目录和记忆保留。共享档案预占与全部已知原生会话编辑预占，拒绝忙碌、排队、后台任务、未处理预约消息、学习及关联定时任务/已受理运行，核对修订并停止空闲 worker 后才写入档案；同步的最终依赖检查防止迟到工作。旧 `/profiles/:id/trash` 对 Bot 使用相同协调路径。失败保持未移走，不自动取消工作；可从身份恢复接口恢复。常见 409：`BOT_TRASH_STALE`、`BOT_WINDOW_STALE`、`BOT_WINDOW_ROTATING`、`SESSION_BUSY`、`SESSION_QUEUE_RECOVERY`、`BOT_HAS_SCHEDULES`、`BOT_HAS_DEFERRED`、`BOT_WORK_PENDING`。
 - `POST /bots/:id/windows` `{expectedRevision:<windowsRevision>,title?,focus?,emoji?,instructions?}` 创建新话题，返回 `{ok,window,windowsRevision}`；title 可省略（默认“新话题”，并在首轮问答自动生成标题与关注点后同步更新未手动改过的字段），传值时 1–80 字，focus 最多 500，emoji 最多 16，拒绝控制字符和未知字段。`instructions` 为话题指令（多行纯文本，省略为空，首尾空白去掉），最多 8192 UTF-8 字节，只允许换行（LF）和制表符两种控制字符；只存在窗口索引中，不写入原生标记的 metadata seed，索引从原生标记重建时不恢复。话题窗口的 worker 每次运行前重读索引，把非空指令放在 Bot 身份段的话题说明之后，修改从下一次运行生效，无需重开 worker。最多 100 个话题，包含归档；新话题是独立原生对话与记事本，共用 Bot 档案记忆，不复制主聊天。先 CAS 写 prepared 索引，再创建含 metadata seed 的原生标记，最后提交当前会话；中断时采用原标记，不重复创建。
 - `bot.notify` 为 `{version:2,proactive,quietHours:null|{start,end},dailyProactiveLimit:null|0..200,timeZone?}`，`start/end` 为 `HH:mm` 且不能相同，`dailyProactiveLimit:null` 表示不限，`timeZone` 为 IANA 时区。version 2 之前保存的上限读作默认 20。`PATCH` 的 `notify` 与已保存值合并。
-- `GET /bots/:id/follow-ups` → `{items:[{id,kind:'due'|'checkin',windowId,at,title,state:'pending',noteId?,due?}]}`，按时间排序；`DELETE /bots/:id/follow-ups/:itemId` → `{cancelled}`，已开始发送的 409，不存在的 404。关闭主动消息后排队未开始的运行记为 `skipped`（`proactive-off`）；话题归档、Bot 移到回收站时其未开始的运行记为 `cancelled`（`dropped`）。到期跟进取消后不会因同一条承诺再次加回。状态存于 `<agentDir>/pivane-bots/<profileId>/proactive.json`（私有文件）。
+- `GET /bots/:id/follow-ups` → `{items:[{id,kind:'due'|'checkin',windowId,at,title,state:'pending',noteId?,due?}]}`，按时间排序；`DELETE /bots/:id/follow-ups/:itemId` → `{cancelled}`，已开始发送的 409，不存在的 404。关闭主动消息后排队未开始的运行记为 `skipped`（`proactive-off`）；话题归档、Bot 移到回收站时其未开始的运行记为 `cancelled`（`dropped`）。到期跟进取消后不会因同一条承诺再次加回。状态存于 `<agentDir>/ohmybuddy-bots/<profileId>/proactive.json`（私有文件）。
 - `PATCH /bots/:id/windows/:windowId` `{expectedRevision:<windowsRevision>,title?,focus?,emoji?,instructions?,archived?:boolean}` 修改话题或归档/恢复，返回同创建；只改所传字段，`instructions:''` 清除话题指令，校验同创建。主聊天不可修改；归档保留所有代，恢复沿用当前会话。归档拒绝忙碌/队列/待确认/草稿/后台/预约/侧聊/换代及关联定时工作，返回 409 `BOT_WINDOW_BUSY|BOT_WINDOW_ROTATING|BOT_TOPIC_SCHEDULED`。归档后新消息、原生会话入口和定时/延迟派发拒绝，409 `BOT_WINDOW_ARCHIVED`；只读历史仍可读取归档的当前代，不启动 worker。
 - `GET /bots/:id/topics/open-items` → `{v:1,topics:[{windowId,title,state:'ready'|'busy'|'unavailable'|'budget',items:[{title,kind,due?}],omitted?}],omittedTopics,windowsRevision}`；只读标题级未了事项，取 active open/commitment，按 Bot 隔离。最多 20 话题、40 项、每题 3 项、标题 120 字，每文件 2 MiB、总 8 MiB、150 ms 预算；失败表示未知，不表示空，无新 worker/模型请求。
 - `POST /bots/:id/main-window` 幂等补建或采用已有原生标记的主聊天。
@@ -389,13 +389,13 @@ HTTP 成功响应也是工具结果 `details.pivaneBotSchedule` 的值（工具 
 
 ### 版本检查与 Pi 受管维护
 
-`/status` 的 `appVersion` 表示 Pivane，原 `version` 继续表示实际 Pi 包版本。`GET /settings/updates?channel=stable或preview`只读当前版本与内存缓存；`POST /settings/updates/check`接受 JSON `{channel?}`，显式查询发行源并缓存 5 分钟，查询本身不安装。源码安装使用 GitHub/npm；完整平台包使用 `config/distribution.json` 中固定的 HTTPS 源、渠道和 Ed25519 公钥，签名清单须在有效期内，错误不回退。响应增加 `distributionUrl`；`installMode` 为 `managed-bundle` 时可使用设置内更新，其他安装仍为 `manual`。只读检查省略 channel 时源码安装默认包含预发布版；stable 参数供旧客户端兼容，当前设置页不显示渠道切换。维护 review 省略 channel 时仍按本地版本选择原默认渠道，以保留旧客户端执行语义。`POST /settings/updates/automatic`仅接受空 JSON `{}`，按持久 24 小时成功期限检查 Pi 正式版，失败按 1–24 小时指数退避；并发共享请求，不安装。`GET /settings/updates/notifications`返回 enabled、available、eligible、idle、currentVersion、version、lastSuccessAt/nextCheckAt（Unix 毫秒或 null）。`POST`同路径接受 `{enabled:boolean}` 或 `{action:"claim"或"snooze"或"ignore",version}`；claim 仅当前可提醒版本且空闲时返回 claimed:true，同版本仅一次，snooze 延后 3 天，ignore 仅忽略该版。过期版本动作 409、错误字段 400、存储/服务不可用 503。身份与 Origin 校验、no-store 沿用工作台；偏好保留无关字段，查询与提醒不会产生维护票据或执行请求。
+`/status` 的 `appVersion` 表示 OhMyBuddy，原 `version` 继续表示实际 Pi 包版本。`GET /settings/updates?channel=stable或preview`只读当前版本与内存缓存；`POST /settings/updates/check`接受 JSON `{channel?}`，显式查询发行源并缓存 5 分钟，查询本身不安装。源码安装使用 GitHub/npm；完整平台包使用 `config/distribution.json` 中固定的 HTTPS 源、渠道和 Ed25519 公钥，签名清单须在有效期内，错误不回退。响应增加 `distributionUrl`；`installMode` 为 `managed-bundle` 时可使用设置内更新，其他安装仍为 `manual`。只读检查省略 channel 时源码安装默认包含预发布版；stable 参数供旧客户端兼容，当前设置页不显示渠道切换。维护 review 省略 channel 时仍按本地版本选择原默认渠道，以保留旧客户端执行语义。`POST /settings/updates/automatic`仅接受空 JSON `{}`，按持久 24 小时成功期限检查 Pi 正式版，失败按 1–24 小时指数退避；并发共享请求，不安装。`GET /settings/updates/notifications`返回 enabled、available、eligible、idle、currentVersion、version、lastSuccessAt/nextCheckAt（Unix 毫秒或 null）。`POST`同路径接受 `{enabled:boolean}` 或 `{action:"claim"或"snooze"或"ignore",version}`；claim 仅当前可提醒版本且空闲时返回 claimed:true，同版本仅一次，snooze 延后 3 天，ignore 仅忽略该版。过期版本动作 409、错误字段 400、存储/服务不可用 503。身份与 Origin 校验、no-store 沿用工作台；偏好保留无关字段，查询与提醒不会产生维护票据或执行请求。
 
 维护接口供完整平台包的设置内更新、既有集成及受控恢复使用。源码安装的设置页继续只读展示。`GET /settings/updates/maintenance`返回启动器能力、generation、busy、idle（全局工作和请求均已空闲）、版本指针和最近维护结果；`POST /settings/updates/review`只接受 `{action:"update"或"application"或"backup"或"restart",channel?}`（channel 仅 application 接受），返回绑定服务端目标版本和进程代次的 10 分钟票据。`POST /settings/updates/execute`只接受 `{ticket,confirmed:true,draftsSaved:true,externalWritersStopped:true}`，再次检查空闲并暂停预约，接受返回 202。票据一次有效，不接受命令、URL、路径或版本覆盖；忙碌/过期/重复为 409，格式错误 400，不支持或交接失败 503。交接不确定不自动解锁或重试。
 
 `maintenance.retention` 是只读摘要：`releases`、`backups` 为配置的保留数，`null` 表示对应类型关闭（包含已排队回收区）。`last` 初始为 `null`，随后含 `at` 和 `phase`：`running`、`disabled`、`skipped`、`succeeded`、`failed` 或 `cancelled`。成功含 `quarantinedReleases`、`quarantinedBackups`（移入隔离的数量）、`purged`（实际删除的槽位数）、`keptReleases`、`keptBackups`、`incomplete`、`unverified`（本轮预算内未核验、因此未动的较旧备份数）；跳过含 `reason`，失败／取消含 `error:"cleanup-incomplete"`，不把部分删除计为成功。数值上限不覆盖恢复保护。自动删除仅支持 Linux 描述符边界，权限、原生完整性或能力不足时保留。`busy` 包含启动／清理的完整生命周期；维护任务的 `retaining` 是非终态，清理结束且已就绪子进程仍存在后才记主要任务成功。主要维护与随后保留清理各自记录结果，清理失败不自动回退已启动的服务。安全范围、预算和不确定删除保留规则见[版本与更新](UPDATES.md)。
 
-所有接口复用身份/Origin、响应 no-store。`maintenance.job`增加脱敏 `output`、`outputTruncated`、`exitCode`、`fromVersion`与`installedVersion`；输出按行回传并保留有界尾部，只有实际退出后才返回退出码，成功后刷新版本卡片。普通`node server.js`与`npm start`自动支持，无需改服务启动命令；`--direct`为不含自动维护的开发入口。维护期间拒绝普通 API/WS 新工作；关闭页面不取消已接受操作。Pi 精确依赖在独立快照中安装并验证，然后停机备份和启动；Pivane 应用更新使用 `action:"application"`、可选 `channel` 复用 review/execute，票据绑定服务器选择的版本和 SHA256；完整包另绑定目标平台、架构和压缩字节数，不接受浏览器覆盖。完整包按签名清单的固定同源路径下载，不执行 npm；包内普通文件与可执行模式按有界清单逐一验证，拒绝链接、穿越、控制文件及平台不匹配。运行时来自包内固定 Node，并验证安装证明中的二进制摘要。能力以 `maintenance.appUpdateSupported` 为准。兼容字段 `installMode:"manual"`不表示受管维护不可用。字段、文件权限、预算、失败处理及恢复边界见[版本与更新](UPDATES.md)。
+所有接口复用身份/Origin、响应 no-store。`maintenance.job`增加脱敏 `output`、`outputTruncated`、`exitCode`、`fromVersion`与`installedVersion`；输出按行回传并保留有界尾部，只有实际退出后才返回退出码，成功后刷新版本卡片。普通`node server.js`与`npm start`自动支持，无需改服务启动命令；`--direct`为不含自动维护的开发入口。维护期间拒绝普通 API/WS 新工作；关闭页面不取消已接受操作。Pi 精确依赖在独立快照中安装并验证，然后停机备份和启动；OhMyBuddy 应用更新使用 `action:"application"`、可选 `channel` 复用 review/execute，票据绑定服务器选择的版本和 SHA256；完整包另绑定目标平台、架构和压缩字节数，不接受浏览器覆盖。完整包按签名清单的固定同源路径下载，不执行 npm；包内普通文件与可执行模式按有界清单逐一验证，拒绝链接、穿越、控制文件及平台不匹配。运行时来自包内固定 Node，并验证安装证明中的二进制摘要。能力以 `maintenance.appUpdateSupported` 为准。兼容字段 `installMode:"manual"`不表示受管维护不可用。字段、文件权限、预算、失败处理及恢复边界见[版本与更新](UPDATES.md)。
 
 ### `GET /projects`
 
@@ -473,7 +473,7 @@ Body: `{ "cwd": "/workspace/demo" }`。先经过 token/Origin/realpath 根检查
 { "cwd": "/workspace/demo", "pinned": true }
 ```
 
-`pinned` 必须是 boolean；`false` 取消置顶。cwd 经过 realpath/项目根白名单检查。原子写入 0600 `pivane-workspace.json` 的 `pinnedProjects`（既有 `pi5-workspace.json` 自动沿用），保留其他配置；返回 `{ "pinnedProjects": [...] }`，最近置顶排在前面。不同浏览器通过 activity 轮询自动同步。不改 Pi JSONL。
+`pinned` 必须是 boolean；`false` 取消置顶。cwd 经过 realpath/项目根白名单检查。原子写入 0600 `ohmybuddy-workspace.json` 的 `pinnedProjects`（既有 `pi5-workspace.json` 自动沿用），保留其他配置；返回 `{ "pinnedProjects": [...] }`，最近置顶排在前面。不同浏览器通过 activity 轮询自动同步。不改 Pi JSONL。
 
 `GET /projects` 也返回 `pinnedProjects`，并包含没有 session 的有效置顶项目；不存在或不再允许的路径不会返回，也不会因此删除原偏好。
 
@@ -975,7 +975,7 @@ Key 只作为 request body 进入服务端，现有值永不回显。此单字�
 { "provider": "my-provider", "modelId": "planner-model" }
 ```
 
-服务端只接受 `ModelRuntime.getAvailable()` 中当前已认证的模型，并原子写入 0600 的 `~/.pi/agent/pivane-workspace.json`（已有旧 `pi5-workspace.json` 时沿用）。它不会修改 Pi Agent 默认模型，response 不包含 credential。
+服务端只接受 `ModelRuntime.getAvailable()` 中当前已认证的模型，并原子写入 0600 的 `~/.pi/agent/ohmybuddy-workspace.json`（已有旧 `pi5-workspace.json` 时沿用）。它不会修改 Pi Agent 默认模型，response 不包含 credential。
 
 模型测试 body：
 

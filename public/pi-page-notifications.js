@@ -48,9 +48,9 @@
                 await navigator.serviceWorker.register('/pi-notification-sw.js', { scope: '/', updateViaCache: 'none' });
                 reg = await Promise.race([navigator.serviceWorker.ready, new Promise((_, reject) => setTimeout(() => reject(Error(translateUi("通知服务启动超时"))), 15000))]);
             }
-            await reg.showNotification('Pivane', { body, tag, icon: '/brand/logo-192.png' });
+            await reg.showNotification('OhMyBuddy', { body, tag, icon: '/brand/logo-192.png' });
         } else {
-            const notification = new Notification('Pivane', { body, tag, icon: '/brand/logo-192.png' });
+            const notification = new Notification('OhMyBuddy', { body, tag, icon: '/brand/logo-192.png' });
             notification.onclick = () => { window.focus(); notification.close(); };
             setTimeout(() => notification.close(), 15000);
         }

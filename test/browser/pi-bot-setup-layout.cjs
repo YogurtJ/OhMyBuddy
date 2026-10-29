@@ -41,7 +41,7 @@ const DEDICATED = { name: '', job: ' ', aboutUser: [''], workStyle: 'free' };
             const api = async ({ pathname, method, body }) => {
                 if (pathname === '/api/pi/status') return { json: { ok: true, bots: true, agentProfiles: true, deliverables: true, sessionWorkflows: true,
                     composerTools: true, projectRoots: ['/fixture'], defaultProject: '/fixture/project' } };
-                if (pathname === '/api/pi/composer/catalog') return { json: { cwd: '/fixture/PivaneBots/bot-11111111', builtins: [], templates: [], warnings: [] } };
+                if (pathname === '/api/pi/composer/catalog') return { json: { cwd: '/fixture/OhMyBuddyBots/bot-11111111', builtins: [], templates: [], warnings: [] } };
                 if (pathname === `/api/pi/bots/${BOT}/settings`) return { json: { revision, bot: { id: BOT, name: '新伙伴', avatar: { kind: 'preset', id: 'pivane-pebble' },
                     soul: PERSONALITY, bot: world.bots()[0].bot }, models: { defaults: null, models: [] } } };
                 if (pathname !== `/api/pi/bots/${BOT}/setup` || method !== 'POST') return undefined;

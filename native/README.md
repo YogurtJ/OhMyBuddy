@@ -2,7 +2,7 @@
 
 `server/pi-file-descriptor.js` supplies opened-object final paths for file preview, session text search and usage scanning. Linux retains `/proc/self/fd`. The macOS Node-API 8 bundle calls `fcntl(fd, F_GETPATH)`. The Windows x64 Node-API 8 DLL calls Node's exported libuv descriptor conversion API, then Win32 filesystem APIs. No backend substitutes the requested path for a failed descriptor lookup.
 
-Pivane's native artifacts ship with source and SHA256 build manifests, so normal installation does not compile these components. SQLite's separate platform requirements are documented under [bundled capabilities](../docs/BUNDLED_CAPABILITIES.md). The loaders check binary/source hashes; missing or mismatched modules fail closed. The Windows module is also required for private filesystem writes, so a damaged component can prevent configuration initialization.
+OhMyBuddy's native artifacts ship with source and SHA256 build manifests, so normal installation does not compile these components. SQLite's separate platform requirements are documented under [bundled capabilities](../docs/BUNDLED_CAPABILITIES.md). The loaders check binary/source hashes; missing or mismatched modules fail closed. The Windows module is also required for private filesystem writes, so a damaged component can prevent configuration initialization.
 
 ## macOS
 

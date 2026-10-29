@@ -30,7 +30,7 @@ async function handleNativeControl(service, job, slash, control, busyWithOther, 
                 if (error.code === 'CHANNEL_ADMISSION_CHANGED' || error.code === 'RPC_TIMEOUT') throw error;
                 const after = await rpc('get_state').catch(() => null);
                 if (after?.webCompaction?.status === 'cancelled') return '⏹ 上下文压缩已取消。';
-                if (after?.webCompaction?.status === 'error') return '❌ 上下文压缩失败，请在 Pivane 网页查看详情。';
+                if (after?.webCompaction?.status === 'error') return '❌ 上下文压缩失败，请在 OhMyBuddy 网页查看详情。';
                 throw error;
             } finally {
                 await stopTyping();
@@ -84,7 +84,7 @@ async function handleNativeControl(service, job, slash, control, busyWithOther, 
                 control.submit();
                 const submitted = await chatReq.run({ key: chosen.id, modelId: chosen.modelId, parameters: chosen.parameters, confirmed: true });
                 if (submitted.status === 'changed') {
-                    return `⚠️ 服务端规范化了部分参数，请打开 Pivane 网页端核对卡片「${chosen.summary || chosen.modelId}」后再确认。`;
+                    return `⚠️ 服务端规范化了部分参数，请打开 OhMyBuddy 网页端核对卡片「${chosen.summary || chosen.modelId}」后再确认。`;
                 }
                 const waitMs = chosen.kind === 'video' ? 15000 : 60000;
                 const state = await chatReq.waitFor(chosen.id, waitMs);
@@ -98,7 +98,7 @@ async function handleNativeControl(service, job, slash, control, busyWithOther, 
                 if (last?.status === 'running' || last?.status === 'queued') {
                     return `🎬 已确认并开始生成：${chosen.summary || chosen.modelId}（${chosen.modelId}）。\n当前状态：${last.status === 'queued' ? '排队中' : '后台生成中'}（可在网页查看进度，或稍后发送 /confirm 查看是否完成）。`;
                 }
-                return `❌ 媒体生成未完成（${last?.status || 'failed'}）：${last?.error || '请打开 Pivane 网页端查看卡片详情'}`;
+                return `❌ 媒体生成未完成（${last?.status || 'failed'}）：${last?.error || '请打开 OhMyBuddy 网页端查看卡片详情'}`;
             } finally {
                 await stopTyping();
             }

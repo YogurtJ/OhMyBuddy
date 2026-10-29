@@ -117,9 +117,9 @@ async function stagePi({ root, directory, version, env = process.env, signal, ru
     copy(root, directory);
     const manifestPath = path.join(directory, 'package.json');
     const manifest = JSON.parse(readSafe(manifestPath));
-    if (manifest.pivaneCompatibility?.piVersion && manifest.pivaneCompatibility.piVersion !== version) throw new Error('This Pivane release is bound to its reviewed Pi version; update Pivane and its adapter together');
+    if (require('./ohmybuddy-compat').packageMetadata(manifest, 'Compatibility')?.piVersion && require('./ohmybuddy-compat').packageMetadata(manifest, 'Compatibility').piVersion !== version) throw new Error('This OhMyBuddy release is bound to its reviewed Pi version; update OhMyBuddy and its adapter together');
     const packages = piPackageNames(manifest);
-    const baselinePi = manifest.pivaneManaged?.baselinePi || manifest.dependencies[PI_PACKAGES[0]];
+    const baselinePi = require('./ohmybuddy-compat').packageMetadata(manifest, 'Managed')?.baselinePi || manifest.dependencies[PI_PACKAGES[0]];
     for (const name of packages) {
         if (manifest.dependencies[name]) manifest.dependencies[name] = version;
         const override = manifest.overrides?.[name];
@@ -127,7 +127,8 @@ async function stagePi({ root, directory, version, env = process.env, signal, ru
             for (const nestedName of Object.keys(override)) override[nestedName] = version;
         } else if (typeof override === 'string' && !override.startsWith('$')) manifest.overrides[name] = version;
     }
-    manifest.pivaneManaged = { baselinePi, piVersion: version, validation: 'isolated-sdk-rpc' };
+    delete manifest.pivaneManaged;
+    manifest.ohmybuddyManaged = { baselinePi, piVersion: version, validation: 'isolated-sdk-rpc' };
     atomicJson(manifestPath, manifest);
     const installEnv = installEnvironment(env, directory);
     await run([npmCli(env), 'install', '--ignore-scripts', '--no-audit', '--no-fund', '--registry=https://registry.npmjs.org'], { cwd: directory, env: installEnv, signal, onOutput, secretEnv: env });

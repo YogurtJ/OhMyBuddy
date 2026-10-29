@@ -1,9 +1,9 @@
 (() => {
     const t = (text, ...values) => globalThis.PiI18n?.t(text, ...values) || text.replace(/\{(\d+)\}/g, (_, i) => values[i] ?? `{${i}}`);
     const el = (tag, text, attrs = {}) => { const node = document.createElement(tag); if (text) node.textContent = text; for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value); return node; };
-    const phases = { preparing: '正在准备更新…', installing: '正在安装更新…', downloading: '正在下载并校验 Pivane…', unpacking: '正在解压更新…', verifying: '正在验证新版…', stopping: '正在安全停止 Pivane…', 'backing-up': '正在备份会话、配置和媒体…', starting: '正在启动新版…', retaining: '正在整理更新备份…', succeeded: '更新完成，正在重新连接…', failed: '更新失败，请查看下方信息。', interrupted: '上次更新已中断，请先核对当前版本和备份。' };
+    const phases = { preparing: '正在准备更新…', installing: '正在安装更新…', downloading: '正在下载并校验 OhMyBuddy…', unpacking: '正在解压更新…', verifying: '正在验证新版…', stopping: '正在安全停止 OhMyBuddy…', 'backing-up': '正在备份会话、配置和媒体…', starting: '正在启动新版…', retaining: '正在整理更新备份…', succeeded: '更新完成，正在重新连接…', failed: '更新失败，请查看下方信息。', interrupted: '上次更新已中断，请先核对当前版本和备份。' };
     function create({ apiFetch }) {
-        const element = el('section', '', { class: 'updates-application', 'aria-label': t('更新 Pivane') });
+        const element = el('section', '', { class: 'updates-application', 'aria-label': t('更新 OhMyBuddy') });
         let snapshot, status, ticket, submitting = false, uncertain = false, timer, epoch = 0, visible = false, ownJob = null;
         const cancelTimer = () => { clearTimeout(timer); timer = null; };
         const request = (path, body) => apiFetch('/api/pi/settings/updates/' + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -13,7 +13,7 @@
             element.replaceChildren();
             if (snapshot?.installMode !== 'managed-bundle') { element.hidden = true; return; }
             element.hidden = false;
-            element.append(el('h4', t('更新 Pivane')));
+            element.append(el('h4', t('更新 OhMyBuddy')));
             const job = status?.job;
             const feedback = el('p', message || (job ? t(phases[job.phase] || '正在准备更新…') : status?.idle === false ? t('正在等待会话启动和当前操作结束…') : t('更新会先下载和验证新版，再备份并重启。')), { role: 'status', 'aria-live': 'polite' });
             element.append(feedback);
@@ -57,7 +57,7 @@
                 if (uncertain || next.busy || next.idle === false || next.job && !terminal(next.job)) schedule();
             } catch {
                 if (!visible || n !== epoch) return;
-                draw(t('正在等待 Pivane 重新连接，请保持页面打开…')); schedule();
+                draw(t('正在等待 OhMyBuddy 重新连接，请保持页面打开…')); schedule();
             }
         }
         async function review() {

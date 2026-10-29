@@ -76,7 +76,7 @@ test('managed inventory preserves legacy filters, respects trust, and saves port
     assert.deepEqual(saved.packages, legacy.packages); assert.equal(saved.sentinel, 9);
     assert.deepEqual(saved.pivaneBuiltins.subagents.extensions, ['-' + path.join('bundle', 'index.js')]);
     for (const action of ['install', 'update', 'remove']) await assert.rejects(resources.packageAction({ cwd, scope: 'global', action,
-        source: packagePath(catalog[0]), confirmed: true, expectedRevision: snapshot.revision }), /Pivane/);
+        source: packagePath(catalog[0]), confirmed: true, expectedRevision: snapshot.revision }), /OhMyBuddy/);
     await resources.toggle({ cwd, scope: 'global', expectedRevision: snapshot.revision, resourceId: extension.id, confirmed: true, state: 'inherit' });
     assert.equal((await resources.snapshot(cwd)).resources.find(r => r.id === extension.id).enabled, true);
     const inheritedSettings = fs.readFileSync(settingsFile, 'utf8');
@@ -256,7 +256,7 @@ registerHooks({ resolve(specifier, context, next) {
     assert.equal(fs.existsSync(marker), false);
     const trace = fs.readFileSync(traceFile, 'utf8').trim().split('\n').map(line => JSON.parse(line));
     const parentPid = worker.client.child.pid;
-    assert.ok(trace.some(item => item.pid === parentPid && item.url.endsWith('/server/pi-bundled-subagents.mjs')), 'managed parent actually loads the Pivane wrapper');
+    assert.ok(trace.some(item => item.pid === parentPid && item.url.endsWith('/server/pi-bundled-subagents.mjs')), 'managed parent actually loads the OhMyBuddy wrapper');
     assert.deepEqual(trace.filter(item => item.url.includes('/vendor/pi-subagents/bundle/')), [], 'parent, foreground child and detached runner never resolve bundled modules');
     const childFactoryLoads = trace.filter(item => item.url.endsWith('/src/runs/shared/child-session.js'));
     assert.ok(childFactoryLoads.some(item => item.pid === parentPid), 'foreground child uses the parent unbundled factory');

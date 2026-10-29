@@ -48,7 +48,7 @@ POST https://api.minimax.io/v2/video_generation
 GET  https://api.minimax.io/v2/query/video_generation/{task_id}
   -> queued | running | succeeded | failed | cancelled
 succeeded -> task.content.url
-  -> Pivane 立即下载到 public/videos/
+  -> OhMyBuddy 立即下载到 public/videos/
   -> video_history.json
 ```
 

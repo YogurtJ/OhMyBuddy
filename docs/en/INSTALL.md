@@ -1,10 +1,10 @@
-# Install, update and recover Pivane
+# Install, update and recover OhMyBuddy
 
 [English home](../../README.md) · [User guide](USER_GUIDE.md) · [中文完整指南](../INSTALL_RECOVERY.md)
 
-Pivane runs natively on Linux, macOS and Windows with **Node.js 22.x (22.19.0 or later)** and npm, as required by the current locked dependencies. The environments validated for each release are listed in [platform validation](../RELEASE_INSTALL_VALIDATION.md); if you run into a problem elsewhere, please [open an issue](https://github.com/YogurtJ/pivane/issues).
+OhMyBuddy runs natively on Linux, macOS and Windows with **Node.js 22.x (22.19.0 or later)** and npm, as required by the current locked dependencies. The environments validated for each release are listed in [platform validation](../RELEASE_INSTALL_VALIDATION.md); if you run into a problem elsewhere, please [open an issue](https://github.com/YogurtJ/pivane/issues).
 
-The examples below use **1.6.0**; replace it with the version you downloaded from [Releases](https://github.com/YogurtJ/pivane/releases). Use matching archives, checksums and version directories together. Each release's notes and validation attachment describe the checks performed on that archive.
+The examples below use **1.11.0**; replace it with the version you downloaded from [Releases](https://github.com/YogurtJ/pivane/releases). Use matching archives, checksums and version directories together. Each release's notes and validation attachment describe the checks performed on that archive.
 
 ## Prerequisites
 
@@ -13,15 +13,15 @@ The examples below use **1.6.0**; replace it with the version you downloaded fro
 - HTTPS access to npm to download locked dependencies on first installation.
 - Your own model provider account or compatible model service. A model appearing in the catalog does not provide credentials or credit.
 
-No global Pi installation, frontend build or GPU is required. Pivane's own native components are prebuilt; the current source's SQLite dependency may require native compilation when no matching prebuilt binary is available. Keep packaged native source, binaries and manifests together. Do not reuse another OS/CPU's `node_modules`, omit optional dependencies, or use `npm audit fix --force` to change locked dependencies.
+No global Pi installation, frontend build or GPU is required. OhMyBuddy's own native components are prebuilt; the current source's SQLite dependency may require native compilation when no matching prebuilt binary is available. Keep packaged native source, binaries and manifests together. Do not reuse another OS/CPU's `node_modules`, omit optional dependencies, or use `npm audit fix --force` to change locked dependencies.
 
-Use the same ordinary operating-system user as your existing Pi CLI. Pivane normally reuses that user's native Pi identity; media and scheduled messages use instance-specific paths. Use a separate identity only for an explicitly independent instance or isolated testing. Additional project tools, such as Git, compilers or Python, are installed separately as needed.
+Use the same ordinary operating-system user as your existing Pi CLI. OhMyBuddy normally reuses that user's native Pi identity; media and scheduled messages use instance-specific paths. Use a separate identity only for an explicitly independent instance or isolated testing. Additional project tools, such as Git, compilers or Python, are installed separately as needed.
 
 ## Bundled capabilities
 
 The current source includes pi-subagents 0.82.1 and pi-hermes-memory 0.9.10 under `vendor/`. `node scripts/install.cjs` installs the locked dependencies, prepares esbuild, verifies upstream files, builds the profile memory component and checks native SQLite support. It uses the dependency's shipped binaries without npm's unnecessary node-gyp step. Failure returns a nonzero installation result. Older published archives without this script retain their original `npm ci` installation command. Targets without a usable SQLite binary need Python and C/C++ tools to build the upstream module explicitly.
 
-Pivane selects its own package versions without rewriting existing CLI package declarations or moving profile data. Legacy resource filters remain effective. Subagent settings and profile memory controls keep their existing scopes; installation does not start tasks or enable memory for every profile. Components update with Pivane. `PI_SKIP_DEFAULT_CAPABILITIES` no longer controls bundled preparation. After an explicit `npm ci --ignore-scripts`, run `npm rebuild esbuild --foreground-scripts` and `node scripts/install-bundled-capabilities.cjs`. See [bundled capabilities](../BUNDLED_CAPABILITIES.md).
+OhMyBuddy selects its own package versions without rewriting existing CLI package declarations or moving profile data. Legacy resource filters remain effective. Subagent settings and profile memory controls keep their existing scopes; installation does not start tasks or enable memory for every profile. Components update with OhMyBuddy. `PI_SKIP_DEFAULT_CAPABILITIES` no longer controls bundled preparation. After an explicit `npm ci --ignore-scripts`, run `npm rebuild esbuild --foreground-scripts` and `node scripts/install-bundled-capabilities.cjs`. See [bundled capabilities](../BUNDLED_CAPABILITIES.md).
 
 ## Installation scope
 
@@ -35,18 +35,18 @@ Project roots are separate from data isolation. Ordinary installations default t
 
 Pi uses Node's OS home directory plus `.pi/agent`: usually `/Users/<user>/.pi/agent` on macOS, `/home/<user>/.pi/agent` on Linux, and `C:\Users\<user>\.pi\agent` on native Windows. Windows does not default to AppData. A nonempty `PI_CODING_AGENT_DIR` overrides this. Git Bash's `~`, PowerShell's home and native Node's home may differ; WSL Pi is a separate Linux environment.
 
-After dependency installation, the commands below use `node scripts/pi-agent-dir.cjs` to obtain the path through Pi's public resolver. Run them as the normal CLI user with its actual configuration environment, including overrides supplied by a CLI alias or wrapper. The helper only reports a path; it does not read credentials, create directories or send model requests. Existing identities are reused, and missing ones are initialized by Pi on normal startup. Pivane still uses its bundled Pi version, not the globally installed executable.
+After dependency installation, the commands below use `node scripts/pi-agent-dir.cjs` to obtain the path through Pi's public resolver. Run them as the normal CLI user with its actual configuration environment, including overrides supplied by a CLI alias or wrapper. The helper only reports a path; it does not read credentials, create directories or send model requests. Existing identities are reused, and missing ones are initialized by Pi on normal startup. OhMyBuddy still uses its bundled Pi version, not the globally installed executable.
 
-Sharing an identity also shares native settings, standard sessions and global resources. Do not let the CLI and Web UI write the same session concurrently. For an existing Pivane installation, stop it when idle through its original management channel, retain both identity directories, and change the actual `PI_CODING_AGENT_DIR` in its startup configuration. Do not copy or merge authentication files. Media and schedule paths should retain their existing values. After startup, the authenticated `/api/pi/settings/native` response reports `agentDir`; check configured providers in Settings before logging in again.
+Sharing an identity also shares native settings, standard sessions and global resources. Do not let the CLI and Web UI write the same session concurrently. For an existing OhMyBuddy installation, stop it when idle through its original management channel, retain both identity directories, and change the actual `PI_CODING_AGENT_DIR` in its startup configuration. Do not copy or merge authentication files. Media and schedule paths should retain their existing values. After startup, the authenticated `/api/pi/settings/native` response reports `agentDir`; check configured providers in Settings before logging in again.
 
-Environment-only keys, proxy settings and external credential commands must also be available to Pivane. Service managers and `env -i` do not copy your interactive shell environment. Extension-only providers may not appear in provider settings. Custom CLI session directories are not automatically migrated by sharing an identity. See the detailed [Pi CLI integration guide](../PI_CLI.md).
+Environment-only keys, proxy settings and external credential commands must also be available to OhMyBuddy. Service managers and `env -i` do not copy your interactive shell environment. Extension-only providers may not appear in provider settings. Custom CLI session directories are not automatically migrated by sharing an identity. See the detailed [Pi CLI integration guide](../PI_CLI.md).
 
 ## Linux and macOS
 
 Download the archive and its `.sha256` file from [Releases](https://github.com/YogurtJ/pivane/releases) to Downloads and verify the source. In Bash or your macOS terminal:
 
 ```bash
-ARCHIVE="$HOME/Downloads/pivane-1.6.0.tar.gz"
+ARCHIVE="$HOME/Downloads/ohmybuddy-1.11.0.tar.gz"
 # Linux:
 (cd "$(dirname "$ARCHIVE")" && sha256sum -c "$(basename "$ARCHIVE").sha256")
 # macOS: use this checksum command instead:
@@ -56,12 +56,12 @@ ARCHIVE="$HOME/Downloads/pivane-1.6.0.tar.gz"
 Continue only if verification succeeds. For a new instance, the base directory must not already exist:
 
 ```bash
-BASE="$HOME/pivane"
+BASE="$HOME/ohmybuddy"
 test ! -e "$BASE" || { echo "Directory exists; use the update procedure or another BASE"; exit 1; }
 umask 077
-mkdir -p "$BASE/releases/1.6.0" "$BASE/data/media" "$BASE/projects/demo" "$BASE/backups"
-tar -xzf "$ARCHIVE" -C "$BASE/releases/1.6.0" --strip-components=1
-cd "$BASE/releases/1.6.0"
+mkdir -p "$BASE/releases/1.11.0" "$BASE/data/media" "$BASE/projects/demo" "$BASE/backups"
+tar -xzf "$ARCHIVE" -C "$BASE/releases/1.11.0" --strip-components=1
+cd "$BASE/releases/1.11.0"
 node --version
 rg --version
 node scripts/install.cjs
@@ -74,7 +74,7 @@ AGENT_DIR=$(node scripts/pi-agent-dir.cjs) || exit 1
 printf 'Pi identity: %s\n' "$AGENT_DIR"
 ```
 
-Only for an explicitly isolated identity, replace this with `AGENT_DIR="$BASE/data/agent"`. Create a fixed instance configuration. The shell expands `BASE` before writing; Pivane's `.env` reader itself does **not** expand variables or `~`.
+Only for an explicitly isolated identity, replace this with `AGENT_DIR="$BASE/data/agent"`. Create a fixed instance configuration. The shell expands `BASE` before writing; OhMyBuddy's `.env` reader itself does **not** expand variables or `~`.
 
 ```bash
 cat > "$BASE/instance.env" <<EOF
@@ -84,7 +84,7 @@ PI_WORKSPACE_BASE_URL=http://127.0.0.1:11408
 PI_CODING_AGENT_DIR=$AGENT_DIR
 PI_MEDIA_CONFIG_DIR=$BASE/data/media-lab
 PI_MEDIA_DATA_DIR=$BASE/data/media
-PI_WEB_DEFERRED_FILE=$BASE/data/pivane-deferred-messages.json
+PI_WEB_DEFERRED_FILE=$BASE/data/ohmybuddy-deferred-messages.json
 PI_PROJECT_ROOTS=/
 EOF
 chmod 600 "$BASE/instance.env"
@@ -94,7 +94,7 @@ node scripts/install-service.cjs
 
 The minimal environment retains the identity explicitly selected in the configuration but does not inherit shell provider keys or proxy variables. Preserve your own HOME. If authentication uses environment values or external commands, provide those dependencies to this instance, or save credentials through the native Web login. If your network requires a proxy, explicitly add the required proxy configuration for this instance. With a Node version manager, ensure the chosen Node 22 is actually in PATH; noninteractive SSH and service managers may not load shell startup scripts.
 
-Open **http://127.0.0.1:11408**. The installation terminal can close. A user service starts Pivane at login; on Linux servers, configure user linger or an equivalent system service for boot-time startup. macOS also gets a desktop browser shortcut. See [background service management](../BACKGROUND_SERVICE.md). Foreground `npm start` is reserved for trials and troubleshooting.
+Open **http://127.0.0.1:11408**. The installation terminal can close. A user service starts OhMyBuddy at login; on Linux servers, configure user linger or an equivalent system service for boot-time startup. macOS also gets a desktop browser shortcut. See [background service management](../BACKGROUND_SERVICE.md). Foreground `npm start` is reserved for trials and troubleshooting.
 
 macOS's privacy controls and filesystem permissions still apply. `/tmp` resolving to `/private/tmp` is normal. Finder Trash is not integrated: session deletion tries `gio trash`, then permanently deletes if unavailable. The confirmation and result explain which behavior applies.
 
@@ -103,12 +103,12 @@ macOS's privacy controls and filesystem permissions still apply. `/tmp` resolvin
 Install Node 22.x x64, Git for Windows and ripgrep, making them available in PATH. Normal installation does not require Visual Studio or WSL. Use a new directory under your own user profile. In PowerShell:
 
 ```powershell
-$archive = Join-Path $env:USERPROFILE 'Downloads\pivane-1.6.0.tar.gz'
+$archive = Join-Path $env:USERPROFILE 'Downloads\ohmybuddy-1.11.0.tar.gz'
 $expected = (Get-Content -LiteralPath ($archive + '.sha256') -Raw).Trim().Split()[0]
 if ($expected -notmatch '^[a-fA-F0-9]{64}$' -or (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ine $expected) { throw 'Archive checksum failed' }
-$base = Join-Path $env:USERPROFILE 'Pivane'
+$base = Join-Path $env:USERPROFILE 'OhMyBuddy'
 if (Test-Path -LiteralPath $base) { throw 'Directory exists; use the update procedure or another base' }
-$app = Join-Path $base 'releases\1.6.0'
+$app = Join-Path $base 'releases\1.11.0'
 @($app, "$base\data\media", "$base\projects\demo", "$base\backups") | ForEach-Object { New-Item -ItemType Directory -Path $_ -Force | Out-Null }
 tar.exe -xzf $archive -C $app --strip-components=1
 if ($LASTEXITCODE -ne 0) { throw 'Extraction failed' }
@@ -135,7 +135,7 @@ PI_WORKSPACE_BASE_URL=http://127.0.0.1:11408
 PI_CODING_AGENT_DIR=$piIdentity
 PI_MEDIA_CONFIG_DIR=$dataRoot/data/media-lab
 PI_MEDIA_DATA_DIR=$dataRoot/data/media
-PI_WEB_DEFERRED_FILE=$dataRoot/data/pivane-deferred-messages.json
+PI_WEB_DEFERRED_FILE=$dataRoot/data/ohmybuddy-deferred-messages.json
 PI_PROJECT_ROOTS=$projectRoots
 "@
 [IO.File]::WriteAllText((Join-Path $base 'instance.env'), $config, [Text.UTF8Encoding]::new($false))
@@ -143,7 +143,7 @@ Copy-Item -LiteralPath (Join-Path $base 'instance.env') -Destination (Join-Path 
 node.exe scripts/install-service.cjs
 ```
 
-Open **http://127.0.0.1:11408** or the Pivane desktop shortcut. The installation terminal can close; a current-user scheduled task starts Pivane at login. See [service lifecycle and platform limitations](../BACKGROUND_SERVICE.md). Existing process environment variables override `.env`; retain the intended CLI identity and its required credential/proxy/command environment, and clear unrelated instance overrides without printing secrets or changing other applications' system settings. For an explicitly isolated identity, set `$agentDir = Join-Path $base 'data\agent'` before calculating `$piIdentity`.
+Open **http://127.0.0.1:11408** or the OhMyBuddy desktop shortcut. The installation terminal can close; a current-user scheduled task starts OhMyBuddy at login. See [service lifecycle and platform limitations](../BACKGROUND_SERVICE.md). Existing process environment variables override `.env`; retain the intended CLI identity and its required credential/proxy/command environment, and clear unrelated instance overrides without printing secrets or changing other applications' system settings. For an explicitly isolated identity, set `$agentDir = Join-Path $base 'data\agent'` before calculating `$piIdentity`.
 
 The Windows example includes all drive roots visible at installation, such as `C:/;D:/`. Update the configuration and restart when adding drives. To restrict the scope on request, use **semicolon-separated** paths such as `C:/Projects;D:/Work`. The directories must exist. Use NTFS-aware backups and verify the restored Agent directory's protected DACL. See the detailed [Windows guide](../WINDOWS.md) for filesystem and platform limits.
 
@@ -172,7 +172,7 @@ Preserve these together:
 | Startup environment and actual service configuration | `instance.env` and your service-manager configuration |
 | Matching application and checksum | Original release archive and checksum |
 
-External Package sources, symlink targets, external credential commands, certificates and remote service tasks may need separate backups. The BASE archive below does not include an external shared Pi identity. While both Pivane and the CLI are stopped, separately back up that entire directory with private permissions and a checksum, and record its original absolute path. Restore it alongside the matching BASE archive before starting either application; on Windows preserve the actual DACL. The [full backup procedure](../INSTALL_RECOVERY.md#4-备份范围与一致性) includes the separate identity archive. Browser drafts, unsent attachments, temporary sessions, side chats and pending in-memory tickets are not included in a disk backup.
+External Package sources, symlink targets, external credential commands, certificates and remote service tasks may need separate backups. The BASE archive below does not include an external shared Pi identity. While both OhMyBuddy and the CLI are stopped, separately back up that entire directory with private permissions and a checksum, and record its original absolute path. Restore it alongside the matching BASE archive before starting either application; on Windows preserve the actual DACL. The [full backup procedure](../INSTALL_RECOVERY.md#4-备份范围与一致性) includes the separate identity archive. Browser drafts, unsent attachments, temporary sessions, side chats and pending in-memory tickets are not included in a disk backup.
 
 1. Stop submitting new work. Finish Agent, Shell, side-chat, media, settings and import/export tasks. **Pause all scheduled messages in the UI.** Preserve unsent content.
 2. Stop the service and any external CLI using the same Pi identity. Wait for exit before copying data. An HTTP activity check cannot prove an external CLI or remote provider task has stopped.
@@ -183,7 +183,7 @@ External Package sources, symlink targets, external credential commands, certifi
 On Linux/macOS, after stopping the service, an example snapshot is:
 
 ```bash
-BASE="$HOME/pivane"
+BASE="$HOME/ohmybuddy"
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 umask 077
 tar -czf "$BASE/backups/data-$STAMP.tar.gz" -C "$BASE" instance.env data projects

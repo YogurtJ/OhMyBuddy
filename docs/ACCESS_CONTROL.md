@@ -15,11 +15,11 @@
 
 监听和代理分区分别保存，**下次安全重启整个服务生效**；保存不修改当前监听、连接池或 worker 环境。页面区分当前生效与待生效状态，并可撤销本次启动后的待生效配置。不会自动重启或仅重开 worker 冒充全局生效。请先完成任务、保存草稿、处理侧聊、Shell、媒体与预约，再从部署端安全重启；刷新网页不等于应用配置。访问 Token 的即时生效和断线语义仍见下文。
 
-配置保存在 Agent 私有目录的 `pivane-network.json`，不改写 `.env`、服务配置或 Pi 原生 `settings.json.httpProxy`。私有文件原子保存、修订检查、文件描述符验证及 Windows DACL 沿用本项目边界；文件不可读取或损坏时拒绝启动/操作，不回退成开放访问或静默直连。需要本机恢复时，停止对应实例并备份网络配置，再由管理员修复；可显式设置 `HOST=127.0.0.1` 收回监听，但不能绕过损坏文件的检查。不要输出带凭据的代理环境。
+配置保存在 Agent 私有目录的 `ohmybuddy-network.json`，不改写 `.env`、服务配置或 Pi 原生 `settings.json.httpProxy`。私有文件原子保存、修订检查、文件描述符验证及 Windows DACL 沿用本项目边界；文件不可读取或损坏时拒绝启动/操作，不回退成开放访问或静默直连。需要本机恢复时，停止对应实例并备份网络配置，再由管理员修复；可显式设置 `HOST=127.0.0.1` 收回监听，但不能绕过损坏文件的检查。不要输出带凭据的代理环境。
 
 ### 代理覆盖范围
 
-运行环境模式沿用 HTTP_PROXY/HTTPS_PROXY/ALL_PROXY（含小写）及 NO_PROXY；已有 Pi 原生 httpProxy 补充未设置的 HTTP/HTTPS 变量。直连和自定义模式覆盖 Pivane 受管请求，不改写独立 Pi CLI 的配置。默认绕过本机回环及内部管理地址，保留已有 NO_PROXY；可追加逗号分隔的主机/IP/端口规则，不支持 CIDR。
+运行环境模式沿用 HTTP_PROXY/HTTPS_PROXY/ALL_PROXY（含小写）及 NO_PROXY；已有 Pi 原生 httpProxy 补充未设置的 HTTP/HTTPS 变量。直连和自定义模式覆盖 OhMyBuddy 受管请求，不改写独立 Pi CLI 的配置。默认绕过本机回环及内部管理地址，保留已有 NO_PROXY；可追加逗号分隔的主机/IP/端口规则，不支持 CIDR。
 
 接入范围包括更新检查、保留的受管发布下载/安装环境、主会话与侧聊、辅助模型和后台学习、内置媒体/ASR 的 HTTP 请求与结果下载。不同供应商的 HTTP/SSE/WebSocket 实际能力仍需对应验证；不保证任意第三方扩展、独立 CLI 或 Shell 使用代理。保存不会改变已发请求，不增加失败后自动换线路重发。
 
@@ -27,9 +27,9 @@
 
 ### 远程接入
 
-- **Tailscale**：直接访问服务器 Tailscale IP 需要相应监听；同机 [Tailscale Serve](https://tailscale.com/kb/1242/tailscale-serve) 可转发到回环地址，Pivane 可保持仅本机监听。
-- **HTTPS 反向代理**：同机 Caddy/Nginx 等可转发到 `http://127.0.0.1:11408`，需保留原 Host、支持 WebSocket 和长连接；启用 PIVANE_WEB_SECURE_COOKIE，限制后端直接入口。程序不自动信任 X-Forwarded-*；该配置也影响 HTTPS Origin 校验，不能假设原 HTTP 登录入口继续适用。不同机器的代理不能直接连接服务器回环地址。
-- **SSH/本机隧道**：例如从客户端执行 `ssh -N -L 11408:127.0.0.1:11408 user@server`，再访问客户端 `http://127.0.0.1:11408`。服务器端 Pivane 仍可仅本机监听；自行处理端口冲突，保持 Token 验证。其他同机隧道亦可使用回环目标，但可能公开服务，须核对服务商访问策略、TLS 和凭据。
+- **Tailscale**：直接访问服务器 Tailscale IP 需要相应监听；同机 [Tailscale Serve](https://tailscale.com/kb/1242/tailscale-serve) 可转发到回环地址，OhMyBuddy 可保持仅本机监听。
+- **HTTPS 反向代理**：同机 Caddy/Nginx 等可转发到 `http://127.0.0.1:11408`，需保留原 Host、支持 WebSocket 和长连接；启用 OHMYBUDDY_WEB_SECURE_COOKIE，限制后端直接入口。程序不自动信任 X-Forwarded-*；该配置也影响 HTTPS Origin 校验，不能假设原 HTTP 登录入口继续适用。不同机器的代理不能直接连接服务器回环地址。
+- **SSH/本机隧道**：例如从客户端执行 `ssh -N -L 11408:127.0.0.1:11408 user@server`，再访问客户端 `http://127.0.0.1:11408`。服务器端 OhMyBuddy 仍可仅本机监听；自行处理端口冲突，保持 Token 验证。其他同机隧道亦可使用回环目标，但可能公开服务，须核对服务商访问策略、TLS 和凭据。
 
 网络能力以实际服务返回的状态为准。
 
@@ -75,7 +75,7 @@ Token 修改撤销全部旧 Cookie 和旧 Token；“撤销所有登录”只撤
 
 ## 配置与恢复
 
-网页新配置位于 `<PI_CODING_AGENT_DIR 或 ~/.pi/agent>/pivane-access.json`；既有 `pi5-access.json` 自动沿用，两者同时存在时拒绝猜测。文件使用0600、同目录临时文件、fsync后原子rename；不写工作台普通偏好或原生 auth.json。仅保存盐与scrypt校验值、配置修订、最多64条登录标识的SHA-256与期限，不保存原 Token 或原 Cookie。一个配置文件只由一个服务进程管理。
+网页新配置位于 `<PI_CODING_AGENT_DIR 或 ~/.pi/agent>/ohmybuddy-access.json`；既有 `pi5-access.json` 自动沿用，两者同时存在时拒绝猜测。文件使用0600、同目录临时文件、fsync后原子rename；不写工作台普通偏好或原生 auth.json。仅保存盐与scrypt校验值、配置修订、最多64条登录标识的SHA-256与期限，不保存原 Token 或原 Cookie。一个配置文件只由一个服务进程管理。
 
 文件不存在表示默认免认证；关闭网页验证会清除原Token校验值，再次开启需重新设置或生成。损坏、非法结构、非普通文件或符号链接返回503并阻止私人访问，不悄悄关闭验证。更改设置需认证、confirmed和expectedRevision，旧页面409，不自动重放失败写入。Cookie登录元数据不改变设置修订。
 

@@ -86,7 +86,7 @@
                 const chosen = mode.value === 'entries' ? entries.value.split('\n').map(s => s.trim()).filter(Boolean) : [...list.querySelectorAll('input:checked')].map(c => c.value);
                 field.value = JSON.stringify(mode.value === 'inherit' ? null : chosen);
                 summary.textContent = mode.value === 'inherit' ? scope === 'project' ? translateUi("移除项目覆盖，使用全局配置或 Pi 默认。") : translateUi("Pi 默认：{0}", spec.defaults.join('、'))
-                    : !chosen.length ? translateUi("显式空列表：Pivane 不默认启用任何工具，包括扩展和自定义工具。")
+                    : !chosen.length ? translateUi("显式空列表：OhMyBuddy 不默认启用任何工具，包括扩展和自定义工具。")
                     : chosen.every(name => /^[+-]/.test(name)) ? translateUi("仅 +/- 修饰符：修改继承的工具选择，按顺序应用。") : translateUi("普通名称替换继承列表，再按顺序应用 +/- 修饰符。");
             };
             mode.addEventListener('change', update); list.addEventListener('change', update); entries.addEventListener('input', update); update();
@@ -272,7 +272,7 @@
             ['skills', translateUi("技能"), 'fa-wand-magic-sparkles', translateUi("针对特定任务的说明与脚本（SKILL.md）。任务匹配时 Agent 会自动读取；停用后不再加载。")],
             ['extensions', translateUi("扩展模块"), 'fa-puzzle-piece', translateUi("为 Agent 增加工具、命令或自动行为的代码模块，随会话加载并可执行代码。只启用可信来源。")],
             ['prompts', translateUi("提示词模板"), 'fa-comment-dots', translateUi("可复用的提示词，在输入框输入 /模板名 即可插入。")],
-            ['themes', translateUi("终端主题"), 'fa-palette', translateUi("Pi 终端界面（TUI）的配色，不影响 Pivane 网页外观，通常无需调整。")]
+            ['themes', translateUi("终端主题"), 'fa-palette', translateUi("Pi 终端界面（TUI）的配色，不影响 OhMyBuddy 网页外观，通常无需调整。")]
         ];
         const packagesDescription = translateUi("打包安装的能力合集，可能同时提供下方的技能、扩展模块、提示词模板和主题。更新与移除在“⋯”菜单中。");
         const resourceScopeLabel = value => value === 'user' || value === 'global' ? translateUi("全局") : translateUi("项目");
@@ -414,7 +414,7 @@
                     snapshot.updates = result; paintUpdateSummary(); render();
                     status('native-resource-status', result.offline ? translateUi("离线模式（PI_OFFLINE）下不联网检查更新。")
                         : result.available.length ? translateUi("{0} 个扩展包有可用更新，可在对应行点击“更新”。", result.available.length)
-                        : translateUi("未发现可用更新。固定版本、本地路径和 Pivane 内置组件不参与检查；查询失败的包同样不会显示更新。"));
+                        : translateUi("未发现可用更新。固定版本、本地路径和 OhMyBuddy 内置组件不参与检查；查询失败的包同样不会显示更新。"));
                 } catch (error) { if (active()) status('native-resource-status', error.message); }
                 finally { if (control.isConnected) control.disabled = disabled; }
             }
@@ -485,7 +485,7 @@
                     if (pkg.installed && !update) menu.push({ label: translateUi("更新"), icon: 'fa-arrows-rotate', disabled, action: () => packageAction(null, 'update', pkg.source) });
                     menu.push({ label: translateUi("移除"), icon: 'fa-trash', danger: true, disabled, action: () => packageAction(null, 'remove', pkg.source) });
                 }
-                const badges = [[pkg.managedBy === 'pivane' ? translateUi("Pivane 内置") : resourceScopeLabel(pkg.scope), 'scope', pkg.managedBy === 'pivane' ? translateUi("随 Pivane 更新") : '']];
+                const badges = [[pkg.managedBy === 'pivane' ? translateUi("OhMyBuddy 内置") : resourceScopeLabel(pkg.scope), 'scope', pkg.managedBy === 'pivane' ? translateUi("随 OhMyBuddy 更新") : '']];
                 if (pkg.version) badges.push(['v' + pkg.version, 'version']);
                 badges.push([pkg.installed ? translateUi("已安装") : translateUi("尚未安装"), pkg.installed ? 'on' : 'off']);
                 if (update) badges.push([translateUi("有可用更新"), 'update']);

@@ -22,7 +22,7 @@ function sourceFiles(root, group) {
         const directory = path.join(root, relative);
         if (fs.lstatSync(directory).isSymbolicLink()) throw new Error(`Source directory is a symlink: ${relative}`);
         for (const entry of fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
-            if (entry.name.startsWith('.') || rule.excluded?.includes(entry.name) || ['node_modules', 'backups', 'pivane-usage', 'pivane-cron', 'pivane-channels', 'pivane-uploads', 'pivane-queue', 'pivane-session-moves', 'pivane-artifacts'].includes(entry.name) || /\.bak(?:[.-]|$)|\.tmp$|~$/i.test(entry.name)) continue;
+            if (entry.name.startsWith('.') || rule.excluded?.includes(entry.name) || ['node_modules', 'backups', 'ohmybuddy-usage', 'ohmybuddy-cron', 'ohmybuddy-channels', 'ohmybuddy-uploads', 'ohmybuddy-queue', 'ohmybuddy-session-moves', 'ohmybuddy-artifacts', 'ohmybuddy-profiles', 'ohmybuddy-bots', 'ohmybuddy-session-images', 'ohmybuddy-deliverables', 'pivane-profiles', 'pivane-bots', 'pivane-session-images', 'pivane-deliverables', 'pivane-usage', 'pivane-cron', 'pivane-channels', 'pivane-uploads', 'pivane-queue', 'pivane-session-moves', 'pivane-artifacts'].includes(entry.name) || /\.bak(?:[.-]|$)|\.tmp$|~$/i.test(entry.name)) continue;
             const file = `${relative}/${entry.name}`;
             if (entry.isSymbolicLink()) throw new Error(`Source entry is a symlink: ${file}`);
             if (entry.isDirectory()) visit(file);
@@ -58,7 +58,7 @@ function distributionFiles(root) {
         'public/vendor/katex-0.18.7/katex.min.js', 'public/vendor/katex-0.18.7/katex.min.css', 'public/vendor/katex-0.18.7/LICENSE',
         'public/brand/fontawesome-6.4.0/css/all.min.css', 'public/brand/fontawesome-6.4.0/LICENSE.txt',
         ...['fa-brands-400', 'fa-regular-400', 'fa-solid-900', 'fa-v4compatibility'].flatMap(name => ['woff2', 'ttf'].map(ext => `public/brand/fontawesome-6.4.0/webfonts/${name}.${ext}`)),
-        'public/site.webmanifest', 'public/brand/favicon.ico', 'public/brand/apple-touch-icon.png',
+        'public/site.webmanifest', 'public/brand/logo.svg', 'public/brand/favicon.ico', 'public/brand/apple-touch-icon.png',
         ...[64, 192, 512, 1024].map(size => `public/brand/logo-${size}.png`),
         'config/media-lab.json', 'config/tts-providers.json', 'config/distribution.json',
         'server/profile-memory/upstream-lock.json',

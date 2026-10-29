@@ -142,7 +142,7 @@ function dumpsEnvironment(name, args) {
 // Hands-off mode runs every command except this short list, which still asks first:
 // privilege escalation, recursive or disk-level deletion, power, process and service
 // control, history-destroying Git, publishing, outgoing mail, persistent background jobs
-// and anything that touches Pivane's own runtime. Best effort over literal text, not a sandbox.
+// and anything that touches OhMyBuddy's own runtime. Best effort over literal text, not a sandbox.
 const ELEVATE = new Set(['sudo', 'doas', 'su', 'runas', 'pkexec', 'gsudo']);
 const ALWAYS_ASK = new Set(['shutdown', 'reboot', 'halt', 'poweroff', 'stop-computer', 'restart-computer',
     'kill', 'killall', 'pkill', 'skill', 'taskkill', 'stop-process', 'spps',
@@ -150,7 +150,7 @@ const ALWAYS_ASK = new Set(['shutdown', 'reboot', 'halt', 'poweroff', 'stop-comp
     'sendmail', 'mail', 'mailx', 'mutt', 'msmtp', 'send-mailmessage', 'rimraf', 'systemd-run',
     'stop-service', 'restart-service', 'start-service', 'set-service', 'new-service', 'remove-service', 'suspend-service',
     'register-scheduledtask', 'set-scheduledtask', 'unregister-scheduledtask']);
-const RUNTIME_TEXT = /\.pivane-runtime\b/i;
+const RUNTIME_TEXT = /\.(?:ohmybuddy|pivane)-runtime\b/i;
 function dangerous(name, args, tool) {
     const lower = args.map(arg => arg.toLowerCase()), first = lower.find(arg => !arg.startsWith('-'));
     if (ELEVATE.has(name) || ALWAYS_ASK.has(name) || name.startsWith('mkfs')) return true;
@@ -194,7 +194,7 @@ function freeModeAsks({ toolName, input }) {
 }
 
 // Returns 'blocked' (full environment dump or unresolvable/hardlink alias), 'credential'
-// (recognizable credential/private key), 'state' (Pivane/Pi private state), or 'ok'.
+// (recognizable credential/private key), 'state' (OhMyBuddy/Pi private state), or 'ok'.
 function commandPrivacy(command, words, cwd, agentDir, resolve, tool = 'bash') {
     if (visitCommands(command, tool, dumpsEnvironment)
         || /(?:^|[\s'"`=;,:|<>(){}])(?:\/proc\/[^\s'"`=;,:|<>(){}]*\/environ|(?:^|[/:])(?:environ|self\/fd)(?:\/|$))/i.test(command)

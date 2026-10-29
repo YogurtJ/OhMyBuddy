@@ -108,7 +108,7 @@ test('real child factory waits for selected native MCP tools and retains nested 
         const result = child.messages.find(message => message.role === 'toolResult' && message.toolName === 'codemode');
         assert.match(JSON.stringify(result), /CHILD_MCP_OK:a-b/);
         assert.match(JSON.stringify(result), /UNSELECTED_DENIED/);
-        assert.match(JSON.stringify(result), /models\.generateImages\(\) is blocked in Pivane codemode/);
+        assert.match(JSON.stringify(result), /models\.generateImages\(\) is blocked in OhMyBuddy codemode/);
         assert.deepEqual(f.calls(), ['a-b']);
         assert.equal(f.requests.length, 2, 'only the synthetic chat provider is called');
         assert.equal(f.imageCalls(), 0, 'Codemode cannot reach even a synthetic image provider');

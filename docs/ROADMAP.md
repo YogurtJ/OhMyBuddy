@@ -1,4 +1,4 @@
-# Pivane 路线图
+# OhMyBuddy 路线图
 
 本页记录产品方向。已发布能力以 [Releases](https://github.com/YogurtJ/pivane/releases) 和对应版本说明为准；当前源码中尚未发布的改动见 [CHANGELOG](../CHANGELOG.md)。源码完成、实例已启用和公开版本已发布分别核对。
 
@@ -17,7 +17,7 @@
 
 ## 当前工程方向
 
-- 跟随 Pi 更新，成组验证 Pivane 适配与依赖。
+- 跟随 Pi 更新，成组验证 OhMyBuddy 适配与依赖。
 - 按职责逐步收敛前端协调逻辑与旧媒体入口，理由和约束见 [架构 · 设计取舍与已知技术债](development/ARCHITECTURE.md#设计取舍与已知技术债)。
 - 长会话与大项目下的列表、任务目录、索引与首开性能持续测量。
 

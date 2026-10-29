@@ -8,7 +8,7 @@
 
 ## 适配边界
 
-依赖调整放在 Pivane 的 CLI/RPC/SDK 适配层，不修改 node_modules，也不维护 Pi 源码补丁。升级前阅读目标版本的原生文档和类型，核对实际公开 API；开发环境中导入成功不等于运行协议兼容。
+依赖调整放在 OhMyBuddy 的 CLI/RPC/SDK 适配层，不修改 node_modules，也不维护 Pi 源码补丁。升级前阅读目标版本的原生文档和类型，核对实际公开 API；开发环境中导入成功不等于运行协议兼容。
 
 | 边界 | 需要验证的行为 |
 |---|---|
@@ -25,7 +25,7 @@
 
 较早 Pi npm 包含独立 shrinkwrap；1.0.2 已移除它。两种布局均不能只靠根 override 或外层 audit 证明真实运行解析已修复。根直接依赖与 lock 保留审查过的 brace-expansion／undici 固定版本，`install-bundled-capabilities.cjs` 在所有受管安装入口先核实这些声明和真实目录，只移除明确识别的旧嵌套副本，再定位实际 nested／hoisted consumer，按 Node 查找顺序核对解析并扫描已知漏洞残留；consumer 缺失或解析不符失败关闭。未知版本、符号链接或布局失败关闭，不修改上游实现字节。隔离记忆 recipe 调用同一入口并更新 lock hash。
 
-Pivane 使用未打包的 Pi SDK／RPC 入口；Pi 自带 `dist/bundle` 中的内联代码不受依赖目录修正覆盖，不把本机运行修复宣称为所有上游分发产物已修复。
+OhMyBuddy 使用未打包的 Pi SDK／RPC 入口；Pi 自带 `dist/bundle` 中的内联代码不受依赖目录修正覆盖，不把本机运行修复宣称为所有上游分发产物已修复。
 
 ## 浏览器分发包
 
@@ -43,21 +43,21 @@ Pi 1.4 审查新增：Codemode FIFO 准入、按调用读取的容量覆盖、�
 
 ## 原生 Codemode 与 SDK 启动适配
 
-Codemode 输出直接使用官方 executor／sandbox，已移除旧的输出合并子类与精确 import 重定向。原生沙箱拥有 16 Mi 字符／100000 条输出限制、取消及 store；官方 executor 拥有目录／嵌套权限、用量、截断与私有完整输出文件。Pi 1.4 的结果、finished 或 close 完成只表示已请求 VM 停止，真实退出可更晚；官方工厂默认两个存活 VM 额度按单 Pi 进程共享，`PI_CODEMODE_MAX_WORKERS` 可设为正整数并按调用读取。容量耗尽时 FIFO 等待，最多 60 秒或更短的调用期限，等待计入执行期限；取消后仍占额度至实际退出。Pivane 不把它描述为整个工作台的并发上限。Node 专项通过公开 acquireWorker/onWorkerStarted 观测实际退出，并覆盖官方工厂间 FIFO、取消、等待超时与迟到启动保护；RPC 进程退出、已派发工具和维护生命周期继续由各自所有者核实。Pivane 工厂继续约束模型注册表与媒体确认权限。验证覆盖 100001 条压力、文本／console／返回值及图片顺序、完整输出文件、失败 store、取消与不重放。
+Codemode 输出直接使用官方 executor／sandbox，已移除旧的输出合并子类与精确 import 重定向。原生沙箱拥有 16 Mi 字符／100000 条输出限制、取消及 store；官方 executor 拥有目录／嵌套权限、用量、截断与私有完整输出文件。Pi 1.4 的结果、finished 或 close 完成只表示已请求 VM 停止，真实退出可更晚；官方工厂默认两个存活 VM 额度按单 Pi 进程共享，`PI_CODEMODE_MAX_WORKERS` 可设为正整数并按调用读取。容量耗尽时 FIFO 等待，最多 60 秒或更短的调用期限，等待计入执行期限；取消后仍占额度至实际退出。OhMyBuddy 不把它描述为整个工作台的并发上限。Node 专项通过公开 acquireWorker/onWorkerStarted 观测实际退出，并覆盖官方工厂间 FIFO、取消、等待超时与迟到启动保护；RPC 进程退出、已派发工具和维护生命周期继续由各自所有者核实。OhMyBuddy 工厂继续约束模型注册表与媒体确认权限。验证覆盖 100001 条压力、文本／console／返回值及图片顺序、完整输出文件、失败 store、取消与不重放。
 
 受管主会话在资源发现前初始化原生主题 schema validator；这一内部模块导出路径绑定已审查的 Pi 版本，不复制 schema。模型选择预检在保存的模型或新线程默认不可用时保留原生未选模型状态，完整目录和显式 set_model 仍可恢复；仅在 SDK 初始选择期间隐藏可用候选，真实目录与认证不变。
 
 公开 prompt/sendCustomMessage 适配在原生调用前保留带 UUID、会话身份与导航 nonce 的启动所有权，通过原生串行 stdout 发送私有开始／完成帧。真实 Promise 完成或进程退出释放；原生 settled、读取快照及超时不能提前释放。命名 prompt section 保留普通用户／custom wake 的组合顺序和更早的 forceSystemPrompt。Pi 升级须重新验证这些公开方法的完成语义及内部 transport／theme seam。
 
-pi-subagents 使用官方 child factory 与原生包解析；0.82.1 的选定 MCP／Codemode wrapper 负责就绪等待，Pivane 经 SDK seam 注入受过滤的 factory，不另设轮询。主扩展 wrapper 通过公开注册、事件和工具 API 保持 Pi 原生工具选择：惰性委派工具不因注册取得默认激活，已有分支在绑定／导航前的原生当前选择优先于上游的卸载猜测；明确启用工具的执行保留独立异步调用范围，待答请求不取得恢复委派的权限。不持久化额外的工具选择状态或迁移 JSONL。真正的 eager 工厂保留原定义默认注册，让 Pi 1.4 按原生 new-tools 规则启用从未提及的默认委派；已有 active 保持，明确 removed 不因配置转换恢复，未选中的监督回复工具也不因转换新增。
+pi-subagents 使用官方 child factory 与原生包解析；0.82.1 的选定 MCP／Codemode wrapper 负责就绪等待，OhMyBuddy 经 SDK seam 注入受过滤的 factory，不另设轮询。主扩展 wrapper 通过公开注册、事件和工具 API 保持 Pi 原生工具选择：惰性委派工具不因注册取得默认激活，已有分支在绑定／导航前的原生当前选择优先于上游的卸载猜测；明确启用工具的执行保留独立异步调用范围，待答请求不取得恢复委派的权限。不持久化额外的工具选择状态或迁移 JSONL。真正的 eager 工厂保留原定义默认注册，让 Pi 1.4 按原生 new-tools 规则启用从未提及的默认委派；已有 active 保持，明确 removed 不因配置转换恢复，未选中的监督回复工具也不因转换新增。
 
-Pi 的 reload 会重新激活扩展默认工具。wrapper 只在公开 `session_shutdown(reason=reload)` 保存一次原生当前选择，以 SessionManager 弱身份、session ID 与 leaf ID 校验，在下一次启动消费并清除；结合公开 `getCurrentTools()` 和原生 mentioned 信息阻止默认重加覆盖撤销，不实现另一套会话回放。冷 loader 转 eager 可增加从未提及的默认工具；其余 live reload 保留已经完成的选择。已在 reload 前完成的公开选择、已持久化重新启用、reload 后的 `setActiveTools`／`subagents_enable` 与新进程 `--tools` 继续有效。自定义 SDK 宿主若在同次 `beforeSessionStart` 中新增工具，且该集合与自动默认重加无法区分，wrapper 保守保持撤销；应在 reload 完成后明确选择，或在 reload 前选择并持久化。Pivane 生产服务不通过该回调重选工具。
+Pi 的 reload 会重新激活扩展默认工具。wrapper 只在公开 `session_shutdown(reason=reload)` 保存一次原生当前选择，以 SessionManager 弱身份、session ID 与 leaf ID 校验，在下一次启动消费并清除；结合公开 `getCurrentTools()` 和原生 mentioned 信息阻止默认重加覆盖撤销，不实现另一套会话回放。冷 loader 转 eager 可增加从未提及的默认工具；其余 live reload 保留已经完成的选择。已在 reload 前完成的公开选择、已持久化重新启用、reload 后的 `setActiveTools`／`subagents_enable` 与新进程 `--tools` 继续有效。自定义 SDK 宿主若在同次 `beforeSessionStart` 中新增工具，且该集合与自动默认重加无法区分，wrapper 保守保持撤销；应在 reload 完成后明确选择，或在 reload 前选择并持久化。OhMyBuddy 生产服务不通过该回调重选工具。
 
-销毁代次检查使启动期间已排队的创建失效；精确 MCP selector、工具 gate、授权与媒体限制仍由 Pivane 保留。单一精确 import 重定向仅用于直接工具 selector 解析，不扩大为通用 alias。官方 calendar 模块需要根锁定的 Temporal polyfill；不安装 vendor 的开发依赖。记忆绑定 0.9.10：上游把 pi-tui 改为 peer，根依赖与独立 recipe 均直接提供宿主 TUI；数据库追加列、搜索只读与技能描述上限见[记忆适配](../PROFILE_MEMORY.md#upstream-0910-adaptation)。
+销毁代次检查使启动期间已排队的创建失效；精确 MCP selector、工具 gate、授权与媒体限制仍由 OhMyBuddy 保留。单一精确 import 重定向仅用于直接工具 selector 解析，不扩大为通用 alias。官方 calendar 模块需要根锁定的 Temporal polyfill；不安装 vendor 的开发依赖。记忆绑定 0.9.10：上游把 pi-tui 改为 peer，根依赖与独立 recipe 均直接提供宿主 TUI；数据库追加列、搜索只读与技能描述上限见[记忆适配](../PROFILE_MEMORY.md#upstream-0910-adaptation)。
 
 ## 验证与交付
 
-pi-subagents 升级复核覆盖包声明的扩展入口、模块单例、资源过滤、child factory 字段、MCP selector seam、自动续跑与后台保持、消息类型、模型上下文和依赖清单。0.82.1 的 `pi.extensions` 指向 `bundle/index.js`；受管 loader 在执行前按包声明映射至 Pivane wrapper，wrapper 与前台子会话、后台 runner 共用未打包的 child-session 模块，避免 bundle 的独立状态绕过授权 seam。旧 `+index.js`／`-index.js` 在内存资源投影中转换为新入口的精确规则，兼容已有保存配置；显式切换资源时才保存当前路径。上游原字节及逐文件哈希保持。
+pi-subagents 升级复核覆盖包声明的扩展入口、模块单例、资源过滤、child factory 字段、MCP selector seam、自动续跑与后台保持、消息类型、模型上下文和依赖清单。0.82.1 的 `pi.extensions` 指向 `bundle/index.js`；受管 loader 在执行前按包声明映射至 OhMyBuddy wrapper，wrapper 与前台子会话、后台 runner 共用未打包的 child-session 模块，避免 bundle 的独立状态绕过授权 seam。旧 `+index.js`／`-index.js` 在内存资源投影中转换为新入口的精确规则，兼容已有保存配置；显式切换资源时才保存当前路径。上游原字节及逐文件哈希保持。
 
 0.82.1 恢复时在 `session_start` 重新登记 liveness，后台 workflow 续跑由原执行器登记；Supervisor 继续用同一 `backgroundWork` 阻止回收、退出、移动和 MCP 重载。机器 boot ID 与 PID namespace 共同判定旧进程；不能把不同 namespace 的 PID 当作本机证据。自动续跑条件及前台旧记录限制见[用户指南](../USER_GUIDE.md#使用子-agent)。版本自检会拒绝旧进程热加载新文件，启用升级须切换不可变运行快照并重启全部受管 worker，不能仅用 `/reload` 替换模块。
 

@@ -13,9 +13,9 @@
                 item('commands', () => translateUi("运行命令和脚本")),
                 item('install', () => translateUi("安装依赖")),
                 item('web', () => translateUi("上网查资料")),
-                item('memory-schedule', () => translateUi("记忆和 Pivane 定时任务")),
+                item('memory-schedule', () => translateUi("记忆和 OhMyBuddy 定时任务")),
                 item('delegate', () => translateUi("交给其他助手")),
-                item('state', () => translateUi("读写 Pivane 的设置和记录"))
+                item('state', () => translateUi("读写 OhMyBuddy 的设置和记录"))
             ],
             asks: [
                 item('elevate', () => translateUi("sudo 等提权")),
@@ -26,7 +26,7 @@
                 item('mail', () => translateUi("发邮件")),
                 item('autostart', () => translateUi("系统定时（cron 等）和开机自启")),
                 item('credentials', () => translateUi("密码和密钥文件")),
-                item('runtime', () => translateUi("Pivane 正在运行的程序目录"))
+                item('runtime', () => translateUi("OhMyBuddy 正在运行的程序目录"))
             ],
             refused: []
         },
@@ -43,8 +43,8 @@
                 item('commands', () => translateUi("运行任何命令")),
                 item('outside', () => translateUi("写工作目录以外的文件")),
                 item('delegate', () => translateUi("交给其他助手")),
-                item('schedule', () => translateUi("设定或取消 Pivane 定时任务")),
-                item('state', () => translateUi("读写 Pivane 的设置和记录"))
+                item('schedule', () => translateUi("设定或取消 OhMyBuddy 定时任务")),
+                item('state', () => translateUi("读写 OhMyBuddy 的设置和记录"))
             ],
             refused: [item('credentials', () => translateUi("密码和密钥文件"))]
         },
@@ -59,8 +59,8 @@
                 item('commands', () => translateUi("运行命令")),
                 item('memory', () => translateUi("记下关于你的事")),
                 item('delegate', () => translateUi("交给其他助手")),
-                item('schedule', () => translateUi("设定或取消 Pivane 定时任务")),
-                item('state', () => translateUi("读写 Pivane 的设置和记录")),
+                item('schedule', () => translateUi("设定或取消 OhMyBuddy 定时任务")),
+                item('state', () => translateUi("读写 OhMyBuddy 的设置和记录")),
                 item('other', () => translateUi("其他每一步"))
             ],
             refused: [item('credentials', () => translateUi("密码和密钥文件"))]
@@ -657,7 +657,7 @@
             };
             const boundary = disclosure('is-boundary', 'fa-circle-info', el('strong', null, translateUi("安全边界")), translateUi("这是工具层的检查，不是系统沙箱"));
             const bullets = el('ul', 'pi-bot-sheet-bullets');
-            for (const text of [translateUi("允许执行的命令以 Pivane 服务的权限运行，不会被隔离。"),
+            for (const text of [translateUi("允许执行的命令以 OhMyBuddy 服务的权限运行，不会被隔离。"),
                 translateUi("“放手”只认得上面列出的常见高风险操作，藏在复杂脚本里的不一定认得出。"),
                 translateUi("对外发消息、明显花钱：靠 {0} 按指令先问你和对应功能自己的确认，工具层不一定识别得出。", bot.name),
                 translateUi("任何方式下都不会列出全部环境变量。")]) bullets.append(el('li', null, text));

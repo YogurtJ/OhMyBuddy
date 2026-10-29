@@ -1,4 +1,4 @@
-# Pivane：源码 Agent 入口
+# OhMyBuddy：源码 Agent 入口
 
 本文件用于修改源码。安装、配置和排障从 [用户 Agent 指南](docs/AGENT_GUIDE.md) 开始。
 
@@ -22,7 +22,7 @@
 
 ## 命名与开发
 
-产品名 Pivane；Pi Coding Agent 是上游引擎名。新工作台标识使用 `pivane`，旧名称集中在兼容边界；原生 Pi 包名、身份变量和协议保持上游定义。改目录、配置或持久化名称按 [命名与迁移](docs/development/NAMING.md) 执行，不能仅替换字符串。
+产品名 OhMyBuddy；Pi Coding Agent 是上游引擎名。新产品显示、默认安装与公开配置使用 `ohmybuddy`／`OHMYBUDDY_`；既有持久格式和协议名称按兼容契约保留，旧名称集中在兼容边界；原生 Pi 包名、身份变量和协议保持上游定义。改目录、配置或持久化名称按 [命名与迁移](docs/development/NAMING.md) 执行，不能仅替换字符串。
 
 按功能职责提取模块，避免只为缩短文件而转移同样的共享状态。新增代码、测试和文档应进入统一源码发现或明确的公开清单；不要在打包、受管快照和测试入口各维护一份目录规则。
 

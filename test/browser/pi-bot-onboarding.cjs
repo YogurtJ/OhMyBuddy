@@ -103,7 +103,7 @@ const CLOSING = '好，我们算是认识了。';
                 await closure.waitFor();
                 assert.equal(await closure.locator('header strong').textContent(), '认识好啦！先说说我平时怎么做事');
                 const facts = await closure.locator('.pi-bot-closure-facts').textContent();
-                assert.match(facts, /运行 Pivane 的服务机器上/);
+                assert.match(facts, /运行 OhMyBuddy 的服务机器上/);
                 assert.match(facts, /“稳妥”/);
                 assert.match(facts, /不是系统沙箱/);
                 await closure.locator('[data-closure-model-trigger]').waitFor();

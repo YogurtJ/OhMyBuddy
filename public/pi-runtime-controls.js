@@ -77,7 +77,7 @@
                 this.extensionSignature = signature;
                 const visible = extension.title || extension.statuses.length || extension.widgets.length;
                 this.extension.hidden = !visible;
-                document.title = extension.title ? `${extension.title} · Pivane` : this.baseTitle;
+                document.title = extension.title ? `${extension.title} · OhMyBuddy` : this.baseTitle;
                 const content = [];
                 if (extension.title) content.push(el('p', extension.title, 'pi-extension-title'));
                 for (const [key, text] of extension.statuses) {

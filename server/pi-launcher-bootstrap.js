@@ -6,7 +6,7 @@ const path = require('node:path');
 const { readSafe } = require('./pi-maintenance-files');
 function start(root) {
     root = fs.realpathSync.native(root);
-    const stateFile = path.join(root, '.pivane-runtime/state.json');
+    const stateFile = path.join(require('./ohmybuddy-compat').runtimeDirectory(root), 'state.json');
     let entry = root;
     if (fs.existsSync(stateFile)) {
         const state = JSON.parse(readSafe(stateFile));

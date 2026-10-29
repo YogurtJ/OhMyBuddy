@@ -41,9 +41,9 @@
         summary.append(icon('fa-circle-info'), el('span', null, translateUi("当前：{0} · 数据、权限与备份", (style[preset] || style.free)())));
         const facts = el('ul', 'pi-bot-closure-facts');
         const fact = (glyph, text) => { const item = el('li'); item.append(icon(glyph), el('span', null, text)); facts.append(item); return item; };
-        fact('fa-house-laptop', translateUi("聊天、记忆和工作文件保存在运行 Pivane 的服务机器上；回复时，相关上下文会发送给已配置的外部模型服务。"));
+        fact('fa-house-laptop', translateUi("聊天、记忆和工作文件保存在运行 OhMyBuddy 的服务机器上；回复时，相关上下文会发送给已配置的外部模型服务。"));
         fact('fa-thumbtack', translateUi("关于你的事记在“关于你”，这段聊天定下的事记在“我记着的事”，都能随时查看和修改。"));
-        fact('fa-shield-halved', `${(WORK[preset] || WORK.free)()} ${translateUi("这些确认在 Pivane 的工具层进行，不是系统沙箱；可以在设置里改。")}`);
+        fact('fa-shield-halved', `${(WORK[preset] || WORK.free)()} ${translateUi("这些确认在 OhMyBuddy 的工具层进行，不是系统沙箱；可以在设置里改。")}`);
         fact('fa-code-branch', translateUi("“以身份新建线程”使用普通 Pi 的工具和权限，不受 Bot 的做事方式限制。"));
         const backup = fact('fa-box-archive', translateUi("完整备份需要在空闲停机时保存实际 Pi 身份目录、Bot 工作目录及关联媒体/配置；聊天里的 /export 仅导出当前会话范围，不是整个 Bot 的备份。"));
         const guide = el('a', 'pi-bot-backup-guide', translateUi("查看备份与恢复指南"));

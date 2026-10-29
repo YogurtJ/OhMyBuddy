@@ -80,7 +80,7 @@
             const copy = node('div', '', 'sa-heading'); copy.append(node('h4', '子 Agent'), node('p', '为不同任务分配合适的模型', 'sa-note'));
             const statusLabels = { ready: '已配置启用', missing: '尚未安装', disabled: '已停用', unsupported: '版本待适配' };
             const badge = node('span', statusLabels[data.plugin.status] || '状态未知', 'sa-badge'); badge.dataset.state = data.plugin.status;
-            if (data.plugin.managedBy === 'pivane') copy.append(node('p', 'Pivane 内置，随应用更新', 'sa-note'));
+            if (data.plugin.managedBy === 'pivane') copy.append(node('p', 'OhMyBuddy 内置，随应用更新', 'sa-note'));
             header.append(emblem, copy, badge); this.root.append(header);
             const toolbar = node('div', '', 'sa-toolbar');
             if (ready) {
@@ -105,12 +105,12 @@
             }
             if (!ready) {
                 const messages = {
-                    missing: '尚未安装 pi-subagents，暂时无法设置子 Agent。下载失败不影响 Pivane 的其他功能。',
+                    missing: '尚未安装 pi-subagents，暂时无法设置子 Agent。下载失败不影响 OhMyBuddy 的其他功能。',
                     disabled: 'pi-subagents 已安装但未启用，请在 Packages 中启用后刷新。',
                     unsupported: '已安装的 pi-subagents 版本尚未适配，暂时无法编辑。请在 Packages 中核对版本。'
                 };
                 const message = data.plugin.managedBy === 'pivane' && data.plugin.status !== 'disabled'
-                    ? '内置组件未就绪，请检查 Pivane 安装或重新安装依赖。' : messages[data.plugin.status];
+                    ? '内置组件未就绪，请检查 OhMyBuddy 安装或重新安装依赖。' : messages[data.plugin.status];
                 const empty = node('div', '', 'sa-empty'); empty.append(icon('puzzle-piece'), node('p', message));
                 if (data.plugin.canInstall) {
                     this.installButton = button('安装 pi-subagents', 'settings-primary-button', () => { if (window.confirm(t('将为所有项目安装 pi-subagents 指定版本，安装位置与 Pi CLI 共用。继续？'))) this.submit('install'); });

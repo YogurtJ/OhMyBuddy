@@ -1,6 +1,6 @@
 // Native metadata and bounded text selection shared by the private bridge and tests.
 const { createHash } = require('node:crypto');
-const { customTypeIs } = require('./pivane-compat');
+const { customTypeIs } = require('./ohmybuddy-compat');
 const TITLE_STATE = 'pivane-web-title';
 
 function textOf(message, limit = 2000) {

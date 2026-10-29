@@ -1,6 +1,6 @@
 # 第三方软件与资源
 
-Pivane自身的代码使用[ISC许可证](LICENSE)。第三方软件、字体、图标及其原有版权声明继续适用各自许可证，不因Pivane改名或发行而改变。
+OhMyBuddy自身的代码使用[ISC许可证](LICENSE)。第三方软件、字体、图标及其原有版权声明继续适用各自许可证，不因OhMyBuddy改名或发行而改变。
 
 ## 随源码包直接分发的资源
 
@@ -10,7 +10,7 @@ Pivane自身的代码使用[ISC许可证](LICENSE)。第三方软件、字体、
 | KaTeX及字体 | 0.18.7 | MIT；[许可证](public/vendor/katex-0.18.7/LICENSE) |
 | Font Awesome Free | 6.4.0 | 图标CC BY 4.0、字体SIL OFL 1.1、代码MIT；[完整声明](public/brand/fontawesome-6.4.0/LICENSE.txt) |
 
-保留库文件中的嵌入版权/许可注释。Pivane蓝色π星光品牌资源随本项目分发，不属于Font Awesome图标。
+保留库文件中的嵌入版权/许可注释。OhMyBuddy蓝色π星光品牌资源随本项目分发，不属于Font Awesome图标。
 
 ## 通过npm安装的直接依赖
 
@@ -33,17 +33,17 @@ Pivane自身的代码使用[ISC许可证](LICENSE)。第三方软件、字体、
 
 ## 内置第三方能力
 
-[pi-subagents](https://github.com/nicobailon/pi-subagents) 0.82.1（Nico Bailon，MIT）官方 npm 发布内容原样保存于 `vendor/pi-subagents/`，包含 JavaScript、声明、bundle、角色、技能、提示词和文档，不含 source map；原始 LICENSE 随包保留。Pivane 的安装与运行适配独立于上游文件，版本随应用更新。
+[pi-subagents](https://github.com/nicobailon/pi-subagents) 0.82.1（Nico Bailon，MIT）官方 npm 发布内容原样保存于 `vendor/pi-subagents/`，包含 JavaScript、声明、bundle、角色、技能、提示词和文档，不含 source map；原始 LICENSE 随包保留。OhMyBuddy 的安装与运行适配独立于上游文件，版本随应用更新。
 
 ## 可选档案记忆组件
 
-[pi-hermes-memory](https://github.com/chandra447/pi-hermes-memory) 0.9.10 使用 MIT 许可证。官方 npm 发布源码原样保存于 `vendor/pi-hermes-memory/`，原始 LICENSE 随包保留；Pivane 从选定组件生成档案记忆 bundle，不加载其默认扩展。`vendor/manifest.json` 记录两个包的来源、版本和逐文件哈希；运行依赖的许可证由 npm 安装保留，版本图由根 lockfile 锁定。安装、SQLite 平台要求和维护边界见[内置能力包](docs/BUNDLED_CAPABILITIES.md)与[档案记忆适配](docs/PROFILE_MEMORY.md)。
+[pi-hermes-memory](https://github.com/chandra447/pi-hermes-memory) 0.9.10 使用 MIT 许可证。官方 npm 发布源码原样保存于 `vendor/pi-hermes-memory/`，原始 LICENSE 随包保留；OhMyBuddy 从选定组件生成档案记忆 bundle，不加载其默认扩展。`vendor/manifest.json` 记录两个包的来源、版本和逐文件哈希；运行依赖的许可证由 npm 安装保留，版本图由根 lockfile 锁定。安装、SQLite 平台要求和维护边界见[内置能力包](docs/BUNDLED_CAPABILITIES.md)与[档案记忆适配](docs/PROFILE_MEMORY.md)。
 
 ## 按需下载的微信连接组件
 
-微信连接使用 [Tencent/openclaw-weixin](https://github.com/Tencent/openclaw-weixin) 官方 npm 包 `@tencent-weixin/openclaw-weixin` 2.4.10（Tencent，MIT），以及 `qrcode-terminal` 0.12.0 包（Apache-2.0）中的 QRCode for JavaScript（Copyright 2009 Kazuhiko Arase，MIT）。这些包不随默认 Pivane 归档分发；用户确认安装后才下载精确归档并核对 SHA256。
+微信连接使用 [Tencent/openclaw-weixin](https://github.com/Tencent/openclaw-weixin) 官方 npm 包 `@tencent-weixin/openclaw-weixin` 2.4.10（Tencent，MIT），以及 `qrcode-terminal` 0.12.0 包（Apache-2.0）中的 QRCode for JavaScript（Copyright 2009 Kazuhiko Arase，MIT）。这些包不随默认 OhMyBuddy 归档分发；用户确认安装后才下载精确归档并核对 SHA256。
 
-私有组件回执保留上游选定文件原始字节、两个包的 LICENSE、二维码作者的版权与 MIT 条款，以及 Pivane 的适配说明。Pivane 仅替换模块装配中的账户、日志和网络边界，不执行上游 OpenClaw 插件入口或修改上游源文件；当前审查版本与安装方式见[消息渠道](docs/MESSAGE_CHANNELS.md)。
+私有组件回执保留上游选定文件原始字节、两个包的 LICENSE、二维码作者的版权与 MIT 条款，以及 OhMyBuddy 的适配说明。OhMyBuddy 仅替换模块装配中的账户、日志和网络边界，不执行上游 OpenClaw 插件入口或修改上游源文件；当前审查版本与安装方式见[消息渠道](docs/MESSAGE_CHANNELS.md)。
 
 ## 平台与外部服务
 

@@ -57,7 +57,7 @@ async function fixture(browser, width, hash = '#/chat', options = {}) {
         ws.onMessage(raw => {
             const command = JSON.parse(raw); commands.push(command.type);
             const state = { model, thinkingLevel: 'off', isStreaming: false };
-            const channelHeader = '[用户通过已绑定的微信私聊发来消息。请完成本次请求；回复及本次通过 deliver_files 发布的文件/图片将发送回该微信聊天。需要交互确认时请提示用户到 Pivane 网页处理。]';
+            const channelHeader = '[用户通过已绑定的微信私聊发来消息。请完成本次请求；回复及本次通过 deliver_files 发布的文件/图片将发送回该微信聊天。需要交互确认时请提示用户到 OhMyBuddy 网页处理。]';
             const channelBody = '请帮我优化扩展-消息渠道的样式，让它在大屏和手机端都更美观易用。';
             const data = command.type === 'open_session' ? { session, state, messages: { messages: [
                 { role: 'user', timestamp: 1700000000000, content: [{ type: 'text', text: 'Fixture' }] },

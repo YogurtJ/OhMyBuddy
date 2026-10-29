@@ -571,7 +571,7 @@ async function generateFlux2Image(body) {
     const queued = await comfyJson(baseUrl, '/prompt', {
         method: 'POST',
         headers: ['Content-Type: application/json'],
-        body: JSON.stringify({ prompt: workflow, client_id: `pivane-flux2-${Date.now()}` }),
+        body: JSON.stringify({ prompt: workflow, client_id: `ohmybuddy-flux2-${Date.now()}` }),
         timeout: 90
     });
     if (queued.node_errors && Object.keys(queued.node_errors).length) {
@@ -976,7 +976,7 @@ const httpServer = app.listen(PORT, network.host, () => {
     const localHost = ['::', '0.0.0.0'].includes(address.address) ? '127.0.0.1' : address.address;
     process.env.PI_WORKSPACE_INTERNAL_ORIGIN = `http://${localHost.includes(':') ? `[${localHost}]` : localHost}:${address.port}`;
     if (!workspaceBaseUrlProvided) process.env.PI_WORKSPACE_BASE_URL = process.env.PI_WORKSPACE_INTERNAL_ORIGIN;
-    console.log(`Pivane backend running at http://localhost:${httpServer.address().port}`);
+    console.log(`OhMyBuddy backend running at http://localhost:${httpServer.address().port}`);
     if (maintenance.managed) {
         const base = process.env.PI_MANAGED_BASE || __dirname;
         const agent = path.resolve((process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.pi/agent')).replace(/^~(?=$|[\\/])/, os.homedir()));

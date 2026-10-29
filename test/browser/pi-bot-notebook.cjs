@@ -9,7 +9,7 @@ const express = require('express');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
 const BOT = '11111111-1111-4111-8111-111111111111', MAIN = '22222222-2222-4222-8222-222222222222';
-const workspace = '/fixture/PivaneBots/bot-11111111', geek = '/fixture/project';
+const workspace = '/fixture/OhMyBuddyBots/bot-11111111', geek = '/fixture/project';
 const usage = { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 const reply = (content, stopReason, at) => ({ role: 'assistant', content, model: 'fixture-model', provider: 'fixture', api: 'openai-completions', stopReason, usage, timestamp: Date.parse(at) });
 // One turn: the Bot notes a decision and a promise, then answers.

@@ -8,10 +8,10 @@
         return el;
     };
     const entries = [
-        { id: 'pivane-weixin', type: 'channel', name: 'WeChat ClawBot', author: 'Tencent · Pivane', kind: ['可选组件 · 消息渠道', 'Optional · Messaging'], icon: 'fa-comments',
+        { id: 'pivane-weixin', type: 'channel', name: 'WeChat ClawBot', author: 'Tencent · OhMyBuddy', kind: ['可选组件 · 消息渠道', 'Optional · Messaging'], icon: 'fa-comments',
             url: 'https://github.com/Tencent/openclaw-weixin',
             title: ['在微信继续对话', 'Continue in WeChat'],
-            description: ['扫码连接微信 ClawBot，把私聊绑定到 Pivane 线程，支持图片、文件、斜杠指令和定时通知。', 'Connect WeChat ClawBot with a QR code and bind a DM to a Pivane thread, with images, files, slash commands and scheduled notifications.'],
+            description: ['扫码连接微信 ClawBot，把私聊绑定到 OhMyBuddy 线程，支持图片、文件、斜杠指令和定时通知。', 'Connect WeChat ClawBot with a QR code and bind a DM to a OhMyBuddy thread, with images, files, slash commands and scheduled notifications.'],
             requirement: ['按需下载连接组件；支持文字与图片私聊、文件交付及定时推送，需要扫码和线程绑定。', 'Downloads the connector on demand. Supports text/image DMs, file delivery and scheduled notifications with QR login and a thread binding.'],
             example: ['把当前项目线程连接到我的微信聊天。', 'Connect this project thread to my WeChat chat.'] },
         { id: 'ppt-master', type: 'skill', name: 'PPT Master', author: 'hugohe3', kind: ['技能工作流', 'Skill workflow'], icon: 'fa-file-powerpoint',
@@ -100,7 +100,7 @@
             }
         }
         const bundled = inventory.packages.find(item => item.managedBy === 'pivane' && item.name === entry.id && item.installed);
-        if (bundled) return { state: 'installed', label: text('Pivane 内置', 'Bundled with Pivane'), version: versionText(bundled.version), note: text('随 Pivane 更新', 'Updates with Pivane') };
+        if (bundled) return { state: 'installed', label: text('OhMyBuddy 内置', 'Bundled with OhMyBuddy'), version: versionText(bundled.version), note: text('随 OhMyBuddy 更新', 'Updates with OhMyBuddy') };
         const matches = inventory.packages.filter(item => identity(item.source) === entry.source || identity(item.source) === `github:${repositories[entry.id]}`);
         const installed = matches.filter(item => item.installed === true);
         if (installed.length) {
@@ -161,11 +161,11 @@
             '请帮我配置 Pi 原生 MCP。先检查全局或受信项目的 mcp.json、连接和工具暴露策略；不要安装 pi-mcp-adapter，不要展示凭据。使用 Pi 原生 MCP/Codemode 接口，写配置和授权前说明方案并等我确认。',
             'Help configure native Pi MCP. Inspect global or trusted-project mcp.json, connections and tool exposure. Do not install pi-mcp-adapter or display credentials. Use native MCP/Codemode; explain the plan and wait for confirmation before configuration changes or sign-in.');
         if (entry && ['pi-subagents', 'pi-hermes-memory'].includes(entry.id)) need = text(
-            `请帮我配置 Pivane 内置的 ${entry.name}。该组件随 Pivane 安装和更新，请先检查当前版本、资源开关、身份与会话加载状态，再调整配置，不要另行安装或修改上游源码。`,
-            `Help me configure ${entry.name}, bundled with Pivane. Check its version, resource toggles, profile and actual session loading before adjusting settings. It updates with Pivane; do not install another copy or modify upstream source.`);
+            `请帮我配置 OhMyBuddy 内置的 ${entry.name}。该组件随 OhMyBuddy 安装和更新，请先检查当前版本、资源开关、身份与会话加载状态，再调整配置，不要另行安装或修改上游源码。`,
+            `Help me configure ${entry.name}, bundled with OhMyBuddy. Check its version, resource toggles, profile and actual session loading before adjusting settings. It updates with OhMyBuddy; do not install another copy or modify upstream source.`);
         if (entry?.id === 'pi-hermes-memory' && inventory?.profileMemoryInstalled) need += text(
-            '\nPivane 已安装独立的档案记忆适配组件。请先检查助手身份和实际加载状态；不要另行全局启用上游默认扩展，以免扩大历史索引范围。',
-            '\nPivane already has the separate profile memory adapter installed. Inspect assistant profiles and actual loading first; do not additionally enable the upstream default extension globally, which would broaden history indexing.');
+            '\nOhMyBuddy 已安装独立的档案记忆适配组件。请先检查助手身份和实际加载状态；不要另行全局启用上游默认扩展，以免扩大历史索引范围。',
+            '\nOhMyBuddy already has the separate profile memory adapter installed. Inspect assistant profiles and actual loading first; do not additionally enable the upstream default extension globally, which would broaden history indexing.');
         window.dispatchEvent(new CustomEvent('pi:extension-assistant', { detail: { need, scope: document.getElementById('extensions-scope')?.value || 'global' } }));
     }
     function mountExplore(root) {
@@ -273,7 +273,7 @@
         const introIcon = node('span', null, { class: 'extensions-head-icon', 'aria-hidden': 'true' });
         introIcon.append(node('i', '', { class: 'fa-solid fa-compass', 'aria-hidden': 'true' }));
         const introCopy = node('div', null, { class: 'extensions-head-copy' });
-        introCopy.append(node('h3', text('发现扩展', 'Discover extensions')), node('p', text('精选工具与技能，按需配置到 Pivane。浏览不会安装任何内容。', 'Curated tools and skills to add when you need them. Browsing installs nothing.')));
+        introCopy.append(node('h3', text('发现扩展', 'Discover extensions')), node('p', text('精选工具与技能，按需配置到 OhMyBuddy。浏览不会安装任何内容。', 'Curated tools and skills to add when you need them. Browsing installs nothing.')));
         const customBtn = button(text('让助手帮我找', 'Ask the assistant'), () => assistant(), { class: 'settings-secondary-button extensions-head-action', 'data-extension-configure': '', disabled: '' });
         customBtn.prepend(node('i', '', { class: 'fa-solid fa-wand-magic-sparkles', 'aria-hidden': 'true' }));
         intro.append(introIcon, introCopy, customBtn);

@@ -2,7 +2,11 @@
 // The private runtime registers no chat models. Keys are escaped literals in Pi's config-value syntax.
 class MediaProviderCredentials {
     constructor(options = {}) { this.options = options; this.registered = new Set(); }
-    providerId(id, legacy = false) { return `${legacy ? 'pi5' : 'pivane'}-media:${id}`; }
+    providerId(id, legacy = false) {
+        const prefix = typeof legacy === 'string' ? legacy : legacy ? 'pi5' : 'ohmybuddy';
+        if (!['ohmybuddy', 'pivane', 'pi5'].includes(prefix)) throw new Error('Unknown media credential namespace');
+        return `${prefix}-media:${id}`;
+    }
     async runtime() {
         if (process.platform === 'win32' && this.options.authPath) require('./pi-private-files').privateDirectory(require('node:path').dirname(this.options.authPath));
         if (!this.runtimePromise) this.runtimePromise = require('./pi-session-store').getSdk().then(({ ModelRuntime }) => ModelRuntime.create({
@@ -28,12 +32,12 @@ class MediaProviderCredentials {
     }
     async list() {
         const runtime = await this.runtime();
-        try { return new Set((await runtime.listCredentials({ signal: AbortSignal.timeout(10000) })).filter(item => item.type === 'api_key' && /^(?:pivane|pi5)-media:/.test(item.providerId)).map(item => item.providerId.replace(/^(?:pivane|pi5)-media:/, ''))); }
+        try { return new Set((await runtime.listCredentials({ signal: AbortSignal.timeout(10000) })).filter(item => item.type === 'api_key' && /^(?:ohmybuddy|pivane|pi5)-media:/.test(item.providerId)).map(item => item.providerId.replace(/^(?:ohmybuddy|pivane|pi5)-media:/, ''))); }
         catch { throw new Error('Media credential status could not be read'); }
     }
     async get(id) {
         try {
-            for (const legacy of [false, true]) {
+            for (const legacy of ['ohmybuddy', 'pivane', 'pi5']) {
                 const runtime = await this.register(id, legacy);
                 const result = await runtime.getAuth(this.providerId(id, legacy), { signal: AbortSignal.timeout(10000) });
                 if (result?.auth?.apiKey) return result.auth.apiKey;
@@ -52,7 +56,7 @@ class MediaProviderCredentials {
         }
     }
     async remove(id) {
-        for (const legacy of [false, true]) {
+        for (const legacy of ['ohmybuddy', 'pivane', 'pi5']) {
             const runtime = await this.register(id, legacy), providerId = this.providerId(id, legacy);
             try { await runtime.logout(providerId, { signal: AbortSignal.timeout(30000) }); }
             catch (error) {

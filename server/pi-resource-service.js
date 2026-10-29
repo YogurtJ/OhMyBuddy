@@ -20,7 +20,7 @@ const offline = () => ['1', 'true', 'yes'].includes(String(process.env.PI_OFFLIN
 const UPDATE_RESULT_TTL = 24 * 60 * 60 * 1000;
 const SKILL_VERSION_LIMIT = 500;
 // How the native update check treats a configured source. Mirrors the public update semantics:
-// local paths and exact npm versions / git refs are never checked; Pivane components update with Pivane.
+// local paths and exact npm versions / git refs are never checked; OhMyBuddy components update with OhMyBuddy.
 function updateMode(source, managed) {
     if (managed) return 'managed';
     if (source.startsWith('npm:')) {
@@ -246,7 +246,7 @@ class PiResourceService {
             const ctx = await this.context(input.cwd, input.scope);
             if (ctx.revision !== input.expectedRevision) throw fail('配置已变化，请刷新', 409);
             if (obsoleteMcpAdapter(input.source, input.scope === 'project' ? path.join(ctx.cwd, '.pi') : ctx.agentDir) && input.action !== 'remove') throw fail('当前 Pi 已原生内置 MCP；请配置原生 mcp.json，不要安装旧适配器');
-            if (identify(input.source, input.scope === 'project' ? path.join(ctx.cwd, '.pi') : ctx.agentDir)) throw fail('此组件由 Pivane 管理，请随 Pivane 更新；资源开关可单独设置');
+            if (identify(input.source, input.scope === 'project' ? path.join(ctx.cwd, '.pi') : ctx.agentDir)) throw fail('此组件由 OhMyBuddy 管理，请随 OhMyBuddy 更新；资源开关可单独设置');
             if (input.scope === 'project' && !ctx.trust.effective) throw fail('请先信任项目');
             const wantedScope = input.scope === 'project' ? 'project' : 'user';
             const matches = ctx.manager.listConfiguredPackages().filter(p => p.source === input.source);

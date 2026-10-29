@@ -94,7 +94,7 @@ test('generic originals and image originals retain bytes, scope and exclusive pr
             manager.appendMessage({ role: 'user', content: uploaded.marker, timestamp: Date.now() });
             await assert.rejects(own.read(worker, { id: uploaded.reference.id }), { code: 'DOCUMENT_FORMAT' });
             const result = await own.read(worker, { id: uploaded.reference.id, action: 'materialize' });
-            assert.equal(result.path, path.join(cwd, '.pivane-attachments', uploaded.reference.id, name));
+            assert.equal(result.path, path.join(cwd, '.ohmybuddy-attachments', uploaded.reference.id, name));
             assert.deepEqual(fs.readFileSync(result.path), original);
             require('./private-file-helper.cjs').assertPrivateFile(result.path);
             assert.equal((await own.read(worker, { id: uploaded.reference.id, action: 'materialize' })).path, result.path);

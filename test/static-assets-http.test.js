@@ -109,7 +109,7 @@ test('real server serves public scripts and vendor assets compressed without tou
     });
     let port;
     for (let i = 0; i < 400; i++) {
-        const match = /Pivane backend running at http:\/\/localhost:(\d+)/.exec(output);
+        const match = /OhMyBuddy backend running at http:\/\/localhost:(\d+)/.exec(output);
         if (match) { port = Number(match[1]); break; }
         if (child.exitCode !== null) break;
         await delay(50);

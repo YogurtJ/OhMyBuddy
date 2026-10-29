@@ -185,7 +185,7 @@ async function scanReferences(agent, ids, maxBytes = 4 * 1024 ** 3) {
     // bodies are not native history. Nested run/fork JSONL stays discoverable.
     const sessions = tree(sessionsRoot, proofs).map(p => ({ ...p,
         artifact: path.relative(sessionsRoot, p.file).split(path.sep).includes('subagent-artifacts') }));
-    const files = [...sessions, ...tree(path.join(agent, 'pivane-session-moves', 'forks'), proofs)];
+    const files = [...sessions, ...tree(path.join(require('./ohmybuddy-compat').dataFile(agent, 'ohmybuddy-session-moves'), 'forks'), proofs)];
     for (const p of files) {
         const jsonl = p.file.endsWith('.jsonl');
         if (!jsonl && !p.file.endsWith('.json')) {

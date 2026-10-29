@@ -1,6 +1,6 @@
-# Pivane 架构
+# OhMyBuddy 架构
 
-Pivane 是单体部署的 AI 工作台。一个 Express 服务提供同源 REST/WebSocket、浏览器资源和媒体入口；Pi Coding Agent 提供原生会话与工具执行；独立启动器负责受管版本和正常停机。源码按功能服务拆分，运行部署保持简单。
+OhMyBuddy 是单体部署的 AI 工作台。一个 Express 服务提供同源 REST/WebSocket、浏览器资源和媒体入口；Pi Coding Agent 提供原生会话与工具执行；独立启动器负责受管版本和正常停机。源码按功能服务拆分，运行部署保持简单。
 
 本页用于理解系统边界。查文件和测试用[模块导航](MODULES.md)，追踪具体生命周期、缓存和组件协作用[实现细节](RUNTIME.md)，字段和限额查 [API](../API.md) 与功能契约；验证范围见 [WORKFLOW](WORKFLOW.md)。
 
@@ -46,13 +46,13 @@ RPC 使用 StringDecoder 和严格 LF 分帧，未知或迟到私有响应也要
 
 任务线程是普通持久会话；任务目录、结果回执与线程间消息从原生来源重建，不维护独立聊天历史。侧聊使用内存 SessionManager 和冻结背景，工具确认与关闭生命周期独立，共享项目目录不代表写入隔离。标题、媒体规划和后台学习使用独立的受限调用与各自预算。
 
-pi-subagents 通过受管扩展报告后台活动，Supervisor 用它阻止过早回收或维护；子任务状态不等于主回合忙碌。MCP/Codemode 使用原生连接、执行器和 SDK seam，Pivane 保留工具授权、模型注册表和媒体权限边界，不修改上游包。
+pi-subagents 通过受管扩展报告后台活动，Supervisor 用它阻止过早回收或维护；子任务状态不等于主回合忙碌。MCP/Codemode 使用原生连接、执行器和 SDK seam，OhMyBuddy 保留工具授权、模型注册表和媒体权限边界，不修改上游包。
 
 档案知识的 HTTP、工具与学习写入共用唯一 `ProfileKnowledgeService`；后台学习引用已核实原生条目，派生 SQLite 索引可以重建。细节见[辅助工作实现](RUNTIME.md#辅助工作与扩展)、[档案设计](AGENT_PROFILES.md)、[记忆契约](../PROFILE_MEMORY.md)与[依赖适配](DEPENDENCIES.md)。
 
 ## Bot 模式（未发布）
 
-Bot 是带 `bot` 段的助手档案；“窗口”（主聊天和话题）是永久逻辑容器，指向一串原生会话“代”。窗口索引 `<agentDir>/pivane-bots/<profileId>/windows.json` 只是路由缓存，可从每代开头的原生标记 `pivane-bot-window {profileId,windowId,generation,predecessor{sessionId,lastEntryId}}` 重建；Pi 原生 JSONL 仍是唯一聊天事实。换代在 Supervisor 会话编辑预占内进行：日志预备 → 停止空闲 worker → 核对旧代并写新代（模型、思考、隐藏交接消息、标记最后写入）→ CAS 提交索引。恢复只采用标记代数、前任会话与前任最后条目都匹配的新代，否则放弃，不重放回合；恢复在档案预占和前任会话编辑预占内进行，并且在 `resolve()` 交出会话之前完成，因此普通打开路径不会先把前任交给新的回合；只有决定采用新代时才停止前任 worker（先广播 `gateway_reconnect`），放弃时前任 worker 与已连接页面保持不变。已受理的工作留在原代。
+Bot 是带 `bot` 段的助手档案；“窗口”（主聊天和话题）是永久逻辑容器，指向一串原生会话“代”。窗口索引 `<agentDir>/ohmybuddy-bots/<profileId>/windows.json` 只是路由缓存，可从每代开头的原生标记 `pivane-bot-window {profileId,windowId,generation,predecessor{sessionId,lastEntryId}}` 重建；Pi 原生 JSONL 仍是唯一聊天事实。换代在 Supervisor 会话编辑预占内进行：日志预备 → 停止空闲 worker → 核对旧代并写新代（模型、思考、隐藏交接消息、标记最后写入）→ CAS 提交索引。恢复只采用标记代数、前任会话与前任最后条目都匹配的新代，否则放弃，不重放回合；恢复在档案预占和前任会话编辑预占内进行，并且在 `resolve()` 交出会话之前完成，因此普通打开路径不会先把前任交给新的回合；只有决定采用新代时才停止前任 worker（先广播 `gateway_reconnect`），放弃时前任 worker 与已连接页面保持不变。已受理的工作留在原代。
 
 Bot 身份在 worker 内作为独立提示词段 `pivane_bot` 注入（不用 `customPrompt`，以免丢掉原生工具与规则段），每轮刷新 SOUL 并按 Bot 设置对齐模型与独立思考偏好（打开时也对齐；定时运行结束或复核之前不对齐，保持准入计价所用模型）。窗口上下文只对核实过标记、档案、工作目录和当前代的会话生效。“稳妥”“每次都问”由同一扩展的 `tool_call` 钩子执行（`bot-guard.js` 判定）：需要确认时发一个标题固定的原生 `confirm`（消息首行为类型与令牌），Bot 页渲染为确认卡，其他页面落到通用对话框；未确认或定时运行中直接阻止。写入目标按与 Pi 1.4 `resolveToCwd` 一致的镜像实现解析（测试与已安装 Pi 比对），读不到预设时按“每次都问”。确认结束后 worker 经私有桥报告令牌，Supervisor 撤回仍挂起的同一请求；嵌套调用的确认随父工具结束而取消。Bot 工作目录基准为家目录或首个项目根，排除服务 cwd 与安装目录。浏览器的 `#/bot` 复用聊天面板：`pi-chat.js` 的 botMode 打开窗口当前代，`open_session` 带 `botWindow` 由服务端在启动 worker 前和订阅后核对当前代（`BOT_WINDOW_STALE`/`BOT_WINDOW_ROTATING`），断线重连和启动失败后的重试都先重新解析窗口，`pi-bot.js` 负责 Bot 栏、问候和较早代只读回看，`pi-bot-settings.js` 负责设置窗口。模型／思考控制由 `bot-settings`、`bot-model` 和 `bot-model-runtime` 负责，后者在 SDK 边界读取原生设置、模型支持的等级与 `findInitialModel` 自动选择；`models.effectiveDefault` 只投影、不保存自动结果。顶层 thinking 与旧嵌套字段兼容，UI 不按目录顺序猜默认。用户行为见 [Bot 模式](../BOT_MODE.md)。
 

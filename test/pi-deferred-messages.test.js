@@ -17,14 +17,19 @@ test('default port queue stays separate while explicit old ports and file overri
     process.env.PI_CODING_AGENT_DIR = root;
     delete process.env.PI_WEB_DEFERRED_FILE;
     const legacy = path.join(root, 'pi5-deferred-messages.json');
-    const saved = JSON.stringify({ version: 1, jobs: [] });
+    const saved = JSON.stringify({ version: 1, jobs: [] }) + '\n';
     fs.writeFileSync(legacy, saved, { mode: 0o600 });
-    for (const [port, expected] of [[undefined, 'pivane-deferred-messages-11408.json'], ['11408', 'pivane-deferred-messages-11408.json'], ['3001', 'pi5-deferred-messages.json'], ['3000', 'pivane-deferred-messages-3000.json']]) {
+    for (const [port, expected] of [[undefined, 'ohmybuddy-deferred-messages-11408.json'], ['11408', 'ohmybuddy-deferred-messages-11408.json'], ['3001', 'pi5-deferred-messages.json'], ['3000', 'ohmybuddy-deferred-messages-3000.json']]) {
         if (port === undefined) delete process.env.PORT; else process.env.PORT = port;
         const service = new PiDeferredMessages({ store: {}, supervisor: {}, intervalMs: 1000000 });
         try { assert.equal(service.filePath, path.join(root, expected)); } finally { await service.dispose(); }
     }
     process.env.PORT = '11408';
+    const installedQueue = path.join(root, 'pivane-deferred-messages-11408.json');
+    fs.writeFileSync(installedQueue, saved, { mode: 0o600 });
+    const existing = new PiDeferredMessages({ store: {}, supervisor: {}, intervalMs: 1000000 });
+    try { assert.equal(existing.filePath, installedQueue); assert.equal(fs.readFileSync(installedQueue, 'utf8'), saved); }
+    finally { await existing.dispose(); }
     process.env.PI_WEB_DEFERRED_FILE = legacy;
     const service = new PiDeferredMessages({ store: {}, supervisor: {}, intervalMs: 1000000 });
     try { assert.equal(service.filePath, legacy); assert.equal(service.error, null); } finally { await service.dispose(); }
