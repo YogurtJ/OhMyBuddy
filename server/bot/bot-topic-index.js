@@ -9,7 +9,7 @@ const LIMITS = Object.freeze({ topics: 20, items: 40, perTopic: 3, title: 120, f
 const line = (text, max) => String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 
 function openItems({ windows, profileId, cwd, directory, supervisor, pi, now = Date.now, limits = LIMITS }) {
-    const started = now(), topics = windows.filter(window => window.kind === 'topic' && !window.archivedAt);
+    const started = now(), topics = windows.filter(window => window.kind === 'topic' && !window.archivedAt && !window.trashedAt);
     const result = []; let bytes = 0, items = 0;
     for (const window of topics.slice(0, limits.topics)) {
         const row = { windowId: window.id, title: line(window.title, 80), state: 'unavailable', items: [] };

@@ -1,0 +1,61 @@
+/* Topic organization lives with the chat list; ordinary Bot settings keep their layout. */
+.pi-bot-topic-list, .pi-bot-topic-results, .pi-bot-topic-group { min-width: 0; }
+.pi-bot-topic-filters { display: grid; gap: 6px; padding: 0 8px 6px; }
+.pi-bot-topic-filters input, .pi-bot-topic-filters select {
+    box-sizing: border-box; width: 100%; min-width: 0; min-height: 36px; border: 1px solid var(--border); border-radius: 8px;
+    padding: 6px 9px; color: var(--text-main); background: var(--surface-2); font: inherit; font-size: 16px;
+}
+.pi-bot-topic-group { margin: 2px 0 6px; }
+.pi-bot-topic-group > summary {
+    display: flex; align-items: center; gap: 6px; min-height: 36px; padding: 4px 10px; border-radius: 8px;
+    color: var(--text-muted); font-size: .8rem; cursor: pointer; list-style: none;
+}
+.pi-bot-topic-group > summary::-webkit-details-marker { display: none; }
+.pi-bot-topic-group > summary::before { content: '▸'; flex: none; transition: transform .12s; }
+.pi-bot-topic-group[open] > summary::before { transform: rotate(90deg); }
+.pi-bot-topic-group > summary span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.pi-bot-topic-group > summary small { flex: none; font-variant-numeric: tabular-nums; }
+.pi-bot-topic-group > summary:hover { background: var(--pv-nav-hover, var(--surface-2)); }
+.pi-bot-topic-trash-link {
+    display: block; width: 100%; min-height: 38px; margin-top: 10px; padding: 7px 10px; border: 0; border-radius: 8px;
+    color: var(--text-muted); background: transparent; font: inherit; font-size: .8rem; text-align: left; cursor: pointer;
+}
+.pi-bot-topic-trash-link:hover { background: var(--pv-nav-hover, var(--surface-2)); }
+.pi-bot-topic-emoji-picker { padding: 8px 12px; border: 1px solid var(--border); border-radius: 12px; }
+.pi-bot-topic-emoji-picker > summary { min-height: 28px; color: var(--text-muted); font-size: .88rem; cursor: pointer; }
+.pi-bot-topic-emoji-choices { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 10px 0; }
+.pi-bot-topic-emoji-option {
+    min-width: 0; min-height: 42px; border: 1px solid transparent; border-radius: 10px; background: var(--surface-2);
+    font-size: 1.4rem; cursor: pointer;
+}
+.pi-bot-topic-emoji-option:hover, .pi-bot-topic-emoji-option[aria-pressed="true"] { border-color: var(--primary, var(--green)); background: var(--surface-3); }
+.pi-bot-topic-manager .pi-bot-sheet-form { grid-template-rows: auto auto minmax(0, 1fr) auto; }
+.pi-bot-topic-manager .pi-bot-sheet-body { display: grid; gap: 12px; align-content: start; }
+.pi-bot-topic-tabs { display: flex; flex-wrap: wrap; gap: 7px; padding: 8px 20px; border-bottom: 1px solid var(--border); }
+.pi-bot-topic-tabs button { flex: 1; min-width: 0; padding: 8px 6px; font-size: .85rem; }
+.pi-bot-topic-tabs button[aria-pressed="true"] { border-color: var(--primary, var(--green)); color: var(--primary, var(--green)); background: var(--surface-3); }
+.pi-bot-topic-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.pi-bot-topic-manager .is-danger, .pi-bot-topic-trash { color: var(--danger); }
+.pi-bot-topic-manager .pi-bot-primary.is-danger { background: var(--danger); color: #fff; }
+.pi-bot-topic-checklist { display: grid; gap: 4px; min-width: 0; }
+.pi-bot-topic-check-row { display: flex; align-items: center; gap: 12px; min-height: 46px; padding: 7px 10px; border-radius: 8px; cursor: pointer; }
+.pi-bot-topic-check-row:hover { background: var(--surface-2); }
+.pi-bot-topic-check-row > span { min-width: 0; overflow-wrap: anywhere; }
+.pi-bot-topic-check-row small { margin-left: 8px; color: var(--text-muted); font-size: .75rem; }
+.pi-bot-sheet .pi-bot-topic-check-row input[type="checkbox"] { width: 18px; min-height: 18px; height: 18px; flex: none; accent-color: var(--primary, var(--green)); }
+.pi-bot-topic-trash-row { display: grid; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--border); min-width: 0; }
+.pi-bot-topic-trash-row > strong { overflow-wrap: anywhere; }
+.pi-bot-topic-delete-confirm { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--danger); border-radius: 10px; min-width: 0; }
+.pi-bot-topic-manager input:not([type="checkbox"]), .pi-bot-topic-manager select {
+    width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; box-sizing: border-box; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--surface-2); color: var(--text-main); font: inherit; font-size: 16px;
+}
+.pi-bot-archived-row { grid-template-columns: 20px minmax(0, 1fr) auto auto; }
+.pi-bot-topic-group > summary:focus-visible, .pi-bot-topic-filters input:focus-visible, .pi-bot-topic-filters select:focus-visible,
+.pi-bot-topic-trash-link:focus-visible, .pi-bot-topic-emoji-option:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 1px; }
+@media (max-width: 600px) {
+    .pi-bot-topic-tabs { padding-inline: 12px; }
+    .pi-bot-topic-manager input, .pi-bot-topic-manager select { font-size: 16px; }
+    .pi-bot-topic-identity { grid-template-columns: 90px minmax(0, 1fr); gap: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { .pi-bot-topic-group > summary::before { transition: none; } }

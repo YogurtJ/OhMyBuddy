@@ -74,8 +74,8 @@ function notebookView(state, branch, current) {
 }
 
 function publicWindow(window) {
-    const { id, kind, title, emoji, focus, instructions = '', createdAt, updatedAt, archivedAt, current, generations } = window;
-    return { id, kind, title, emoji, focus, instructions, createdAt, updatedAt, archivedAt,
+    const { id, kind, title, emoji, focus, instructions = '', groupId = null, trashedAt = null, createdAt, updatedAt, archivedAt, current, generations } = window;
+    return { id, kind, title, emoji, focus, instructions, groupId, trashedAt, deleting: Boolean(window.deleting), createdAt, updatedAt, archivedAt,
         generation: current?.generation ?? null, sessionId: current?.sessionId ?? null, generations: generations.length };
 }
 
@@ -128,7 +128,7 @@ class BotService extends EventEmitter {
     // Active windows of a Bot for the WeChat /topic list: main chat first, then topics by recency.
     async channelWindows(profileId) {
         const { profile } = await this.bot(profileId);
-        const windows = (await this.windows.read(profileId)).state.windows.filter(item => !item.archivedAt).map(publicWindow);
+        const windows = (await this.windows.read(profileId)).state.windows.filter(item => !item.archivedAt && !item.trashedAt).map(publicWindow);
         windows.sort((a, b) => (a.kind === 'main' ? -1 : b.kind === 'main' ? 1 : 0) || Date.parse(b.updatedAt || 0) - Date.parse(a.updatedAt || 0));
         return { name: profile.name, enabled: settings.isBot(profile), windows };
     }
@@ -163,7 +163,7 @@ class BotService extends EventEmitter {
             const { state: windowState, revision: windowsRevision } = await this.windows.read(profile.id);
             bots.push({ id: profile.id, name: profile.name, description: profile.description, avatar: profile.avatar ?? null,
                 enabled: settings.isBot(profile), profileRevision: profileRevision(profile), bot: this.publicBot(bot), chosen: chosenIdentity(profile, bot),
-                windowsRevision, windows: windowState.windows.map(publicWindow) });
+                windowsRevision, groups: windowState.groups || [], windows: windowState.windows.map(publicWindow) });
         }
         bots.sort((a, b) => a.bot.order - b.bot.order || Date.parse(a.bot.createdAt) - Date.parse(b.bot.createdAt));
         return { version: 1, revision, bots };
@@ -294,8 +294,16 @@ class BotService extends EventEmitter {
         });
     }
 
+    createTopicGroup(profileId, input) { return require('./bot-topic-management').mutateGroup(this, profileId, null, input, 'create'); }
+    updateTopicGroup(profileId, groupId, input) { return require('./bot-topic-management').mutateGroup(this, profileId, groupId, input, 'edit'); }
+    deleteTopicGroup(profileId, groupId, input) { return require('./bot-topic-management').mutateGroup(this, profileId, groupId, input, 'delete'); }
+    moveTopics(profileId, input) { return require('./bot-topic-management').moveTopics(this, profileId, input); }
+    trashTopic(profileId, windowId, input) { return require('./bot-topic-trash').trashTopic(this, profileId, windowId, input); }
+    restoreTrashedTopic(profileId, windowId, input) { return require('./bot-topic-trash').restoreTopic(this, profileId, windowId, input); }
+    deleteTopic(profileId, windowId, input) { return require('./bot-topic-trash').deleteTopic(this, profileId, windowId, input); }
+
     createTopic(profileId, input) {
-        const fields = topicFields(input, { revision: true, withInstructions: true });
+        const fields = topicFields(input, { revision: true, withInstructions: true, withGroups: true });
         return this.profiles.reserve(async () => {
             const { windowsRevision, ...window } = await this.createWindowLocked(profileId, 'topic', { ...fields, expectedRevision: input.expectedRevision });
             return { ok: true, window, windowsRevision };
@@ -345,6 +353,7 @@ class BotService extends EventEmitter {
             const { state } = await this.windows.read(profileId);
             let existing = state.windows.find(item => item.id === id);
             if (existing) {
+                if (existing.trashedAt) fail('Restore this topic from trash first', 409, 'BOT_TOPIC_TRASHED');
                 if (!isDeepStrictEqual(existing.topicSeed, fields)) fail('This topic call already used different fields', 409, 'BOT_TOPIC_CONFLICT');
                 if (!existing.current) existing = await this.completeWindowLocked(profileId, existing);
                 return { window: publicWindow(existing) };
@@ -358,17 +367,20 @@ class BotService extends EventEmitter {
     // its last native marker proves creation completed and carries the original metadata.
     // Topic instructions live in this index only: the marker is immutable creation-time
     // evidence that older readers reject with unknown seed fields, and instructions are edited later.
-    async createWindowLocked(profileId, kind, { title = '', emoji = '', focus = '', instructions = '', expectedRevision, id = randomUUID(), beforeCommit = () => {} } = {}) {
+    async createWindowLocked(profileId, kind, { title = '', emoji = '', focus = '', instructions = '', groupId = null, expectedRevision, id = randomUUID(), beforeCommit = () => {} } = {}) {
         const { bot } = await this.bot(profileId);
         const { revision } = await this.windows.read(profileId);
         const now = new Date().toISOString(), topicSeed = { title, focus, emoji };
         if (kind === 'topic') topicFields({ ...topicSeed, instructions }, { withInstructions: true });
         const record = { id, kind, title, emoji, focus, cwd: bot.workspace, createdAt: now, updatedAt: now, archivedAt: null,
-            current: null, generations: [], rotation: null, ...(kind === 'topic' ? { instructions, topicSeed } : {}) };
+            current: null, generations: [], rotation: null, ...(kind === 'topic' ? { instructions, topicSeed, groupId } : {}) };
         await this.windows.mutate(profileId, expectedRevision ?? revision, state => {
+            if ((state.deletedTopicIds || []).includes(id)) fail('This topic was permanently deleted', 410, 'BOT_TOPIC_DELETED');
+            if (kind === 'topic') require('./bot-topic-management').assertGroup(state, groupId);
             if (kind === 'main' && state.windows.some(window => window.kind === 'main')) fail('Bot already has a main chat', 409);
-            if (state.windows.length >= MAX_WINDOWS || kind === 'topic' && state.windows.filter(window => window.kind === 'topic').length >= MAX_TOPICS)
+            if (kind === 'topic' && state.windows.filter(window => window.kind === 'topic' && !window.trashedAt).length >= MAX_TOPICS)
                 fail('Topic limit reached (including archived topics)', 409, 'BOT_TOPIC_LIMIT');
+            if (state.windows.length >= MAX_WINDOWS) fail('Topic storage is full; clear unneeded topics from trash', 409, 'BOT_TOPIC_TRASH_LIMIT');
             beforeCommit();
             state.windows.push(record); return {};
         });
@@ -380,6 +392,7 @@ class BotService extends EventEmitter {
     async completeWindowLocked(profileId, record, { fresh = false } = {}) {
         record = (await this.windows.read(profileId)).state.windows.find(item => item.id === record.id);
         if (!record) fail('Window not found', 404);
+        if (record.trashedAt) fail('Restore this topic from trash first', 409, 'BOT_TOPIC_TRASHED');
         if (record.current) return record;
         if (record.archivedAt) fail('This topic is archived; restore it before sending', 409, 'BOT_WINDOW_ARCHIVED');
         const matches = fresh ? [] : (await this.nativeMarkers(profileId, record.cwd))
@@ -403,7 +416,7 @@ class BotService extends EventEmitter {
     }
 
     updateWindow(profileId, windowId, input, { beforeCommit = () => {}, source = null } = {}) {
-        const fields = topicFields(input, { patch: true, revision: true, withInstructions: true });
+        const fields = topicFields(input, { patch: true, revision: true, withInstructions: true, withGroups: true });
         return this.profiles.reserve(() => {
             const update = async () => {
                 const window = await this.windowRecord(profileId, windowId);
@@ -417,7 +430,8 @@ class BotService extends EventEmitter {
                         const item = state.windows.find(entry => entry.id === windowId);
                         beforeCommit();
                         if (fields.archived && !window.archivedAt) this.assertWindowQuiescent?.(window);
-                        for (const key of ['title', 'focus', 'emoji', 'instructions']) if (Object.hasOwn(fields, key)) item[key] = fields[key];
+                        if (Object.hasOwn(fields, 'groupId')) require('./bot-topic-management').assertGroup(state, fields.groupId);
+                        for (const key of ['title', 'focus', 'emoji', 'instructions', 'groupId']) if (Object.hasOwn(fields, key)) item[key] = fields[key];
                         if (Object.hasOwn(fields, 'archived')) item.archivedAt = fields.archived ? item.archivedAt ?? new Date().toISOString() : null;
                         item.updatedAt = new Date().toISOString(); return {};
                     });
@@ -431,7 +445,7 @@ class BotService extends EventEmitter {
         });
     }
 
-    async archiveWindowLocked(profileId, window, save) {
+    async archiveWindowLocked(profileId, window, save, { verify = null } = {}) {
         const busy = () => fail('This topic has unfinished work; finish or clear it before archiving', 409, 'BOT_WINDOW_BUSY');
         const paths = window.generations.map(item => item.sessionPath);
         const check = async () => {
@@ -460,6 +474,7 @@ class BotService extends EventEmitter {
         // Reserve every generation, including native-page workers, until the archive commits.
         const reserve = index => index === paths.length ? (async () => {
             await check();
+            if (verify) await verify();
             for (const file of paths) {
                 const worker = this.supervisor.getActiveWorker(file);
                 if (worker) { worker._broadcast({ type: 'gateway_reconnect' }); await this.supervisor.stopSession(file); }
@@ -469,7 +484,7 @@ class BotService extends EventEmitter {
             return saved;
         })() : this.supervisor.withSessionEdit(paths[index], () => reserve(index + 1));
         try { return await reserve(0); }
-        catch (error) { if (error.status === 409 || error.code === 'SESSION_BUSY') busy(); throw error; }
+        catch (error) { if (error.code === 'SESSION_BUSY') busy(); throw error; }
     }
 
     async openItems(worker) {
@@ -510,7 +525,7 @@ class BotService extends EventEmitter {
         const { bot } = await this.bot(profileId);
         const markers = (await this.nativeMarkers(profileId, bot.workspace)).filter(marker => onlyWindowId === null || marker.windowId === onlyWindowId);
         const { state, revision } = await this.windows.read(profileId);
-        const known = new Set(state.windows.map(window => window.id));
+        const known = new Set([...state.windows.map(window => window.id), ...(state.deletedTopicIds || [])]);
         const adoptable = markers.filter(marker => marker.generation === 0 && !known.has(marker.windowId))
             .filter(marker => marker.kind !== 'main' || !state.windows.some(window => window.kind === 'main'));
         // Only one main window can be adopted; prefer the earliest.
@@ -519,7 +534,7 @@ class BotService extends EventEmitter {
         for (const marker of adoptable) counts.set(marker.windowId, (counts.get(marker.windowId) || 0) + 1);
         if (onlyWindowId && counts.get(onlyWindowId) > 1) fail('Multiple native conversations claim this topic; recovery is required', 409, 'BOT_TOPIC_CONFLICT');
         const chosen = [...mains.slice(0, 1), ...adoptable.filter(marker => marker.kind === 'topic')
-            .slice(0, Math.max(0, MAX_TOPICS - state.windows.filter(item => item.kind === 'topic').length))]
+            .slice(0, Math.max(0, MAX_TOPICS - state.windows.filter(item => item.kind === 'topic' && !item.trashedAt).length))]
             .filter(marker => counts.get(marker.windowId) === 1).slice(0, MAX_WINDOWS - state.windows.length);
         if (!chosen.length) return { main: state.windows.find(window => window.kind === 'main') || null, adopted: 0 };
         const now = new Date().toISOString();
@@ -640,7 +655,7 @@ class BotService extends EventEmitter {
         try {
             const { state } = await this.windows.read(loaded.profileId);
             const window = state.windows.find(item => item.id === loaded.windowId);
-            if (!window?.current || window.archivedAt || window.rotation || window.current.sessionPath !== sessionPath || window.current.generation !== loaded.generation) return null;
+            if (!window?.current || window.archivedAt || window.trashedAt || window.rotation || window.current.sessionPath !== sessionPath || window.current.generation !== loaded.generation) return null;
             const started = window.generations.find(item => item.generation === window.current.generation)?.startedAt ?? window.createdAt;
             const bytes = fs.statSync(sessionPath).size;
             const reason = rotationReason({ bytes, entries: bytes >= 1024 * 1024 ? countLines(sessionPath) : 0, startedAt: started, now });
@@ -693,14 +708,14 @@ class BotService extends EventEmitter {
         if (!nextTitle && !nextFocus) return Promise.resolve(null);
         return this.profiles.reserve(async () => {
             const { state, revision } = await this.windows.read(profileId);
-            const current = state.windows.find(item => item.id === windowId && item.kind === 'topic' && !item.archivedAt);
+            const current = state.windows.find(item => item.id === windowId && item.kind === 'topic' && !item.archivedAt && !item.trashedAt);
             if (!current) return null;
             const takeTitle = Boolean(nextTitle && (!current.title || defaultTopicTitle(current.title)));
             const takeFocus = Boolean(nextFocus && !current.focus?.trim());
             if (!takeTitle && !takeFocus) return null;
             const saved = await this.windows.mutate(profileId, revision, windowState => {
                 const item = windowState.windows.find(entry => entry.id === windowId);
-                if (!item || item.archivedAt) return {};
+                if (!item || item.archivedAt || item.trashedAt) return {};
                 if (takeTitle && (!item.title || defaultTopicTitle(item.title))) item.title = nextTitle;
                 if (takeFocus && !item.focus?.trim()) item.focus = nextFocus;
                 item.updatedAt = new Date().toISOString();
@@ -841,11 +856,16 @@ class BotService extends EventEmitter {
         });
     }
 
-    async windowRecord(profileId, windowId) {
+    async windowRecord(profileId, windowId, { includeTrashed = false } = {}) {
         const { bot } = await this.bot(profileId);
         if (typeof windowId !== 'string' || !UUID.test(windowId)) fail('Invalid window ID');
-        const window = (await this.windows.read(profileId)).state.windows.find(item => item.id === windowId);
-        if (!window) fail('Window not found', 404);
+        const { state } = await this.windows.read(profileId);
+        const window = state.windows.find(item => item.id === windowId);
+        if (!window) {
+            if ((state.deletedTopicIds || []).includes(windowId)) fail('This topic was permanently deleted', 410, 'BOT_TOPIC_DELETED');
+            fail('Window not found', 404);
+        }
+        if (window.trashedAt && !includeTrashed) fail('Restore this topic from trash first', 409, 'BOT_TOPIC_TRASHED');
         if (window.cwd !== bot.workspace) fail('Window workspace does not match its Bot', 409);
         return window;
     }
@@ -955,11 +975,20 @@ class BotService extends EventEmitter {
 
     // Worker environment for a verified Bot window session, or null for every other session.
     // manager: the store's verified read of the exact file the worker will open.
+    async learningSourceAllowed(manager) {
+        const binding = readWindowBinding(manager); if (!binding) return true;
+        const { state } = await this.windows.read(binding.profileId);
+        return !state.windows.find(window => window.id === binding.windowId)?.trashedAt
+            && !(state.deletedTopicIds || []).includes(binding.windowId);
+    }
+
     async windowContext(manager, { cwd, sessionId, sessionPath }) {
         const binding = readWindowBinding(manager);
         if (!binding) return null;
         const { state } = await this.windows.read(binding.profileId);
         const window = state.windows.find(item => item.id === binding.windowId);
+        if ((state.deletedTopicIds || []).includes(binding.windowId)) fail('This topic was permanently deleted', 410, 'BOT_TOPIC_DELETED');
+        if (window?.trashedAt) fail('Restore this topic from trash first', 409, 'BOT_TOPIC_TRASHED');
         if (window?.archivedAt) fail('This topic is archived; restore it before sending', 409, 'BOT_WINDOW_ARCHIVED');
         const profile = (await this.profiles.state()).state.profiles.find(item => item.id === binding.profileId);
         const bot = settings.readBot(profile);
