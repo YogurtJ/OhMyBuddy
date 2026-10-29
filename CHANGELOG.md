@@ -2,7 +2,7 @@
 
 本页概括用户可见变化与升级要点。安装步骤见[安装与恢复](docs/INSTALL_RECOVERY.md)；每版完整说明和验收附件见 [Releases](https://github.com/YogurtJ/OhMyBuddy/releases)。历史行为不代表当前功能，当前用法以[用户指南](docs/USER_GUIDE.md)为准。
 
-## 1.11.0
+## 1.11.0（已发布）
 
 - Pivane更名为OhMyBuddy：网页、PWA、通知、新图标及源码／Mac完整包的默认名称更新；新配置采用OHMYBUDDY_，既有PIVANE_及公开PI_别名继续兼容。旧配置、运行根和用户数据原位读取，双位置冲突明确拒绝；历史消息、协议字段和浏览器偏好不改写。Mac旧更新器使用显式Pivane格式过渡包，不混用签名渠道；实例迁移仍是独立操作。
 - 导航中的 Bot 显示为“伙伴”（Buddy），Pi Agent 显示为“工作台”（Workspace）；原先指整个实例的“工作台”文案改为 OhMyBuddy。接口路径、数据目录和微信 `/bot` 保持不变，微信新增 `/伙伴`、`/buddy` 别名。
@@ -10,7 +10,7 @@
 - 修复 Linux 上英文界面的引号和撇号被中文字体按全角绘制（如 “I’ ll”）：字体栈先使用常见拉丁字体，再回退到中文字体。
 - 修复英文界面的伙伴记忆回执在条数和内容之间显示中文冒号（如 “1： Vegetarian”）。
 
-[1.11.0 版本说明](docs/releases/1.11.0.md)。三平台发布准备与改名归档实机补验已完成，执行与证据复用见[平台验证范围](docs/RELEASE_INSTALL_VALIDATION.md)，准确包哈希、实例部署和公开发布状态分别记录。
+[1.11.0 版本说明](docs/releases/1.11.0.md) · [Release](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.11.0)。2026-10-29 正式发布并确认为 Latest，九份附件匿名 HTTP 200 回下载逐字节一致。冻结源码 `9d3755b9479ee9aec6eda5b4562c9e5335831db6`，源码包 SHA256 `453ae4039ecf4607054514e64daafbc4c280854d25e92831118b334998b07e8c`；三平台执行与证据复用见[平台验证范围](docs/RELEASE_INSTALL_VALIDATION.md)。标签与发行包不因补写发布记录改变。
 
 - 修复 macOS 的 `/etc`／`/var` 经真实路径解析为 `/private/etc`／`/private/var` 后漏掉系统与自启动分类的问题；系统文件不能保存长期允许规则，自启动位置仍按原做事方式确认。
 - 修复受管线程重开时定时扩展提前重设工具列表，导致已选中的子任务回复工具丢失；包含最后一次模型请求来自定时任务的恢复情形。普通回合在启动注册完成后移除静默结束工具，保留原生选择和明确禁用。
