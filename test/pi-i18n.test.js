@@ -191,8 +191,8 @@ test('all catalogs, numeric placeholders and static/source bindings are complete
     }
 });
 
-test('Bot activity English describes global source windows before filtering matching Bot records', () => {
+test('Buddy activity English describes global source windows before filtering matching Buddy records', () => {
     const { api } = runtime();
     const text = api.t('只读最近的有限记录（全局最近 {0} 次定时运行、{1} 条渠道记录），最多显示 {2} 项；每个聊天核对最近 {3} 代，链接打开当前一代。', 100, 60, 30, 100);
-    assert.match(text, /globally/); assert.match(text, /matching (?:this )?Bot records/); assert.doesNotMatch(text, /across this identity/);
+    assert.match(text, /globally/); assert.match(text, /matching (?:this )?Buddy records/); assert.doesNotMatch(text, /across this identity/);
 });

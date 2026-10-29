@@ -70,9 +70,9 @@ async function main() {
                 const dialog = page.locator('dialog.pi-identity-thread[open]');
                 await dialog.waitFor();
                 await dialog.locator('.pi-identity-thread-row').first().waitFor();
-                assert.match(await dialog.locator('.pi-identity-thread-note').textContent(), /identity-thread.*普通 Pi 线程.*不受 Bot 的做事方式限制/);
+                assert.match(await dialog.locator('.pi-identity-thread-note').textContent(), /identity-thread.*普通 Pi 线程.*不受伙伴的做事方式限制/);
                 const names = await dialog.locator('.pi-identity-thread-copy strong').allTextContents();
-                assert.deepEqual(names, ['数学老师', '小狸Bot'], 'enabled identities and Bots; a Bot is marked; disabled ones are left out');
+                assert.deepEqual(names, ['数学老师', '小狸伙伴'], 'enabled identities and Bots; a Bot is marked; disabled ones are left out');
                 assert.equal(await dialog.locator('input[value="' + TUTOR + '"]').isChecked(), true, 'the first one is preselected');
                 if (process.env.PI_BOT_EVIDENCE) await page.screenshot({ path: path.join(process.env.PI_BOT_EVIDENCE, `identity-thread-${width}.png`) });
                 const box = await dialog.boundingBox();

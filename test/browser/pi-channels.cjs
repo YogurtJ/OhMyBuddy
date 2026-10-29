@@ -42,7 +42,7 @@ const server = http.createServer((req, res) => {
             await page.getByRole('button', { name: 'Install WeChat connector', exact: true }).waitFor();
             assert.equal(await page.evaluate(() => writes.length), 0);
             assert.equal(await page.locator('select[aria-label="Thread"]').inputValue(), 'thread-two');
-            assert.deepEqual(await page.locator('select[aria-label="Project or Bot"] option').evaluateAll(options => options.map(o => o.value)), ['/fixture', '/other'], 'removed projects stay out of channel binding selectors');
+            assert.deepEqual(await page.locator('select[aria-label="Project or Buddy"] option').evaluateAll(options => options.map(o => o.value)), ['/fixture', '/other'], 'removed projects stay out of channel binding selectors');
             const headingOverlap = () => page.evaluate(() => {
                 const a = document.querySelector('.channel-header .channel-icon-button').getBoundingClientRect();
                 return [...document.querySelectorAll('.channel-feedback, .channel-card, .channel-overview')].filter(n => n.getClientRects().length)
@@ -199,12 +199,12 @@ const server = http.createServer((req, res) => {
             const botRow = page.locator(`[data-bot-binding="${fox}"]`);
             await botRow.waitFor();
             assert.match(await botRow.innerText(), /Fox/); assert.match(await botRow.innerText(), /also connected: Owl/);
-            assert.equal(await botRow.getByRole('button', { name: 'Open Bot' }).isVisible(), true);
-            const targets = await page.locator('select[aria-label="Project or Bot"] option').evaluateAll(options => options.map(o => o.value));
+            assert.equal(await botRow.getByRole('button', { name: 'Open Buddy' }).isVisible(), true);
+            const targets = await page.locator('select[aria-label="Project or Buddy"] option').evaluateAll(options => options.map(o => o.value));
             assert.deepEqual(targets.slice(0, 2), [`bot:${fox}`, `bot:${other}`]);
-            await page.locator('select[aria-label="Project or Bot"]').selectOption(`bot:${other}`);
+            await page.locator('select[aria-label="Project or Buddy"]').selectOption(`bot:${other}`);
             assert.equal(await page.locator('select[aria-label="Thread"]').isVisible(), false, 'a Bot has no thread to choose');
-            await page.getByRole('button', { name: 'Connect Bot', exact: true }).click();
+            await page.getByRole('button', { name: 'Connect Buddy', exact: true }).click();
             await page.waitForFunction(() => writes.at(-1)?.action === 'bind');
             assert.equal(await page.evaluate(() => writes.at(-1).botProfileId), other);
             assert.equal(await page.evaluate(() => 'cwd' in writes.at(-1) || 'sessionId' in writes.at(-1)), false);

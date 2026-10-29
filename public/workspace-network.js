@@ -125,17 +125,17 @@
         const panel = $('workspace-access-panel'); if (!panel) return;
         if ($('network-model-link')) $('network-model-link').textContent = t('网络代理设置');
         $('workspace-access-nav').querySelector('span').textContent = t('网络与访问');
-        const heading = panel.querySelector('.settings-panel-header'); heading.querySelector('h3').textContent = t('网络与访问'); heading.querySelector('p').textContent = t('管理工作台的访问方式与服务器网络连接。');
+        const heading = panel.querySelector('.settings-panel-header'); heading.querySelector('h3').textContent = t('网络与访问'); heading.querySelector('p').textContent = t('管理 OhMyBuddy 的访问方式与服务器网络连接。');
         const loadStatus = el('p', undefined, { id: 'network-load-status', hidden: '' });
         const summary = el('div', undefined, { id: 'network-summary' });
         const hint = el('p', undefined, { id: 'network-auth-hint', hidden: '' });
         heading.after(loadStatus, summary, hint);
         const pending = el('div', undefined, { id: 'network-pending', class: 'network-pending', hidden: '' });
         pending.append(el('strong', '有配置等待重启生效'), paragraph('保存不会中断任务。请在任务结束、草稿保存后，由部署端安全重启整个服务。'), button('network-discard', '撤销待生效配置'), el('p', undefined, { id: 'network-discard-status', hidden: '' })); hint.after(pending);
-        const security = card('network-security', 'fa-shield-halved', '访问安全', '用登录验证保护工作台。已登录设备共享此实例的使用权限。');
+        const security = card('network-security', 'fa-shield-halved', '访问安全', '用登录验证保护 OhMyBuddy。已登录设备共享此实例的使用权限。');
         const accessForm = $('workspace-access-form'); accessForm.before(security); security.append(accessForm);
         const note = accessForm.querySelector('p.workspace-access-note:not([id])'); if (note) { const help = fold('访问安全说明', note); accessForm.append(help); }
-        const listen = card('network-listen', 'fa-laptop', '访问范围', '选择哪些设备可以直接连接这个工作台。');
+        const listen = card('network-listen', 'fa-laptop', '访问范围', '选择哪些设备可以直接连接这个 OhMyBuddy。');
         listen.append(field('允许连接的设备', select('network-listen-mode', [['local', '仅本机访问'], ['devices', '允许其他设备连接']])), paragraph(''));
         listen.lastChild.id = 'network-current-listen';
         const source = paragraph(''); source.id = 'network-listen-source'; listen.append(source);
@@ -159,8 +159,8 @@
         const remote = card('network-remote', 'fa-globe', '远程访问', '推荐私有网络或 HTTPS；无需在这里安装穿透工具。');
         for (const [title, description, url] of [
             ['Tailscale 私有访问', '直接访问 Tailscale 地址需要相应监听；同机 Tailscale Serve 可转发到本机地址，无需开放全部接口。', 'https://tailscale.com/kb/1242/tailscale-serve'],
-            ['HTTPS 反向代理', '同机代理可连接本机监听。需要保留 Host、转发 WebSocket、配置 Secure Cookie，并限制后端直接入口。', 'https://github.com/YogurtJ/pivane/blob/main/docs/ACCESS_CONTROL.md'],
-            ['本机隧道与端口转发', 'SSH 转发或同机隧道客户端可以访问回环监听。隧道可能扩大访问范围，仍应启用 Token；不自动创建公网入口。', 'https://github.com/YogurtJ/pivane/blob/main/docs/ACCESS_CONTROL.md']]) {
+            ['HTTPS 反向代理', '同机代理可连接本机监听。需要保留 Host、转发 WebSocket、配置 Secure Cookie，并限制后端直接入口。', 'https://github.com/YogurtJ/OhMyBuddy/blob/main/docs/ACCESS_CONTROL.md'],
+            ['本机隧道与端口转发', 'SSH 转发或同机隧道客户端可以访问回环监听。隧道可能扩大访问范围，仍应启用 Token；不自动创建公网入口。', 'https://github.com/YogurtJ/OhMyBuddy/blob/main/docs/ACCESS_CONTROL.md']]) {
             const content = el('div'); content.append(paragraph(description)); const link = el('a', '查看接入指引', { href: url, target: '_blank', rel: 'noopener noreferrer' }); content.append(link); remote.append(fold(title, content));
         }
         panel.append(listen, proxy, remote);

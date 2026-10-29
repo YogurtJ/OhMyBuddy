@@ -375,7 +375,7 @@ document.addEventListener('DOMContentLoaded', () => {
         changed: () => {
             state.shellBusy = shell.busy; setStreaming(state.streaming);
             if (state.connected && !state.shellBusy && !state.streaming && !state.compacting) {
-                setConnection('connected', translateUi("Pi Agent 已连接")); setAgentState('connected', translateUi("空闲"), state.model?.id || 'Pi Agent');
+                setConnection('connected', translateUi("Agent 已连接")); setAgentState('connected', translateUi("空闲"), state.model?.id || 'Agent');
             }
         }
     });
@@ -762,7 +762,7 @@ document.addEventListener('DOMContentLoaded', () => {
             submitting: state.submittingDrafts.has(state.composerSessionKey), submissionVersion: state.composerSubmissionVersion }),
         api: apiFetch, toast, changed: autoResizeInput, reload: reloadResources,
         locals: () => LOCAL_COMMANDS.filter(c => c.name !== 'btw' || sideChat.enabled).map(c =>
-            c.name === 'btw' && state.botMode ? { ...c, available: false, description: translateUi("Bot 聊天里没有侧聊，直接在这里问就好") } :
+            c.name === 'btw' && state.botMode ? { ...c, available: false, description: translateUi("伙伴聊天里没有侧聊，直接在这里问就好") } :
             c.name === 'tree' && !historyView.tree.enabled ? { ...c, available: false, description: translateUi("当前后端尚未启用会话树") } :
             c.name === 'trust' && !state.nativeSettings ? { ...c, available: false, description: translateUi("当前后端尚未启用项目信任设置") } :
             ['import', 'export'].includes(c.name) && !transfer.enabled
@@ -869,7 +869,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // One projection for the footer: related work does not lock the main composer.
     function refreshAgentState() {
-        if (state.connected) setAgentState('connected', translateUi('空闲'), state.model?.id || 'Pi Agent');
+        if (state.connected) setAgentState('connected', translateUi('空闲'), state.model?.id || 'Agent');
     }
 
     function setAgentState(kind, title, detail) {
@@ -902,7 +902,7 @@ document.addEventListener('DOMContentLoaded', () => {
             title = labels[0] || translateUi('空闲');
             kind = state.pendingUi.size || side.waiting || side.uncertain || attention && !active && !state.streaming && !side.busy && !controls?.subagents?.background?.active
                 ? 'waiting' : labels.length ? 'working' : 'connected';
-            detail = state.model ? `${state.model.provider}/${state.model.id}` : 'Pi Agent';
+            detail = state.model ? `${state.model.provider}/${state.model.id}` : 'Agent';
         }
         elements.agentStateDot.dataset.state = kind;
         if (state.botMode) {
@@ -1002,7 +1002,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!window.WorkspaceAccess.authenticated) return;
         }
         elements.projectButton.disabled = true;
-        setConnection('connecting', translateUi("正在连接 Pi Agent"));
+        setConnection('connecting', translateUi("正在连接 Agent"));
         try {
             const status = await apiFetch('/api/pi/status');
             state.scheduledTasks = status.scheduledTasks === true;
@@ -1463,7 +1463,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 badge.dataset.phase = phase;
                 badge.innerHTML = `<i class="fa-solid ${icon}" aria-hidden="true"></i><span>${label}</span>`;
             }
-            badge.title = phase === 'inactive' ? translateUi("本工作台没有此会话的运行实例；不代表外部终端状态")
+            badge.title = phase === 'inactive' ? translateUi("本实例没有此会话的运行实例；不代表外部终端状态")
                 : phase === 'idle' ? translateUi("运行实例仍保留，可使用 /quit 退出") : label;
             const notice = state.replyNotices.get(key);
             const unread = Boolean(notice);
@@ -2398,7 +2398,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             const resolved = await apiFetch(`/api/pi/bots/${encodeURIComponent(target.profileId)}/windows/${encodeURIComponent(target.windowId)}/session`);
-            toast(translateUi("这个 Bot 聊天已接续到新的会话文件，正在打开"), 'info');
+            toast(translateUi("这个伙伴聊天已接续到新的会话文件，正在打开"), 'info');
             await window.PiChatNavigation.openSession({ cwd: resolved.session.cwd, sessionId: resolved.session.id });
         } catch (error) { toast(error.message, 'error'); }
     }
@@ -2448,7 +2448,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // The previous thread's pre-compaction turns leave with its transcript.
         archive?.sync();
         document.getElementById('pi-chat-knowledge').hidden = true;
-        setConnection('connecting', translateUi("正在连接 Pi Agent"));
+        setConnection('connecting', translateUi("正在连接 Agent"));
         setAgentState('connecting', translateUi("正在启动"), getSessionTitle(session));
         const openedCwd = state.cwd;
         const connected = await connectSocket(session);
@@ -2495,7 +2495,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (!live || !event.webRuntimeId || event.webSequence > live.sequence
                             || event.type === 'extension_error' || event.type === 'extension_ui_request' && event.method === 'notify') handlePiEvent(event);
                     }
-                    setConnection(state.shellBusy || state.compacting || state.streaming ? 'working' : 'connected', state.shellBusy ? translateUi("Shell 正在执行") : state.compacting ? translateUi("正在压缩上下文") : state.streaming ? translateUi("Pi 正在执行") : translateUi("Pi Agent 已连接"));
+                    setConnection(state.shellBusy || state.compacting || state.streaming ? 'working' : 'connected', state.shellBusy ? translateUi("Shell 正在执行") : state.compacting ? translateUi("正在压缩上下文") : state.streaming ? translateUi("Pi 正在执行") : translateUi("Agent 已连接"));
                     resolve(true);
                 } catch (error) {
                     if (generation !== state.socketGeneration || state.socket !== socket) return resolve(false);
@@ -2550,7 +2550,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.pendingUi.clear();
                 closeRequestDialog();
                 renderPendingUi();
-                rejectPending(new Error(event.reason || 'Pi Agent connection closed'));
+                rejectPending(new Error(event.reason || 'Agent connection closed'));
                 if (event.code === 4401) {
                     clearTimeout(state.reconnectTimer);
                     if (window.WorkspaceAccess?.supported) void window.WorkspaceAccess.refresh();
@@ -2567,7 +2567,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
             socket.addEventListener('error', () => {
-                if (generation === state.socketGeneration) setConnection('error', translateUi("Pi Agent 连接失败"));
+                if (generation === state.socketGeneration) setConnection('error', translateUi("Agent 连接失败"));
             });
         });
     }
@@ -2630,7 +2630,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function requestRpc(type, payload = {}, timeoutMs = 45000) {
         if (!state.socket || state.socket.readyState !== WebSocket.OPEN) {
-            return Promise.reject(new Error(translateUi("Pi Agent 尚未连接")));
+            return Promise.reject(new Error(translateUi("Agent 尚未连接")));
         }
         const id = `browser-${state.nextRequestId++}`;
         return new Promise((resolve, reject) => {
@@ -2740,7 +2740,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setAgentState(
             state.compacting || state.streaming || state.shellBusy ? 'working' : 'connected',
             state.shellBusy ? translateUi("Shell 执行中") : state.compacting ? translateUi("压缩中") : state.streaming ? translateUi("执行中") : translateUi("空闲"),
-            state.model ? `${state.model.provider}/${state.model.id}` : 'Pi Agent'
+            state.model ? `${state.model.provider}/${state.model.id}` : 'Agent'
         );
         autoResizeInput();
         void workflows.refresh(true).catch(() => {});
@@ -2760,7 +2760,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // A Bot speaks plainly: no catalog refresh or per-session picker, just what is missing.
         elements.modelRefresh.hidden = elements.modelChoose.hidden = state.botMode;
         if (state.botMode && !state.modelRefreshOp) {
-            const name = botUi?.identity()?.name || 'Bot';
+            const name = botUi?.identity()?.name || translateUi('伙伴');
             elements.modelGuidanceText.textContent = state.modelAuthError ? translateUi("{0} 用的模型现在登录失效了。请在“供应商与模型”里重新登录。", name)
                 : state.models.length ? translateUi("{0} 选的模型现在用不了。可以在 {0} 的设置里换一个。", name)
                     : translateUi("还没有可用的聊天模型。{0} 要接入一个模型才能回复你。", name);
@@ -3391,7 +3391,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderEmptySession() {
         if (!state.session && (state.transcriptBooting || state.pendingRestore)) {
-            elements.transcript.innerHTML = transcriptLoadingMarkup(elements.connectionText.textContent || translateUi("正在连接 Pi Agent"), 'boot');
+            elements.transcript.innerHTML = transcriptLoadingMarkup(elements.connectionText.textContent || translateUi("正在连接 Agent"), 'boot');
             return;
         }
         if (state.botMode) {
@@ -3527,7 +3527,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             case 'gateway_bot_notice':
                 if (event.notice === 'model_unavailable') toast(state.botMode ? translateUi("设置里选的模型暂时用不了，这次先用当前模型回复")
-                    : translateUi("Bot 设置的模型 {0} 暂时不可用，已沿用当前模型", `${event.provider}/${event.id}`), 'error', 7000);
+                    : translateUi("伙伴设置的模型 {0} 暂时不可用，已沿用当前模型", `${event.provider}/${event.id}`), 'error', 7000);
                 break;
             case 'gateway_session_moving':
                 state.connected = false; nativeControls.disconnected(); workflows.update();
@@ -3604,7 +3604,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 transcriptActivity?.agentStart();
                 setStreaming(true);
                 setConnection('working', translateUi("Pi 正在执行"));
-                setAgentState('working', translateUi("执行中"), state.model?.id || 'Pi Agent');
+                setAgentState('working', translateUi("执行中"), state.model?.id || 'Agent');
                 if (state.botMode) botUi?.motionEvent('start', botMotionKey());
                 break;
             case 'agent_settled':
@@ -3615,8 +3615,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 timeline?.settled();
                 if (chatKnowledge?.settled) chatKnowledge.settled(); else void chatKnowledge?.refresh();
                 setStreaming(false);
-                setConnection('connected', translateUi("Pi Agent 已连接"));
-                setAgentState('connected', translateUi("空闲"), state.model?.id || 'Pi Agent');
+                setConnection('connected', translateUi("Agent 已连接"));
+                setAgentState('connected', translateUi("空闲"), state.model?.id || 'Agent');
                 if (state.botMode) botUi?.motionEvent('settled', botMotionKey());
                 reconcileSession();
                 break;
@@ -3669,7 +3669,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 state.compaction = { status: 'running', reason: event.reason };
                 setStreaming(state.streaming);
                 setConnection('working', translateUi("正在压缩上下文"));
-                setAgentState('working', translateUi("压缩中"), state.model?.id || 'Pi Agent');
+                setAgentState('working', translateUi("压缩中"), state.model?.id || 'Agent');
                 renderCompactionStatus();
                 transcriptActivity?.compaction(state.compaction, { streaming: state.streaming });
                 break;
@@ -3685,8 +3685,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderCompactionStatus();
                 transcriptActivity?.compaction(state.compaction, { streaming: state.streaming });
                 setStreaming(state.streaming);
-                setConnection(state.streaming ? 'working' : 'connected', state.streaming ? translateUi("Pi 正在执行") : translateUi("Pi Agent 已连接"));
-                setAgentState(state.streaming ? 'working' : 'connected', state.streaming ? translateUi("执行中") : translateUi("空闲"), state.model?.id || 'Pi Agent');
+                setConnection(state.streaming ? 'working' : 'connected', state.streaming ? translateUi("Pi 正在执行") : translateUi("Agent 已连接"));
+                setAgentState(state.streaming ? 'working' : 'connected', state.streaming ? translateUi("执行中") : translateUi("空闲"), state.model?.id || 'Agent');
                 if (state.compaction.status === 'error' && event.errorMessage) toast(translateUi("压缩失败：{0}", event.errorMessage), 'error', 8000);
                 if (event.reason === 'manual' || !state.streaming) void reconcileSession();
                 else void refreshStats();
@@ -3733,7 +3733,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 void refreshActivity();
                 break;
             case 'gateway_error':
-                toast(event.error || translateUi("Pi Agent 发生错误"), 'error', 7000);
+                toast(event.error || translateUi("Agent 发生错误"), 'error', 7000);
                 break;
         }
     }
@@ -4205,7 +4205,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const compacting = state.compacting || state.compactRequested;
         const stopping = nativeControls.value?.stopping || state.controlRequested;
         const busy = state.treeBusy || state.shellBusy || streaming || compacting || stopping || state.resourceRequested || Boolean(state.modelRefreshOp || state.thinkingChangeOp) || modelSpeed.pending;
-        if (state.connected && state.shellBusy) { setConnection('working', translateUi("Shell 正在执行")); setAgentState('working', translateUi("Shell 执行中"), state.model?.id || 'Pi Agent'); }
+        if (state.connected && state.shellBusy) { setConnection('working', translateUi("Shell 正在执行")); setAgentState('working', translateUi("Shell 执行中"), state.model?.id || 'Agent'); }
         const cancellable = !state.modelRefreshOp && !state.thinkingChangeOp && !state.treeBusy && !state.shellBusy && state.connected && !state.resourceRequested && (nativeControls.enabled ? busy : streaming && !compacting);
         elements.stopButton.dataset.cancellable = String(cancellable);
         elements.stopButton.disabled = !state.connected || stopping;
@@ -4395,7 +4395,7 @@ document.addEventListener('DOMContentLoaded', () => {
             $('settings-manage-templates').focus(); return true;
         }
         if (name === 'btw') {
-            if (state.botMode) throw new Error(translateUi("Bot 聊天里没有侧聊，直接在这里问就好"));
+            if (state.botMode) throw new Error(translateUi("伙伴聊天里没有侧聊，直接在这里问就好"));
             return sideChat.run(() => sideChat.open({ question: args }));
         }
         if (name === 'copy') { await copyTextToClipboard(state.lastAssistantText); toast(translateUi("已复制最近一条 Agent 回复"), 'success'); return true; }
@@ -4418,7 +4418,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (name === 'hotkeys') { toast(translateUi("输入 / 搜索命令、Skill 或模板，@ 搜索项目文件；↑↓ 选择，Tab/Enter 填入，Esc 关闭；加号内可添加附件、延迟发送或创建定时任务，Shift+Enter 换行。"), 'info', 12000); return true; }
         if (!state.connected) throw new Error(translateUi("请先打开会话"));
-        if ((name === 'fork' || name === 'clone') && state.botMode) throw new Error(translateUi("Bot 聊天不能分叉；以后可以为 Bot 另开话题"));
+        if ((name === 'fork' || name === 'clone') && state.botMode) throw new Error(translateUi("伙伴聊天不能分叉；以后可以为伙伴另开话题"));
         if (name === 'fork' || name === 'clone') {
             if (!workflows.enabled) throw new Error(translateUi("当前后端尚未支持会话分叉"));
             if (name === 'fork') await workflows.openList('history'); else await workflows.openClone(); return true;
@@ -5510,7 +5510,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     window.addEventListener('workspace:access-locked', () => {
-        state.token = ''; sideChat.disposeAll(); disconnectSocket(true); setConnection('idle', translateUi("请登录工作台"));
+        state.token = ''; sideChat.disposeAll(); disconnectSocket(true); setConnection('idle', translateUi("请登录 OhMyBuddy"));
     });
     window.addEventListener('workspace:access-ready', () => {
         state.token = '';

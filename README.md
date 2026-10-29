@@ -9,7 +9,7 @@
 An open-source personal AI agent with a full coding-agent workspace, built on the [Pi coding agent](https://pi.dev).<br>
 Bring your own models: Claude, GPT, Gemini, DeepSeek, Qwen, Kimi and more. Your chats, memory and keys stay on your machine.
 
-[![Latest release](https://img.shields.io/github/v/release/YogurtJ/pivane?style=flat-square&label=release)](https://github.com/YogurtJ/pivane/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/YogurtJ/OhMyBuddy?style=flat-square&label=release)](https://github.com/YogurtJ/OhMyBuddy/releases/latest)
 [![License: ISC](https://img.shields.io/badge/license-ISC-blue?style=flat-square)](LICENSE)
 [![Node.js 22](https://img.shields.io/badge/node-22.x-339933?style=flat-square&logo=node.js&logoColor=white)](docs/en/INSTALL.md)
 [![Platforms](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-555?style=flat-square)](#platforms)
@@ -17,9 +17,9 @@ Bring your own models: Claude, GPT, Gemini, DeepSeek, Qwen, Kimi and more. Your 
 
 **English** · [简体中文](README.zh-CN.md)
 
-[Download](https://github.com/YogurtJ/pivane/releases/latest) · [Install](docs/en/INSTALL.md) · [User guide](docs/en/USER_GUIDE.md) · [Changelog](CHANGELOG.md) · [Report an issue](https://github.com/YogurtJ/pivane/issues/new/choose) · [Discussions](https://github.com/YogurtJ/pivane/discussions)
+[Download](https://github.com/YogurtJ/OhMyBuddy/releases/latest) · [Install](docs/en/INSTALL.md) · [User guide](docs/en/USER_GUIDE.md) · [Changelog](CHANGELOG.md) · [Report an issue](https://github.com/YogurtJ/OhMyBuddy/issues/new/choose) · [Discussions](https://github.com/YogurtJ/OhMyBuddy/discussions)
 
-<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/hero-en.webp" alt="OhMyBuddy, a self-hosted AI assistant, on the desktop: a Bot conversation with a folded process summary and memory receipts" width="100%">
+<img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/hero-en.webp" alt="OhMyBuddy, a self-hosted AI assistant, on the desktop: a Buddy conversation with a folded process summary and memory receipts" width="100%">
 
 </div>
 
@@ -31,14 +31,14 @@ OhMyBuddy is a self-hosted web app that turns the Pi coding agent into a persona
 
 It has two sides that share the same runtime, models and tools:
 
-- **Bot: your personal buddy.** A Bot has a name, a look and a personality. It keeps one ongoing conversation with you, remembers what matters across chats, and handles everyday questions, plans, notes, research, reminders and small jobs on your computer.
-- **Pi Agent: your agent workspace.** For project work in real folders, you get threads, streaming tool calls, diffs, subagents, side chats and session trees. Sessions stay compatible with Pi CLI.
+- **Buddy: a personal assistant that knows you.** A Buddy has a name, a look and a personality. It keeps one ongoing conversation with you, remembers what matters across chats, and handles everyday questions, plans, notes, research, reminders and small jobs on your computer.
+- **Workspace: the full agent workspace.** For project work in real folders, you get threads, streaming tool calls, diffs, subagents, side chats and session trees. Sessions stay compatible with Pi CLI.
 
 ## Why OhMyBuddy
 
-- **It remembers you, and you can see what it remembers.** Each Bot keeps notes about you, long-term memory, learned skills and a notebook for every chat. When a reply saves something, a receipt appears under it, and every memory and skill can be reviewed, edited or undone.
+- **It remembers you, and you can see what it remembers.** Each Buddy keeps notes about you, long-term memory, learned skills and a notebook for every chat. When a reply saves something, a receipt appears under it, and every memory and skill can be reviewed, edited or undone.
 - **One buddy on every screen.** Sessions live on your server, so your desktop, phone and WeChat continue the same conversation. Install it to your home screen and get notified when a reply finishes.
-- **It does real work.** Bots and agents can read and write files, run commands, use the web and MCP tools, start subagents and run scheduled tasks on your machine. Bots offer three working styles: Hands-off, Careful and Ask every time.
+- **It does real work.** Buddies and agents can read and write files, run commands, use the web and MCP tools, start subagents and run scheduled tasks on your machine. Buddies offer three working styles: Hands-off, Careful and Ask every time.
 - **Your models, your keys, your machine.** Use any provider Pi supports, including Anthropic, OpenAI, Google Gemini, GitHub Copilot, OpenRouter, DeepSeek, Qwen, Kimi, MiniMax, xAI and Mistral, with an API key, OAuth or your own OpenAI-compatible endpoint. Credentials and history stay on your machine.
 - **Grows with Pi's ecosystem.** Install Pi packages, skills, prompt templates and MCP servers from the browser, or ask the built-in extension assistant to find and set them up.
 - **Images, video and voice built in.** Connect your own image, video and speech services, describe what you want and get editable parameters. Dictate messages and have replies read aloud.
@@ -52,16 +52,16 @@ It has two sides that share the same runtime, models and tools:
 
 ## Features
 
-### Bots: a personal buddy
+### Buddies: personal assistants that remember you
 
-- Give a Bot a name, an avatar, a personality and a working folder. An optional two-to-three-minute interview covers how it should address you, what it helps with and how it should work.
-- Each Bot has one ongoing main chat and up to 100 topics. Every chat has its own notebook, "Things I'm keeping in mind", for decisions, promises, deadlines and open questions. Topics share the Bot's memory and skills.
-- Long chats stay usable. Old tool output is trimmed and summaries are written while the chat is idle. Earlier parts of the chat stay readable, and the Bot can search their original wording.
+- Give a Buddy a name, an avatar, a personality and a working folder. An optional two-to-three-minute interview covers how it should address you, what it helps with and how it should work.
+- Each Buddy has one ongoing main chat and up to 100 topics. Every chat has its own notebook, "Things I'm keeping in mind", for decisions, promises, deadlines and open questions. Topics share the Buddy's memory and skills.
+- Long chats stay usable. Old tool output is trimmed and summaries are written while the chat is idle. Earlier parts of the chat stay readable, and the Buddy can search their original wording.
 - Each turn shows one reply and a one-line summary of the process, which you can expand. Memory, notebook, skill, settings and schedule changes appear as receipts you can open.
-- Run several Bots side by side, each with separate memory. A new Bot can copy the "About you" notes you select from another Bot.
-- Proactive messages and background learning have their own switches and budgets in the Bot settings. See the [Bot guide (Chinese)](docs/BOT_MODE.md).
+- Run several Buddies side by side, each with separate memory. A new Buddy can copy the "About you" notes you select from another Buddy.
+- Proactive messages and background learning have their own switches and budgets in the Buddy settings. See the [Buddy guide](docs/en/BUDDY.md).
 
-### Pi Agent: the agent workspace
+### Workspace: projects, threads and tools
 
 - Threads are organized by project and run directly in folders on the server.
 - Replies stream in with thinking, tool calls and the files changed in each turn. The default compact view folds each finished turn into a one-line "time · tool calls" summary.
@@ -69,7 +69,7 @@ It has two sides that share the same runtime, models and tools:
 - While a task runs, you can steer it or queue a follow-up. You can also stop, retry or compact the context.
 - `!command` runs a shell command on the server, and `!!command` keeps its output out of the model context.
 - The model picker has search, favorites that sync across devices, per-model thinking levels and a context usage meter. A progress card shows the plan the agent is following.
-- Start a thread in any project as one of your Bots to bring its personality, memory and skills into project work.
+- Start a thread in any project as one of your Buddies to bring its personality, memory and skills into project work.
 
 ### Sessions and history
 
@@ -87,15 +87,15 @@ It has two sides that share the same runtime, models and tools:
 
 ### Memory and learning
 
-- Bots and assistant profiles each have their own persona, notes about you and long-term memory, powered by [pi-hermes-memory](https://pi.dev/packages/pi-hermes-memory?name=memory). Overview, Settings, Memories, Skills and Learning have separate pages for reviewing changes and budgets.
+- Buddies and assistant profiles each have their own persona, notes about you and long-term memory, powered by [pi-hermes-memory](https://pi.dev/packages/pi-hermes-memory?name=memory). Overview, Settings, Memories, Skills and Learning have separate pages for reviewing changes and budgets.
 - Optional background learning picks up your corrections and preferences within daily budgets.
 - Several logical projects with their own instructions can point to the same directory.
 
 ### WeChat
 
 - Install the optional WeChat connector, sign in with a QR code and allow specific users. It connects a WeChat ClawBot (iLink) bot identity and does not take over your personal account's chats.
-- Chat with a Bot in WeChat, or bind a private chat to a Pi Agent thread. Send text and images; get final replies, delivered files and scheduled notifications back.
-- Slash commands switch Bots (`/bot`) and topics (`/topic`), change the model or thinking level, and check status, stop or confirm work. Connection status and delivery receipts are shown in the browser. See [messaging channels (Chinese)](docs/MESSAGE_CHANNELS.md).
+- Chat with a Buddy in WeChat, or bind a private chat to a Workspace thread. Send text and images; get final replies, delivered files and scheduled notifications back.
+- Slash commands switch Buddies (`/bot` or `/buddy`) and topics (`/topic`), change the model or thinking level, and check status, stop or confirm work. Connection status and delivery receipts are shown in the browser. See [messaging channels (Chinese)](docs/MESSAGE_CHANNELS.md).
 
 ### Files and rendering
 
@@ -120,13 +120,13 @@ It has two sides that share the same runtime, models and tools:
 
 ### Everyday use
 
-<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/mobile-en.webp" alt="OhMyBuddy on a phone: a Bot conversation with a process summary and memory receipts" width="280"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/mobile-en.webp" alt="OhMyBuddy on a phone: a Buddy conversation with a process summary and memory receipts" width="280"></p>
 
 - Layouts adapt to desktop, tablet and phone screens, and OhMyBuddy can be installed to your home screen.
 - In-page notifications and sounds are available, with optional Web Push for background alerts.
 - A usage dashboard breaks down tokens and estimated cost by day, provider, model, project and session.
 - Light and dark color themes, adjustable font sizes, and an English or Simplified Chinese interface are available.
-- An access token protects the workspace. OhMyBuddy runs as a background service with a desktop shortcut, checks for new releases and gives you an upgrade prompt to hand to an agent on the host.
+- An access token protects your instance. OhMyBuddy runs as a background service with a desktop shortcut, checks for new releases and gives you an upgrade prompt to hand to an agent on the host.
 
 ## Quick start
 
@@ -144,14 +144,14 @@ node scripts/install.cjs
 npm start
 ```
 
-Open <http://127.0.0.1:11408>, check **Settings → Providers and models**, then open **Bot** to meet your first buddy, or pick a project folder in **Pi Agent**.
+Open <http://127.0.0.1:11408>, check **Settings → Providers and models**, then open **Buddy** to meet your first one, or pick a project folder in **Workspace**.
 
 For everyday use, follow the [installation guide](docs/en/INSTALL.md) to keep your data outside the app directory, then run `node scripts/install-service.cjs`. This keeps OhMyBuddy running in the background and starts it when you log in. On macOS and Windows, it also adds a desktop shortcut.
 
 **Let your coding agent install it.** Paste this into Claude Code, Codex, Pi or another agent on the target computer:
 
 ```text
-Install OhMyBuddy from https://github.com/YogurtJ/pivane on this computer.
+Install OhMyBuddy from https://github.com/YogurtJ/OhMyBuddy on this computer.
 Follow docs/AGENT_GUIDE.md and the installation guide for this platform:
 use the latest release, verify its checksum, install it as a background service,
 and tell me the URL, version and data paths. Never print or copy my API keys.
@@ -179,22 +179,22 @@ flowchart LR
 ```
 
 - A Node.js server (Express and WebSocket) serves a plain JavaScript frontend, so there is no build step.
-- Each persistent thread, including every Bot chat and topic, is served by exactly one Pi worker process, and every browser that opens it connects to that worker.
+- Each persistent thread, including every Buddy chat and topic, is served by exactly one Pi worker process, and every browser that opens it connects to that worker.
 - Pi's SessionManager and JSONL files are the only record of each conversation. Usage statistics are kept in a separate ledger that stores no message content.
 - Each OhMyBuddy release bundles a tested version of Pi, which is upgraded together with OhMyBuddy.
 
 ## Security model
 
 - OhMyBuddy is meant for **personal, single-user** instances. Everyone who has the access token shares the same instance, and there are no separate user accounts.
-- Project roots limit which folders you can browse, but they are **not a sandbox**. Bots, agents, the shell, packages and extensions all run with the permissions of the server's user account. A Bot's working style controls when it asks first; it is not an operating-system sandbox either. Install only extensions you trust.
+- Project roots limit which folders you can browse, but they are **not a sandbox**. Buddies, agents, the shell, packages and extensions all run with the permissions of the server's user account. A Buddy's working style controls when it asks first; it is not an operating-system sandbox either. Install only extensions you trust.
 - Only allowed WeChat users can reach a bound chat, and they can use that chat's tools, so add only people you trust.
 - Media execution follows your per-type chat settings and confirmation policy. OhMyBuddy never automatically replays failed or uncertain submissions.
 
 ## FAQ
 
-**What is the difference between Bot and Pi Agent?** A Bot is one ongoing, personal conversation that hides projects, models and context controls. Pi Agent is the full workspace for project folders. Both use the same Pi runtime, and you can start a Pi Agent thread as a Bot to bring its memory along.
+**What is the difference between Buddy and Workspace?** A Buddy is one ongoing, personal conversation that hides projects, models and context controls. Workspace is the full agent workspace for project folders. Both use the same Pi runtime, and you can start a Workspace thread as a Buddy to bring its memory along.
 
-**Is OhMyBuddy just a web UI for Pi?** It started that way, as Pivane. It still runs Pi's own runtime and session files, but Bots, visible memory, WeChat, scheduled tasks and the media lab make it a personal agent you can use every day without opening a terminal.
+**Is OhMyBuddy just a web UI for Pi?** It started that way, as Pivane. It still runs Pi's own runtime and session files, but Buddies, visible memory, WeChat, scheduled tasks and the media lab make it a personal agent you can use every day without opening a terminal.
 
 **How does it compare with OpenClaw or Hermes Agent?** All of them run an agent on your own hardware with your own models. OhMyBuddy is browser-first: memory changes appear as receipts you can review, the Pi coding workspace is included, and WeChat works through ClawBot. If you mainly want one assistant inside many chat apps, OpenClaw's channel list is wider.
 
@@ -210,7 +210,8 @@ flowchart LR
 
 If you are an AI agent helping someone install, configure, upgrade or troubleshoot OhMyBuddy, start with the [agent operations guide](docs/AGENT_GUIDE.md). Read [AGENTS.md](AGENTS.md) only when you are asked to change the source code.
 
-- **What it is:** a self-hosted personal AI agent (Bots with memory) and coding-agent workspace (Pi Agent), formerly named Pivane. ISC license.
+- **What it is:** a self-hosted personal AI agent ("Buddies" with memory) plus a coding-agent workspace ("Workspace"), formerly named Pivane. ISC license.
+- **Names in code:** the API, data directories and WeChat command call Buddies `bot` (`/api/pi/bots`, `/bot`); the Workspace tab is `chat`.
 - **Runtime:** Node.js 22.x (22.19.0 or later), npm, `bash` and ripgrep. No build step, GPU, Docker or global Pi installation.
 - **Default address:** `http://127.0.0.1:11408`. It listens on localhost by default; turn on the access token before allowing other devices.
 - **Engine:** a pinned [Pi coding agent](https://pi.dev) runtime. Conversations are Pi-native JSONL sessions, compatible with Pi CLI.
@@ -222,19 +223,19 @@ If you are an AI agent helping someone install, configure, upgrade or troublesho
 |---|---|
 | Install, upgrade and recover | [Installation guide](docs/en/INSTALL.md) · [Background service](docs/BACKGROUND_SERVICE.md) |
 | Daily use | [User guide](docs/en/USER_GUIDE.md) |
-| Bots | [Bot guide (Chinese)](docs/BOT_MODE.md) |
+| Buddies | [Buddy guide](docs/en/BUDDY.md) |
 | All features, in detail (mostly in Chinese) | [Documentation index](docs/README.md) |
 | REST and WebSocket API | [API reference](docs/API.md) |
 | Help from your own agent | [Agent operations guide](docs/AGENT_GUIDE.md) |
-| What's new and what's next | [Changelog](CHANGELOG.md) · [Releases](https://github.com/YogurtJ/pivane/releases) · [Roadmap](docs/ROADMAP.md) |
+| What's new and what's next | [Changelog](CHANGELOG.md) · [Releases](https://github.com/YogurtJ/OhMyBuddy/releases) · [Roadmap](docs/ROADMAP.md) |
 
 ## Contributing
 
-Feedback of any kind is welcome. Start with the [welcome post](https://github.com/YogurtJ/pivane/discussions/5).
+Feedback of any kind is welcome. Start with the [welcome post](https://github.com/YogurtJ/OhMyBuddy/discussions/5).
 
-- **Bugs and feature requests:** [open an issue](https://github.com/YogurtJ/pivane/issues/new/choose). For bugs, include your OhMyBuddy version and the shortest steps that reproduce it.
-- **Questions, chat and sharing:** post in [Discussions](https://github.com/YogurtJ/pivane/discussions) or reply to the welcome post. Not sure where something belongs? Post it anywhere and I'll see it.
-- **Pull requests:** welcome. Issues labeled [`good first issue`](https://github.com/YogurtJ/pivane/labels/good%20first%20issue) are a good place to start.
+- **Bugs and feature requests:** [open an issue](https://github.com/YogurtJ/OhMyBuddy/issues/new/choose). For bugs, include your OhMyBuddy version and the shortest steps that reproduce it.
+- **Questions, chat and sharing:** post in [Discussions](https://github.com/YogurtJ/OhMyBuddy/discussions) or reply to the welcome post. Not sure where something belongs? Post it anywhere and I'll see it.
+- **Pull requests:** welcome. Issues labeled [`good first issue`](https://github.com/YogurtJ/OhMyBuddy/labels/good%20first%20issue) are a good place to start.
 
 Remove credentials and private content from logs and screenshots first.
 

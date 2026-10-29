@@ -1,6 +1,6 @@
 # OhMyBuddy 路线图
 
-本页记录产品方向。已发布能力以 [Releases](https://github.com/YogurtJ/pivane/releases) 和对应版本说明为准；当前源码中尚未发布的改动见 [CHANGELOG](../CHANGELOG.md)。源码完成、实例已启用和公开版本已发布分别核对。
+本页记录产品方向。已发布能力以 [Releases](https://github.com/YogurtJ/OhMyBuddy/releases) 和对应版本说明为准；当前源码中尚未发布的改动见 [CHANGELOG](../CHANGELOG.md)。源码完成、实例已启用和公开版本已发布分别核对。
 
 ## 已有能力
 

@@ -377,7 +377,7 @@
             choose.type = 'button'; choose.dataset.key = '__default__';
             if (selected) choose.setAttribute('aria-current', 'true');
             const copy = node('div', 'pi-model-copy');
-            copy.append(node('strong', '', this.defaultLabel), node('small', '', t('使用工作台默认模型')));
+            copy.append(node('strong', '', this.defaultLabel), node('small', '', t('使用全局默认模型')));
             const mark = node('b', 'pi-model-check', selected ? '✓' : '');
             mark.setAttribute('aria-hidden', 'true');
             choose.append(mark, copy);

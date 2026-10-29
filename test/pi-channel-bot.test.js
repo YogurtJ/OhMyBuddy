@@ -84,6 +84,7 @@ function fixture(t, { text = 'hello', binding: bindingOverride } = {}) {
 
 test('Chinese Bot commands are recognised; unknown ones stay ordinary text', () => {
     assert.deepEqual(parseSlash('/切换 小狸'), { command: '/bot', args: '小狸' });
+    for (const alias of ['/伙伴', '/buddy', '/Buddy']) assert.deepEqual(parseSlash(`${alias} 小狸`), { command: '/bot', args: '小狸' });
     assert.deepEqual(parseSlash('/话题'), { command: '/topic', args: '' });
     assert.deepEqual(parseSlash('/Help'), { command: '/help', args: '' });
     assert.equal(parseSlash('/随便说说'), null);
@@ -155,7 +156,7 @@ test('/切换 and /话题 move the chat; native reset commands explain Bot topic
     assert.match(await send('back', '/切换 小狸'), /现在和 小狸 聊/);
     assert.match(await send('topic', '/话题 旅行'), /进入「旅行」/);
     assert.deepEqual([db.value.bindings[0].bot.windowId, db.value.bindings[0].sessionId], [TOPIC_A, 'a-topic-0']);
-    assert.match(await send('reset', '/reset'), /Bot 不支持 \/reset/);
+    assert.match(await send('reset', '/reset'), /伙伴不支持 \/reset/);
     assert.match(await send('status', '/status'), /小狸 聊 · 旅行/);
 });
 
@@ -189,7 +190,7 @@ test('pushes reach every chat connected to the Bot, with the speaker named when 
 
 test('a plain thread binding cannot target a Bot chat, and a Bot binding must match its marker', async t => {
     const { s, cwd } = fixture(t, { text: null });
-    await assert.rejects(s.withBindingTarget(cwd, 'a-main-0', () => {}), /按 Bot 连接微信/);
+    await assert.rejects(s.withBindingTarget(cwd, 'a-main-0', () => {}), /按伙伴连接微信/);
     await assert.rejects(s.withBindingTarget(cwd, 'a-topic-0', () => {}, { bot: { profileId: A, windowId: MAIN_A } }), /不一致/);
     await s.withBindingTarget(cwd, 'a-main-0', () => {}, { bot: { profileId: A, windowId: MAIN_A } });
     await s.withBindingTarget(cwd, 'plain', () => {});

@@ -446,7 +446,7 @@ tool adapter.
   and respects the latest native context edit. Enrollment and each source recheck
   use the same interpretation and original native source entry. Arbitrary custom,
   scheduled, subagent and carried handoff messages never become fresh user input;
-  hidden Bot notebook/topic context notices do not break a real user/assistant pair.
+  hidden 伙伴 notebook/topic context notices do not break a real user/assistant pair.
   Pairs before the last `pivane-learning-baseline` custom entry on the branch
   (written when older conversations are imported) are never learned from, in
   any kind or at a boundary; forks keep the baseline.

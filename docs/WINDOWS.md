@@ -1,6 +1,6 @@
 # Windows 原生安装与验证
 
-OhMyBuddy 在 Windows x64 上原生运行，无需 WSL，使用 Node 22.x、Git for Windows 与 ripgrep。各版本实际验收过的系统与文件系统见[验证范围](RELEASE_INSTALL_VALIDATION.md)；在其他环境遇到问题，欢迎通过 [Issues](https://github.com/YogurtJ/pivane/issues) 反馈。
+OhMyBuddy 在 Windows x64 上原生运行，无需 WSL，使用 Node 22.x、Git for Windows 与 ripgrep。各版本实际验收过的系统与文件系统见[验证范围](RELEASE_INSTALL_VALIDATION.md)；在其他环境遇到问题，欢迎通过 [Issues](https://github.com/YogurtJ/OhMyBuddy/issues) 反馈。
 
 ## 安装前提
 

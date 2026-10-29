@@ -87,7 +87,7 @@
     }));
     buttons[3].addEventListener('click', () => void run(refresh));
     window.addEventListener('workspace:access-ready', () => void run(refresh));
-    window.addEventListener('workspace:access-locked', () => { buttons.forEach(button => { button.disabled = true; }); status.textContent = translateUi("请先登录工作台，再启用通知。"); });
+    window.addEventListener('workspace:access-locked', () => { buttons.forEach(button => { button.disabled = true; }); status.textContent = translateUi("请先登录 OhMyBuddy，再启用通知。"); });
     document.querySelector('.pi-notification-advanced').addEventListener('toggle', event => {
         if (event.target.open) void run(refresh);
     });

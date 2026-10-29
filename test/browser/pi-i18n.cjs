@@ -80,7 +80,7 @@ async function run(browser, base, width, language) {
     await page.waitForFunction(() => !document.getElementById('pi-input').disabled);
     const english = language.startsWith('en');
     assert.equal(await page.locator('html').getAttribute('lang'), english ? 'en' : 'zh-CN');
-    assert.equal(await page.locator('#workspace-settings-toggle').getAttribute('title'), english ? 'Workspace settings' : '工作台设置');
+    assert.equal(await page.locator('#workspace-settings-toggle').getAttribute('title'), english ? 'OhMyBuddy settings' : 'OhMyBuddy 设置');
     assert.equal(await page.locator('#workspace-profiles-toggle > span:not(.workspace-nav-short)').textContent(), english ? 'Assistant profiles' : '助手身份');
     assert.equal(await page.locator('#workspace-profiles-toggle').getAttribute('title'), english ? 'Assistant profiles' : '助手身份');
     assert.equal(await page.locator('[data-more-tab="profiles"] span').textContent(), english ? 'Assistant profiles' : '助手身份');
@@ -227,7 +227,7 @@ async function run(browser, base, width, language) {
         await navigation; await page.waitForLoadState('domcontentloaded');
         assert.equal(await page.locator('html').getAttribute('lang'), english ? 'en' : 'zh-CN');
         assert.equal(await page.evaluate(() => sessionStorage.getItem('fixture.language-prepared')), 'yes');
-        assert.equal(await page.locator('#workspace-settings-toggle').getAttribute('title'), english ? 'Workspace settings' : '工作台设置');
+        assert.equal(await page.locator('#workspace-settings-toggle').getAttribute('title'), english ? 'OhMyBuddy settings' : 'OhMyBuddy 设置');
         await page.waitForFunction(() => !document.getElementById('pi-input').disabled);
         await page.locator('[data-settings-tab="models"]').click();
         // An explicit switch confirms the current blockers before preparing and reloading.

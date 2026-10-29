@@ -98,13 +98,13 @@
         }
         for (const [id, phase] of phases) {
             if (previous.has(id) && previous.get(id) !== phase && ['waiting', 'error'].includes(phase)) {
-                events.push([phase === 'waiting' ? translateUi("任务正在等待你的确认。") : translateUi("任务未成功完成，请打开工作台查看。"), 'state-' + Date.now()]);
+                events.push([phase === 'waiting' ? translateUi("任务正在等待你的确认。") : translateUi("任务未成功完成，请打开 OhMyBuddy 查看。"), 'state-' + Date.now()]);
             }
         }
         previous = phases;
         while (seen.size > 512) seen.delete(seen.values().next().value);
         // One alert for a polling interval, even when several threads settle together.
-        if (events.length) await notify(events.length > 1 ? translateUi("{0} 项任务有新的提醒，请查看工作台。", events.length) : events[0][0], events[0][1]);
+        if (events.length) await notify(events.length > 1 ? translateUi("{0} 项任务有新的提醒，请查看 OhMyBuddy。", events.length) : events[0][0], events[0][1]);
     }
     async function poll() {
         if (polling || !(prefs.desktop || prefs.sound) || window.WorkspaceAccess?.supported && !window.WorkspaceAccess.authenticated) return;

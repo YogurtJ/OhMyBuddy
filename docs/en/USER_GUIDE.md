@@ -8,20 +8,21 @@ OhMyBuddy runs on your computer or server. Other devices can use its browser int
 
 1. Follow the [installation guide](INSTALL.md), start the instance and open its URL.
 2. In **Settings → Providers and models**, check existing Pi configuration. Add an API key or complete OAuth if credentials are missing. Keep credentials out of chat. For remote OAuth, localhost means the server; use the provider's device-code or manual-callback flow when available.
-3. Return to Pi Agent, select a server project directory and choose **New chat**, a model and its thinking level.
+3. Return to Workspace, select a server project directory and choose **New chat**, a model and its thinking level.
 4. Send a simple question, then refresh and reopen the persistent thread to check that the reply is retained. Requests use your provider account.
 
 If Pi CLI has models but the browser does not, check its identity directory and startup environment using [existing Pi users](INSTALL.md#existing-pi-cli-users). Global models and extensions can be managed before selecting a project.
 
 ## Workspace navigation
 
-- **Pi Agent** groups threads by directory; **Assistant chat** groups them by identity and project category. Profiles, extensions, scheduled tasks and the media lab have separate pages.
+- **Buddy** opens your personal assistants: one ongoing main chat per Buddy, topics, a notebook and memory you can review. See [Buddies](BUDDY.md).
+- **Workspace** groups threads by directory; **Assistant chat** groups them by identity and project category. Profiles, extensions, scheduled tasks and the media lab have separate pages.
 - Phones place additional entries under **More**. Bottom and header navigation remain available while the project/thread drawer is open. The header drawer button closes it directly; the project name opens the project picker. Opening another entry or panel closes the drawer first.
 - **Projects** browses directories; **Activity** shows running work, items needing attention and recent threads. Sidebar search matches titles and first questions. **Search text** searches conversation content; Ctrl/Cmd+K focuses sidebar search.
 - Text search retains its query, results page and reading position within the current page. **Locate current thread** adjusts the list and focus without changing archive state or restarting the session.
 - Details, Files, History and Side chat share the right panel. Desktop panels dock and resize; narrow desktops temporarily hide the thread list. Phones use a drawer with Close and Esc support. Closing a panel does not stop its task.
 
-Opening management pages does not end the session. Returning to Assistant chat reloads its projects and threads while retaining drafts and attachments within the page. When switching between Pi Agent and Assistant chat, select the thread again to continue. Drafts and loaded attachments are retained per thread within the page; **preserve unsent content before refreshing or closing it**.
+Opening management pages does not end the session. Returning to Assistant chat reloads its projects and threads while retaining drafts and attachments within the page. When switching between Workspace and Assistant chat, select the thread again to continue. Drafts and loaded attachments are retained per thread within the page; **preserve unsent content before refreshing or closing it**.
 
 Management pages load on first use, showing a loading state and a Retry action if resources cannot be read. You can navigate elsewhere while loading; a late result will not return you to the old page. Chat identity names, configuration viewers and automatic update reminders work before you visit a management page.
 
@@ -83,7 +84,7 @@ If creation is uncertain, inspect the original task instead of creating it again
 
 ## Assistant identities and memory
 
-Create an identity under **Assistant profiles**, then select it in Assistant chat and choose a project category and thread. New ordinary Pi Agent threads do not bind an identity. An identity has five pages: **Overview** summarizes memories, skills, learning status and items that need attention; **Persona** edits the name, avatar, capability switches and SOUL (behavior, optionally starting from an example template); **Memories** manages entries for About you (USER), Long-term memory (MEMORY) and Project memory, with a Full text mode for editing USER.md or MEMORY.md directly; **Skills** reviews drafts and manages learned skills; **Learning** configures background learning and the daily budget. Identities you no longer use can be moved to the trash and restored at any time; no data is deleted.
+Create an identity under **Assistant profiles**, then select it in Assistant chat and choose a project category and thread. New ordinary Workspace threads do not bind an identity. An identity has five pages: **Overview** summarizes memories, skills, learning status and items that need attention; **Persona** edits the name, avatar, capability switches and SOUL (behavior, optionally starting from an example template); **Memories** manages entries for About you (USER), Long-term memory (MEMORY) and Project memory, with a Full text mode for editing USER.md or MEMORY.md directly; **Skills** reviews drafts and manages learned skills; **Learning** configures background learning and the daily budget. Identities you no longer use can be moved to the trash and restored at any time; no data is deleted.
 
 Categories may share a server directory and add different instructions, but **files, AGENTS.md and memory scoped to the physical directory remain shared**. Identities are not security sandboxes, and opening a thread does not change its existing identity. See [assistant profiles](../AGENT_PROFILES.md).
 
@@ -162,7 +163,7 @@ Configure a media model, then ask “draw a cover for this report” or “read 
 
 - For a staged video workflow, first ask for opening/ending frames or reference images and wait for those cards to finish, confirming them when required. In the next turn, ask the Agent to use those images for a video. It reads current-branch results and uses stable asset references; the card shows frame roles and reference order. Finished videos can be played, downloaded and reused as video references.
 - Video requests default to a two-hour wait, configurable up to 24 hours; existing saved values are preserved. For accepted asynchronous jobs, Continue querying original task retrieves the same job after a timeout or restart without creating another generation. Synchronous requests without a task ID need checking at the provider.
-- To edit an image, upload a PNG/JPEG/WebP in Pi Agent or an assistant conversation and describe the changes. The Agent selects a model with image inputs and shows the reference on the confirmation card. You can also ask to edit a completed card image, or replace the reference under Edit parameters. Available inputs depend on the model.
+- To edit an image, upload a PNG/JPEG/WebP in Workspace or an assistant conversation and describe the changes. The Agent selects a model with image inputs and shows the reference on the confirmation card. You can also ask to edit a completed card image, or replace the reference under Edit parameters. Available inputs depend on the model.
 - Use Edit parameters to review or change a card. When confirmation is required, server-normalized changes return for another review.
 - Results appear in the card and lab history, including after reconnecting or changing devices. The same card is not submitted twice. Status refreshes preserve unsaved parameter edits on the page and playback progress for unchanged results; switching threads releases the old cards. Status queries and generation jobs have separate timeout limits.
 - Multiple accepted cards queue for available slots and can be cancelled before starting. Remote services allow 4 concurrent items (2 videos); local backends allow 1.

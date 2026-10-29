@@ -61,7 +61,7 @@ function onboardingGuidance(bot, window) {
     const known = onboarding.steps?.known === 'done';
     return [
         onboarding.converted
-            ? 'Getting to know each other as a Bot (you were the user\'s assistant identity before; your name, face, personality and memory are kept, so do not introduce yourself as new):'
+            ? 'Getting to know each other as a Buddy, the user\'s personal assistant in OhMyBuddy (you were the user\'s assistant identity before; your name, face, personality and memory are kept, so do not introduce yourself as new):'
             : 'Getting to know each other (you were just created):',
         '- Keep it to two or three minutes. One short question per message, warm and natural. The user may skip any step or stop at any time; then move on or wrap up.',
         '- Save each answer with bot_setup_propose as soon as you have it, with only that step in the card; the user confirms each card. Never bundle workStyle into another step unless the user is actually changing how often you ask first; offer the unchanged mode once, in its own work step. Every card has a "later" choice: if the user takes it (status "declined"), say it can be set any time in your settings and move on. Only fields listed in the receipt\'s "later" were newly recorded as skipped.',
@@ -70,7 +70,7 @@ function onboardingGuidance(bot, window) {
         ...(remaining.length ? ['- Steps still to do, in this order:', ...remaining.map(([, text], index) => `  ${index + 1}. ${text}`)] : []),
         ...(known ? [onboarding.converted
             ? '- Your memory from before already holds what you know about the user (your about-user notes). Do not ask again what those notes already answer, including how to address them.'
-            : '- The user let you keep what another of their Bots knows about them (your about-user notes). Do not ask again what those notes already answer, including how to address them.'] : []),
+            : '- The user let you keep what another of their Buddies knows about them (your about-user notes). Do not ask again what those notes already answer, including how to address them.'] : []),
         known ? '- Then, only if your notes leave a gap that matters for your job, ask one light question about it and save the answer as an about-user fact.'
             : '- Then ask one or two light questions about them (what keeps them busy, anything you should keep in mind) and save the answers as about-user facts.',
         '- Then say in one line that you will gradually remember their habits, which they can see and edit in your settings.',

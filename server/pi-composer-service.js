@@ -8,7 +8,7 @@ const { withinCanonical: isWithin } = require('./pi-platform-path');
 
 // Web equivalents for the installed Pi 0.85 built-ins; runtime resources come from get_commands.
 const BUILTINS = [
-    ['settings', '打开工作台设置'], ['model', '选择当前会话模型', '<provider/model>'],
+    ['settings', '打开 OhMyBuddy 设置'], ['model', '选择当前会话模型', '<provider/model>'],
     ['thinking', '选择思考等级', '<level>'], ['name', '命名当前会话', '<名称>'],
     ['session', '查看会话详情与用量'], ['new', '新建当前项目会话'], ['resume', '选择已有会话'],
     ['compact', '压缩当前上下文', '[摘要要求]'], ['copy', '复制最近一条回复'], ['quit', '退出当前运行实例'],

@@ -132,7 +132,7 @@
                 const menuItems = [{ label: t('与 Agent 起草'), icon: 'wand-magic-sparkles', disabled: !enabled || busy(), onSelect: () => void assist() }];
                 // An identity can become a Bot (M4-5b); a Bot is managed from the Bot page.
                 const stored = savedProfile();
-                if (stored && !stored.bot) menuItems.push({ label: t('变成 Bot'), icon: 'robot', disabled: !enabled || busy() || Boolean(reconcile) || !stored.enabled,
+                if (stored && !stored.bot) menuItems.push({ label: t('变成伙伴'), icon: 'robot', disabled: !enabled || busy() || Boolean(reconcile) || !stored.enabled,
                     title: !stored.enabled ? t('请先启用并保存此身份') : undefined, onSelect: () => void makeBot(stored) });
                 if (Array.isArray(snapshot?.trash)) menuItems.push({ label: t('移到回收站'), icon: 'trash-can', tone: 'danger', disabled: !enabled || busy() || Boolean(reconcile), onSelect: () => void trashAction(profile, 'trash') });
                 header.append(el('div', { class: 'pi-id-header-actions' }, [button({ label: t('用此身份对话'), icon: 'comments', variant: 'primary', disabled: !enabled || !profile.enabled || busy(), title: !profile.enabled ? t('请先启用并保存此身份') : undefined, attrs: { 'data-profile-chat': '' }, onClick: () => void chat() }),
@@ -204,7 +204,7 @@
             if (!profile?.enabled || !await guard() || id !== selected) return;
             if (profile.bot) return void window.PiWorkspaceRoute?.navigate('bot', { profileId: id });
             const target = project?.cwd || cwd();
-            if (!target) { ui.toast(t('请先在 Pi Agent 选择一个项目'), { tone: 'warning' }); return; }
+            if (!target) { ui.toast(t('请先在工作台选择一个项目'), { tone: 'warning' }); return; }
             try {
                 const session = await apiFetch('/api/pi/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ cwd: target, profileId: id, ...(project ? { assistantProjectId: project.id } : {}) }) });
@@ -375,7 +375,7 @@
             }
             const changes = card({ title: t('最近变化'), icon: 'clock-rotate-left', actions: receipts.length > 6 && receiptLimit === 6 ? [button({ label: t('显示更多'), size: 'sm', variant: 'ghost', onClick: () => { receiptLimit = 30; renderOverview(); } })] : [] }, [!knowledgeData ? notice(t('{0}读取失败：{1}', t('记忆'), overviewData.knowledge.reason?.message || ''), [button({ label: t('重试'), size: 'sm', onClick: () => void loadOverview() })]) : receipts.length ? timeline : empty({ icon: 'clock', title: t('还没有变化记录'), compact: true })]);
             const projectsCard = card({ title: t('关联项目'), icon: 'folder-open', subtitle: t('这些项目中的新对话会使用此身份。') }, [
-                projectsData ? projectRows.length ? el('div', { class: 'pi-id-entries' }, projectRows.map(project => el('div', { class: 'pi-id-entry pi-profile-project' }, [el('div', { class: 'pi-id-entry-main' }, [el('span', { class: 'pi-id-entry-title' }, [icon('folder'), ' ', project.name]), el('span', { class: 'pi-id-entry-meta pi-profile-project-path', title: project.cwd, text: project.cwd }), el('span', { class: 'pi-id-entry-text', text: project.description || '' })]), button({ label: t('在此项目对话'), icon: 'arrow-right', variant: 'quiet', size: 'sm', onClick: () => void chat(project) })]))) : empty({ icon: 'folder-open', title: t('没有关联项目'), text: t('在 Pi Agent 项目菜单中选“以身份新建…”，就能在那个项目里用此身份。'), compact: true })
+                projectsData ? projectRows.length ? el('div', { class: 'pi-id-entries' }, projectRows.map(project => el('div', { class: 'pi-id-entry pi-profile-project' }, [el('div', { class: 'pi-id-entry-main' }, [el('span', { class: 'pi-id-entry-title' }, [icon('folder'), ' ', project.name]), el('span', { class: 'pi-id-entry-meta pi-profile-project-path', title: project.cwd, text: project.cwd }), el('span', { class: 'pi-id-entry-text', text: project.description || '' })]), button({ label: t('在此项目对话'), icon: 'arrow-right', variant: 'quiet', size: 'sm', onClick: () => void chat(project) })]))) : empty({ icon: 'folder-open', title: t('没有关联项目'), text: t('在工作台项目菜单中选“以身份新建…”，就能在那个项目里用此身份。'), compact: true })
                     : notice(t('关联项目读取失败：{0}', overviewData.projects.reason?.message || ''), [button({ label: t('重试'), size: 'sm', onClick: () => void loadOverview() })])]);
             projectsCard.dataset.projectsCard = '';
             overviewRoot.replaceChildren(stats, el('div', { class: 'pi-id-grid-2' }, [card({ title: t('需要处理'), icon: 'list-check' }, [attention]), changes]), projectsCard,
@@ -447,12 +447,12 @@
                 schedules = (cron.jobs || []).filter(job => !job.deleted && job.target?.kind === 'profile' && job.target.profileId === id).length;
             } catch { schedules = 0; }
             const items = [
-                { icon: 'fa-sparkles', title: t('保留原有设定与对话'), text: t('{0} 会保留名字、头像、性格、记忆和技能，并有自己的主聊天和工作目录，出现在 Bot 页面。以前用它进行的对话保留在 Pi Agent 的线程列表里。', profile.name) },
-                schedules ? { icon: 'fa-clock', tone: 'highlight', title: t('定时任务自动承接'), text: t('以它为目标的 {0} 个定时任务以后会发到 Bot 的主聊天。', schedules) } : null,
-                { icon: 'fa-circle-info', tone: 'warn', title: t('首次引导与不可逆说明'), text: t('第一次打开时它会问问想让它主要帮你做什么、怎么做事。变成 Bot 后不能再变回普通身份，可以像其他 Bot 一样移到回收站。') }
+                { icon: 'fa-sparkles', title: t('保留原有设定与对话'), text: t('{0} 会保留名字、头像、性格、记忆和技能，并有自己的主聊天和工作目录，出现在伙伴页面。以前用它进行的对话保留在工作台的线程列表里。', profile.name) },
+                schedules ? { icon: 'fa-clock', tone: 'highlight', title: t('定时任务自动承接'), text: t('以它为目标的 {0} 个定时任务以后会发到伙伴的主聊天。', schedules) } : null,
+                { icon: 'fa-circle-info', tone: 'warn', title: t('首次引导与不可逆说明'), text: t('第一次打开时它会问问想让它主要帮你做什么、怎么做事。变成伙伴后不能再变回普通身份，可以像其他伙伴一样移到回收站。') }
             ].filter(Boolean);
             const message = items.map(item => item.text).join('\n\n');
-            const accepted = await ui.confirm({ title: t('把“{0}”变成 Bot？', profile.name), message, items, tone: 'primary', accept: t('变成 Bot') });
+            const accepted = await ui.confirm({ title: t('把“{0}”变成伙伴？', profile.name), message, items, tone: 'primary', accept: t('变成伙伴') });
             if (!accepted || !active() || busy() || selected !== id || snapshot?.revision !== revision) return;
             mutation = { kind: 'bot' }; renderList(); renderHeader(); syncSave();
             let done = false;
@@ -460,12 +460,12 @@
                 await apiFetch('/api/pi/bots/from-profile', { method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ profileId: id, expectedRevision: revision, language: globalThis.PiI18n?.locale === 'en' ? 'en' : 'zh-CN' }) });
                 done = true;
-                ui.toast(t('“{0}”已变成 Bot', profile.name)); window.dispatchEvent(new CustomEvent('workspace:agent-profiles-changed'));
+                ui.toast(t('“{0}”已变成伙伴', profile.name)); window.dispatchEvent(new CustomEvent('workspace:agent-profiles-changed'));
             } catch (error) {
-                if (error.status === 409 && error.code === 'PROFILE_ALREADY_BOT') ui.toast(t('它已经是 Bot 了。'), { tone: 'info' });
+                if (error.status === 409 && error.code === 'PROFILE_ALREADY_BOT') ui.toast(t('它已经是伙伴了。'), { tone: 'info' });
                 else if (error.status === 409 && error.code === 'PROFILE_DISABLED') ui.toast(t('请先启用并保存此身份'), { tone: 'warning' });
                 else if (error.status === 409 || error.status === 404) ui.toast(error.status === 404 ? t('找不到这个身份了，请刷新核对。') : t('身份已变化，请刷新核对。'), { tone: 'warning' });
-                else if (error.status >= 400 && error.status < 500) ui.toast(t('没有变成 Bot：{0}', error.message), { tone: 'error' });
+                else if (error.status >= 400 && error.status < 500) ui.toast(t('没有变成伙伴：{0}', error.message), { tone: 'error' });
                 else { reconcile = { kind: 'bot' }; personaNotice = t('结果未确认，请刷新核对'); ui.toast(personaNotice, { tone: 'warning' }); }
             } finally { mutation = null; if (!reconcile) await load(); renderList(); renderHeader(); showSection(); renderPersonaNotice(); syncSave(); }
             if (done && active()) window.PiWorkspaceRoute?.navigate('bot', { profileId: id });

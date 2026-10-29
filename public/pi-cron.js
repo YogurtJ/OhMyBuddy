@@ -192,7 +192,7 @@
         }
         function openThread(ref) { window.PiWorkspaceRoute.navigate('chat', { cwd: ref.cwd, sessionId: ref.sessionId }); }
         // A Bot's main thread is its main chat: shown, opened on the Bot page, never replaced here.
-        const BOT_HOME = 'Bot 的主线程就是它的主聊天，定时任务会进入它当前的聊天。';
+        const BOT_HOME = '伙伴的主线程就是它的主聊天，定时任务会进入它当前的聊天。';
         const openBotHome = home => button('打开主聊天', 'fa-arrow-up-right-from-square', () => window.PiWorkspaceRoute.navigate('bot', { profileId: home.profileId }));
         async function action(b, job, kind, extra = {}) {
             const requestId = kind === 'run' ? (runRequest?.jobId === job.id ? runRequest.id : randomId()) : undefined;

@@ -164,7 +164,7 @@ class CronService {
         return this.reserve(() => this.profiles.reserve(async () => {
             const profile = await this.profiles.getProfile(profileId);
             if (!profile?.enabled) fail('Profile is unavailable');
-            if (this.bots && require('./bot/bot-settings').readBot(profile)) fail('Bot 的主线程就是它的主聊天，不能在这里更改', 409);
+            if (this.bots && require('./bot/bot-settings').readBot(profile)) fail('伙伴的主线程就是它的主聊天，不能在这里更改', 409);
             const previous = this.db.home(profileId);
             const requestHash = hash([input.cwd, input.sessionId ?? null, input.create === true]);
             if ((previous?.revision || 0) !== input.revision) {

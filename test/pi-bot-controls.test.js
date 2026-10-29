@@ -180,7 +180,7 @@ test('/new durably creates a topic, follows queued inputs, renames only that top
     assert.equal(again.window.id, topic.id); assert.equal((await f.bots.channelWindows(f.id)).windows.length, 2);
     assert.match((await f.send('/name 旅行安排')).text, /旅行安排/);
     assert.match((await f.send('/topic main')).text, /主聊天/);
-    assert.match((await f.send('/name Main rename')).text, /Bot 设置/);
+    assert.match((await f.send('/name Main rename')).text, /伙伴设置/);
     assert.match((await f.send('/reset')).text, /\/new/); assert.match((await f.send('/resume')).text, /\/topic/);
 });
 
@@ -231,7 +231,7 @@ test('advanced controls retain proof/cancellation; extra summary instructions ar
     assert.equal(f.s.job(id).status, 'uncertain');
     f.supervisor.getActiveWorker = () => f.worker;
     const detail = await f.send('/status detail');
-    assert.match(detail.text, /不是整个 Bot 或话题跨代累计/); assert.match(detail.text, /本代费用：\$0.012/);
+    assert.match(detail.text, /不是整个伙伴或话题跨代累计/); assert.match(detail.text, /本代费用：\$0.012/);
     assert.match(detail.text, /配置模型.*跟随/); assert.match(detail.text, /当前运行模型.*fixture\/text/);
 });
 

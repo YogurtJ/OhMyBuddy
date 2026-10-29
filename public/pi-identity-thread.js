@@ -20,7 +20,7 @@
         dialog.setAttribute('aria-labelledby', 'pi-identity-thread-title');
         const form = el('form'); form.method = 'dialog';
         const title = el('h2', null, t('以身份新建线程')); title.id = 'pi-identity-thread-title';
-        const note = el('p', 'pi-identity-thread-note', t('在“{0}”里新开一个普通 Pi 线程，用所选身份的性格、记忆和技能。工具和权限与 Pi Agent 相同，不受 Bot 的做事方式限制；它不会出现在 Bot 的聊天里。', projectName));
+        const note = el('p', 'pi-identity-thread-note', t('在“{0}”里新开一个普通 Pi 线程，用所选身份的性格、记忆和技能。工具和权限与工作台相同，不受伙伴的做事方式限制；它不会出现在伙伴的聊天里。', projectName));
         const list = el('div', 'pi-identity-thread-list'); list.setAttribute('role', 'radiogroup'); list.setAttribute('aria-labelledby', title.id);
         list.append(el('p', 'pi-identity-thread-state', t('正在读取…')));
         const actions = el('div', 'pi-identity-thread-actions');
@@ -43,7 +43,7 @@
                     const empty = el('div', 'pi-identity-thread-state');
                     const go = el('button', 'settings-secondary-button', t('去身份页')); go.type = 'button';
                     go.addEventListener('click', () => { finish(null); window.PiWorkspaceRoute?.navigate('profiles'); });
-                    empty.append(el('p', null, t('还没有可用的身份。可以在“身份”页新建，或先建一个 Bot。')), go);
+                    empty.append(el('p', null, t('还没有可用的身份。可以在“身份”页新建，或先建一个伙伴。')), go);
                     list.replaceChildren(empty);
                     return;
                 }
@@ -55,7 +55,7 @@
                     const face = globalThis.PiAvatar ? globalThis.PiAvatar.render(profile, 'pi-identity-avatar') : el('span', 'pi-identity-avatar', (profile.name || '?').slice(0, 1));
                     const copy = el('span', 'pi-identity-thread-copy');
                     const name = el('strong', null, profile.name);
-                    if (profile.bot) name.append(el('span', 'pi-identity-thread-tag', 'Bot'));
+                    if (profile.bot) name.append(el('span', 'pi-identity-thread-tag', t('伙伴')));
                     copy.append(name);
                     if (profile.description) copy.append(el('small', null, profile.description));
                     row.append(input, face, copy);

@@ -243,7 +243,7 @@
         // A Bot chat is one continuous conversation: it is never forked or copied into an ordinary
         // thread, whichever entry is used (reply action, history list, menu, slash command) (UAT-06).
         forkable() { return !this.context().botMode; }
-        assertForkable() { if (!this.forkable()) throw new Error(translateUi("Bot 聊天不能分叉；以后可以为 Bot 另开话题")); }
+        assertForkable() { if (!this.forkable()) throw new Error(translateUi("伙伴聊天不能分叉；以后可以为伙伴另开话题")); }
 
         openReplyFork(reply, message, navigation) {
             this.assertForkable();

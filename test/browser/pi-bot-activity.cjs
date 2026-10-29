@@ -124,7 +124,7 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
                 await sheet.locator('.pi-bot-data-notice > summary').click();
                 assert.match(await sheet.locator('.pi-bot-data-notice').innerText(), /外部模型服务/);
                 assert.match(await sheet.locator('.pi-bot-data-notice').innerText(), /普通 Pi 的工具和权限/);
-                assert.match(await sheet.locator('.pi-bot-data-notice').innerText(), /不是整个 Bot 的备份/);
+                assert.match(await sheet.locator('.pi-bot-data-notice').innerText(), /不是整个伙伴的备份/);
                 assert.match(await sheet.locator('.pi-bot-backup-guide').getAttribute('href'), /INSTALL_RECOVERY.md/);
                 // Existing dirty-exit warning also covers activity links; no chat draft/attachment is overwritten.
                 await settingsPage(sheet, 'notify');

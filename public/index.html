@@ -85,11 +85,11 @@
                 </button>
             </div>
 
-            <nav class="nav-menu" aria-label="工作区" data-i18n-aria-label="s1317">
+            <nav class="nav-menu" aria-label="主导航" data-i18n-aria-label="s1317">
                 <span class="workspace-nav-heading"><!--i18n:s2547-->工作</span>
-                <button class="nav-btn" id="workspace-bot-toggle" data-tab="bot" type="button" title="Bot" hidden><svg class="pv-icon" aria-hidden="true" focusable="false"><use href="#pv-icon-bot"/></svg><span>Bot</span></button>
-                <button class="nav-btn active" data-tab="chat" title="Pi Agent">
-                    <svg class="pv-icon" aria-hidden="true" focusable="false"><use href="#pv-icon-chat"/></svg><span>Pi Agent</span>
+                <button class="nav-btn" id="workspace-bot-toggle" data-tab="bot" type="button" title="伙伴" data-i18n-title hidden><svg class="pv-icon" aria-hidden="true" focusable="false"><use href="#pv-icon-bot"/></svg><span><!--i18n-->伙伴</span></button>
+                <button class="nav-btn active" data-tab="chat" title="OhMyBuddy 自带的 Agent 工作台，由 Pi Coding Agent 驱动" data-i18n-title>
+                    <svg class="pv-icon" aria-hidden="true" focusable="false"><use href="#pv-icon-chat"/></svg><span><!--i18n-->工作台</span>
                 </button>
                 <button class="nav-btn" data-tab="cron" type="button"><svg class="pv-icon" aria-hidden="true" focusable="false"><use href="#pv-icon-cron"/></svg><span data-cron-nav>定时任务</span></button>
                 <button class="nav-btn workspace-more-toggle" id="workspace-more-toggle" type="button" title="更多功能" aria-label="更多功能" aria-haspopup="menu" aria-expanded="false" aria-controls="workspace-more-menu" data-i18n-title="s2652" data-i18n-aria-label="s2652"><svg class="pv-icon" aria-hidden="true" focusable="false"><use href="#pv-icon-more"/></svg><span><!--i18n:s2652-->更多功能</span></button>
@@ -134,7 +134,7 @@
                         </button>
                     </div>
                 </div>
-                <button id="workspace-settings-toggle" class="sidebar-tool-button" type="button" title="工作台设置" aria-label="工作台设置" data-i18n-title="s1330" data-i18n-aria-label="s1330">
+                <button id="workspace-settings-toggle" class="sidebar-tool-button" type="button" title="OhMyBuddy 设置" aria-label="OhMyBuddy 设置" data-i18n-title="s1330" data-i18n-aria-label="s1330">
                     <svg class="pv-icon" aria-hidden="true" focusable="false"><use href="#pv-icon-settings"/></svg><span><!--i18n:s1331-->设置</span>
                 </button>
                 <div class="status-panel">
@@ -233,7 +233,7 @@
                     <div id="pi-connection-banner" class="pi-connection-banner">
                         <span class="pi-status-dot"></span>
                         <span id="pi-mobile-thread-title"></span>
-                        <span id="pi-connection-text"><!--i18n:s477-->正在连接 Pi Agent</span>
+                        <span id="pi-connection-text"><!--i18n:s477-->正在连接 Agent</span>
                         <span id="pi-session-profile" class="pi-session-profile" hidden></span>
                         <span id="pi-actual-identity" class="pi-actual-identity" hidden></span>
                         <button id="pi-profile-authoring-return" class="pi-conversation-origin" type="button" hidden><i class="fa-solid fa-user-pen" aria-hidden="true"></i><span></span></button>
@@ -248,7 +248,7 @@
                         <div id="pi-transcript" class="pi-transcript" tabindex="0" role="region" aria-label="会话消息" data-i18n-aria-label="s1354">
                             <section id="pi-transcript-archive" class="pi-transcript-archive" hidden></section>
                             <div id="pi-transcript-content" class="pi-transcript-content" aria-live="polite">
-                                <div class="pi-transcript-loading" role="status" aria-live="polite" aria-busy="true" data-placeholder="boot"><span class="pi-transcript-loading-label"><span class="pi-spinner" aria-hidden="true"></span><span data-loading-label><!--i18n:s477-->正在连接 Pi Agent</span></span><div class="pv-skeleton pv-skeleton--chat" aria-hidden="true"><span class="pv-skel-turn is-user"><span class="pv-skel-line is-tag"></span><span class="pv-skel-bubble"></span></span><span class="pv-skel-turn"><span class="pv-skel-line is-tag"></span><span class="pv-skel-line" style="--w:96%"></span><span class="pv-skel-line" style="--w:82%"></span><span class="pv-skel-line" style="--w:68%"></span></span><span class="pv-skel-turn is-user"><span class="pv-skel-line is-tag"></span><span class="pv-skel-bubble"></span></span><span class="pv-skel-turn"><span class="pv-skel-line is-tag"></span><span class="pv-skel-line" style="--w:72%"></span><span class="pv-skel-line" style="--w:78%"></span><span class="pv-skel-line" style="--w:52%"></span></span></div></div>
+                                <div class="pi-transcript-loading" role="status" aria-live="polite" aria-busy="true" data-placeholder="boot"><span class="pi-transcript-loading-label"><span class="pi-spinner" aria-hidden="true"></span><span data-loading-label><!--i18n:s477-->正在连接 Agent</span></span><div class="pv-skeleton pv-skeleton--chat" aria-hidden="true"><span class="pv-skel-turn is-user"><span class="pv-skel-line is-tag"></span><span class="pv-skel-bubble"></span></span><span class="pv-skel-turn"><span class="pv-skel-line is-tag"></span><span class="pv-skel-line" style="--w:96%"></span><span class="pv-skel-line" style="--w:82%"></span><span class="pv-skel-line" style="--w:68%"></span></span><span class="pv-skel-turn is-user"><span class="pv-skel-line is-tag"></span><span class="pv-skel-bubble"></span></span><span class="pv-skel-turn"><span class="pv-skel-line is-tag"></span><span class="pv-skel-line" style="--w:72%"></span><span class="pv-skel-line" style="--w:78%"></span><span class="pv-skel-line" style="--w:52%"></span></span></div></div>
                             </div>
                             <div id="pi-transcript-activity" class="pi-transcript-activity" hidden></div>
                         </div>
@@ -811,11 +811,11 @@
                     </section>
 
                     <section class="workspace-settings-panel" data-settings-panel="access" id="workspace-access-panel">
-                        <div class="settings-panel-header"><i class="fa-solid fa-lock" aria-hidden="true"></i><div><h3><!--i18n:s1510-->访问控制</h3><p><!--i18n:s1552-->管理这个工作台的登录与 API 访问</p></div><button id="workspace-access-refresh" type="button" class="settings-secondary-button settings-header-refresh"><i class="fa-solid fa-rotate" aria-hidden="true"></i><!--i18n:s1547-->刷新状态</button></div>
+                        <div class="settings-panel-header"><i class="fa-solid fa-lock" aria-hidden="true"></i><div><h3><!--i18n:s1510-->访问控制</h3><p><!--i18n:s1552-->管理这个 OhMyBuddy 的登录与 API 访问</p></div><button id="workspace-access-refresh" type="button" class="settings-secondary-button settings-header-refresh"><i class="fa-solid fa-rotate" aria-hidden="true"></i><!--i18n:s1547-->刷新状态</button></div>
                         <form id="workspace-access-form" class="workspace-access-card">
                             <label><input id="workspace-access-enabled" type="checkbox" disabled><strong><!--i18n:s1553-->启用访问验证</strong></label>
                             <p id="workspace-access-source" class="workspace-access-note"><!--i18n:s1554-->正在读取设置</p>
-                            <p class="workspace-access-note"><!--i18n:s1555-->关闭后，能够连接此服务的客户端均可使用工作台。请通过监听地址、防火墙或私有网络限制访问。开启后，网页登录一次即可访问，程序调用需携带 Token。</p>
+                            <p class="workspace-access-note"><!--i18n:s1555-->关闭后，能够连接此服务的客户端均可使用 OhMyBuddy。请通过监听地址、防火墙或私有网络限制访问。开启后，网页登录一次即可访问，程序调用需携带 Token。</p>
                             <fieldset id="workspace-access-token-fields" hidden><legend><!--i18n:s1556-->设置或更换 Token</legend>
                                 <label class="workspace-access-field" for="workspace-access-token"><span><!--i18n:s1557-->自行设置（10–256 位英文、数字或符号）</span><input id="workspace-access-token" type="password" autocomplete="new-password" maxlength="256" disabled></label>
                                 <label><input id="workspace-access-generate" type="checkbox"><span><!--i18n:s1558-->自动生成随机 Token</span></label>
@@ -868,7 +868,7 @@
     <div id="pi-token-dialog" class="pi-modal hidden" role="dialog" aria-modal="true" aria-labelledby="pi-token-title">
         <form id="pi-token-form" class="pi-modal-dialog token-dialog" aria-describedby="workspace-access-intro">
             <div class="workspace-login-brand"><img src="brand/logo-192.png" width="44" height="44" alt=""><span>OhMyBuddy</span></div>
-            <div class="workspace-login-heading"><h2 id="pi-token-title"><!--i18n:s1304-->登录工作台</h2><p id="workspace-access-intro"><!--i18n:s1587-->输入访问 Token，继续你的工作。</p></div>
+            <div class="workspace-login-heading"><h2 id="pi-token-title"><!--i18n:s1304-->登录 OhMyBuddy</h2><p id="workspace-access-intro"><!--i18n:s1587-->输入访问 Token，继续你的工作。</p></div>
             <div class="workspace-login-field">
                 <label for="pi-token-input"><!--i18n:s1588-->访问 Token</label>
                 <div class="workspace-login-input">
@@ -878,8 +878,8 @@
             </div>
             <label class="workspace-access-remember" hidden><input id="workspace-access-remember" type="checkbox"><span><!--i18n:s1590-->记住此设备 <small><!--i18n:s1591-->30 天</small></span></label>
             <p id="workspace-access-login-error" role="alert" hidden></p>
-            <button class="pi-primary-button workspace-login-submit" type="submit"><span><!--i18n:s1304-->登录工作台</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
-            <details class="workspace-login-help"><summary><!--i18n:s1592-->找不到 Token？</summary><p><!--i18n:s1593-->使用部署此工作台时设置的访问 Token。忘记时，可在服务器按部署文档重置；由他人部署时，请联系部署者获取。</p></details>
+            <button class="pi-primary-button workspace-login-submit" type="submit"><span><!--i18n:s1304-->登录 OhMyBuddy</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg></button>
+            <details class="workspace-login-help"><summary><!--i18n:s1592-->找不到 Token？</summary><p><!--i18n:s1593-->使用部署此 OhMyBuddy 时设置的访问 Token。忘记时，可在服务器按部署文档重置；由他人部署时，请联系部署者获取。</p></details>
         </form>
     </div>
 

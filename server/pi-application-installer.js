@@ -85,7 +85,7 @@ async function stageApplication({ root, directory, release, env = process.env, s
     if (release.bundle) return require('./pi-platform-bundle').stageBundle({ root, directory, release, env, signal, run, get, progress, onOutput });
     progress('downloading');
     const asset = release.assetName || `ohmybuddy-${release.version}.tar.gz`;
-    const url = `https://github.com/YogurtJ/pivane/releases/download/v${release.version}/${asset}`;
+    const url = `${require('./ohmybuddy-compat').REPOSITORY_URL}/releases/download/v${release.version}/${asset}`;
     const bytes = await get(url, { env, signal });
     if (bytes.length > MAX_ARCHIVE || hash(bytes) !== release.sha256) throw Error('Application archive SHA256 mismatch');
     const manifest = unpack(bytes, release.version, directory);

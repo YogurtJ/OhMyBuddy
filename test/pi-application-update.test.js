@@ -44,6 +44,6 @@ test('application installer fails before npm on checksum mismatch and isolates i
 });
 test('release download rejects off-origin redirects before requesting them', async () => {
     let calls = 0;
-    await assert.rejects(download('https://github.com/YogurtJ/pivane/releases/download/v1.2.3/a', { env: {}, request: async () => { calls++; return { status: 302, headers: { get: () => 'https://evil.example/payload' } }; } }), /Untrusted/);
+    await assert.rejects(download('https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.2.3/a', { env: {}, request: async () => { calls++; return { status: 302, headers: { get: () => 'https://evil.example/payload' } }; } }), /Untrusted/);
     assert.equal(calls, 1);
 });
