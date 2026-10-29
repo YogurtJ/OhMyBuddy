@@ -33,16 +33,17 @@
     function list({ bot, topicItem, creating, create, manage }) {
         const state = stateFor(bot.id), root = el('section', 'pi-bot-topic-list');
         const heading = el('div', 'pi-bot-section-row'), more = btn('', 'pi-bot-topic-edit'), add = btn('', 'pi-bot-topic-add');
+        more.dataset.botAction = 'topic-manager-control'; add.dataset.botAction = 'topic-create-control';
         more.title = t('整理话题'); more.setAttribute('aria-label', more.title); more.append(icon('fa-folder-tree')); more.addEventListener('click', () => manage('move'));
         add.title = t('新话题'); add.setAttribute('aria-label', add.title); add.disabled = creating; add.append(creating ? el('span', 'pi-spinner') : icon('fa-plus')); add.addEventListener('click', create);
         heading.append(el('p', 'pi-bot-section', t('话题')), more, add); root.append(heading);
         const topics = bot.windows.filter(item => item.kind === 'topic' && item.generation !== null && !item.archivedAt && !item.trashedAt);
         if (state.group !== '*' && state.group !== '' && !(bot.groups || []).some(group => group.id === state.group)) state.group = '*';
         const controls = el('div', 'pi-bot-topic-filters');
-        const search = el('input'); search.type = 'search'; search.placeholder = t('搜索话题'); search.setAttribute('aria-label', t('搜索话题')); search.value = state.search;
+        const search = el('input'); search.type = 'search'; search.dataset.botAction = 'topic-search'; search.placeholder = t('搜索话题'); search.setAttribute('aria-label', t('搜索话题')); search.value = state.search;
         controls.append(search);
         if (bot.groups?.length) {
-            const select = groupSelect(bot, state.group); select.prepend(new Option(t('全部话题'), '*')); select.value = state.group; select.setAttribute('aria-label', t('筛选话题分组'));
+            const select = groupSelect(bot, state.group); select.prepend(new Option(t('全部话题'), '*')); select.value = state.group; select.dataset.botAction = 'topic-filter'; select.setAttribute('aria-label', t('筛选话题分组'));
             select.addEventListener('change', () => { state.group = select.value; paint(); }); controls.append(select);
         }
         if (topics.length || bot.groups?.length || state.search) root.append(controls);
@@ -57,7 +58,7 @@
             for (const group of [...bot.groups, { id: '', name: t('未分组') }]) {
                 const items = selected.filter(topic => (topic.groupId || '') === group.id); if (!items.length) continue;
                 const section = el('details', 'pi-bot-topic-group'); section.open = !state.closed.has(group.id) || Boolean(query);
-                const summary = el('summary'); summary.append(el('span', null, group.name), el('small', null, String(items.length))); section.append(summary, ...items.map(topicItem));
+                const summary = el('summary'); summary.dataset.botAction = 'topic-group'; summary.dataset.windowId = group.id || 'ungrouped'; summary.append(el('span', null, group.name), el('small', null, String(items.length))); section.append(summary, ...items.map(topicItem));
                 section.addEventListener('toggle', () => { if (!query) { if (section.open) state.closed.delete(group.id); else state.closed.add(group.id); } }); rows.append(section);
             }
         }

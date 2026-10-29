@@ -747,6 +747,7 @@
             // A repaint (activity, a refresh) keeps keyboard focus on the same control.
             const focused = this.pane.contains(document.activeElement) ? document.activeElement : null;
             const focusKey = focused?.dataset.botAction ? `${focused.dataset.botAction}|${focused.dataset.botId || ''}|${focused.dataset.windowId || ''}` : null;
+            const selection = typeof focused?.selectionStart === 'number' ? [focused.selectionStart, focused.selectionEnd] : null;
             const home = window.PiBotHome, live = this.live;
             const rail = el('nav', 'pi-bot-rail'); rail.setAttribute('aria-label', translateUi("我的伙伴"));
             for (const bot of this.bots) {
@@ -816,8 +817,9 @@
             }
             this.pane.replaceChildren(rail, side);
             if (focusKey && focused !== document.activeElement) {
-                [...this.pane.querySelectorAll('[data-bot-action]')].find(node => `${node.dataset.botAction}|${node.dataset.botId || ''}|${node.dataset.windowId || ''}` === focusKey)
-                    ?.focus({ preventScroll: true });
+                const restored = [...this.pane.querySelectorAll('[data-bot-action]')].find(node => `${node.dataset.botAction}|${node.dataset.botId || ''}|${node.dataset.windowId || ''}` === focusKey);
+                restored?.focus({ preventScroll: true });
+                if (selection && restored?.setSelectionRange) restored.setSelectionRange(...selection);
             }
         }
 

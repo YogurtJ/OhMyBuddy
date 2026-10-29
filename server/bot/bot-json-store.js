@@ -3,7 +3,7 @@
 // Same protocol as the profile registry: descriptor-verified
 // reads, a lock directory, compare-and-swap on the raw-text revision, private atomic
 // replacement, post-write verification and a directory fsync. These files are
-// indexes; native session markers stay the source of truth.
+// native indexes and owner metadata; conversation content/ownership stays native.
 const fs = require('node:fs');
 const path = require('node:path');
 const { createHash, randomUUID } = require('node:crypto');

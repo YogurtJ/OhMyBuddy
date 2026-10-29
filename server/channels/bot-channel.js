@@ -90,7 +90,7 @@ async function ensureCurrent(service, jobId) {
     try { target = await resolveTarget(service, binding.bot.profileId, binding.bot.windowId); }
     catch (error) {
         if (transient(error)) return 'retry';
-        if (error.code !== 'BOT_WINDOW_ARCHIVED' && error.status !== 404 && error.code !== 'BOT_DISABLED') throw error;
+        if (!['BOT_WINDOW_ARCHIVED', 'BOT_TOPIC_TRASHED', 'BOT_TOPIC_DELETED', 'BOT_DISABLED'].includes(error.code) && error.status !== 404) throw error;
         // The topic is gone: the chat returns to the Bot's main chat. Without an available Bot the
         // binding stays; the message is explained, never run somewhere else.
         let reply = '⚠️ 这个伙伴现在不可用，刚才这条消息没有发出。可以发 /切换 换一个伙伴。';
@@ -101,7 +101,9 @@ async function ensureCurrent(service, jobId) {
                     const current = v.bindings.find(b => b.id === binding.id);
                     if (current) Object.assign(current, { cwd: session.cwd, sessionId: session.id, bot: windowRef(main), ...boundary });
                 }, { config: true }), { bot: windowRef(main) });
-                reply = '⚠️ 这个话题已经归档，刚才这条消息没有发出。已回到主聊天，请重新发送。';
+                reply = error.code === 'BOT_TOPIC_TRASHED' ? '⚠️ 这个话题已移到回收站，刚才这条消息没有发出。已回到主聊天，请重新发送。'
+                    : error.code === 'BOT_TOPIC_DELETED' ? '⚠️ 这个话题已彻底删除，刚才这条消息没有发出。已回到主聊天，请重新发送。'
+                    : '⚠️ 这个话题已经归档，刚才这条消息没有发出。已回到主聊天，请重新发送。';
             } catch (inner) { if (transient(inner)) return 'retry'; }
         }
         const current = service.db.value.bindings.find(b => b.id === binding.id) || binding;

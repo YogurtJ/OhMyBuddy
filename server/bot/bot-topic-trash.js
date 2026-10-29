@@ -8,7 +8,7 @@ const { descriptorPathSync } = require('../pi-file-descriptor');
 const { readWindowBinding } = require('./bot-window-state');
 const { request } = require('./bot-topic-management');
 const { MAX_TOPICS } = require('./bot-topic');
-const { mediaPlanRecord, MEDIA_PLAN_ENTRY, MEDIA_TOOLS } = require('../pi-media-plan-format');
+const { mediaPlanRecord, MEDIA_PLAN_ENTRY, MEDIA_TOOLS, PLAN_KEY } = require('../pi-media-plan-format');
 const fail = (message, status = 409, code) => { throw Object.assign(new Error(message), { status, code }); };
 const stamp = stat => [stat.dev, stat.ino, stat.mode, stat.size, stat.mtimeNs, stat.ctimeNs].map(String).join(':');
 function fingerprint(file) {
@@ -42,7 +42,7 @@ async function verifyTopic(service, profileId, window, { deleting = false } = {}
     const expected = new Map(window.generations.map(generation => [generation.sessionPath, generation]));
     if (markers.some(marker => !expected.has(marker.path) || expected.get(marker.path).sessionId !== marker.sessionId
         || expected.get(marker.path).generation !== marker.generation)) fail('Unindexed topic history requires recovery', 409, 'BOT_WINDOW_STALE');
-    const plans = new Set(), files = [];
+    const plans = new Set(deleting ? window.deleting.planIds : []), files = [];
     for (const generation of window.generations) {
         // Only an already-journalled permanent deletion may have missing generations.
         if (deleting && !fs.existsSync(generation.sessionPath)) {
@@ -53,7 +53,7 @@ async function verifyTopic(service, profileId, window, { deleting = false } = {}
                 const native = entry.type === 'custom' && entry.customType === MEDIA_PLAN_ENTRY ? mediaPlanRecord(entry.data) : null;
                 const message = entry.type === 'message' ? entry.message : null;
                 const plan = native?.plan || (message?.role === 'toolResult' && !message.isError && MEDIA_TOOLS.has(message.toolName) ? message.details?.plan : null);
-                if (typeof plan?.id === 'string') plans.add(plan.id);
+                if (typeof plan?.id === 'string' && PLAN_KEY.test(plan.id)) plans.add(plan.id);
             }
             const current = fingerprint(generation.sessionPath);
             const original = deleting && window.deleting.files.find(file => file.generation === generation.generation);
@@ -130,7 +130,7 @@ function deleteTopic(service, profileId, windowId, input) {
             if (!window.deleting) {
                 const saved = await service.windows.mutate(profileId, input.expectedRevision, state => {
                     activity(service, profileId, window, verified.plans);
-                    state.windows.find(item => item.id === windowId).deleting = { startedAt: new Date().toISOString(), files: verified.files }; return {};
+                    state.windows.find(item => item.id === windowId).deleting = { startedAt: new Date().toISOString(), files: verified.files, planIds: [...verified.plans] }; return {};
                 });
                 window = saved.state.windows.find(item => item.id === windowId); snapshot = saved;
             }
