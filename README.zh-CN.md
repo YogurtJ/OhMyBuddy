@@ -4,12 +4,10 @@
 
 # OhMyBuddy
 
-原名 **Pivane**。旧安装的数据与设置继续兼容，详见[改名与升级说明](docs/development/NAMING.md)。
+**装在自己电脑上的 AI 伙伴：记得你，能办事，浏览器、手机和微信都能找到它。**
 
-**一个自托管的 AI 伙伴：聊天、记忆、办事与编程，电脑、平板和手机都能接着用。**
-
-把 [Pi Coding Agent](https://pi.dev) 部署在自己的机器上，用任何设备的浏览器使用它。<br>
-子 Agent、定时任务、MCP、长期记忆、丰富的文件预览，以及内置的图像、视频、语音实验室，都用你自己的模型和 Key。
+开源的私人 AI 助理，自带完整的编程 Agent 工作台，基于 [Pi Coding Agent](https://pi.dev)。<br>
+用你自己的模型：Claude、GPT、Gemini、DeepSeek、通义千问、Kimi 等都可以。聊天、记忆和 Key 都留在你的机器上。
 
 [![Latest release](https://img.shields.io/github/v/release/YogurtJ/pivane?style=flat-square&label=release)](https://github.com/YogurtJ/pivane/releases/latest)
 [![License: ISC](https://img.shields.io/badge/license-ISC-blue?style=flat-square)](LICENSE)
@@ -21,44 +19,58 @@
 
 [下载](https://github.com/YogurtJ/pivane/releases/latest) · [安装](docs/INSTALL_RECOVERY.md) · [用户指南](docs/USER_GUIDE.md) · [变更记录](CHANGELOG.md) · [反馈问题](https://github.com/YogurtJ/pivane/issues/new/choose) · [讨论区](https://github.com/YogurtJ/pivane/discussions)
 
-<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/hero-zh.webp" alt="电脑上的 OhMyBuddy：私人 Bot 对话、折叠过程和可查看的记忆回执" width="100%">
+<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/hero-zh.webp" alt="自托管私人 AI 助理 OhMyBuddy 的电脑界面：Bot 对话、折叠的过程摘要和记忆回执" width="100%">
 
 </div>
 
+> 原名 **Pivane**。旧安装的数据与设置继续兼容，详见[改名与升级说明](docs/development/NAMING.md)。
+
+## OhMyBuddy 是什么？
+
+OhMyBuddy 是一个自托管的网页应用，把 Pi Coding Agent 变成随时能找到的私人 AI 助理。把它装在自己的电脑上（Linux、macOS、Windows，树莓派也行），然后在电脑、平板或手机的浏览器里使用，也可以直接在微信里给它发消息。
+
+它有两面，共用同一套运行时、模型和工具：
+
+- **Bot：你的私人伙伴。** Bot 有名字、形象和性格，和你一直在同一个对话里聊；它记得跨聊天的重要信息，帮你处理日常提问、计划、笔记、资料整理、提醒和电脑上的小活。
+- **Pi Agent：你的 Agent 工作台。** 面向真实文件夹里的项目工作：线程、流式工具调用、文件差异、子 Agent、侧聊和会话树一应俱全，会话与 Pi CLI 兼容。
+
 ## 为什么选择 OhMyBuddy
 
-- **直接使用 Pi 自己的运行时。** OhMyBuddy 运行 Pi 的原生运行时，直接读写 Pi 自己的会话文件。流式回复、工具调用、文件差异、Shell 命令、任务引导和上下文压缩都可以使用，界面在任何屏幕上都便于阅读。
-- **在电脑上开始，在手机上查看进度。** 会话保存在你的服务器上。在另一台设备上打开同一个线程时，仍由同一个 Agent 进程提供服务。OhMyBuddy 可以添加到手机主屏幕，回复完成时会通知你。
-- **出门在外，也能在微信里派活。** 装上可选的微信连接组件并扫码绑定后，在微信里发一句话或一张图片，家里电脑上的 Agent 就会读文件、跑工具，做完把文件发回微信。
-- **在一个工作台里同时运行多个 Agent。** 你可以使用子 Agent、Agent 自己创建的任务线程、线程间消息、侧聊和按 cron 运行的定时任务，并实时查看每个 Agent 正在做什么。
-- **模型、Key 和机器都由你掌控。** Pi 支持的供应商都可以使用，包括 Anthropic、OpenAI、Google Gemini、GitHub Copilot、OpenRouter、DeepSeek、通义千问、Kimi、MiniMax、xAI 和 Mistral。可以用 API Key 或 OAuth 登录，也可以添加自己的 OpenAI 兼容服务。凭据和历史都保存在你自己的机器上。
-- **扩展方式和 Pi 一样。** Pi 的 Packages、Skills、提示词模板和 MCP 服务器都可以在浏览器里安装。也可以让内置的扩展助手帮你查找和配置。
-- **内置媒体生成和语音。** 可以接入自己的图像、视频和语音服务。Agent 会把你的想法整理成可编辑的参数，可按媒体类型设置对话自动执行；视频默认需要确认。也可以用语音输入消息，或让回复朗读出来。
+- **记得你，而且记了什么你都看得见。** 每个 Bot 都有“关于你”、长期记忆、学到的技能，每个聊天还有自己的记事本。回复里保存了什么，下方就出现一条回执；每条记忆和技能都可以查看、修改或撤销。
+- **在微信里派活。** 装上可选的微信连接组件并扫码后，在微信里发一句话或一张图片，家里电脑上的 Bot 或 Agent 就会读文件、跑工具，做完把文件发回微信。
+- **一个伙伴，所有屏幕。** 会话保存在你的服务器上，电脑、手机和微信接着同一段对话。可以添加到手机主屏幕，回复完成时收到通知。
+- **真能干活。** Bot 和 Agent 可以读写文件、执行命令、上网、使用 MCP 工具、启动子 Agent、运行定时任务。Bot 提供“放手”“稳妥”“每次都问”三种做事方式。
+- **模型、Key 和机器都由你掌控。** Pi 支持的供应商都可以使用，包括 Anthropic、OpenAI、Google Gemini、GitHub Copilot、OpenRouter、DeepSeek、通义千问、Kimi、MiniMax、xAI 和 Mistral；可以用 API Key 或 OAuth 登录，也可以接入自己的 OpenAI 兼容服务。凭据和历史都保存在你自己的机器上。
+- **跟着 Pi 生态一起长。** Pi 的 Packages、Skills、提示词模板和 MCP 服务器都可以在浏览器里安装，也可以让内置的扩展助手帮你查找和配置。
+- **内置图像、视频和语音。** 接入自己的图像、视频和语音服务，说出想法就能得到可编辑的生成参数；也可以语音输入消息，或让回复朗读出来。
 
-### 对话之外，也留下可用的结果
+### 适合谁
 
-让 Buddy 记住一件安排和一个回复偏好。对话里保留一个最终回复，过程和记忆变更则可以展开核对。
-
-<sub>当前截图使用合成对话和本地夹具，没有发送真实模型或微信业务消息。</sub>
-
-### 在微信里派活
-
-不在电脑前也能交代任务。微信私聊绑定到 OhMyBuddy 的一个线程后，发一句话或一张照片，家里电脑上的 Agent 就会读你的文件、跑脚本，做完把 PDF、Excel 等文件直接发回微信；定时任务的结果也能推送到这里。
-- 支持私聊文字、图片、交付文件、常用斜杠指令（如 `/status`、`/resume`）和定时通知。
-- 需要自己部署 OhMyBuddy，并按需安装微信连接组件，详见[消息渠道](docs/MESSAGE_CHANNELS.md)。
-
+- 想要一个像 ChatGPT 那样的助理，但跑在自己电脑上、用自己的 Key，并且跨对话记得你。
+- 在用 Pi 或其他编程 Agent，希望在电脑前开个长任务，出门后用手机看进度。
+- 生活和工作都在微信里，想把活儿交给家里的 Agent，做完直接在微信里收文件。
+- 想把聊天、Agent、定时任务和媒体生成放在一个地方，而不是装好几个工具。
 
 ## 功能
 
-### Agent 工作台
+### Bot：私人伙伴
+
+- 给 Bot 起名字、选头像、定性格和工作目录。可选的两三分钟“互相认识”会问清怎么称呼你、主要帮你做什么、该怎么做事，也可以跳过。
+- 每个 Bot 有一个一直聊下去的主聊天和最多 100 个话题。每个聊天都有自己的“我记着的事”，记下定好的事、答应的事、截止时间和待回答的问题；话题共用这个 Bot 的记忆与技能。
+- 长聊天一直好用：旧工具输出会被省略，空闲时在后台整理摘要；更早的聊天可以只读回看，Bot 也能按原话翻找。
+- 每轮只显示一个回复和一行可展开的过程摘要；记忆、记事本、技能、设置和定时任务的变化都以回执呈现，点开即可查看。
+- 可以同时有多个 Bot，记忆互不共享；新 Bot 可以从其他 Bot 勾选复制“关于你”。
+- 主动联系和后台学习在 Bot 设置里各有开关和额度。详见 [Bot 模式](docs/BOT_MODE.md)。
+
+### Pi Agent：Agent 工作台
 
 - 线程按项目组织，直接在服务器上的文件夹里工作。
 - 回复会流式显示思考过程、工具调用和本轮修改的文件。默认的简洁视图会把每个已完成的轮次收成一行“用时 · 工具调用”摘要。
 - 可以粘贴或拖放图片和文件作为附件，用 `@` 引用项目文件，也可以把选中的文字引用到下一条消息里。上传 DOCX、XLSX、PPTX 和 PDF 会保留原件，Agent 按需读取选定范围。
 - 任务运行时，可以发送引导或排队一条后续消息，也可以停止、重试或压缩上下文。
 - `!命令` 在服务器上执行 Shell 命令；`!!命令` 的输出不会进入模型上下文。
-- 模型选择器支持搜索、跨设备同步的常用模型、按模型调整的思考等级，并显示上下文用量。
-- 进度卡会显示 Agent 正在执行的计划。
+- 模型选择器支持搜索、跨设备同步的常用模型、按模型调整的思考等级，并显示上下文用量；进度卡会显示 Agent 正在执行的计划。
+- 在任意项目里可以“以身份新建…”线程，选一个 Bot，把它的性格、记忆和技能带进项目工作。
 
 ### 会话与历史
 
@@ -69,31 +81,22 @@
 
 ### 多 Agent 与自动化
 
-
 - 内置 [pi-subagents](https://pi.dev/packages/pi-subagents) 子 Agent。实时面板显示每次运行的状态和所用模型，可以引导、停止或继续运行，并统计 token 用量和费用。
 - Agent 可以新开任务线程，也可以给同一项目里的其他线程发消息。
 - 侧聊可以让你临时问个问题，不打断主任务。它可以读取文件；在你为当次回复授权后，也可以做小范围修改。
 - 定时任务支持 cron 和单次执行，可以设置时区，预览接下来的运行时间，设置预算并查看运行记录。
 
-### 私人 Bot 对话
+### 记忆与学习
 
-<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/bot-zh.png" alt="私人 Bot 的话题、简洁过程摘要与可查看的记忆回执" width="100%">
-
-- 为 Bot 设置名字、性格和工作目录。主聊天与话题各有独立对话和记事本，共用这个 Bot 的记忆与技能。
-- 模型和思考偏好独立保存，网页与微信沿用同一份设置。
-- 执行过程收进一行，记忆、技能和设置的变化仍有可查看的回执。
-- 在设置中核对权限、主动活动和学习预算；工具权限规则不是操作系统沙箱。详见 [Bot 模式](docs/BOT_MODE.md)。
-
-### 身份与长期记忆
-
-- 每个助手身份都有自己的人设、关于你的偏好记录和长期记忆，由 [pi-hermes-memory](https://pi.dev/packages/pi-hermes-memory?name=memory) 提供支持。概览、设定、记忆、技能、学习分别展示待处理变化、内容和预算。
-- 可以开启后台学习，从你的纠正和偏好中学习。学习受每日预算限制，每条记忆和学到的技能都可以查看、修改或撤销。
+- Bot 和助手身份都有自己的人设、关于你的偏好记录和长期记忆，由 [pi-hermes-memory](https://pi.dev/packages/pi-hermes-memory?name=memory) 提供支持。概览、设定、记忆、技能、学习分别展示待处理变化、内容和预算。
+- 可以开启后台学习，在每日预算内从你的纠正和偏好中学习。
 - 多个逻辑项目可以指向同一个目录，并各自带有项目指令。
 
-### 消息渠道
+### 微信
 
-- 按需安装可选的微信连接组件，扫码登录，允许指定用户，并把私聊绑定到 OhMyBuddy 线程。
-- 支持文字、图片、交付文件、常用斜杠指令和定时通知；浏览器中可查看连接状态与投递回执。
+- 按需安装可选的微信连接组件，扫码登录，只允许指定用户。连接的是微信 ClawBot（iLink）机器人身份，不会接管你个人微信号的聊天。
+- 可以在微信里和 Bot 聊天，也可以把私聊绑定到 Pi Agent 线程。支持发送文字和图片，最终回复、交付文件和定时通知都会发回微信。
+- 斜杠指令可以切换 Bot（`/bot`）和话题（`/topic`）、修改模型与思考等级、查看状态、停止或确认任务；浏览器中可以查看连接状态与投递回执。详见[消息渠道](docs/MESSAGE_CHANNELS.md)。
 
 ### 文件与渲染
 
@@ -104,7 +107,6 @@
 
 ### 扩展与 MCP
 
-
 - 可以在全局或单个项目范围内管理 Pi 的 Packages、Skills、扩展、提示词模板和主题。
 - MCP 使用 Pi 的原生支持，包括 Codemode 和工具搜索。MCP 服务器和 OAuth 登录都在浏览器里管理。
 - 发现页可按类型和安装状态筛选，卡片内展开前提与示例。扩展助手先核对来源，你要求后才会安装；已安装的扩展包和技能显示版本，并可手动检查更新。
@@ -112,17 +114,14 @@
 
 ### 多媒体实验室与语音
 
-
-<sub>示例图片均由 GPT Image 2.5 实际生成。</sub>
-
 - 可以接入图像、视频、语音合成和语音转写服务。预设包括 OpenAI、Google Gemini、火山方舟（Seedream 和 Seedance）和阿里云百炼，其他兼容的 HTTP API 可以手动添加。
-- Agent 会在聊天或实验室里根据自然语言描述起草可编辑的参数。对话按媒体类型设置自动执行或等待确认；视频默认需要确认。忙时排队，刷新后恢复同一状态。模型支持时，还可以附上参考图片或视频。
+- Agent 会在聊天或实验室里根据自然语言描述起草可编辑的参数。对话按媒体类型设置自动执行或等待确认；视频默认需要确认。模型支持时，还可以附上参考图片或视频。
 - 生成历史可以预览、复用和下载以前的结果。
 - 可以用语音在输入框里输入消息，也可以让回复或选中的文字朗读出来。
 
 ### 日常使用
 
-<img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/mobile-zh.webp" alt="手机上的 OhMyBuddy：私人 Bot 对话、过程摘要与记忆回执" width="100%">
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/pivane/main/docs/assets/readme/mobile-zh.webp" alt="手机上的 OhMyBuddy：Bot 对话、过程摘要与记忆回执" width="280"></p>
 
 - 布局会适应电脑、平板和手机屏幕，OhMyBuddy 也可以添加到手机主屏幕。
 - 提供页面通知和提示音，并可选开启 Web Push 后台提醒。
@@ -146,13 +145,20 @@ node scripts/install.cjs
 npm start
 ```
 
-打开 <http://127.0.0.1:11408>，检查 **设置 → 供应商与模型**，选择一个项目文件夹，然后开始新聊天。
+打开 <http://127.0.0.1:11408>，检查 **设置 → 供应商与模型**，然后打开 **Bot** 认识你的第一个伙伴，或在 **Pi Agent** 里选择一个项目文件夹。
 
 日常使用时，请按[安装指南](docs/INSTALL_RECOVERY.md)（另有 [macOS](docs/MACOS.md) 和 [Windows](docs/WINDOWS.md) 版本）把数据放在应用目录之外，然后运行 `node scripts/install-service.cjs`。这样 OhMyBuddy 会在后台运行，并在你登录时自动启动；在 macOS 和 Windows 上还会添加桌面入口。
 
+**让编程 Agent 帮你装。** 在目标电脑上把下面这段话发给 Claude Code、Codex、Pi 或其他 Agent：
+
+```text
+请在这台电脑上安装 OhMyBuddy：https://github.com/YogurtJ/pivane
+按仓库里的 docs/AGENT_GUIDE.md 和本平台的安装指南操作：使用最新 Release，
+校验压缩包哈希，安装为后台服务，最后告诉我访问地址、版本和数据路径。
+不要打印或复制我的任何 API Key。
+```
+
 > **已经在用 Pi CLI？** OhMyBuddy 默认使用同一个 Pi 身份，你的模型、登录、设置和会话都能直接使用。请不要同时从 CLI 和网页写入同一个会话。详见[已有 Pi 接入](docs/PI_CLI.md)。
->
-> **想让 Agent 帮你部署？** 把这个仓库和[用户 Agent 操作指南](docs/AGENT_GUIDE.md)交给你的编程 Agent。指南涵盖安装、配置、升级和排障。
 
 ## 支持平台
 
@@ -165,6 +171,7 @@ OhMyBuddy 默认只监听本机。如果要从手机或其他电脑访问，请�
 ```mermaid
 flowchart LR
     B["浏览器<br/>电脑 · 平板 · 手机"] <-->|HTTP + WebSocket| S["OhMyBuddy 服务<br/>Node.js"]
+    C["微信<br/>可选"] <--> S
     S <-->|RPC| W["Pi Agent worker<br/>每个打开的线程一个"]
     W --> D[("Pi 会话与配置<br/>原生 JSONL")]
     W --> P["你的项目文件夹"]
@@ -173,17 +180,24 @@ flowchart LR
 ```
 
 - Node.js 服务（Express 和 WebSocket）提供纯 JavaScript 前端，不需要构建步骤。
-- 每个持久线程只由一个 Pi worker 进程提供服务，打开这个线程的所有浏览器都连接到同一个 worker。
+- 每个持久线程（包括 Bot 的每个聊天和话题）只由一个 Pi worker 进程提供服务，打开它的所有浏览器都连接到同一个 worker。
 - Pi 的 SessionManager 和 JSONL 文件是每段对话唯一的记录。用量统计保存在单独的账本里，不保存消息内容。
 - 每个 OhMyBuddy 版本都内置一个经过测试的 Pi 版本，Pi 随 OhMyBuddy 一起升级。
 
 ## 安全模型
 
 - OhMyBuddy 面向**个人、单用户**的实例。拿到访问 Token 的人共用同一个实例，没有单独的用户账户。
-- 项目根目录限制了可以浏览的文件夹，但它**不是沙箱**。Agent、Shell、Packages 和扩展都以服务器用户的权限运行，请只安装你信任的扩展。
+- 项目根目录限制了可以浏览的文件夹，但它**不是沙箱**。Bot、Agent、Shell、Packages 和扩展都以服务器用户的权限运行；Bot 的做事方式只决定什么时候先问你，也不是操作系统沙箱。请只安装你信任的扩展。
+- 只有允许列表里的微信用户能进入绑定的聊天，他们可以使用该聊天已有的工具，请只添加你信任的人。
 - 媒体按你设置的各类型对话自动执行偏好和确认策略运行。失败或结果不确定的提交不会自动重放。
 
 ## 常见问题
+
+**Bot 和 Pi Agent 有什么区别？** Bot 是一段持续的私人对话，隐藏项目、模型和上下文这些控制；Pi Agent 是面向项目文件夹的完整工作台。两者用同一个 Pi 运行时，也可以“以身份新建”一个 Pi Agent 线程，把 Bot 的记忆带进去。
+
+**它只是 Pi 的网页界面吗？** 最早是，那时叫 Pivane。现在它仍然直接使用 Pi 的运行时和会话文件，但 Bot、看得见的记忆、微信、定时任务和媒体实验室，让它成了日常不用打开终端也能用的私人 Agent。
+
+**和 OpenClaw、Hermes Agent 有什么不同？** 它们都在你自己的机器上用你自己的模型运行 Agent。OhMyBuddy 以浏览器为中心：记忆变化以回执呈现、可以核对，自带 Pi 编程工作台，微信通过 ClawBot 接入。如果你主要想把一个助理接进很多聊天软件，OpenClaw 支持的渠道更多。
 
 **它能替代 Pi CLI 吗？** 不能，它是 Pi CLI 的搭档。两者共用同一个 Pi 身份，你可以根据场景选择使用哪一个。
 
@@ -193,12 +207,23 @@ flowchart LR
 
 **支持哪些语言？** 界面支持英文和简体中文。对话可以使用你的模型支持的任何语言。
 
+## 给 AI Agent
+
+如果你是帮用户安装、配置、升级或排查 OhMyBuddy 的 AI Agent，请从[用户 Agent 操作指南](docs/AGENT_GUIDE.md)开始；只有被要求修改源码时才阅读 [AGENTS.md](AGENTS.md)。
+
+- **是什么**：自托管的私人 AI Agent（带记忆的 Bot）和编程 Agent 工作台（Pi Agent），原名 Pivane，ISC 许可证。
+- **运行环境**：Node.js 22.x（22.19.0 或更新）、npm、`bash` 和 ripgrep；不需要构建、GPU、Docker 或全局安装 Pi。
+- **默认地址**：`http://127.0.0.1:11408`。默认只监听本机；允许其他设备访问前先开启访问 Token。
+- **引擎**：固定版本的 [Pi Coding Agent](https://pi.dev) 运行时；对话是 Pi 原生 JSONL 会话，与 Pi CLI 兼容。
+- **接口**：[REST 与 WebSocket API](docs/API.md)、[后台服务](docs/BACKGROUND_SERVICE.md)、[与 Pi CLI 共存](docs/PI_CLI.md)。
+
 ## 文档
 
 | 主题 | 入口 |
 |---|---|
 | 安装、升级与恢复 | [安装与恢复](docs/INSTALL_RECOVERY.md) · [macOS](docs/MACOS.md) · [Windows](docs/WINDOWS.md) · [后台服务](docs/BACKGROUND_SERVICE.md) |
 | 日常使用 | [用户指南](docs/USER_GUIDE.md) |
+| Bot | [Bot 模式](docs/BOT_MODE.md) · [微信与消息渠道](docs/MESSAGE_CHANNELS.md) |
 | 全部功能详解 | [文档目录](docs/README.md) |
 | REST 和 WebSocket API | [API 参考](docs/API.md) |
 | 让自己的 Agent 帮忙 | [用户 Agent 操作指南](docs/AGENT_GUIDE.md) |
@@ -215,6 +240,8 @@ flowchart LR
 日志和截图请先去除凭据和私人内容。
 
 先阅读[贡献指南](CONTRIBUTING.md)和[开发文档](docs/development/README.md)，再运行 `node scripts/install.cjs` 搭建开发环境。按[验证矩阵](docs/development/WORKFLOW.md#验证矩阵)选择覆盖本次改动的定向测试与检查；纯文档改动只核对事实并运行 `npm run check:docs`。编程 Agent 还应阅读 [AGENTS.md](AGENTS.md)。
+
+如果 OhMyBuddy 对你有用，点个 Star 能帮更多人找到它。
 
 ## 许可证
 
