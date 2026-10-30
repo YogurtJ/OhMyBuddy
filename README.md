@@ -56,12 +56,14 @@ It has two sides that share the same runtime, models and tools:
 
 <p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/buddy-en.gif" alt="Telling a Buddy something once: it notes that you are vegetarian and a dinner booking you promised, receipts appear under the reply, and its notebook opens with the new note and the words it came from" width="100%"></p>
 
-- Give a Buddy a name, an avatar, a personality and a working folder. An optional two-to-three-minute interview covers how it should address you, what it helps with and how it should work.
-- Each Buddy has one ongoing main chat and up to 100 topics. Every chat has its own notebook, "What I'm keeping in mind", for decisions, promises, deadlines and open questions. Topics share the Buddy's memory and skills.
+- Give a Buddy a name, a personality and a working folder. Choose an avatar preset, combine its shape, colors and expression, or upload a picture. An optional two-to-three-minute interview covers how it should address you, what it helps with and how it should work.
+- Each Buddy has one ongoing main chat and up to 100 topics. Organize topics into groups, search them and move several at once. Deleted topics go to a recoverable trash. Every chat has its own notebook, "What I'm keeping in mind", while topics share the Buddy's memory and skills.
 - Long chats stay usable. Old tool output is trimmed and summaries are written while the chat is idle. Earlier parts of the chat stay readable, and the Buddy can search their original wording.
 - Each turn shows one reply and a one-line summary of the process, which you can expand. Memory, notebook, skill, settings and schedule changes appear as receipts you can open.
 - Run several Buddies side by side, each with separate memory. A new Buddy can copy the "About you" notes you select from another Buddy.
 - Proactive messages and background learning have their own switches and budgets in the Buddy settings. See the [Buddy guide](docs/en/BUDDY.md).
+
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/buddy-organize-en.webp" alt="Buddy settings with twelve avatar presets, beside topic groups and a bulk move to Study plans; synthetic demo data" width="100%"></p>
 
 ### Workspace: projects, threads and tools
 
@@ -95,7 +97,6 @@ It has two sides that share the same runtime, models and tools:
 
 - Buddies and assistant profiles each have their own persona, notes about you and long-term memory, powered by [pi-hermes-memory](https://pi.dev/packages/pi-hermes-memory?name=memory). Overview, Settings, Memories, Skills and Learning have separate pages for reviewing changes and budgets.
 - Optional background learning picks up your corrections and preferences within daily budgets.
-- Several logical projects with their own instructions can point to the same directory.
 
 ### WeChat
 
