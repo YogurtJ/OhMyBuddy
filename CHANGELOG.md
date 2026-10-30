@@ -2,7 +2,7 @@
 
 本页概括用户可见变化与升级要点。安装步骤见[安装与恢复](docs/INSTALL_RECOVERY.md)；每版完整说明和验收附件见 [Releases](https://github.com/YogurtJ/OhMyBuddy/releases)。历史行为不代表当前功能，当前用法以[用户指南](docs/USER_GUIDE.md)为准。
 
-## 未发布
+## 1.11.1（开发版，未公开发布）
 
 - 修复调度器在崩溃或机器重启后，因残留持有者的进程编号被其他程序复用而拒绝启动的问题（[#6](https://github.com/YogurtJ/OhMyBuddy/issues/6)）。改用进程退出后由系统自动释放的排他锁，保留跨进程互斥和不确定执行不重放；已有任务、记录及预算原位保留。
 - 完整平台包扩展到 Linux x64/ARM64 与 Windows x64：自带 Node、Pi、依赖和工具，Windows 包含 Portable Git/Bash 与普通用户安装入口；Linux 使用用户级 systemd。设置内更新沿用签名、完整包校验、停机备份与恢复，客户端不运行 npm。下载页统一 OhMyBuddy 品牌，支持平台/架构选择、安装步骤和校验文件；各平台实际分发与验收状态以发行回执为准。
