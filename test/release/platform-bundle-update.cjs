@@ -15,8 +15,8 @@ const { readSafe, hashFileSafe } = require('../../server/pi-maintenance-files');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function main() {
     const args = process.argv.slice(2), values = {};
-    for (let i = 0; i < args.length; i += 2) { if (!['--payload', '--output', '--expected', '--playwright', '--resume', '--tls-ca', '--browser'].includes(args[i]) || !args[i + 1] || values[args[i]]) throw Error('Invalid isolated native platform trial arguments'); values[args[i]] = args[i + 1]; }
-    if (!['--payload', '--output', '--expected', '--playwright', '--browser'].every(key => values[key])) throw Error('Use --payload --output NEW_DIR --expected VERSION --playwright MODULE --browser EXECUTABLE');
+    for (let i = 0; i < args.length; i += 2) { if (!['--payload', '--output', '--expected', '--playwright', '--resume', '--tls-ca', '--browser', '--browser-ws', '--port'].includes(args[i]) || !args[i + 1] || values[args[i]]) throw Error('Invalid isolated native platform trial arguments'); values[args[i]] = args[i + 1]; }
+    if (!['--payload', '--output', '--expected', '--playwright'].every(key => values[key]) || !values['--browser'] && !values['--browser-ws']) throw Error('Use --payload --output NEW_DIR --expected VERSION --playwright MODULE --browser EXECUTABLE');
     const output = path.resolve(values['--output']);
     if (values['--resume'] === 'true') assert.equal(readSafe(path.join(output, 'isolated-trial')).toString(), 'OhMyBuddy native platform update\n');
     else { assert.equal(fs.existsSync(output), false); fs.mkdirSync(output, { mode: 0o700 }); fs.writeFileSync(path.join(output, 'isolated-trial'), 'OhMyBuddy native platform update\n', { flag: 'wx', mode: 0o600 }); }
@@ -26,7 +26,7 @@ async function main() {
     fs.writeFileSync(path.join(agent, 'settings.json'), JSON.stringify({ defaultProvider: 'fixture', defaultModel: 'fixture', defaultProjectTrust: 'ask', enableInstallTelemetry: false }), { mode: 0o600 });
     fs.writeFileSync(path.join(agent, 'models.json'), JSON.stringify({ providers: { fixture: { baseUrl: 'http://127.0.0.1:1/v1', api: 'openai-completions', apiKey: 'synthetic-fixture', models: [{ id: 'fixture', input: ['text'], contextWindow: 32000, maxTokens: 1000 }] } } }), { mode: 0o600 });
     const socket = net.createServer();
-    const requestedPort = values['--resume'] === 'true' ? JSON.parse(readSafe(compat.metadataFile(installation, 'INSTALLATION'))).port : 0;
+    const requestedPort = values['--resume'] === 'true' ? JSON.parse(readSafe(compat.metadataFile(installation, 'INSTALLATION'))).port : Number(values['--port'] || 0);
     socket.listen(requestedPort, '127.0.0.1'); await once(socket, 'listening'); const port = socket.address().port; await new Promise(resolve => socket.close(resolve));
     const env = { HOME: home, ...(process.platform === 'win32' ? { USERPROFILE: home, SystemRoot: process.env.SystemRoot, TEMP: home, TMP: home } : {}), HOST: '127.0.0.1', PORT: String(port),
         PI_CODING_AGENT_DIR: agent, PI_PROJECT_ROOTS: project, PI_WEB_TOKEN: 'pivane-platform-trial-only', PI_OFFLINE: '1', PI_TELEMETRY: '0', PI_SKIP_VERSION_CHECK: '1' };
@@ -70,10 +70,10 @@ async function main() {
         const uiSession = await api('sessions', { cwd: project, name: 'Update interface fixture' });
         snapshot = hashFileSafe(session.path);
         const mediaProof = hashFileSafe(fixtureMedia);
-        const versions = await api('settings/updates/check', {}); assert.equal(versions.installMode, 'managed-bundle'); assert.equal(versions.pivane.version, values['--expected']);
+        const versions = await api('settings/updates/check', {}); fs.writeFileSync(path.join(output, values['--resume'] ? 'version-check-resume.json' : 'version-check.json'), JSON.stringify({ installMode: versions.installMode, appVersion: versions.appVersion, pivane: versions.pivane, piVersion: versions.piVersion }, null, 2), { mode: 0o600 }); assert.equal(versions.installMode, 'managed-bundle'); assert.equal(versions.pivane.version, values['--expected']);
         assert.equal(versions.appVersion, initial);
         const { chromium } = require(values['--playwright']);
-        browser = await chromium.launch({ executablePath: values['--browser'], headless: true });
+        browser = values['--browser-ws'] ? await chromium.connect(values['--browser-ws']) : await chromium.launch({ executablePath: values['--browser'], headless: true });
         const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, locale: 'zh-CN', extraHTTPHeaders: { Authorization: 'Bearer pivane-platform-trial-only' } });
         page = await context.newPage(); const errors = [];
         page.on('response', response => { if (response.url().endsWith('/settings/updates/review')) void response.json().then(body => reviewResponses.push({ status: response.status(), body })); });

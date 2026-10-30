@@ -14,7 +14,7 @@
 
 ## Linux
 
-当前构建目标为 glibc Linux x64、ARM64；不适用于 Alpine/musl。使用普通用户和具备用户级 systemd 的系统，不使用 `sudo ./Install.sh`。
+当前构建目标为 glibc Linux x64、ARM64；不适用于 Alpine/musl。随包原生组件需要 glibc 2.34 及以上、支持 GLIBCXX 3.4.29 的 libstdc++，常见基线为 Ubuntu 22.04+ / Debian 12+；实际原生验收为 Ubuntu 24.04 x64、Debian 13 ARM64，ABI 基线不代表所有发行版均已实测。使用普通用户和具备用户级 systemd 的系统，不使用 `sudo ./Install.sh`。
 
 解压匹配架构的 `.tar.gz` 后进入目录运行：
 
