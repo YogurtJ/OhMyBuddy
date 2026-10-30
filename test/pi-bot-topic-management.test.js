@@ -81,6 +81,20 @@ test('whole-topic trash preserves every generation/notebook; restored archives a
     const result = await f.action('POST', `/windows/${topic.id}/trash`);
     assert.equal(result.status, 200, JSON.stringify(result.data)); assert.equal(result.data.recoverable, true);
     for (const [file, bytes] of files) assert.deepEqual(fs.readFileSync(file), bytes);
+    assert.equal((await f.call('GET', f.prefix + '/topics/trash', undefined, null)).status, 401);
+    const nativeRead = f.store.withSessionRead, nativeScan = f.store._nativeSessionMetadata;
+    let historyReads = 0; const forbidden = () => { historyReads++; throw Error('List must not open native histories'); };
+    f.store.withSessionRead = forbidden; f.store._nativeSessionMetadata = forbidden;
+    try {
+        const legacy = await f.call('GET', '/bots'); assert.ok(legacy.data.bots.find(bot => bot.id === f.id).windows.some(window => window.id === topic.id), 'the original list contract remains available to older clients');
+        const ordinary = await f.call('GET', '/bots?includeTrash=false'), listed = ordinary.data.bots.find(bot => bot.id === f.id);
+        assert.equal(listed.trashCount, 1); assert.ok(!listed.windows.some(window => window.id === topic.id));
+        const trash = await f.call('GET', f.prefix + '/topics/trash');
+        assert.equal(trash.status, 200); assert.equal(trash.cache, 'no-store'); assert.equal(trash.data.windowsRevision, await f.revision());
+        assert.equal(trash.data.windows[0].id, topic.id); assert.equal(trash.data.windows[0].generations, 2);
+        assert.ok(!Object.hasOwn(trash.data.windows[0], 'instructions')); assert.ok(!Object.hasOwn(trash.data.windows[0], 'sessionId'));
+        assert.equal(historyReads, 0, 'ordinary and lazy trash lists use registry metadata only');
+    } finally { f.store.withSessionRead = nativeRead; f.store._nativeSessionMetadata = nativeScan; }
     await assert.rejects(f.bots.resolve(f.id, topic.id), { code: 'BOT_TOPIC_TRASHED' });
     await assert.rejects(f.bots.assertNativeSendable({ ...session }), { code: 'BOT_TOPIC_TRASHED' });
     assert.equal((await f.bots.channelWindows(f.id)).windows.some(item => item.id === topic.id), false);
