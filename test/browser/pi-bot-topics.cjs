@@ -1,5 +1,5 @@
 // Bot topics (public/pi-bot-topics.js with the session pane in pi-bot.js): create with just a
-// title and focus (no emoji; an older topic's emoji stays editable on that topic), a topic
+// title, focus and optional emoji/group metadata, a topic
 // limit refusal and a windows-revision conflict that keep the draft, multi-line text saved as one
 // line, multi-line topic instructions (grow then scroll, byte limit, lines kept), edit only what
 // changed (with refusals in plain words), archive refused while busy and then
@@ -138,9 +138,9 @@ const REV = letter => letter.repeat(64);
                 await page.waitForFunction(id => decodeURIComponent(location.hash).includes(`windowId=${id}`), T3);
                 assert.equal(await page.locator('#pi-session-pane.open').count(), 0, 'the phone drawer closes when opening the new topic');
                 assert.deepEqual(bodies.slice(0, 3).map(([, body]) => body), [
-                    { expectedRevision: REV('a') },
-                    { expectedRevision: REV('a') },
-                    { expectedRevision: REV('b') }]);
+                    { expectedRevision: REV('a'), groupId: null },
+                    { expectedRevision: REV('a'), groupId: null },
+                    { expectedRevision: REV('b'), groupId: null }]);
                 await page.locator('.pi-bot-empty h2').filter({ hasText: '新话题' }).waitFor();
                 assert.match(await page.locator('.pi-bot-empty p').textContent(), /想聊什么都可以直接说/);
                 await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-who-topic')?.textContent === '新话题');
@@ -164,7 +164,7 @@ const REV = letter => letter.repeat(64);
                 await sheet.locator('.pi-bot-sheet-save').click();
                 await sheet.locator('.pi-bot-sheet-status[data-tone="warn"]').filter({ hasText: '别处改过' }).waitFor();
                 assert.deepEqual(await sheet.locator('[data-topic-field]').evaluateAll(nodes => nodes.map(node => node.value)),
-                    ['📚', '英语考试（12月）', 'a\nb', '每次先列出单词\n再出题'], 'the draft stays, the other device’s name is taken');
+                    ['📚', '英语考试（12月）', '', 'a\nb', '每次先列出单词\n再出题'], 'the draft stays, the other device’s name is taken');
                 await sheet.locator('.pi-bot-sheet-save').click();
                 await sheet.locator('.pi-bot-sheet-status[data-tone="error"]').filter({ hasText: '内容没有通过检查' }).waitFor();
                 assert.doesNotMatch(await sheet.locator('.pi-bot-sheet-status').textContent(), /Invalid|maximum/);
@@ -181,7 +181,7 @@ const REV = letter => letter.repeat(64);
                 await openPane();
                 await page.locator(`.pi-bot-topic-edit[data-window-id="${T3}"]`).click();
                 await sheet.waitFor();
-                assert.deepEqual(await sheet.locator('[data-topic-field]').evaluateAll(nodes => nodes.map(node => node.dataset.topicField)), ['title', 'focus', 'instructions']);
+                assert.deepEqual(await sheet.locator('[data-topic-field]').evaluateAll(nodes => nodes.map(node => node.dataset.topicField)), ['emoji', 'title', 'groupId', 'focus', 'instructions']);
                 await sheet.locator('[data-topic-field="title"]').fill('日本旅行');
                 await sheet.locator('[data-topic-field="focus"]').fill('十二月去大阪\n先订酒店');
                 await sheet.locator('.pi-bot-sheet-save').click();

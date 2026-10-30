@@ -2,8 +2,9 @@
 // Per-Bot window index: <agentDir>/pivane-bots/<profileId>/windows.json.
 // A window is the permanent conversation container the user sees (main chat or a
 // topic). Each window points at its current native session generation and keeps the
-// ordered list of earlier generations. This file is an index: every generation's
-// native session carries a `pivane-bot-window` marker, so the index can be rebuilt.
+// ordered list of earlier generations. Generation pointers are verified against native
+// `pivane-bot-window` markers. Groups, trash and deletion intent are owner metadata:
+// they must be backed up with the native files, not rebuilt from creation markers.
 const fs = require('node:fs');
 const path = require('node:path');
 const { safeFile } = require('../pi-native-service');
@@ -11,12 +12,13 @@ const privateFiles = require('../pi-private-files');
 const { PrivateJsonDocument } = require('./bot-json-store');
 const { validTopicSeed } = require('./bot-window-state');
 const { validInstructions } = require('./bot-topic');
+const { validGroups, validGroupId } = require('./bot-topic-management');
 
 const UUID = /^[a-f0-9-]{36}$/;
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const iso = value => typeof value === 'string' && value.length <= 40 && Number.isFinite(Date.parse(value));
 const text = (value, max) => typeof value === 'string' && value.length <= max && !/[\x00-\x1f\x7f]/.test(value);
-const MAX_WINDOWS = 200;
+const MAX_WINDOWS = 201; // Main + 100 active/archived topics + 100 recoverable topics.
 const MAX_GENERATIONS = 10000;
 const KINDS = Object.freeze(['main', 'topic']);
 const ROTATION_REASONS = Object.freeze(['initial', 'size', 'entries', 'age', 'manual']);
@@ -35,12 +37,27 @@ function validRotation(value) {
         && typeof value.fromSessionId === 'string' && value.fromSessionId.length > 0 && value.fromSessionId.length <= 128;
 }
 
+function validDeletion(value, generations) {
+    return object(value) && iso(value.startedAt) && Object.keys(value).every(key => ['startedAt', 'files', 'planIds'].includes(key))
+        && Array.isArray(value.planIds) && value.planIds.length <= 50000
+        && value.planIds.every(id => typeof id === 'string' && /^plan-[a-f0-9-]{36}$/.test(id))
+        && new Set(value.planIds).size === value.planIds.length
+        && Array.isArray(value.files) && value.files.length === generations.length
+        && value.files.every((file, index) => object(file) && file.generation === generations[index].generation
+            && typeof file.stamp === 'string' && file.stamp.length <= 512
+            && (file.identity === null || typeof file.identity === 'string' && file.identity.length <= 512)
+            && Object.keys(file).every(key => ['generation', 'stamp', 'identity'].includes(key)));
+}
+
 function validWindow(value) {
     if (!object(value) || typeof value.id !== 'string' || !UUID.test(value.id) || !KINDS.includes(value.kind)
         || !text(value.title, 80) || !text(value.emoji, 16) || typeof value.focus !== 'string' || value.focus.length > 500
         || typeof value.cwd !== 'string' || !path.isAbsolute(value.cwd) || !iso(value.createdAt) || !iso(value.updatedAt)
         || value.archivedAt !== null && !iso(value.archivedAt) || !Array.isArray(value.generations)
         || value.generations.length > MAX_GENERATIONS || !value.generations.every(validGeneration) || !validRotation(value.rotation ?? null)) return false;
+    if (value.groupId !== undefined && (value.kind !== 'topic' || !validGroupId(value.groupId))) return false;
+    if (value.trashedAt !== undefined && (value.kind !== 'topic' || value.trashedAt !== null && !iso(value.trashedAt))) return false;
+    if (value.deleting !== undefined && (!value.trashedAt || !validDeletion(value.deleting, value.generations))) return false;
     if (value.topicSeed !== undefined && (value.kind !== 'topic' || !validTopicSeed(value.topicSeed))) return false;
     // Topics only; records written before topic instructions have none (read as '').
     if (value.instructions !== undefined && (value.kind !== 'topic' || !validInstructions(value.instructions))) return false;
@@ -54,6 +71,12 @@ function validWindow(value) {
 function validState(state, profileId) {
     return object(state) && state.version === 1 && state.profileId === profileId && Array.isArray(state.windows)
         && state.windows.length <= MAX_WINDOWS && state.windows.every(validWindow)
+        && validGroups(state.groups ?? [])
+        && state.windows.every(item => item.groupId == null || (state.groups || []).some(group => group.id === item.groupId))
+        && Array.isArray(state.deletedTopicIds ?? []) && (state.deletedTopicIds || []).length <= 10000
+        && (state.deletedTopicIds || []).every(id => typeof id === 'string' && UUID.test(id))
+        && new Set(state.deletedTopicIds || []).size === (state.deletedTopicIds || []).length
+        && state.windows.every(item => !(state.deletedTopicIds || []).includes(item.id))
         && new Set(state.windows.map(item => item.id)).size === state.windows.length
         && state.windows.filter(item => item.kind === 'main').length <= 1
         && state.windows.filter(item => item.kind === 'main').every(item => item.archivedAt === null);

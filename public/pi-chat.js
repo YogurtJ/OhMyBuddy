@@ -2384,7 +2384,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!state.botMode || state.connected || state.bot?.windowId !== target.windowId) return;
                     // Archived, removed or moved to the trash elsewhere: retrying cannot succeed. Only the
                     // latest attempt for this very window hands over; the Bot page then continues elsewhere.
-                    if (error.code === 'BOT_WINDOW_ARCHIVED' || error.status === 404) {
+                    if (['BOT_WINDOW_ARCHIVED', 'BOT_TOPIC_TRASHED', 'BOT_TOPIC_DELETED'].includes(error.code) || error.status === 404) {
                         if (attempt !== state.reconnectAttempt || state.bot?.profileId !== target.profileId) return;
                         clearTimeout(state.reconnectTimer);
                         void botUi?.leaveGoneWindow(target, { archived: error.code === 'BOT_WINDOW_ARCHIVED' });
@@ -2507,7 +2507,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     resolve(true);
                 } catch (error) {
                     if (generation !== state.socketGeneration || state.socket !== socket) return resolve(false);
-                    if (['BOT_WINDOW_STALE', 'BOT_WINDOW_ROTATING', 'BOT_WINDOW_ARCHIVED'].includes(error.errorCode) && state.botMode && state.bot) {
+                    if (['BOT_WINDOW_STALE', 'BOT_WINDOW_ROTATING', 'BOT_WINDOW_ARCHIVED', 'BOT_TOPIC_TRASHED', 'BOT_TOPIC_DELETED'].includes(error.errorCode) && state.botMode && state.bot) {
                         // The window moved on: open its current generation instead of this one (an archived
                         // topic is then settled by the reconnect, which leaves it).
                         state.intentionalClose = true; socket.close(4000, 'Bot window moved');

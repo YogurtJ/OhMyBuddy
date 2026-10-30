@@ -171,7 +171,7 @@ class BotProactive {
         let notes = [];
         if (found?.notify.proactive) {
             const window = (await this.bots.windows.read(profileId)).state.windows.find(item => item.id === windowId);
-            if (window?.current && !window.archivedAt) notes = (await this.bots.notebook(profileId, windowId)).items
+            if (window?.current && !window.archivedAt && !window.trashedAt) notes = (await this.bots.notebook(profileId, windowId)).items
                 .filter(item => item.kind === 'commitment' && item.status === 'active' && item.due);
         }
         const zone = zoneOf(found?.notify), now = this.now();
@@ -302,7 +302,7 @@ class BotProactive {
             const plan = new Map();
             for (const item of due) {
                 const window = windows.find(entry => entry.id === item.windowId);
-                const reason = !found ? 'bot-unavailable' : !found.notify.proactive ? 'off' : !window?.current || window.archivedAt ? 'chat-gone'
+                const reason = !found ? 'bot-unavailable' : !found.notify.proactive ? 'off' : !window?.current || window.archivedAt || window.trashedAt ? 'chat-gone'
                     : now - item.at > LATE ? 'late' : null;
                 plan.set(item.id, reason ? { state: 'skipped', reason } : { state: 'sending', runId: hash('run', profileId, item.id), window });
             }

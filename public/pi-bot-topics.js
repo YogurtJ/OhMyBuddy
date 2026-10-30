@@ -29,9 +29,11 @@
     function refusal(error) {
         const code = String(error?.code || '');
         if (/ROTATING/.test(code)) return translateUi("这个话题正在接续到新的会话文件，稍等一下再试。");
-        if (/SCHEDULE/.test(code)) return translateUi("还有定时任务发到这个话题。先在“定时”页改掉或取消它，再归档。");
-        if (/DEFERRED/.test(code)) return translateUi("这个话题还有等着稍后发送的消息。等它们发出或取消后再归档。");
-        if (/BUSY|QUEUE|RUNNING|ACTIVE|PENDING|RECOVERY/.test(code)) return translateUi("这个话题还在忙或有排队的消息，等它停下再归档。");
+        if (/SCHEDULE/.test(code)) return translateUi("还有定时任务发到这个话题。先在“定时”页调整或取消它，再继续。");
+        if (/MEDIA/.test(code)) return translateUi("这个话题还有进行中或结果待核实的媒体任务，请先在媒体卡片中处理。");
+        if (/LEARNING/.test(code)) return translateUi("伙伴正在整理学到的内容，等它结束后再试。");
+        if (/DEFERRED/.test(code)) return translateUi("这个话题还有等着稍后发送的消息。等它们发出或取消后再继续。");
+        if (/BUSY|QUEUE|RUNNING|ACTIVE|PENDING|RECOVERY/.test(code)) return translateUi("这个话题还在忙或有排队的消息，等它停下再继续。");
         return error?.message || translateUi("保存失败");
     }
 
@@ -70,12 +72,10 @@
         const mark = el('span', 'pi-bot-topic-sheet-mark'); mark.setAttribute('aria-hidden', 'true');
         head.append(mark, title, close);
 
-        // An older topic's saved emoji keeps its own field; a new topic, or one without, has none.
-        const emoji = !creating && options.window.emoji ? el('input') : null;
-        const own = topic => ({ title: topic?.title || '', focus: topic?.focus || '', instructions: topic?.instructions || '',
-            ...(emoji ? { emoji: topic?.emoji || '' } : {}) });
+        const emoji = el('input');
+        const own = topic => ({ title: topic?.title || '', focus: topic?.focus || '', instructions: topic?.instructions || '', emoji: topic?.emoji || '', groupId: topic?.groupId || '' });
         let revision = options.bot.windowsRevision, base = own(creating ? null : options.window);
-        let busy = false, warned = null, archiveArmed = false, gone = false;
+        let busy = false, warned = null, archiveArmed = false, trashArmed = false, gone = false;
 
         const name = el('input'); name.type = 'text'; name.maxLength = LIMITS.title; name.required = true; name.autocomplete = 'off'; name.dataset.topicField = 'title';
         name.placeholder = translateUi("比如：功能开发");
@@ -85,8 +85,14 @@
         const instructions = el('textarea', 'pi-bot-sheet-long is-instructions'); instructions.rows = 3; instructions.maxLength = INSTRUCTION_BYTES;
         instructions.dataset.topicField = 'instructions';
         instructions.placeholder = translateUi("比如：先给结论再展开；改代码前先说明思路和影响。");
+        const group = el('select'); group.dataset.topicField = 'groupId';
+        const fillGroups = (bot, selected) => {
+            group.replaceChildren(new Option(translateUi("未分组"), ''), ...(bot.groups || []).map(item => new Option(item.name, item.id)));
+            group.value = selected || '';
+        };
+        fillGroups(options.bot, base.groupId);
         const fill = values => {
-            name.value = values.title; focus.value = values.focus; instructions.value = values.instructions; if (emoji) emoji.value = values.emoji;
+            name.value = values.title; focus.value = values.focus; instructions.value = values.instructions; emoji.value = values.emoji; group.value = values.groupId;
             fitTextarea(instructions);
         };
         let identity = field(translateUi("话题名"), name);
@@ -97,16 +103,26 @@
             identity = el('div', 'pi-bot-topic-identity');
             identity.append(field(translateUi("表情（可不填）"), emoji), title);
         }
+        const picker = el('details', 'pi-bot-topic-emoji-picker');
+        picker.append(el('summary', null, translateUi("选择图标")));
+        const choices = el('div', 'pi-bot-topic-emoji-choices');
+        for (const value of ['📖', '📚', '❓', '🌍', '💬', '💻', '🧰', '🧭', '📝', '🎯', '🎨', '🏡', '🎵', '💡', '🏃', '🍳', '📊', '🧪', '🧩', '✈️']) {
+            const choose = button('pi-bot-topic-emoji-option', value); choose.setAttribute('aria-label', translateUi("使用图标 {0}", value));
+            choose.addEventListener('click', () => { emoji.value = value; emoji.dispatchEvent(new Event('input', { bubbles: true })); }); choices.append(choose);
+        }
+        const clear = button('pi-bot-chip', translateUi("不使用图标"));
+        clear.addEventListener('click', () => { emoji.value = ''; emoji.dispatchEvent(new Event('input', { bubbles: true })); });
+        picker.append(choices, clear, el('p', 'pi-bot-sheet-hint', translateUi("也可以在图标输入框里粘贴表情。")));
         fill(base);
         const body = el('div', 'pi-bot-sheet-body');
         body.append(el('p', 'pi-bot-sheet-note pi-bot-topic-intro',
             translateUi("话题是单独的聊天：{0} 在里面只专心聊这件事，“我记着的事”也分开记。主聊天不受影响。", options.name || translateUi('伙伴'))),
-        identity, field(translateUi("专注什么"), focus, translateUi("最多 {0} 字，可以以后再改。", LIMITS.focus)),
+        identity, picker, field(translateUi("分组"), group, translateUi("仅用来整理话题，不影响聊天方式。在话题列表的“整理话题”里管理分组。")), field(translateUi("专注什么"), focus, translateUi("最多 {0} 字，可以以后再改。", LIMITS.focus)),
         field(translateUi("话题指令（可不填）"), instructions,
             translateUi("在这个话题里它要一直遵守的做法，比如回答格式、资料来源。最多 {0} KB（约 {1} 个汉字），可以以后再改。", INSTRUCTION_BYTES / 1024, 2700)));
 
         let archive = null;
-        if (!creating) {
+        if (!creating && !options.window.archivedAt) {
             archive = button('pi-bot-sheet-link pi-bot-topic-archive'); archive.dataset.topicAction = 'archive';
             archive.append(icon('fa-box-archive'), el('span', null, translateUi("归档这个话题")), icon('fa-chevron-right'));
             const section = el('section', 'pi-bot-sheet-section');
@@ -115,6 +131,15 @@
             body.append(section);
         }
 
+        let trash = null;
+        if (!creating) {
+            trash = button('pi-bot-sheet-link pi-bot-topic-trash'); trash.dataset.topicAction = 'trash';
+            trash.append(icon('fa-trash-can'), el('span', null, translateUi("移到回收站")));
+            const section = el('section', 'pi-bot-sheet-section');
+            section.append(el('h3', null, translateUi("删除话题")), el('p', 'pi-bot-sheet-note',
+                translateUi("整个话题（包括更早的聊天和记事本）会移到回收站，可以恢复。伙伴记忆、技能和单独保存的成果保留。")), trash);
+            body.append(section);
+        }
         const foot = el('footer', 'pi-bot-sheet-foot');
         const status = el('p', 'pi-bot-sheet-status'); status.setAttribute('role', 'status');
         const cancel = button('pi-bot-chip', translateUi("取消"));
@@ -124,7 +149,7 @@
         sheet.append(form);
         document.body.append(sheet);
 
-        const values = () => ({ title: name.value, focus: focus.value, instructions: instructions.value, ...(emoji ? { emoji: emoji.value } : {}) });
+        const values = () => ({ title: name.value, focus: focus.value, instructions: instructions.value, emoji: emoji.value, groupId: group.value });
         const edited = () => Object.entries(values()).some(([key, value]) => value !== base[key]);
         const say = (text, tone) => { status.textContent = text; if (tone) status.dataset.tone = tone; else delete status.dataset.tone; };
         const tooLong = () => bytes(cleanLines(instructions.value)) > INSTRUCTION_BYTES;
@@ -133,16 +158,18 @@
             const next = Object.fromEntries(Object.entries(values()).map(([key, value]) => [key, tidy(key, value)]));
             if (!next.title || next.title.length > LIMITS.title || next.focus.length > LIMITS.focus || (next.emoji ?? '').length > LIMITS.emoji
                 || tooLong()) return null;
-            if (creating) return next;
-            return Object.fromEntries(Object.entries(next).filter(([key, value]) => value !== tidy(key, base[key])));
+            if (creating) return { ...next, groupId: next.groupId || null };
+            return Object.fromEntries(Object.entries(next).filter(([key, value]) => value !== tidy(key, base[key])).map(([key, value]) => [key, key === 'groupId' ? value || null : value]));
         }
         function refresh() {
             mark.textContent = emoji?.value.trim() || '';
             mark.hidden = !mark.textContent;
             const pending = changes();
             save.disabled = busy || gone || !pending || !Object.keys(pending).length;
-            for (const control of form.querySelectorAll('input,textarea')) control.disabled = busy || gone;
+            for (const control of form.querySelectorAll('input,textarea,select,.pi-bot-topic-emoji-picker button')) control.disabled = busy || gone;
+            for (const choice of choices.children) choice.setAttribute('aria-pressed', String(choice.textContent === emoji.value.trim()));
             if (archive) archive.disabled = busy || gone;
+            if (trash) trash.disabled = busy || gone;
         }
         const alive = () => sheet.open && dialog === sheet && options.current();
         const leave = action => {
@@ -156,7 +183,9 @@
         sheet.addEventListener('cancel', event => { event.preventDefault(); leave('close'); });
         sheet.addEventListener('close', () => { sheet.remove(); if (dialog === sheet) dialog = null; });
         form.addEventListener('input', event => {
-            warned = null; archiveArmed = false; if (archive) archive.querySelector('span').textContent = translateUi("归档这个话题");
+            warned = null; archiveArmed = false; trashArmed = false;
+            if (trash) trash.querySelector('span').textContent = translateUi("移到回收站");
+            if (archive) archive.querySelector('span').textContent = translateUi("归档这个话题");
             // Over the byte limit the field says so here; saving stays off until it fits.
             const over = tooLong();
             instructions.setAttribute('aria-invalid', String(over));
@@ -172,9 +201,10 @@
             const fresh = await options.latest();
             if (!alive()) return false;
             revision = fresh?.windowsRevision ?? revision;
-            if (creating) return true;
+            if (creating) { fillGroups(fresh, group.value); return true; }
             const now = fresh?.windows?.find(item => item.id === options.window.id);
-            if (!now || now.archivedAt) { gone = true; say(translateUi("这个话题已经被归档或移走了。"), 'error'); refresh(); return false; }
+            if (!now || now.trashedAt || !options.window.archivedAt && now.archivedAt) { gone = true; say(translateUi("这个话题已经被归档或移走了。"), 'error'); refresh(); return false; }
+            fillGroups(fresh, group.value);
             // A field counts as the user's own edit only when its saved form differs from before.
             const mine = values(), next = own(now);
             fill(Object.fromEntries(Object.keys(next).map(key => [key, tidy(key, mine[key]) !== tidy(key, base[key]) ? mine[key] : next[key]])));
@@ -229,6 +259,25 @@
             } finally { busy = false; if (sheet.open) refresh(); }
         });
 
+        trash?.addEventListener('click', async () => {
+            if (busy || gone) return;
+            if (!trashArmed) {
+                archiveArmed = false; if (archive) archive.querySelector('span').textContent = translateUi("归档这个话题");
+                trashArmed = true; trash.querySelector('span').textContent = translateUi("再点一次移到回收站");
+                say(edited() ? translateUi("未保存的修改会放弃，完整聊天和记事本会保留在回收站。") : translateUi("完整聊天和记事本会保留在回收站，可以恢复。"), 'warn'); return;
+            }
+            busy = true; say(translateUi("正在移到回收站…")); refresh();
+            try {
+                const result = await options.api(url(options.profileId, options.window.id) + '/trash', { method: 'POST', ...json({ expectedRevision: revision }) });
+                if (dialog === sheet) sheet.close();
+                if (options.current()) await options.onSaved?.(result, 'trashed');
+            } catch (error) {
+                if (!alive()) return;
+                trashArmed = false; trash.querySelector('span').textContent = translateUi("移到回收站");
+                if (stale(error)) { try { await reread(); } catch {} if (alive() && !gone) say(translateUi("话题刚刚在别处改过，请检查后重新确认。"), 'warn'); }
+                else say(refusal(error), 'error');
+            } finally { busy = false; if (sheet.open) refresh(); }
+        });
         refresh();
         sheet.showModal();
         fitTextarea(instructions);
@@ -246,7 +295,7 @@
     // by topic: { count, busy, titles }. Only 'ready' topics have known items; 'busy' is shown as
     // such; unavailable, over-budget and unknown topics are left without a badge (unknown, not none).
     function index(data, windows) {
-        const topics = new Set((windows || []).filter(item => item.kind === 'topic' && !item.archivedAt).map(item => item.id));
+        const topics = new Set((windows || []).filter(item => item.kind === 'topic' && !item.archivedAt && !item.trashedAt).map(item => item.id));
         const out = new Map();
         if (data?.v !== 1 || !Array.isArray(data.topics)) return out;
         for (const topic of data.topics.slice(0, 100)) {
