@@ -70,7 +70,7 @@ async function install({ root = path.resolve(__dirname, '..'), noShortcut = fals
     } else if (process.platform === 'darwin') execFileSync('/bin/launchctl', ['bootstrap', `gui/${process.getuid()}`, value.service], { stdio: 'inherit' });
     else powershell(`Register-ScheduledTask -TaskName ${ps(value.id)} -Xml ([IO.File]::ReadAllText(${ps(value.service)})) | Out-Null; Start-ScheduledTask -TaskName ${ps(value.id)}`);
     let ready = false;
-    for (let i = 0; i < 45; i++) {
+    for (let i = 0; i < 120; i++) {
         try { const response = await fetch(url.href + 'api/access/status', { signal: AbortSignal.timeout(1500), redirect: 'error' }); const data = await response.json(); if (response.ok && typeof data.authenticated === 'boolean') { ready = true; break; } } catch {}
         await new Promise(resolve => setTimeout(resolve, 1000));
     }
