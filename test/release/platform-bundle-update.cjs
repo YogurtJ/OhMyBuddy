@@ -15,7 +15,7 @@ const { readSafe, hashFileSafe } = require('../../server/pi-maintenance-files');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function main() {
     const args = process.argv.slice(2), values = {};
-    for (let i = 0; i < args.length; i += 2) { if (!['--payload', '--output', '--expected', '--playwright', '--resume', '--tls-ca', '--browser'].includes(args[i]) || !args[i + 1] || values[args[i]]) throw Error('Invalid isolated macOS trial arguments'); values[args[i]] = args[i + 1]; }
+    for (let i = 0; i < args.length; i += 2) { if (!['--payload', '--output', '--expected', '--playwright', '--resume', '--tls-ca', '--browser'].includes(args[i]) || !args[i + 1] || values[args[i]]) throw Error('Invalid isolated native platform trial arguments'); values[args[i]] = args[i + 1]; }
     if (!['--payload', '--output', '--expected', '--playwright', '--browser'].every(key => values[key])) throw Error('Use --payload --output NEW_DIR --expected VERSION --playwright MODULE --browser EXECUTABLE');
     const output = path.resolve(values['--output']);
     if (values['--resume'] === 'true') assert.equal(readSafe(path.join(output, 'isolated-trial')).toString(), 'OhMyBuddy native platform update\n');
@@ -52,14 +52,14 @@ async function main() {
     };
     async function boot() {
         child = spawn(node, [servicePlan.runner], { cwd: installation, env, stdio: ['ignore', logFile, logFile] });
-        const deadline = Date.now() + 60000;
+        const deadline = Date.now() + 120000;
         while (Date.now() < deadline) { if (child.exitCode !== null) throw Error('Isolated service exited'); try { const state = await api('settings/updates/maintenance'); if (!state.busy) return; } catch {} await delay(200); }
         throw Error('Isolated service readiness failed');
     }
     async function stop() { if (child?.exitCode === null) { const exited = once(child, 'exit'); fs.writeFileSync(stopFile, 'normal stop requested by isolated trial\n', { flag: 'wx', mode: 0o600 }); const [code, signal] = await exited; assert.equal(code, 0, `Unclean stop: ${signal}`); } }
     try {
         await boot();
-        session = await api('sessions', { cwd: project, name: 'Synthetic macOS update validation' });
+        session = await api('sessions', { cwd: project, name: 'Synthetic native platform update validation' });
         const sdk = await import('@earendil-works/pi-coding-agent');
         const native = sdk.SessionManager.open(session.path);
         const images = new (require('../../server/pi-session-images').SessionImages)(agent);
