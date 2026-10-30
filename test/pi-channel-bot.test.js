@@ -44,6 +44,8 @@ function fixture(t, { text = 'hello', binding: bindingOverride } = {}) {
             const w = windowId === null ? bot.windows.find(item => item.kind === 'main') : windowOf(profileId, windowId);
             if (!w) throw Object.assign(Error('Window not found'), { status: 404 });
             if (w.archived) throw Object.assign(Error('archived'), { status: 409, code: 'BOT_WINDOW_ARCHIVED' });
+            if (w.trashed) throw Object.assign(Error('trashed'), { status: 409, code: 'BOT_TOPIC_TRASHED' });
+            if (w.deleted) throw Object.assign(Error('deleted'), { status: 410, code: 'BOT_TOPIC_DELETED' });
             return { name: bot.name, window: publicWindow(w), session: sessions.get(w.current) };
         },
         async withChannelWindow(profileId, windowId, session, action) { await this.assertCurrentWindowSession(profileId, windowId, session); return action(); },
@@ -139,6 +141,16 @@ test('an archived topic sends the chat back to the main chat with an explanation
     assert.equal(s.job('job').status, 'delivered'); assert.equal(turns.length, 0);
     assert.match(sends[0], /归档/);
     assert.deepEqual([db.value.bindings[0].bot.windowId, db.value.bindings[0].sessionId], [MAIN_A, 'a-main-0']);
+});
+
+test('trashed and permanently deleted topics explain the undelivered message and return the binding to main without running it', async t => {
+    for (const [flag, text] of [['trashed', /回收站/], ['deleted', /彻底删除/]]) {
+        const { s, db, windows, turns, sends } = fixture(t, { binding: { sessionId: 'a-topic-0', bot: { profileId: A, windowId: TOPIC_A, main: false } } });
+        windows[A].windows[1][flag] = true;
+        s.pump(); await until(() => ['delivered', 'failed', 'uncertain'].includes(s.job('job').status));
+        assert.equal(s.job('job').status, 'delivered'); assert.equal(turns.length, 0); assert.match(sends[0], text); assert.match(sends[0], /重新发送/);
+        assert.deepEqual([db.value.bindings[0].bot.windowId, db.value.bindings[0].sessionId], [MAIN_A, 'a-main-0']);
+    }
 });
 
 test('/切换 and /话题 move the chat; native reset commands explain Bot topics', async t => {

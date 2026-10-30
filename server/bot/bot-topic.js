@@ -13,8 +13,8 @@ const validInstructions = value => typeof value === 'string' && Buffer.byteLengt
 // Shared by HTTP and the worker: no coercion, unknown fields or empty titles.
 // Optional title on create defaults to '新话题' so one click opens a fresh topic immediately.
 // withInstructions: only the owner's API sets instructions; the Bot's topic proposal cannot.
-function topicFields(raw, { patch = false, revision = false, requireTitle = false, withInstructions = false } = {}) {
-    const allowed = ['title', 'focus', 'emoji', ...(withInstructions ? ['instructions'] : []), ...(patch ? ['archived'] : []),
+function topicFields(raw, { patch = false, revision = false, requireTitle = false, withInstructions = false, withGroups = false } = {}) {
+    const allowed = ['title', 'focus', 'emoji', ...(withInstructions ? ['instructions'] : []), ...(withGroups ? ['groupId'] : []), ...(patch ? ['archived'] : []),
         ...(revision ? ['expectedRevision'] : [])];
     if (!object(raw) || Object.keys(raw).some(key => !allowed.includes(key))) fail('Invalid topic fields');
     if (revision && (typeof raw.expectedRevision !== 'string' || !/^[a-f0-9]{64}$/.test(raw.expectedRevision))) fail('Expected windows revision is required');
@@ -34,6 +34,10 @@ function topicFields(raw, { patch = false, revision = false, requireTitle = fals
     if (!patch && !Object.hasOwn(result, 'title')) {
         if (requireTitle) fail('A topic title is required');
         result.title = DEFAULT_TOPIC_TITLES['zh-CN'];
+    }
+    if (Object.hasOwn(raw, 'groupId')) {
+        if (!require('./bot-topic-management').validGroupId(raw.groupId)) fail('Invalid topic group');
+        result.groupId = raw.groupId;
     }
     if (Object.hasOwn(raw, 'archived')) {
         if (typeof raw.archived !== 'boolean') fail('Invalid topic archived flag');

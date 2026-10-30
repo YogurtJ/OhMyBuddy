@@ -234,6 +234,7 @@ function createPiAgentGateway(options = {}) {
     learning = new (require('./profile-memory/learning-service').ProfileLearningService)({ profiles, store, preferences,
         knowledge: knowledgeService, getAgentDir, createModelRuntime: () => settingsService.createModelRuntime(),
         idle: job => !maintenance.locked && !maintenance.referenceLocked && (job ? supervisor.isSessionIdle(job.sessionPath) : supervisor.isIdle()),
+        sourceAllowed: manager => bots.learningSourceAllowed(manager),
         auxiliaryModels, legacyReviewModel: async () => (await profileMemory.snapshot()).reviewModel });
     learning.resumePromise = learning.resume();
     router.get('/profiles/:id/learning', profileRoute(req => learning.snapshot(req.params.id)));
@@ -288,6 +289,15 @@ function createPiAgentGateway(options = {}) {
             || [...sideChat.connections].some(c => matches(c.reference.source))
             || [...sideChat.parents.values()].some(p => (p.preparing || p.ticket) && matches(p.source)))
             throw Object.assign(new Error('This topic has pending messages or side chats; finish them before archiving'), { status: 409, code: 'BOT_WINDOW_BUSY' });
+    };
+    bots.assertTopicQuiescent = ({ profileId, planIds }) => {
+        if (learning.recovering || [...learning.active.values()].some(item => item.profileId === profileId))
+            throw Object.assign(new Error('Wait for this Buddy learning work to finish'), { status: 409, code: 'BOT_TOPIC_LEARNING' });
+        const media = options.mediaLabService?.chatRequests;
+        if (media?.unavailable) throw Object.assign(new Error('Media task checks are unavailable'), { status: 503, code: 'BOT_TOPIC_ACTIVITY_UNAVAILABLE' });
+        if (planIds.some(id => media?.pending.has(id) || (media?.entries.get(id)?.attempts || []).some(attempt =>
+            ['running', 'queued'].includes(attempt.status) || attempt.status === 'uncertain' && attempt.remoteTerminal !== true)))
+            throw Object.assign(new Error('Finish or resolve this topic media tasks first'), { status: 409, code: 'BOT_TOPIC_MEDIA' });
     };
     require('./bot/bot-topic').mountBotTopics(router, { bots, authenticate: req => agentThreads.authenticate(req) });
     // Messages Bots start themselves (M4-3): due follow-ups and check-ins, quiet hours and push limits.
