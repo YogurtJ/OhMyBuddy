@@ -225,7 +225,7 @@
         }
 
         async load() {
-            const data = await this.api('/api/pi/bots');
+            const data = await this.api('/api/pi/bots?includeTrash=false');
             this.revision = data.revision; this.bots = Array.isArray(data.bots) ? data.bots : []; this.loaded = true;
             return data;
         }
@@ -641,7 +641,7 @@
             void window.PiBotSettings.open({ api: this.api, toast: this.toast, profileId, face,
                 current: () => this.active && this.profileId === profileId,
                 checkChat: async windowId => {
-                    const data = await this.api('/api/pi/bots');
+                    const data = await this.api('/api/pi/bots?includeTrash=false');
                     if (!this.active || this.profileId !== profileId) return 'unavailable';
                     const bot = data.bots?.find(item => item.id === profileId && item.enabled);
                     const target = bot?.windows?.find(item => item.id === windowId);
@@ -799,7 +799,8 @@
                 else for (const topic of topics) list.append(this.topicItem(bot, topic));
                 const archived = bot.windows.filter(item => item.kind === 'topic' && item.archivedAt && !item.trashedAt);
                 if (archived.length) list.append(this.archivedList(archived));
-                const trash = button('pi-bot-topic-trash-link'); trash.textContent = translateUi("回收站（{0}）", bot.windows.filter(item => item.trashedAt).length);
+                const trash = button('pi-bot-topic-trash-link'); trash.setAttribute('aria-label', translateUi("回收站（{0}）", bot.trashCount ?? bot.windows.filter(item => item.trashedAt).length));
+                trash.append(icon('fa-trash-can'), el('span', null, translateUi("回收站")), el('small', null, String(bot.trashCount ?? bot.windows.filter(item => item.trashedAt).length)));
                 trash.addEventListener('click', () => this.manageTopics('trash')); list.append(trash);
                 const foot = el('footer', 'pi-bot-side-foot');
                 const notes = button('pi-bot-notes-link'); notes.dataset.botAction = 'notes';
