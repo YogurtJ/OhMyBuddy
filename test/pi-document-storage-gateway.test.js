@@ -102,6 +102,40 @@ test('real deferred, durable queue and recurring-job records protect uploaded or
     assert.equal(usage.status, 200); assert.equal(usage.body.complete, false); assert.equal(usage.body.count, 3);
 });
 
+test('image cleanup uses the real lease, requires confirmation, and preserves the system-trash recovery promise', { timeout: 60000 }, async t => {
+    const f = await fixture(t), { SessionImages } = require('../server/pi-session-images'), images = new SessionImages(f.agent);
+    const block = images.save({ type: 'image', mimeType: 'image/png', data: Buffer.from('synthetic orphan image').toString('base64') });
+    const usage = await f.request('/session-images/storage/usage', { cwd: f.cwd });
+    assert.equal(usage.status, 200); assert.equal(usage.body.complete, true); assert.equal(usage.body.reclaimableCount, 1);
+    const preview = await f.request('/session-images/storage/preview', { cwd: f.cwd, action: 'quarantine' });
+    assert.equal(preview.status, 200, JSON.stringify(preview.body));
+    const body = { cwd: f.cwd, ticket: preview.body.ticket, revision: preview.body.revision, requestId: 'image-confirmed', confirmed: true, externalWritersStopped: true, externalRestoreReviewed: true };
+    const rejected = await f.request('/session-images/storage/cleanup', { ...body, externalRestoreReviewed: false }); assert.equal(rejected.status, 400);
+    const result = await f.request('/session-images/storage/cleanup', body);
+    assert.equal(result.status, 200, JSON.stringify(result.body)); assert.equal(result.body.state, 'completed');
+    assert.equal(images.restore(block).data, Buffer.from('synthetic orphan image').toString('base64'));
+    assert.equal(f.maintenance.referenceLocked, false); assert.equal(f.gateway.documents.active, 0); assert.equal(f.gateway.supervisor.workers.size, 0);
+    const status = await f.request('/session-images/storage/status?' + new URLSearchParams({ cwd: f.cwd, requestId: body.requestId }), undefined, 'GET');
+    assert.deepEqual(status.body, result.body);
+});
+
+test('image preview rejects idle native processes and out-of-scope native history without stopping them', { timeout: 60000 }, async t => {
+    const f = await fixture(t), images = new (require('../server/pi-session-images').SessionImages)(f.agent);
+    images.save({ type: 'image', mimeType: 'image/png', data: Buffer.from('synthetic image').toString('base64') });
+    const worker = { sessionPath: f.session.path, isIdle: () => true, retainsBackgroundWork: () => false,
+        request: async () => ({ isStreaming: false, isCompacting: false, pendingMessageCount: 0 }) };
+    f.gateway.supervisor.workers.set(f.session.path, worker);
+    try {
+        const result = await f.request('/session-images/storage/preview', { cwd: f.cwd, action: 'quarantine' });
+        assert.equal(result.status, 409); assert.equal(result.body.code, 'DOCUMENT_STORAGE_BUSY');
+        assert.equal(f.gateway.supervisor.workers.get(f.session.path), worker);
+    } finally { f.gateway.supervisor.workers.delete(f.session.path); }
+    fs.writeFileSync(path.join(f.agent, 'settings.json'), JSON.stringify({ subagents: { defaultSessionDir: path.join(f.agent, 'unknown-native-root') } }));
+    const result = await f.request('/session-images/storage/usage', { cwd: f.cwd });
+    assert.equal(result.status, 200); assert.equal(result.body.complete, false); assert.equal(result.body.reclaimableCount, 0);
+    assert.equal(f.maintenance.referenceLocked, false);
+});
+
 test('session deletion preserves recoveries on failure and removes them only after confirmed native removal', { timeout: 60000 }, async t => {
     const f = await fixture(t), queue = await f.gateway.supervisor.getQueueStore();
     const owner = { cwd: f.cwd, sessionId: f.session.id, sessionPath: f.session.path, controls: { runtimeId: randomUUID() } };

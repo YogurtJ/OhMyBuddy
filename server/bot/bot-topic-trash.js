@@ -8,6 +8,7 @@ const { descriptorPathSync } = require('../pi-file-descriptor');
 const { readWindowBinding } = require('./bot-window-state');
 const { request } = require('./bot-topic-management');
 const { MAX_TOPICS } = require('./bot-topic');
+const { SessionImageLifecycle, imageReferences } = require('../pi-session-image-lifecycle');
 const { mediaPlanRecord, MEDIA_PLAN_ENTRY, MEDIA_TOOLS, PLAN_KEY } = require('../pi-media-plan-format');
 const fail = (message, status = 409, code) => { throw Object.assign(new Error(message), { status, code }); };
 const stamp = stat => [stat.dev, stat.ino, stat.mode, stat.size, stat.mtimeNs, stat.ctimeNs].map(String).join(':');
@@ -42,13 +43,14 @@ async function verifyTopic(service, profileId, window, { deleting = false } = {}
     const expected = new Map(window.generations.map(generation => [generation.sessionPath, generation]));
     if (markers.some(marker => !expected.has(marker.path) || expected.get(marker.path).sessionId !== marker.sessionId
         || expected.get(marker.path).generation !== marker.generation)) fail('Unindexed topic history requires recovery', 409, 'BOT_WINDOW_STALE');
-    const plans = new Set(deleting ? window.deleting.planIds : []), files = [];
+    const plans = new Set(deleting ? window.deleting.planIds : []), files = [], imageRefs = new Map();
     for (const generation of window.generations) {
         // Only an already-journalled permanent deletion may have missing generations.
         if (deleting && !fs.existsSync(generation.sessionPath)) {
             try { fs.lstatSync(generation.sessionPath); } catch (error) { if (error.code === 'ENOENT') continue; throw error; }
         }
         await readGeneration(service, profileId, window, generation, (manager, read) => {
+            for (const ref of imageReferences(manager.getEntries())) imageRefs.set(ref.sha256, ref);
             for (const entry of manager.getEntries()) {
                 const native = entry.type === 'custom' && entry.customType === MEDIA_PLAN_ENTRY ? mediaPlanRecord(entry.data) : null;
                 const message = entry.type === 'message' ? entry.message : null;
@@ -62,7 +64,7 @@ async function verifyTopic(service, profileId, window, { deleting = false } = {}
             read.validate(); files.push({ generation: generation.generation, ...current });
         });
     }
-    return { plans, files };
+    return { plans, files, imageRefs: [...imageRefs.values()] };
 }
 function activity(service, profileId, window, plans) {
     if (typeof service.assertTopicQuiescent !== 'function') fail('Topic activity checks are unavailable', 503, 'BOT_TOPIC_ACTIVITY_UNAVAILABLE');
@@ -127,6 +129,8 @@ function deleteTopic(service, profileId, windowId, input) {
         return service.archiveWindowLocked(profileId, window, async () => {
             verified = await verifyTopic(service, profileId, window, { deleting: Boolean(window.deleting) });
             activity(service, profileId, window, verified.plans);
+            const lifecycle = new SessionImageLifecycle();
+            const imageDeletionId = lifecycle.prepare({ kind: 'buddy-topic', key: [profileId, windowId], name: window.title || '', refs: verified.imageRefs });
             if (!window.deleting) {
                 const saved = await service.windows.mutate(profileId, input.expectedRevision, state => {
                     activity(service, profileId, window, verified.plans);
@@ -157,7 +161,11 @@ function deleteTopic(service, profileId, windowId, input) {
                 (state.deletedTopicIds ||= []).push(windowId); return {};
             });
             service.emit('botChanged', { profileId, windowId, deleted: true });
-            return { ok: true, deleted: true, recoverable: false, generations: window.generations.length, windowsRevision: saved.revision };
+            const result = { ok: true, deleted: true, recoverable: false, generations: window.generations.length, windowsRevision: saved.revision,
+                ...(imageDeletionId ? { imageDeletionId, imageRetention: 'pending-reference-check' } : {}) };
+            try { lifecycle.finish(imageDeletionId, 'deleted'); }
+            catch { result.imageCleanupWarning = '话题已删除，图片删除记录待核对；相关图片继续保留'; }
+            return result;
         }, { verify: () => verifyTopic(service, profileId, window, { deleting: Boolean(window.deleting) }) });
     });
 }

@@ -186,6 +186,21 @@
 
 拒绝返回 `{error,code}`，包括 DOCUMENT_STORAGE_BUSY、DOCUMENT_STORAGE_CHANGED、DOCUMENT_SCAN_INCOMPLETE、DOCUMENT_PROTECTED、DOCUMENT_SCOPE、DOCUMENT_INPUT、DOCUMENT_CONFLICT；全局入口忙碌可能返回 503/errorCode。已进入删除发布阶段的 I/O 失败保留不确定凭据和删除标记，不自动恢复、重放或复活同一上传 ID。可验证残留不再被全局扫描当作普通可下载对象：新证据按原大小保守计费；仅有旧格式匹配标记/回执的可验证残留按每项100MiB计入实例及每个线程预算，隐藏未验证名称与归属并给出warning。未知、篡改、链接或替换残留仍拒绝，达到额度仍阻止新上传。没有存储守卫／完整引用提供者时只能列出用量。操作仍计入 documentOperations；详细用户边界见[附件用量与清理](COMPOSER_TOOLS.md#附件用量与清理)。
 
+### 会话外置图片回收（sessionImageStorage）
+
+`GET /api/pi/status.sessionImageStorage=true` 启用附件管理中的会话/Buddy图片入口。以下接口使用正常工作台鉴权与允许项目的 `cwd`，均为 no-store；管理对象为同一身份全局共享图片，不接受客户端路径。
+
+| Method | Path（前缀 `/api/pi`） | 请求与结果 |
+|---|---|---|
+| POST | `/session-images/storage/usage` | `{cwd}`；返回主库 `totalBytes/count`、`quarantineBytes/quarantineCount`、`reclaimableBytes/reclaimableCount`、`purgeableBytes/purgeableCount`、`retentionDays:30`、`trash:[{id,name,createdAt,images,bytes}]`、`pendingRecords`、`complete/revision/warning`。不完整时不提供可清理候选 |
+| POST | `/session-images/storage/preview` | `{cwd,action:"quarantine"|"purge"|"release",recordId?}`；release需要指定系统回收站图片保护记录。全局租约和全部writer退出后返回 `{ticket,revision,action,count,bytes,expiresAt,retentionDays,recordId?,name?}`，五分钟有效 |
+| POST | `/session-images/storage/cleanup` | `{cwd,ticket,revision,requestId,confirmed:true,externalWritersStopped:true,externalRestoreReviewed:true}`；依票据隔离无引用图片、永久清理隔离至少30天且仍无引用的图片，或放弃指定已删除会话的图片恢复保护。返回持久回执 `{version,cwd,requestId,ticket,revision,action,ids,state:"completed"|"uncertain",createdAt}`；同编号仅回读结果，不重复执行 |
+| GET | `/session-images/storage/status?cwd&requestId` | 仅查询原持久回执；404不表示在途操作取消，不能自动重提 |
+
+`externalRestoreReviewed` 确认已检查系统回收站及外部裸会话副本中的额外引用。正常会话/分支/子会话/Buddy回收站/归档、已登记的系统回收站恢复记录和未确认删除意图继续保护图片；全局检查复用附件引用租约，相关读写计入 `documentOperations`。扫描不完整/超预算、身份变化或仍有原生运行实例时拒绝，不为清理停止worker。隔离不立即释放空间，30天到期也不自动删除；隔离图片仍可由恢复的原生记录读取。预览最多10000个对象，单个对象32MiB，图片库读取总预算4GiB；完整边界见[图片生命周期](development/SESSION_IMAGES.md#删除回收站与图片回收)。
+
+拒绝使用 `IMAGE_STORAGE_INPUT`（400）、`IMAGE_STORAGE_CHANGED|IMAGE_STORAGE_PROTECTED|IMAGE_STORAGE_BUSY|IMAGE_STORAGE_INCOMPLETE`（409）以及复用的 `DOCUMENT_STORAGE_BUSY|DOCUMENT_SCAN_INCOMPLETE|DOCUMENT_STORAGE_CHANGED`；全局准入冲突可能为503。I/O失败保留`uncertain`意图，不确定图片不会再次列为可清理。普通会话删除与Buddy话题彻底删除可附带 `imageDeletionId`、`imageRetention:"trash-protected"|"pending-reference-check"` 或 `imageCleanupWarning`；原生删除成功后的图片附属失败不能冒充会话删除失败。
+
 ### 任务进度（taskProgress）
 
 `GET /api/pi/status` 的 `taskProgress:true` 表示服务支持内置进度卡。主 WS `open_session` / `open_ephemeral` 的 `messages.webProgress` 与 `get_messages.webProgress` 为 `null` 或 `{version:1,id,plan:[{step,status}],explanation}`；`id` 标识一次已保存的更新。空 `plan` 表示明确清除，不回退到更早计划。每次原生更新或分支恢复广播 `{type:'gateway_progress',progress}`，沿用 `webRuntimeId/webSequence`，初始化按 `messages.webLive` 的边界过滤已包含事件；前端收到进度事件递增运行修订，拒绝较早的异步快照覆盖。

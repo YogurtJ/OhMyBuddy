@@ -185,6 +185,9 @@ test('partial deletion stays visibly irreversible, never retries itself, and con
     const f = await fixture(t), topic = await f.topic(), planId = `plan-${randomUUID()}`;
     const { SessionManager } = await import('@earendil-works/pi-coding-agent');
     SessionManager.open((await f.row(topic.id)).current.sessionPath).appendCustomEntry('pivane-media-plan', { version: 1, toolCallId: 'old-generation-media', plan: { id: planId, kind: 'image', modelId: 'synthetic', parameters: {} } });
+    const images = new (require('../server/pi-session-images').SessionImages)(agentDir);
+    const oldImage = images.save({ type: 'image', mimeType: 'image/png', data: Buffer.from('partial-topic-' + topic.id).toString('base64') });
+    SessionManager.open((await f.row(topic.id)).current.sessionPath).appendMessage({ role: 'user', content: [oldImage], timestamp: 1 });
     await f.rotate(topic.id); await f.action('POST', `/windows/${topic.id}/trash`);
     const row = await f.row(topic.id), files = row.generations.map(item => item.sessionPath), bytes = fs.readFileSync(files[1]);
     const old = fs.unlinkSync; let attempted = 0;
@@ -192,6 +195,9 @@ test('partial deletion stays visibly irreversible, never retries itself, and con
     let result;
     try { result = await f.action('DELETE', `/windows/${topic.id}`, { confirmed: true }); } finally { fs.unlinkSync = old; }
     assert.notEqual(result.status, 200); assert.equal(attempted, 2); assert.equal(fs.existsSync(files[0]), false); assert.deepEqual(fs.readFileSync(files[1]), bytes);
+    const lifecycle = new (require('../server/pi-session-image-lifecycle').SessionImageLifecycle)(agentDir);
+    const imageDeletionId = require('../server/pi-maintenance-files').hash(JSON.stringify(['buddy-topic', [f.id, topic.id]]));
+    assert.equal(lifecycle.read(imageDeletionId).state, 'prepared'); assert.equal(images.restore(oldImage).data, Buffer.from('partial-topic-' + topic.id).toString('base64'));
     const partial = await f.row(topic.id); assert.ok(partial.deleting); assert.equal(partial.deleting.files.length, 2); assert.deepEqual(partial.deleting.planIds, [planId]);
     assert.equal((await f.action('POST', `/windows/${topic.id}/restore`)).data.code, 'BOT_TOPIC_DELETING');
     f.media.entries.set(planId, { attempts: [{ status: 'running' }] });
@@ -199,4 +205,33 @@ test('partial deletion stays visibly irreversible, never retries itself, and con
     assert.deepEqual(fs.readFileSync(files[1]), bytes); f.media.entries.get(planId).attempts[0].status = 'done';
     const completed = await f.action('DELETE', `/windows/${topic.id}`, { confirmed: true });
     assert.equal(completed.status, 200, JSON.stringify(completed.data)); assert.equal(fs.existsSync(files[1]), false); assert.equal(await f.row(topic.id), undefined);
+    assert.equal(lifecycle.read(imageDeletionId).state, 'deleted'); assert.ok(lifecycle.read(imageDeletionId).refs.some(ref => ref.sha256 === oldImage.pivaneImage.sha256));
+});
+
+test('Buddy trash and archived generations protect images; permanent topic deletion only releases unshared references', async t => {
+    const f = await fixture(t), topic = await f.topic(), session = (await f.bots.resolve(f.id, topic.id)).session;
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+    const { SessionImages } = require('../server/pi-session-images'), { SessionImageLifecycle } = require('../server/pi-session-image-lifecycle');
+    const images = new SessionImages(agentDir), lifecycle = new SessionImageLifecycle(agentDir);
+    const shared = images.save({ type: 'image', mimeType: 'image/png', data: Buffer.from('shared-buddy-' + topic.id).toString('base64') });
+    const exclusive = images.save({ type: 'image', mimeType: 'image/png', data: Buffer.from('exclusive-buddy-' + topic.id).toString('base64') });
+    SessionManager.open(session.path).appendMessage({ role: 'user', content: [shared, exclusive], timestamp: 1 });
+    SessionManager.open(f.main.path).appendMessage({ role: 'user', content: [shared], timestamp: 2 });
+    await f.rotate(topic.id);
+    const trashed = await f.action('POST', `/windows/${topic.id}/trash`); assert.equal(trashed.status, 200);
+    let snapshot = await f.sessionImageStorage.snapshot(root);
+    for (const block of [shared, exclusive]) assert.ok(snapshot.protectedIds.has(block.pivaneImage.sha256), 'trashed topic history retains its images');
+    const restored = await f.action('POST', `/windows/${topic.id}/restore`); assert.equal(restored.status, 200);
+    assert.equal(images.restore(exclusive).data, Buffer.from('exclusive-buddy-' + topic.id).toString('base64'));
+    assert.equal((await f.action('POST', `/windows/${topic.id}/trash`)).status, 200);
+    const removed = await f.action('DELETE', `/windows/${topic.id}`, { confirmed: true });
+    assert.equal(removed.status, 200, JSON.stringify(removed.data));
+    assert.equal(lifecycle.read(removed.data.imageDeletionId).state, 'deleted');
+    snapshot = await f.sessionImageStorage.snapshot(root);
+    assert.ok(snapshot.protectedIds.has(shared.pivaneImage.sha256), 'Buddy main chat keeps the shared image');
+    assert.ok(snapshot.candidates.some(object => object.id === exclusive.pivaneImage.sha256), 'all deleted generations release their exclusive image');
+    const botTrash = await f.bots.trash(f.id, { expectedRevision: (await f.profiles.state()).revision });
+    assert.equal(botTrash.recoverable, true);
+    snapshot = await f.sessionImageStorage.snapshot(root);
+    assert.ok(snapshot.protectedIds.has(shared.pivaneImage.sha256), 'whole Buddy trash remains recoverable');
 });

@@ -113,6 +113,7 @@ function createPiAgentGateway(options = {}) {
         idle: () => workbenchIdle(1) });
     const documents = new (require('./pi-document-uploads').DocumentUploads)({ store, supervisor, ...storageIntegration,
         isSuspended: () => maintenance.locked || Boolean(store.sessionMoves?.running) });
+    const sessionImageStorage = new (require('./pi-session-image-storage').SessionImageStorage)(documents, storageIntegration);
     Object.assign(profiles, { nativeService, settingsService, maintenance });
     const sideChat = new PiSideChatService({ store, supervisor, usage });
     const notifications = new (require('./pi-notification-service').PiNotificationService)({ access, store });
@@ -185,6 +186,7 @@ function createPiAgentGateway(options = {}) {
     const artifacts = require('./pi-artifacts-routes').mountArtifacts(router, { store, supervisor, preferences, mediaRoot: options.artifactMediaRoot,
         isSuspended: () => maintenance.locked || maintenance.referenceLocked || Boolean(store.sessionMoves?.running) || Boolean(sessionTransfer.running) });
     require('./pi-document-uploads').mountDocumentUploads(router, documents);
+    require('./pi-session-image-storage').mountSessionImageStorage(router, sessionImageStorage);
     notifications.mount(router);
     require('./pi-extension-assistant').mountExtensionAssistant(router, { store, supervisor, resourceService, settingsService, access });
     const assistantEnvironment = supervisor.workerEnvironment;
@@ -379,6 +381,7 @@ function createPiAgentGateway(options = {}) {
             attachmentUploads: descriptorBackendAvailable(),
             attachmentUploadLimits: { fileBytes: 100 * 1024 * 1024, batchBytes: 200 * 1024 * 1024, files: 8 },
             documentStorage: descriptorBackendAvailable(),
+            sessionImageStorage: descriptorBackendAvailable(),
             durableQueueRecovery: true,
             documentUploadLimits: { fileBytes: 20 * 1024 * 1024, files: 5 },
             modelCatalog: true,
@@ -1236,7 +1239,7 @@ function createPiAgentGateway(options = {}) {
         await Promise.all([stoppingChannels, stoppingFileRoots, stoppingDeferred, stoppingTitles, stoppingAuxiliaryModels, stoppingMoves, stoppingTranscription, stoppingDocuments]);
         await stoppingProactive;
         await cron.dispose();
-    }, store, supervisor, bots, channels, cron, deferred, sideChat, titles, auxiliaryModels, learning, knowledgeService, agentThreads, sessionMoves, transcription, documents, artifacts };
+    }, store, supervisor, bots, channels, cron, deferred, sideChat, titles, auxiliaryModels, learning, knowledgeService, agentThreads, sessionMoves, transcription, documents, sessionImageStorage, artifacts };
 }
 
 module.exports = { createPiAgentGateway };

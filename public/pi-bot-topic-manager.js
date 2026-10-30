@@ -98,7 +98,8 @@
             try {
                 const result = await options.api(baseUrl(bot) + path, { method, ...body({ expectedRevision, ...fields }) });
                 if (!alive()) return; await options.onSaved?.(result); if (!alive()) return;
-                await latest(); if (!alive()) return; done(result); invalidateTrash(); paint(); say(t('已保存'));
+                await latest(); if (!alive()) return; done(result); invalidateTrash(); paint();
+                say(result.imageCleanupWarning ? t(result.imageCleanupWarning) : result.imageDeletionId ? t('话题已删除，图片已登记待核对；其他会话仍使用的图片会保留，可在附件管理中检查。') : t('已保存'), Boolean(result.imageCleanupWarning));
             } catch (error) {
                 if (!alive()) return; try { await latest(); } catch {}
                 if (!alive()) return; invalidateTrash(); paint();

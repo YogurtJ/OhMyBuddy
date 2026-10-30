@@ -470,14 +470,24 @@ class PiSessionStore {
         });
     }
 
-    async deleteSession(cwdInput, id) {
+    async deleteSession(cwdInput, id, { trashFile = file => execFileAsync('gio', ['trash', file], { timeout: 10000 }) } = {}) {
         const session = await this.getSession(cwdInput, id);
+        const lifecycle = new (require('./pi-session-image-lifecycle').SessionImageLifecycle)();
+        const imageDeletionId = lifecycle.prepareSession(session);
         try {
-            await execFileAsync('gio', ['trash', session.path], { timeout: 10000 });
-            return { id, trashed: true };
-        } catch {
-            fs.unlinkSync(session.path);
-            return { id, trashed: false };
+            let trashed = false;
+            try { await trashFile(session.path); trashed = true; }
+            catch { fs.unlinkSync(session.path); }
+            let removed = false;
+            try { fs.lstatSync(session.path); } catch (error) { if (error.code !== 'ENOENT') throw error; removed = true; }
+            if (!removed) throw new Error('会话删除结果待核对，原路径仍存在；图片继续保留');
+            const result = { id, trashed, ...(imageDeletionId ? { imageDeletionId, imageRetention: trashed ? 'trash-protected' : 'pending-reference-check' } : {}) };
+            try { lifecycle.finish(imageDeletionId, trashed ? 'trashed' : 'deleted'); }
+            catch { result.imageCleanupWarning = '会话已移除，图片删除记录待核对；相关图片继续保留'; }
+            return result;
+        } catch (error) {
+            lifecycle.cancelSession(imageDeletionId);
+            throw error;
         } finally { this.sessionLists.delete(session.cwd); }
     }
 

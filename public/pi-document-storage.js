@@ -1,7 +1,7 @@
 /* Project attachment browsing and explicitly confirmed storage cleanup. */
 (() => {
     function mount({ host = document.body, request, getContext, getDraftIds = () => [], getSessions = async () => [],
-        fetchFile, openSession, onDeleted = () => {}, t = text => text } = {}) {
+        fetchFile, openSession, sessionImagesEnabled = () => false, onDeleted = () => {}, t = text => text } = {}) {
         if (typeof request !== 'function' || typeof getContext !== 'function') throw new Error('Attachment storage host callbacks required');
         const el = (tag, text, className) => { const n = document.createElement(tag); if (text) n.textContent = t(text); if (className) n.className = className; return n; };
         const button = (text, action, className) => { const n = el('button', text, className); n.type = 'button'; n.addEventListener('click', action); return n; };
@@ -20,9 +20,11 @@
         const content = el('div', null, 'pi-storage-content'); content.dataset.storageContent = '';
         const footer = el('footer', null, 'pi-storage-footer'), hint = el('span', '会话和草稿正在使用的附件会保留。');
         const refresh = button('刷新用量', () => { if (!loading) load(); }); footer.append(hint, refresh);
-        layout.append(header, overview, toolbar, notice, status, content, footer); dialog.append(layout); host.append(dialog);
+        const imageSection = el('section', null, 'pi-storage-notice pi-session-image-storage'); imageSection.dataset.sessionImageStorage = ''; imageSection.hidden = true;
+        layout.append(header, overview, toolbar, notice, imageSection, status, content, footer); dialog.append(layout); host.append(dialog);
         let generation = 0, controller, cwd, loading = false, disposed = false, snapshot = null, sessions = new Map();
-        const pending = new Map(), downloads = new Set();
+        const pending = new Map(), downloads = new Set(), imagePending = new Map();
+        let imageBusy = false, imageController;
         const size = bytes => bytes === 0 ? '0 KB' : bytes < 1024 ** 2 ? `${Math.max(1, Math.ceil(bytes / 1024))} KB` : bytes < 1024 ** 3 ? `${(bytes / 1024 ** 2).toFixed(1)} MB` : `${(bytes / 1024 ** 3).toFixed(1)} GB`;
         const current = token => !disposed && dialog.open && token === generation;
         const drafts = () => [...getDraftIds(cwd)];
@@ -165,6 +167,90 @@
                 content.replaceChildren(); showError(e); if (!rejected) resultNotice(token);
             } finally { if (current(token)) { loading = false; refresh.disabled = false; } }
         }
+        function renderImageHome() {
+            imageSection.hidden = !sessionImagesEnabled(); imageSection.replaceChildren();
+            if (imageSection.hidden) return;
+            imageSection.append(el('h3', '会话图片与 Buddy 图片'), el('p', '删除后的图片会先检查共享引用。回收站中的会话和 Buddy 仍受保护；无引用图片先隔离保留 30 天，再由你确认永久清理。'));
+            const pending = imagePending.get(cwd);
+            imageSection.append(button(pending ? '查询图片清理结果' : '检查会话图片用量', () => pending ? imageResult() : imageUsage()));
+        }
+        function imageError(error) {
+            const message = error.code === 'DOCUMENT_STORAGE_BUSY' || error.code === 'IMAGE_STORAGE_BUSY'
+                ? '请先退出各线程的运行实例，再检查并清理会话图片。' : error.message || t('图片清理结果待核对');
+            imageSection.append(el('p', message));
+        }
+        async function imageUsage() {
+            if (imageBusy || loading) return;
+            const token = generation, owner = cwd; imageBusy = true;
+            imageController?.abort(); imageController = new AbortController();
+            try {
+                const result = await request('/session-images/storage/usage', { method: 'POST', body: { cwd: owner }, signal: imageController.signal });
+                if (!current(token)) return;
+                renderImageHome();
+                imageSection.append(el('p', t('图片占用：') + size(result.totalBytes) + ' · ' + t('隔离区：') + size(result.quarantineBytes)));
+                if (result.warning) imageSection.append(el('p', result.warning));
+                if (result.complete && !imagePending.has(owner)) {
+                    if (result.reclaimableCount) imageSection.append(button(t('隔离无引用图片') + ' (' + result.reclaimableCount + ' · ' + size(result.reclaimableBytes) + ')', () => imagePreview('quarantine')));
+                    if (result.purgeableCount) imageSection.append(button(t('永久清理到期图片') + ' (' + result.purgeableCount + ' · ' + size(result.purgeableBytes) + ')', () => imagePreview('purge'), 'pi-storage-danger'));
+                    for (const record of result.trash) {
+                        const row = el('div', null, 'pi-storage-file'), label = el('span'); label.textContent = (record.name || t('已删除会话')) + ' · ' + size(record.bytes);
+                        row.append(label, button('放弃该会话的图片恢复保护', () => imagePreview('release', record.id))); imageSection.append(row);
+                    }
+                    if (!result.reclaimableCount && !result.purgeableCount) imageSection.append(el('p', '当前没有可回收的图片。Buddy 回收站、归档和其他分支仍在使用的图片会保留。'));
+                }
+            } catch (error) { if (current(token) && error.name !== 'AbortError') imageError(error); }
+            finally { if (current(token)) imageBusy = false; }
+        }
+        async function imagePreview(action, recordId) {
+            if (imageBusy || loading || imagePending.has(cwd)) return;
+            const token = generation, owner = cwd; imageBusy = true;
+            try {
+                const result = await request('/session-images/storage/preview', { method: 'POST', body: { cwd: owner, action, ...(recordId ? { recordId } : {}) } });
+                if (!current(token)) return;
+                renderImageHome();
+                const panel = el('div', null, 'pi-storage-confirm');
+                panel.append(el('h3', action === 'release' ? '放弃图片恢复保护' : action === 'purge' ? '确认永久清理图片' : '确认隔离无引用图片'));
+                const description = action === 'release' ? '这会放弃已删除会话的图片恢复保护，不会删除其他仍在使用这些图片的会话。'
+                    : action === 'purge' ? '这些图片已隔离至少 30 天。永久清理后，只有外部备份才能恢复图片。'
+                    : '这些图片没有找到保存引用。隔离期间仍可供恢复的会话读取；至少保留 30 天，不会立即释放磁盘空间。';
+                panel.append(el('p', description), el('p', result.count + ' · ' + size(result.bytes)));
+                const label = el('label'), checked = el('input'); checked.type = 'checkbox';
+                label.append(checked, document.createTextNode(t('我已检查系统回收站及外部会话备份，确认没有需要保留的额外图片引用，并已停止使用同一身份目录的外部 Pi 进程。')));
+                const confirm = button('确认执行图片清理', () => imageCleanup(result, token, confirm), 'pi-storage-danger'); confirm.disabled = true;
+                checked.addEventListener('change', () => { confirm.disabled = !checked.checked; });
+                panel.append(label, confirm, button('取消', renderImageHome)); imageSection.append(panel);
+            } catch (error) { if (current(token)) imageError(error); }
+            finally { if (current(token)) imageBusy = false; }
+        }
+        function clearImagePending(owner, requestId) {
+            if (imagePending.get(owner)?.requestId === requestId) imagePending.delete(owner);
+        }
+        async function imageCleanup(preview, token, node) {
+            if (imageBusy || loading || node.disabled || imagePending.has(cwd)) return;
+            const owner = cwd, requestId = 'image-cleanup-' + Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+            imageBusy = true; imagePending.set(owner, { requestId }); node.disabled = true;
+            try {
+                // Do not abort or retry an accepted destructive operation on close.
+                const result = await request('/session-images/storage/cleanup', { method: 'POST', body: { cwd: owner, ticket: preview.ticket,
+                    revision: preview.revision, requestId, confirmed: true, externalWritersStopped: true, externalRestoreReviewed: true } });
+                if (result.state === 'completed') clearImagePending(owner, requestId);
+                if (current(token)) { renderImageHome(); imageSection.append(el('p', result.state === 'completed' ? '图片清理操作已完成。隔离中的图片仍会保留，永久清理后才释放对应空间。' : '图片清理结果待核对')); }
+            } catch (error) {
+                if ((error.status >= 400 && error.status < 500 || error.status === 503)
+                    && ['IMAGE_STORAGE_CHANGED', 'IMAGE_STORAGE_INPUT', 'IMAGE_STORAGE_PROTECTED', 'IMAGE_STORAGE_BUSY', 'IMAGE_STORAGE_INCOMPLETE', 'DOCUMENT_STORAGE_BUSY', 'DOCUMENT_SCAN_INCOMPLETE', 'DOCUMENT_STORAGE_CHANGED'].includes(error.code)) clearImagePending(owner, requestId);
+                if (current(token)) { renderImageHome(); imageError(error); }
+            } finally { if (current(token)) imageBusy = false; }
+        }
+        async function imageResult() {
+            const pending = imagePending.get(cwd); if (!pending || imageBusy) return;
+            const token = generation, owner = cwd; imageBusy = true;
+            try {
+                const result = await request('/session-images/storage/status?' + new URLSearchParams({ cwd: owner, requestId: pending.requestId }), { method: 'GET' });
+                if (result.state === 'completed') clearImagePending(owner, pending.requestId);
+                if (current(token)) { renderImageHome(); imageSection.append(el('p', result.state === 'completed' ? '图片清理操作已完成。' : '图片清理结果仍不确定，相关图片已保留，请联系管理员核对。')); }
+            } catch (error) { if (current(token)) imageError(error); }
+            finally { if (current(token)) imageBusy = false; }
+        }
         async function load() {
             const token = ++generation; loading = true; refresh.disabled = true; content.replaceChildren(); status.textContent = t('正在读取附件用量…'); delete status.dataset.kind;
             toolbar.hidden = true; notice.hidden = true;
@@ -180,7 +266,7 @@
             } catch (e) { if (current(token) && e.name !== 'AbortError') showError(e); }
             finally { if (current(token)) { loading = false; refresh.disabled = false; } }
         }
-        function close() { generation++; controller?.abort(); for (const abort of downloads) abort.abort(); downloads.clear(); loading = false; if (dialog.open) dialog.close(); }
+        function close() { generation++; controller?.abort(); imageController?.abort(); imageBusy = false; for (const abort of downloads) abort.abort(); downloads.clear(); loading = false; if (dialog.open) dialog.close(); }
         dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
         search.addEventListener('input', renderList); filter.addEventListener('change', renderList);
         return {
@@ -190,6 +276,7 @@
                 cwd = typeof context === 'string' ? context : context?.cwd;
                 if (!cwd) throw new Error(t('请先选择项目'));
                 search.value = ''; filter.value = 'all'; snapshot = null; overview.hidden = true;
+                renderImageHome();
                 if (!dialog.open) dialog.showModal(); closeButton.focus({ preventScroll: true }); load();
             }, close, dispose() { close(); disposed = true; dialog.remove(); }
         };

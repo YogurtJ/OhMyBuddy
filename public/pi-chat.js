@@ -436,6 +436,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const documentStorage = window.PiDocumentStorage?.mount({
         t: translateUi, getContext: () => ({ cwd: state.cwd }), getDraftIds: currentDocumentDraftIds,
+        sessionImagesEnabled: () => state.sessionImageStorageSupported === true,
         getSessions: async cwd => (await apiFetch('/api/pi/sessions?cwd=' + encodeURIComponent(cwd))).sessions || [],
         openSession: target => window.PiChatNavigation.openSession(target),
         fetchFile: async ({ cwd, item, signal }) => {
@@ -1040,6 +1041,7 @@ document.addEventListener('DOMContentLoaded', () => {
             documentAttachments.enabled = status.documentUploads === true;
             documentAttachments.generic = status.attachmentUploads === true;
             state.documentStorageSupported = status.documentStorage === true && Boolean(documentStorage);
+            state.sessionImageStorageSupported = status.sessionImageStorage === true;
             for (const button of [documentStorageOpen, documentStorageSettings]) {
                 button.hidden = !state.documentStorageSupported; button.disabled = !state.cwd;
             }
@@ -2311,6 +2313,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 dialog.querySelector('h3').textContent = translateUi('线程已删除');
                 description.textContent = result?.trashed === true ? translateUi('会话已移入回收站') : result?.trashed === false ? translateUi('会话已永久删除') : translateUi('会话已删除');
                 if (result?.queueRecoveryWarning) description.textContent += '；' + translateUi(result.queueRecoveryWarning);
+                if (result?.imageCleanupWarning) description.textContent += '；' + translateUi(result.imageCleanupWarning);
+                else if (result?.imageDeletionId) description.textContent += '；' + translateUi(result.trashed ? '图片恢复保护已保留，其他会话共享的图片不会删除。' : '图片已登记待核对，可在附件管理中检查并回收无引用图片。');
                 dialog.classList.add('is-complete');
                 submit.hidden = true;
                 closeButtons[1].textContent = translateUi('完成');

@@ -33,7 +33,17 @@ class SessionImages {
         return this.root;
     }
     bytes(ref) {
-        const bytes = readSafe(path.join(this.directory(), ref.sha256), MAX_IMAGE);
+        const root = this.directory();
+        let bytes;
+        try { bytes = readSafe(path.join(root, ref.sha256), MAX_IMAGE); }
+        catch (error) {
+            if (error.code !== 'ENOENT') throw error;
+            const quarantine = path.join(root, '.quarantine');
+            if (fs.realpathSync.native(quarantine) !== quarantine || !fs.lstatSync(quarantine).isDirectory()) throw error;
+            // Quarantine retains the exact bytes during its recovery period.
+            // A restored native session can read them without a write or replay.
+            bytes = readSafe(path.join(quarantine, ref.sha256), MAX_IMAGE);
+        }
         if (bytes.length !== ref.bytes || hash(bytes) !== ref.sha256) throw new Error('图片文件缺失或校验失败，已阻止发送不完整的上下文');
         return bytes;
     }
