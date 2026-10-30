@@ -6,41 +6,64 @@ const { privateDir } = require('./pi-maintenance-files');
 const privateFiles = require('./pi-private-files');
 const ACTIVE = new Set(['waiting', 'dispatching', 'running', 'uncertain']);
 const DEFAULT_LIMITS = { maxRunsPerDay: 40, maxTokensPerDay: 400000, maxCostPerDay: null };
+function prepareDatabase(filename) {
+    for (const suffix of ['', '-journal', '-wal', '-shm']) {
+        try { if (!fs.lstatSync(filename + suffix).isFile()) throw new Error('Unsafe scheduler database'); }
+        catch (error) { if (error.code !== 'ENOENT') throw error; }
+    }
+    try { fs.closeSync(privateFiles.openPrivateFileSync(filename)); }
+    catch (error) { if (error.code !== 'EEXIST') throw error; }
+    if (!fs.lstatSync(filename).isFile()) throw new Error('Unsafe scheduler database');
+    privateFiles.privateFileMode(filename);
+}
+function acquireOwnerLock(filename) {
+    prepareDatabase(filename);
+    const db = new DatabaseSync(filename);
+    try {
+        // Keep this transaction open on a separate database so the task database
+        // can still commit each update durably. SQLite uses OS file locks, which
+        // are released even after SIGKILL or a reboot. Never unlink this file:
+        // replacing its inode would let another process acquire a different lock.
+        db.exec('PRAGMA busy_timeout=0; PRAGMA journal_mode=DELETE; BEGIN EXCLUSIVE');
+        return db;
+    } catch (error) {
+        db.close();
+        if (error.errcode === 5 || error.errcode === 6) throw new Error('This identity already has a scheduler owner', { cause: error });
+        throw error;
+    }
+}
 class CronStore {
     constructor(filename) {
         const directory = privateDir(path.dirname(filename));
         filename = path.join(directory, path.basename(filename));
-        for (const suffix of ['', '-journal', '-wal', '-shm']) {
-            try { if (!fs.lstatSync(filename + suffix).isFile()) throw new Error('Unsafe scheduler database'); }
-            catch (error) { if (error.code !== 'ENOENT') throw error; }
-        }
-        if (!fs.existsSync(filename)) fs.closeSync(privateFiles.openPrivateFileSync(filename));
-        privateFiles.privateFileMode(filename);
         this.filename = filename;
-        this.db = new DatabaseSync(filename);
-        this.db.exec(`PRAGMA busy_timeout=1000; PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;
-            CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, data TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, data TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, jobId TEXT NOT NULL, at INTEGER NOT NULL, data TEXT NOT NULL);
-            CREATE INDEX IF NOT EXISTS runs_job ON runs(jobId,at);
-            CREATE TABLE IF NOT EXISTS homes (profileId TEXT PRIMARY KEY, data TEXT NOT NULL);`);
+        this.ownerLock = acquireOwnerLock(filename + '.owner.sqlite');
+        this.db = null;
         this.owner = `${process.pid}:${randomUUID()}`;
         try {
+            prepareDatabase(filename);
+            this.db = new DatabaseSync(filename);
+            this.db.exec(`PRAGMA busy_timeout=1000; PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;
+                CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, data TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, data TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, jobId TEXT NOT NULL, at INTEGER NOT NULL, data TEXT NOT NULL);
+                CREATE INDEX IF NOT EXISTS runs_job ON runs(jobId,at);
+                CREATE TABLE IF NOT EXISTS homes (profileId TEXT PRIMARY KEY, data TEXT NOT NULL);`);
             this.transaction(() => {
                 const version = this.meta('version');
                 if (version && version !== 1) throw new Error('Unsupported scheduler database');
-                const owner = this.meta('owner');
-                if (owner) {
-                    let alive = true;
-                    try { process.kill(Number(owner.split(':')[0]), 0); } catch (error) { if (error.code === 'ESRCH') alive = false; }
-                    if (alive) throw new Error('This identity already has a scheduler owner');
-                }
+                // Retain the legacy row for older readers, but only the OS lock
+                // establishes ownership. A stored PID can belong to anyone now.
                 this.setMeta('version', 1); this.setMeta('owner', this.owner);
                 for (const run of this.activeRuns()) if (['dispatching', 'running'].includes(run.status)) {
                     this.saveRun({ ...run, status: 'uncertain', reason: 'restart' });
                 }
             });
-        } catch (error) { this.db.close(); throw error; }
+        } catch (error) {
+            try { this.db?.close(); }
+            finally { this.db = null; this.ownerLock.close(); this.ownerLock = null; }
+            throw error;
+        }
     }
     transaction(callback) {
         this.db.exec('BEGIN IMMEDIATE');
@@ -111,8 +134,13 @@ class CronStore {
         if (!this.db) return;
         const db = this.db;
         try {
-            if (fs.existsSync(this.filename) && this.meta('owner') === this.owner) db.prepare("DELETE FROM meta WHERE key='owner'").run();
-        } finally { db.close(); this.db = null; }
+            try {
+                if (fs.existsSync(this.filename) && this.meta('owner') === this.owner) db.prepare("DELETE FROM meta WHERE key='owner'").run();
+            } finally { db.close(); }
+        } finally {
+            this.db = null;
+            this.ownerLock.close(); this.ownerLock = null;
+        }
     }
 }
 module.exports = { CronStore, ACTIVE, DEFAULT_LIMITS };
