@@ -154,7 +154,7 @@ class BotService extends EventEmitter {
     }
 
     // Bots in display order, with their windows. Profiles without a valid section are not Bots.
-    async list() {
+    async list({ includeTrash = true } = {}) {
         const { state, revision } = await this.profiles.state();
         const bots = [];
         for (const profile of state.profiles) {
@@ -163,10 +163,22 @@ class BotService extends EventEmitter {
             const { state: windowState, revision: windowsRevision } = await this.windows.read(profile.id);
             bots.push({ id: profile.id, name: profile.name, description: profile.description, avatar: profile.avatar ?? null,
                 enabled: settings.isBot(profile), profileRevision: profileRevision(profile), bot: this.publicBot(bot), chosen: chosenIdentity(profile, bot),
-                windowsRevision, groups: windowState.groups || [], windows: windowState.windows.map(publicWindow) });
+                windowsRevision, groups: windowState.groups || [], trashCount: windowState.windows.filter(window => window.trashedAt).length,
+                windows: windowState.windows.filter(window => includeTrash || !window.trashedAt).map(publicWindow) });
         }
         bots.sort((a, b) => a.bot.order - b.bot.order || Date.parse(a.bot.createdAt) - Date.parse(b.bot.createdAt));
         return { version: 1, revision, bots };
+    }
+
+    // The organizer asks for trash summaries only when its trash tab is opened.
+    // Both list paths read the small registry, never native messages/notebooks or workers.
+    async topicTrash(profileId) {
+        await this.bot(profileId);
+        const { state, revision } = await this.windows.read(profileId);
+        return { windowsRevision: revision, groups: state.groups || [], windows: state.windows.filter(window => window.trashedAt).map(window => {
+            const { id, kind, title, emoji, groupId, trashedAt, archivedAt, generations, deleting } = publicWindow(window);
+            return { id, kind, title, emoji, groupId, trashedAt, archivedAt, generations, deleting };
+        }) };
     }
 
     publicBot(bot) {
