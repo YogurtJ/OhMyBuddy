@@ -32,7 +32,11 @@ Buddies can read and write files, run commands, use the web and use your configu
 
 Besides the main chat, a Buddy can have up to 100 topics, including archived ones. **New topic** opens a fresh conversation. After the first exchange it gets a name and a focus, which you can edit. Each topic starts empty, shares the Buddy's personality, model and long-term memory, and keeps its own history and notebook.
 
+Search and the group filter share a compact row in the topic list. **Organize** opens the organizer. Select topics first, then choose a destination in the fixed bottom bar. The organizer starts with ungrouped topics when there are any. **All topics** separates current groups and labels every topic’s origin. Search keeps selections; changing the source group clears them. **Manage groups** lists every group with visible rename, move-up/down and delete controls. Deleting a group asks for confirmation and keeps its chats.
+
 Use **Organize topics** in the topic list to create up to 50 groups per Buddy, reorder or rename them, and move several topics at once. Each topic belongs to one group or remains ungrouped. Groups only organize the list: they do not affect prompts, memory, models, permissions or working folders. Deleting a group ungroups its topics and keeps their chats. You can filter by group and search topics. The topic editor lets you choose, paste or clear an emoji; automatic naming keeps your icon.
+
+This is **the app’s restorable trash**, rather than the operating system’s trash used by Workspace session deletion when available. It keeps chat files on disk until permanent deletion. The ordinary Buddy list requests only active/archived topics and a trash count; opening Trash requests lightweight summaries separately. Neither list reads chat bodies or starts workers.
 
 Deleting a topic first moves the entire topic, including every earlier chat and its notebook, to **Trash**. Trash is never cleared automatically, can hold up to 100 topics, and does not count toward the normal topic limit. Restoring keeps its group and archive status; a removed group becomes ungrouped. Busy work, pending messages, learning, media tasks and scheduled targets must be resolved first. Trashed topics cannot accept messages or provide new background learning. Buddy memories, skills and separately saved files or media keep their own management sections.
 

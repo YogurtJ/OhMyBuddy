@@ -7,7 +7,7 @@ function mountBotRoutes(router, { bots, activity = null }) {
         try { res.json(await action(req)); }
         catch (error) { res.status(error.status || error.statusCode || 400).json({ error: error.message, code: error.code }); }
     };
-    router.get('/bots', route(() => bots.list()));
+    router.get('/bots', route(req => bots.list({ includeTrash: req.query.includeTrash !== 'false' })));
     router.get('/bots/readiness', route(() => bots.readiness()));
     router.post('/bots', route(req => bots.create(req.body)));
     // An existing assistant identity becomes a Bot (M4-5b).
@@ -26,6 +26,7 @@ function mountBotRoutes(router, { bots, activity = null }) {
     router.post('/bots/:id/topic-groups', route(req => bots.createTopicGroup(req.params.id, req.body)));
     router.patch('/bots/:id/topic-groups/:groupId', route(req => bots.updateTopicGroup(req.params.id, req.params.groupId, req.body)));
     router.delete('/bots/:id/topic-groups/:groupId', route(req => bots.deleteTopicGroup(req.params.id, req.params.groupId, req.body)));
+    router.get('/bots/:id/topics/trash', route(req => bots.topicTrash(req.params.id)));
     router.post('/bots/:id/topics/move', route(req => bots.moveTopics(req.params.id, req.body)));
     router.post('/bots/:id/windows', route(req => bots.createTopic(req.params.id, req.body)));
     router.post('/bots/:id/windows/:windowId/trash', route(req => bots.trashTopic(req.params.id, req.params.windowId, req.body)));

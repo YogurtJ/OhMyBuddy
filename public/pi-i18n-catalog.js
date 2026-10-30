@@ -11141,5 +11141,29 @@
         ["这个话题还在忙或有排队的消息，等它停下再继续。", "This topic is busy or has queued messages. Wait for it to become idle first."]
 
     );
+    rows.push(
+        ["清除搜索","Clear search"],
+        ["整理","Organize"],
+        ["话题整理方式","Topic organization"],
+        ["你的分组","Your groups"],
+        ["直接改名、调整顺序或删除，话题和聊天记录都会保留。","Rename, reorder or remove groups here. Topics and chat history are kept."],
+        ["还没有分组","No groups yet"],
+        ["先起个名字，再把相关话题放在一起。","Give a group a name, then bring related topics together."],
+        ["{0} 个话题","Topics · {0}"],
+        ["改名","Rename"],
+        ["改名分组“{0}”","Rename group “{0}”"],
+        ["{0}分组“{1}”","{0} group “{1}”"],
+        ["删除分组“{0}”","Delete group “{0}”"],
+        ["删除“{0}”分组？其中的话题会回到未分组，聊天不会删除。","Delete group “{0}”? Its topics will become ungrouped. Chats will be kept."],
+        ["选择要移动的话题","Choose topics to move"],
+        ["先选择话题，再在底部选择目标分组。","Select topics, then choose their destination below."],
+        ["查看分组","View a group"],
+        ["清除选择","Clear selection"],
+        ["选择目标分组","Choose a destination"],
+        ["请选择话题","Select topics"],
+        ["取消选择当前结果","Deselect these results"],
+        ["回收站暂时无法读取，请重试。","Trash could not be loaded. Please try again."],
+        ["这里是应用内回收站，可以恢复话题。彻底删除才会移除全部聊天文件，无法恢复。","This is the app’s trash, where you can restore topics. Permanent deletion removes all chat files and cannot be undone."]
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();
