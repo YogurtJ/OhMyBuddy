@@ -129,6 +129,11 @@
 .pi-storage-notice { margin: 0 22px 12px; padding: 10px 13px; border-radius: 9px; background: var(--surface-2, #f3f6f4); border-left: 3px solid var(--warning, #a87620); font-size: 12px; max-height: 135px; overflow: auto; flex: 0 1 auto; }
 .pi-storage-notice p { margin: 4px 0; overflow-wrap: anywhere; color: var(--text-muted, #64706a); }
 .pi-storage-notice summary { cursor: pointer; margin-top: 5px; color: var(--text-secondary, #47574e); }
+.pi-session-image-storage { max-height: min(320px, 40dvh); min-width: 0; overscroll-behavior: contain; }
+.pi-session-image-storage h3 { margin: 0 0 8px; }
+.pi-session-image-storage button { max-width: 100%; overflow-wrap: anywhere; margin: 4px 4px 4px 0; }
+.pi-session-image-storage .pi-storage-file { grid-template-columns: minmax(0, 1fr); overflow-wrap: anywhere; }
+.pi-session-image-storage .pi-storage-confirm-actions { flex-wrap: wrap; }
 .pi-storage-status { margin: 0 22px 10px; flex: 0 0 auto; overflow-wrap: anywhere; color: var(--text-muted, #64706a); }
 .pi-storage-status:empty { display: none; }
 .pi-storage-status[data-kind="error"] { color: var(--danger, #ab4141); }
@@ -167,6 +172,7 @@
     .pi-storage-toolbar { padding: 0 14px 12px; gap: 7px; }
     .pi-storage-toolbar select { flex-basis: 110px; }
     .pi-storage-notice { margin: 0 14px 10px; max-height: 120px; }
+    .pi-session-image-storage { max-height: 40dvh; }
     .pi-storage-status { margin: 0 14px 10px; }
     .pi-storage-content { padding: 0 14px; scrollbar-gutter: auto; }
     .pi-storage-file { grid-template-columns: 36px minmax(0, 1fr); gap: 9px; padding: 12px 0; }

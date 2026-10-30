@@ -11168,5 +11168,38 @@
         ["回收站暂时无法读取，请重试。","Trash could not be loaded. Please try again."],
         ["这里是应用内回收站，可以恢复话题。彻底删除才会移除全部聊天文件，无法恢复。","This is the app’s trash, where you can restore topics. Permanent deletion removes all chat files and cannot be undone."]
     );
+    rows.push(
+        ["会话图片与 Buddy 图片","Session and Buddy images"],
+        ["删除后的图片会先检查共享引用。回收站中的会话和 Buddy 仍受保护；无引用图片先隔离保留 30 天，再由你确认永久清理。","Shared references are checked before cleanup. Sessions and Buddies in trash stay protected. Unreferenced images are quarantined for 30 days before you can confirm permanent cleanup."],
+        ["查询图片清理结果","Check image cleanup result"],
+        ["检查会话图片用量","Check session image storage"],
+        ["请先退出各线程的运行实例，再检查并清理会话图片。","Quit the running instances in all threads before checking and cleaning up session images."],
+        ["图片清理结果待核对","Image cleanup result needs checking"],
+        ["图片占用：","Images: "],
+        ["隔离区：","Quarantine: "],
+        ["隔离无引用图片","Quarantine unreferenced images"],
+        ["永久清理到期图片","Permanently delete expired images"],
+        ["已删除会话","Deleted session"],
+        ["放弃该会话的图片恢复保护","Release image recovery protection for this session"],
+        ["当前没有可回收的图片。Buddy 回收站、归档和其他分支仍在使用的图片会保留。","No images can be reclaimed right now. Images used by Buddy trash, archives or other branches are kept."],
+        ["放弃图片恢复保护","Release image recovery protection"],
+        ["确认永久清理图片","Confirm permanent image cleanup"],
+        ["确认隔离无引用图片","Confirm image quarantine"],
+        ["这会放弃已删除会话的图片恢复保护，不会删除其他仍在使用这些图片的会话。","This releases image recovery protection for the deleted session. Other sessions using these images are kept."],
+        ["这些图片已隔离至少 30 天。永久清理后，只有外部备份才能恢复图片。","These images have been quarantined for at least 30 days. After permanent cleanup, only an external backup can restore them."],
+        ["这些图片没有找到保存引用。隔离期间仍可供恢复的会话读取；至少保留 30 天，不会立即释放磁盘空间。","No saved references were found for these images. Restored sessions can still read them during quarantine. They are kept for at least 30 days; disk space is not freed immediately."],
+        ["我已检查系统回收站及外部会话备份，确认没有需要保留的额外图片引用，并已停止使用同一身份目录的外部 Pi 进程。","I checked system trash and external session backups for additional image references that need to be kept, and stopped external Pi processes using this identity directory."],
+        ["确认执行图片清理","Confirm image cleanup"],
+        ["图片清理操作已完成。隔离中的图片仍会保留，永久清理后才释放对应空间。","Image cleanup completed. Quarantined images are kept; their disk space is freed only after permanent cleanup."],
+        ["图片清理操作已完成。","Image cleanup completed."],
+        ["图片清理结果仍不确定，相关图片已保留，请联系管理员核对。","The image cleanup result is still uncertain. Related images are preserved; ask an administrator to check."]
+    );
+    rows.push(
+        ["图片恢复保护已保留，其他会话共享的图片不会删除。","Image recovery protection is kept. Images shared by other sessions are preserved."],
+        ["图片已登记待核对，可在附件管理中检查并回收无引用图片。","Images are registered for reference checks. You can review and reclaim unreferenced images in attachment management."],
+        ["话题已删除，图片已登记待核对；其他会话仍使用的图片会保留，可在附件管理中检查。","The topic was deleted and its images were registered for reference checks. Images used by other sessions are preserved. Review them in attachment management."],
+        ["会话已移除，图片删除记录待核对；相关图片继续保留","The session was removed, but its image deletion record needs checking. Related images are preserved."],
+        ["话题已删除，图片删除记录待核对；相关图片继续保留","The topic was deleted, but its image deletion record needs checking. Related images are preserved."]
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();
