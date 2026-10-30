@@ -2,6 +2,12 @@
 
 本页是版本验收索引。**结果只适用于对应归档**：准确 SHA256、测试明细和失败尝试见各 [Release](https://github.com/YogurtJ/OhMyBuddy/releases) 的 `ohmybuddy-<版本>.validation.json`（旧发布仍用 `pivane-` 前缀）。源码、浏览器模拟和旧版结果不能替代新包的实机验收。
 
+## 1.11.1：发布准备
+
+[1.11.1 说明](releases/1.11.1.md)。应用代码基线 `c1ee18ea5b538dd6ba7171ec6c568a8a2cbba271` 已完成 Linux ARM64 本机部署，263 项 HTTP 资源与独立后验通过；相关 Node、桌面／手机浏览器、独立安装及原生探针证据可按内容一致性复用。新调度器文件锁的其他目标系统验证、正式依赖审计和最终归档绑定属于本轮发布准备，不能用本机部署结果代替。
+
+GitHub 正式版仍为 1.11.0。完整平台包预览与源码发行分别记录，其准确源码、升级／恢复证据及未覆盖项以各自清单为准。最终冻结包的 SHA256、本次执行、有效复用及原失败记录由包外验证附件统一绑定；准备状态不代表已经公开发布。
+
 ## 1.11.0：已正式发布
 
 2026-10-29 已[正式发布](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.11.0)并确认为 Latest，九份附件匿名 HTTP 200 回下载逐字节一致。冻结源码 `9d3755b9479ee9aec6eda5b4562c9e5335831db6`，源码归档 SHA256 `453ae4039ecf4607054514e64daafbc4c280854d25e92831118b334998b07e8c`（9,836,329 字节、1,961 个清单文件）。[验收 JSON](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.11.0/ohmybuddy-1.11.0.validation.json)与[验收说明](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.11.0/ohmybuddy-1.11.0.validation.md)记录本轮执行、基线复用、原失败及限制。最终包另完成本机独立安装与部署后验，252 个 HTTP 静态资源字节一致。
