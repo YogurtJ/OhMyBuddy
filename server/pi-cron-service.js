@@ -139,7 +139,13 @@ class CronService {
             const target = previous?.target.windowId !== undefined && input.target?.kind === 'profile'
                 && input.target.profileId === previous.target.profileId && !Object.hasOwn(input.target, 'windowId')
                 ? { ...input.target, windowId: previous.target.windowId } : input.target;
-            const job = validateJob({ ...input, target, policyVersion: input.policyVersion ?? (previous ? previous.policyVersion || 1 : policy.POLICY_VERSION) }, this.now());
+            const policyVersion = input.policyVersion ?? (previous ? previous.policyVersion || 1 : policy.POLICY_VERSION);
+            const samePolicy = previous && policyVersion === (previous.policyVersion || 1);
+            // Older editors cannot display the new spending/stall controls. Omission
+            // must preserve them; an explicit null remains the way to remove a limit.
+            const execution = samePolicy ? { ...previous.execution, ...input.execution } : input.execution;
+            const budget = samePolicy ? { ...previous.budget, ...input.budget } : input.budget;
+            const job = validateJob({ ...input, target, policyVersion, execution, budget }, this.now());
             if (previous?.deleted) fail('This task was deleted; use a new ID', 409);
             if (previous && previous.revision !== input.revision) {
                 if (previous.fingerprint === hash(job)) return previous;
