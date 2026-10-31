@@ -14,7 +14,7 @@
         waiting: '等待处理', completed: '已完成', error: '执行失败', stopped: '已停止', uncertain: '启动状态待核实' };
     const RESULT_LABELS = { completed: '本轮已结束', error: '执行失败', stopped: '已中止', needs_attention: '需要处理', uncertain: '状态待核实' };
     const handles = message => message?.role === 'custom' && (TASK.includes(message.customType) || RECEIPT.includes(message.customType)
-        || message.customType === RESULT || message.customType === MESSAGE || message.customType === 'pivane-cron-message');
+        || message.customType === RESULT || message.customType === MESSAGE || ['pivane-cron-message', 'pivane-cron-result'].includes(message.customType));
 
     function preview(source) {
         return source.replace(/```[^\n]*\n?/g, ' ').replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+\.)\s+/gm, '').replace(/[*_`~]+/g, '')
@@ -68,7 +68,14 @@
         header.append(icon, title);
         const meta = [];
         let body = '', target = null, targetLabel = '', peer = '';
-        if (message.customType === 'pivane-cron-message') {
+        if (message.customType === 'pivane-cron-result') {
+            article.dataset.agentCard = 'scheduled-result'; article.dataset.state = 'attention';
+            icon.className = 'fa-solid fa-triangle-exclamation'; title.textContent = t('定时任务需要处理');
+            peer = str(details.name, 120);
+            body = details.feedback?.title && details.feedback?.suggestion
+                ? [t(str(details.feedback.title, 500)), str(details.feedback.detail, 500), t(str(details.feedback.suggestion, 1000))].filter(Boolean).join('\n\n') : textOf(message.content);
+            meta.push(t(RESULT_LABELS[details.status] || '需要处理'));
+        } else if (message.customType === 'pivane-cron-message') {
             article.dataset.agentCard = 'scheduled'; article.classList.add('pi-agent-turn-start');
             icon.className = 'fa-regular fa-calendar-check'; title.textContent = t('定时任务');
             peer = str(details.name, 120);
@@ -122,8 +129,10 @@
             // Short single-line bodies are shown as-is; anything longer starts collapsed.
             if (body.length <= 160 && !/\n/.test(body.trim())) {
                 const inline = document.createElement('div'); inline.className = 'pi-agent-card-inline pi-markdown';
-                inline.innerHTML = markdown(body.trim()); container.append(inline);
-            } else container.append(collapsible(body, markdown));
+                if (message.customType === 'pivane-cron-result') inline.textContent = body.trim();
+                else inline.innerHTML = markdown(body.trim());
+                container.append(inline);
+            } else container.append(collapsible(body, message.customType === 'pivane-cron-result' ? null : markdown));
             article.append(container);
         }
         return article;

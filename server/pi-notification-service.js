@@ -105,7 +105,8 @@ class PiNotificationService {
             this.store.resolveProject(event.cwd);
             const data = this.read(); if (!data) return;
             const payload = { id: event.completionId, title: 'OhMyBuddy',
-                body: event.kind === 'waiting' ? '任务正在等待你的确认。' : event.kind === 'error' ? '任务未成功完成，请打开 OhMyBuddy 查看。' : '新的回复已完成，点击查看。' };
+                body: event.scheduledFailure === true ? require('./pi-cron-policy').diagnostic(event.reasonCode).title + '，请打开 OhMyBuddy 查看处理建议。'
+                    : event.kind === 'waiting' ? '任务正在等待你的确认。' : event.kind === 'error' ? '任务未成功完成，请打开 OhMyBuddy 查看。' : '新的回复已完成，点击查看。' };
             // Bounded fanout, independent of model/worker lifetime.
             for (let i = 0; i < data.devices.length; i += 4) {
                 await Promise.all(data.devices.slice(i, i + 4).map(d => this.deliver(d, payload, data.vapid)));

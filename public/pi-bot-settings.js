@@ -867,7 +867,7 @@
                 const push = snap.quota?.proactivePushes, schedule = snap.quota?.scheduledTasks;
                 const quotaNodes = [el('p', 'pi-bot-sheet-note', push ? translateUi("此伙伴今日主动推送：{0} / {1}（{2}，{3}）；安静时段暂存 {4} 条。", push.used ?? translateUi("未知"), push.limit ?? translateUi("不限"), push.day, push.timeZone, push.held) : translateUi("今日主动推送用量未知。"))];
                 if (schedule) {
-                    quotaNodes.push(el('p', 'pi-bot-sheet-note', translateUi("全部用户定时任务今日共用额度（UTC）：运行 {0}/{1}，tokens {2}/{3}。不含伙伴主动跟进和后台学习。", schedule.runs ?? translateUi("未知"), schedule.maxRuns ?? translateUi("未知"), schedule.tokens ?? translateUi("未知"), schedule.maxTokens ?? translateUi("未知"))));
+                    quotaNodes.push(el('p', 'pi-bot-sheet-note', translateUi("全部用户定时任务今日共用额度（UTC）：运行 {0}/{1}，tokens {2}/{3}。不含伙伴主动跟进和后台学习。", schedule.runs ?? translateUi("未知"), schedule.maxRuns ?? translateUi("不限制"), schedule.tokens ?? translateUi("未知"), schedule.maxTokens ?? translateUi("不限制"))));
                     quotaNodes.push(el('p', 'pi-bot-sheet-note', schedule.estimatedCost === null ? translateUi("定时任务费用估算未知。") : translateUi("定时任务费用估算：${0}；费用上限：{1}。", schedule.estimatedCost.toFixed(3), schedule.maxCost === null ? translateUi("未设置") : `$${schedule.maxCost}`)));
                 } else quotaNodes.push(el('p', 'pi-bot-sheet-note', translateUi("定时任务共用额度暂不可用。")));
                 activityQuota.replaceChildren(...quotaNodes);

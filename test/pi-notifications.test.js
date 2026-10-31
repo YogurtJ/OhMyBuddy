@@ -36,6 +36,13 @@ test('subscriptions persist privately, completion deduplicates, revocation stops
     revoke(); await service.notify({ ...event, completionId: 'two' }); assert.equal(sent.length, 1);
     assert.equal(service.status({ subscription: s }, identity).enabled, false);
 });
+test('scheduled failure pushes include the reason without leaking provider details', async t => {
+    const sent = [], { service, identity } = fixture(t, async (_subscription, payload) => { sent.push(JSON.parse(payload)); });
+    service.save({ subscription: sub() }, identity);
+    await service.notify({ cwd: '/project', completionId: 'cron-failure', kind: 'error', scheduledFailure: true,
+        reasonCode: 'token-limit', message: 'PRIVATE PROVIDER DETAIL' });
+    assert.match(sent[0].body, /Token 上限已用尽/); assert.ok(!JSON.stringify(sent).includes('PRIVATE PROVIDER DETAIL'));
+});
 test('expired endpoints removed, uncertain failures never retry, disabled subscriptions stop', async t => {
     let calls = 0; let code = 500;
     const { service, identity } = fixture(t, async () => { calls++; throw { statusCode: code }; });

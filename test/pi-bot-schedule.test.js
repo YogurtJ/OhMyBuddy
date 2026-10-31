@@ -94,8 +94,9 @@ test('bot_schedule creates once and repeat tasks with stable ids, defaults and t
     } });
     const job = f.cron.db.job(first.data.job.id);
     assert.equal(job.mode, 'text'); assert.equal(job.prompt.length, 600);
-    assert.deepEqual(job.execution, { maxCalls: 4, maxTokens: 32000, maxDurationSeconds: 300 });
-    assert.deepEqual(job.budget, { maxRunsPerDay: 8, maxTokensPerDay: 200000, maxCostPerDay: null });
+    assert.deepEqual(job.execution, { maxCalls: 8, maxTokens: null, maxDurationSeconds: 300,
+        maxCost: null, maxIdleSeconds: 900, maxRepeatedErrors: 5 });
+    assert.deepEqual(job.budget, { maxRunsPerDay: null, maxTokensPerDay: null, maxCostPerDay: null });
     const retried = await f.call('create', { ...f.onceInput, message: 'x'.repeat(600) });
     assert.deepEqual(retried.data, first.data); assert.equal(f.cron.db.jobs().length, 1);
     assert.equal((await f.call('create', { ...f.onceInput, message: 'changed' })).status, 409, 'same call cannot overwrite');

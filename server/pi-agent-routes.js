@@ -314,6 +314,7 @@ function createPiAgentGateway(options = {}) {
     require('./bot/bot-routes').mountBotRoutes(router, { bots,
         activity: new (require('./bot/bot-activity').BotActivity)({ bots, cron, proactive, channels }) });
     cron.captureChannelNotify = event => channels.captureScheduledRecipients(event);
+    channels.getScheduledRun = id => cron.db?.run(id);
     cron.onChannelNotify = event => channels.track(channels.notifyScheduledRun(event));
     channels.canNotifyScheduled = id => {
         const job = cron.db?.job(id);

@@ -71,7 +71,8 @@ test('scheduler ownership rejects a second live owner and validation projects ex
     try { assert.throws(() => new CronStore(filename), /already has/); }
     finally { store.close(); }
     const input = job({ execution: { maxCalls: 2, maxTokens: 10000, maxDurationSeconds: 60, action: 'acknowledge', sessionId: 'foreign' } });
-    assert.deepEqual(validateJob(input, Date.now()).execution, { maxCalls: 2, maxTokens: 10000, maxDurationSeconds: 60 });
+    assert.deepEqual(validateJob(input, Date.now()).execution, { maxCalls: 2, maxTokens: 10000, maxDurationSeconds: 60,
+        maxCost: null, maxIdleSeconds: 900, maxRepeatedErrors: 5 });
     const now = Date.parse('2026-09-28T06:00:00Z');
     const future = job({ startsAt: Date.parse('2026-09-29T00:00:00Z') });
     assert.equal(validateJob(future, now).startsAt, future.startsAt);
@@ -91,5 +92,57 @@ test('future start dates survive saving and resume, while manual runs stay expli
         const manual = await service.action(saved.id, { action: 'run', revision: enabled.revision, requestId: randomUUID() });
         assert.equal(manual.status, 'waiting');
     } finally { await service.dispose(); }
+});
+test('meter-only jobs remain counted without token reservations and explicit daily quotas still reserve atomically', async () => {
+    const clock = { value: Date.parse('2026-10-31T06:00:00Z') }, f = fixture(path.join(root, 'meter.sqlite'), clock);
+    try {
+        await f.service.ready; f.setIdle(true);
+        const task = await f.service.save({ ...job(), budget: {}, execution: undefined, mode: 'work', enabled: false });
+        const run = f.service.enqueue(task, clock.value); await f.service.dispatch(run);
+        const active = f.service.db.run(run.id);
+        assert.equal(active.reservedTokens, null); assert.equal(active.execution.maxCalls, 100);
+        f.service.applyResult(active, { status: 'completed', usage: { tokens: 4000000, cost: 0.5, calls: 20 } });
+        assert.equal(f.service.db.usage('2026-10-31').tokens, 4000000);
+        assert.equal(f.service.db.usage('2026-10-31').runs, 1);
+        const next = f.service.enqueue(task, clock.value + 1); await f.service.dispatch(next);
+        assert.equal(f.service.db.run(next.id).status, 'running', 'old 400k daily default no longer blocks later tasks');
+        f.service.applyResult(f.service.db.run(next.id), { status: 'completed', usage: { tokens: 100, cost: 0.1, calls: 1 } });
+        f.service.db.setMeta('limits', { maxRunsPerDay: null, maxTokensPerDay: 5000000, maxCostPerDay: null });
+        const limited = f.service.enqueue(task, clock.value + 2); await f.service.dispatch(limited);
+        assert.equal(f.service.db.run(limited.id).reservedTokens, 999900);
+        const other = await f.service.save({ ...job(), budget: {}, execution: undefined, enabled: false });
+        const denied = f.service.enqueue(other, clock.value + 3); await f.service.dispatch(denied);
+        assert.equal(f.service.db.run(denied.id).reason, 'daily-tokens');
+        assert.ok(f.service.db.run(denied.id).feedback.suggestion);
+    } finally { await f.service.dispose(); }
+});
+test('editing a legacy task preserves its policy unless the operator explicitly changes it', async () => {
+    const clock = { value: Date.parse('2026-10-31T06:00:00Z') }, f = fixture(path.join(root, 'legacy-policy.sqlite'), clock);
+    try {
+        await f.service.ready;
+        const old = job({ enabled: false, nextAt: clock.value + 60000 }); f.service.db.saveJob(old);
+        const saved = await f.service.save({ ...old, name: 'Renamed' });
+        assert.equal(saved.policyVersion, 1); assert.equal(saved.execution.maxTokens, 10000); assert.equal(saved.execution.maxIdleSeconds, null);
+        assert.equal(saved.budget.maxTokensPerDay, 200000);
+        const changed = await f.service.save({ ...saved, policyVersion: 2, execution: undefined, budget: {} });
+        assert.equal(changed.execution.maxTokens, null); assert.equal(changed.budget.maxTokensPerDay, null);
+        assert.equal(f.service.db.runs(old.id).length, 0, 'changing policy never runs the task');
+    } finally { await f.service.dispose(); }
+});
+test('a rejected fee policy records feedback and a durable failure notification before model execution', async () => {
+    const clock = { value: Date.parse('2026-10-31T06:00:00Z') }, f = fixture(path.join(root, 'fee-policy.sqlite'), clock);
+    try {
+        await f.service.ready; f.setIdle(true); const events = [];
+        f.service.supervisor.emit = (type, event) => events.push({ type, event });
+        f.service.captureChannelNotify = () => [];
+        const task = await f.service.save({ ...job(), execution: { maxCost: 1 }, budget: {}, enabled: false });
+        f.service.db.setMeta('limits', { maxRunsPerDay: null, maxTokensPerDay: null, maxCostPerDay: 0.5 });
+        f.service.db.saveRun({ id: 'unknown-cost', jobId: 'other', scheduledAt: clock.value - 1, status: 'uncertain', budgetDay: '2026-10-31', startedAt: clock.value - 1, reservedTokens: null, reservedCost: null });
+        const run = f.service.enqueue(task, clock.value); await f.service.dispatch(run);
+        const result = f.service.db.run(run.id);
+        assert.equal(result.status, 'failed'); assert.equal(result.reason, 'daily-cost'); assert.ok(result.feedback.title);
+        assert.equal(result.channelNotify.status, 'pending'); assert.equal(result.channelNotify.event.admissionFailure, true);
+        assert.equal(events[0].type, 'attention'); assert.equal(f.calls.length, 0);
+    } finally { await f.service.dispose(); }
 });
 test.after(() => fs.rmSync(root, { recursive: true, force: true }));

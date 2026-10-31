@@ -5,7 +5,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { privateDir } = require('./pi-maintenance-files');
 const privateFiles = require('./pi-private-files');
 const ACTIVE = new Set(['waiting', 'dispatching', 'running', 'uncertain']);
-const DEFAULT_LIMITS = { maxRunsPerDay: 40, maxTokensPerDay: 400000, maxCostPerDay: null };
+const { DEFAULT_LIMITS, DEFAULT_SETTINGS } = require('./pi-cron-policy');
 function prepareDatabase(filename) {
     for (const suffix of ['', '-journal', '-wal', '-shm']) {
         try { if (!fs.lstatSync(filename + suffix).isFile()) throw new Error('Unsafe scheduler database'); }
@@ -116,13 +116,14 @@ class CronStore {
     home(id) { const row = this.db.prepare('SELECT data FROM homes WHERE profileId=?').get(id); return row ? JSON.parse(row.data) : null; }
     homes() { return this.db.prepare('SELECT profileId,data FROM homes').all().map(row => ({ profileId: row.profileId, ...JSON.parse(row.data) })); }
     saveHome(id, data) { this.db.prepare('INSERT OR REPLACE INTO homes VALUES (?,?)').run(id, JSON.stringify(data)); }
-    limits() { return this.meta('limits') || DEFAULT_LIMITS; }
+    limits() { return this.meta('limits') || { ...DEFAULT_LIMITS }; }
+    settings() { return this.meta('settings') || { ...DEFAULT_SETTINGS }; }
     // The user's scheduled tasks; messages Bots start themselves (origin 'bot') have their own
     // per-Bot count (proactiveRuns) and never use up the user's daily budget.
     usage(day, jobId) {
-        const sql = "SELECT json_extract(data,'$.usage') AS usage, json_extract(data,'$.reservedTokens') AS reservedTokens, json_extract(data,'$.reservedCost') AS reservedCost FROM runs WHERE json_extract(data,'$.budgetDay')=? AND json_extract(data,'$.reservedTokens')>0 AND json_extract(data,'$.origin') IS NULL";
+        const sql = "SELECT json_extract(data,'$.usage') AS usage, json_extract(data,'$.reservedTokens') AS reservedTokens, json_extract(data,'$.reservedCost') AS reservedCost FROM runs WHERE json_extract(data,'$.budgetDay')=? AND (json_extract(data,'$.startedAt') IS NOT NULL OR json_extract(data,'$.reservedTokens')>0) AND json_extract(data,'$.origin') IS NULL";
         const runs = (jobId ? this.db.prepare(sql + ' AND jobId=?').all(day, jobId) : this.db.prepare(sql).all(day)).map(row => ({ ...row, usage: row.usage ? JSON.parse(row.usage) : null }));
-        return { runs: runs.length, tokens: runs.reduce((sum, run) => sum + (run.usage?.tokens ?? run.reservedTokens), 0),
+        return { runs: runs.length, tokens: runs.reduce((sum, run) => sum + (run.usage?.tokens ?? run.reservedTokens ?? 0), 0),
             cost: runs.reduce((sum, run) => sum + (run.usage?.cost ?? run.reservedCost ?? 0), 0),
             unknownCost: runs.some(run => run.usage?.cost == null && run.reservedCost == null) };
     }

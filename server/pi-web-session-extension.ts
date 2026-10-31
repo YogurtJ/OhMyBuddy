@@ -87,7 +87,7 @@ export default async function (pi: ExtensionAPI) {
         }
     });
     pi.registerCommand(INTERNAL_COMMAND, {
-        description: `OhMyBuddy internal session navigation and context snapshot; managed-v1; channels-v1; cron-v1; task-v1; task-results-v1; bot-notebook-v1; agent-messages-v1; title-v1; model-catalog-v1; speed-v1; resources-v1; history-v1; history-archive-v1; tree-v1; tree-presentation-v1; history-presentation-v1; history-body-v1; system-prompt-v1; subagents-v1; mcp-v1; reload-v1:${randomUUID()}`,
+        description: `OhMyBuddy internal session navigation and context snapshot; managed-v1; channels-v1; cron-v1; cron-v2; task-v1; task-results-v1; bot-notebook-v1; agent-messages-v1; title-v1; model-catalog-v1; speed-v1; resources-v1; history-v1; history-archive-v1; tree-v1; tree-presentation-v1; history-presentation-v1; history-body-v1; system-prompt-v1; subagents-v1; mcp-v1; reload-v1:${randomUUID()}`,
         handler: async (args, ctx) => {
             const request = JSON.parse(args);
             if (ctx.mode !== 'rpc' || request.token !== process.env.PI_WEB_NAVIGATION_TOKEN) throw new Error('Invalid navigation request');
