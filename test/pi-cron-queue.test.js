@@ -100,7 +100,7 @@ test('meter-only jobs remain counted without token reservations and explicit dai
         const task = await f.service.save({ ...job(), budget: {}, execution: undefined, mode: 'work', enabled: false });
         const run = f.service.enqueue(task, clock.value); await f.service.dispatch(run);
         const active = f.service.db.run(run.id);
-        assert.equal(active.reservedTokens, null); assert.equal(active.execution.maxCalls, 100);
+        assert.equal(active.reservedTokens, null); assert.equal(active.execution.maxCalls, null);
         f.service.applyResult(active, { status: 'completed', usage: { tokens: 4000000, cost: 0.5, calls: 20 } });
         assert.equal(f.service.db.usage('2026-10-31').tokens, 4000000);
         assert.equal(f.service.db.usage('2026-10-31').runs, 1);
@@ -155,6 +155,22 @@ test('older editors preserve hidden spending and stall controls until explicitly
         assert.equal(edited.budget.maxCostPerDay, 5);
         const cleared = await f.service.save({ ...edited, execution: { maxCost: null }, budget: { maxCostPerDay: null } });
         assert.equal(cleared.execution.maxCost, null); assert.equal(cleared.budget.maxCostPerDay, null);
+    } finally { await f.service.dispose(); }
+});
+test('policy-only edits update expired tasks without changing schedule, target, enabled state or history', async () => {
+    const clock = { value: Date.parse('2026-10-31T06:00:00Z') }, f = fixture(path.join(root, 'expired-policy.sqlite'), clock);
+    try {
+        await f.service.ready;
+        const old = job({ enabled: false, nextAt: null, schedule: { kind: 'once', timeZone: 'UTC', at: clock.value - 86400000 } });
+        f.service.db.saveJob(old); f.service.db.saveRun({ id: 'old-completion', jobId: old.id, scheduledAt: old.schedule.at, status: 'completed', replyEntryId: 'native-original' });
+        f.service.target = async () => { throw Error('Policy editing must not open or retarget the thread'); };
+        const result = await f.service.configurePolicy(old.id, { revision: old.revision, execution: { maxCalls: null, maxTokens: null, maxDurationSeconds: 21600 }, budget: { maxRunsPerDay: null, maxTokensPerDay: null } });
+        assert.equal(result.policyVersion, 3); assert.equal(result.execution.maxCalls, null); assert.equal(result.execution.maxTokens, null);
+        assert.deepEqual(result.schedule, old.schedule); assert.deepEqual(result.target, old.target); assert.equal(result.enabled, false); assert.equal(result.nextAt, null);
+        assert.equal(f.service.db.run('old-completion').replyEntryId, 'native-original'); assert.equal(f.calls.length, 0);
+        await assert.rejects(f.service.configurePolicy(old.id, { revision: old.revision, execution: { maxCalls: null } }), /changed/);
+        f.service.db.saveRun({ id: 'still-active', jobId: old.id, scheduledAt: clock.value, status: 'uncertain', job: result });
+        await assert.rejects(f.service.configurePolicy(old.id, { revision: result.revision, execution: { maxCalls: null } }), /active run/);
     } finally { await f.service.dispose(); }
 });
 test.after(() => fs.rmSync(root, { recursive: true, force: true }));

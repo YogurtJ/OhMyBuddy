@@ -1,11 +1,11 @@
 // Scheduled execution policy. Null quotas mean metering without a hard stop.
-const POLICY_VERSION = 2;
+const POLICY_VERSION = 3;
 const DEFAULT_LIMITS = Object.freeze({ maxRunsPerDay: null, maxTokensPerDay: null, maxCostPerDay: null });
 const DEFAULT_SETTINGS = Object.freeze({ maxConcurrent: 2 });
 const legacyExecution = { maxCalls: 4, maxTokens: 32000, maxDurationSeconds: 300 };
 function executionDefaults(mode = 'work') {
-    return { maxCalls: mode === 'text' ? 8 : 100, maxTokens: null, maxCost: null,
-        maxDurationSeconds: mode === 'text' ? 300 : 3600, maxIdleSeconds: 900, maxRepeatedErrors: 5 };
+    return { maxCalls: null, maxTokens: null, maxCost: null,
+        maxDurationSeconds: 21600, maxIdleSeconds: 900, maxRepeatedErrors: 5 };
 }
 const integer = (v, min, max) => Number.isSafeInteger(v) && v >= min && v <= max;
 const optionalInteger = (v, min, max) => v === null || integer(v, min, max);
@@ -18,9 +18,11 @@ function limits(value, defaults = DEFAULT_LIMITS) {
     return result;
 }
 function execution(value, mode, version = POLICY_VERSION) {
-    const defaults = version === 1 ? { ...legacyExecution, maxCost: null, maxIdleSeconds: null, maxRepeatedErrors: null } : executionDefaults(mode);
+    const defaults = version === 1 ? { ...legacyExecution, maxCost: null, maxIdleSeconds: null, maxRepeatedErrors: null }
+        : version === 2 ? { ...executionDefaults(mode), maxCalls: mode === 'text' ? 8 : 100, maxDurationSeconds: mode === 'text' ? 300 : 3600 }
+            : executionDefaults(mode);
     const result = Object.fromEntries(Object.keys(defaults).map(key => [key, value?.[key] === undefined ? defaults[key] : value[key]]));
-    if (!integer(result.maxCalls, 1, 10000) || !optionalInteger(result.maxTokens, 1000, 1000000000000)
+    if (!optionalInteger(result.maxCalls, 1, 10000) || !optionalInteger(result.maxTokens, 1000, 1000000000000)
         || !optionalCost(result.maxCost) || !integer(result.maxDurationSeconds, 10, 86400)
         || !optionalInteger(result.maxIdleSeconds, 30, 86400) || !optionalInteger(result.maxRepeatedErrors, 2, 100)) invalid('Invalid execution limits');
     return result;
@@ -36,7 +38,7 @@ function stopReason(state, usage, now = Date.now()) {
     if (state.maxTokens != null && usage.tokens != null && usage.tokens >= state.maxTokens) return 'token-limit';
     if (state.maxCost != null && usage.calls > 0 && usage.cost === null) return 'cost-unknown';
     if (state.maxCost != null && usage.cost >= state.maxCost) return 'cost-limit';
-    if (usage.calls >= state.maxCalls) return 'call-limit';
+    if (state.maxCalls != null && usage.calls >= state.maxCalls) return 'call-limit';
     return null;
 }
 const reasons = {

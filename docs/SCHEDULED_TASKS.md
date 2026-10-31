@@ -1,6 +1,6 @@
 # 定时任务与主线程
 
-本机或自托管实例须确认后端报告 `scheduledTasks:true`、目标 worker 加载 `cron-v2`（旧 cron-v1 仅能读取／结束旧运行）；只刷新旧版网页不会更新后端。任务页初次读取时显示加载状态；读取失败可重试。普通 HTTP 局域网地址不提供浏览器 `crypto.randomUUID` 时，创建任务仍通过 `crypto.getRandomValues` 生成随机任务 ID。
+本机或自托管实例须确认后端报告 `scheduledTasks:true`、目标 worker 加载 `cron-v3`（旧能力仅能读取／结束已支持的运行）；只刷新旧版网页不会更新后端。任务页初次读取时显示加载状态；读取失败可重试。普通 HTTP 局域网地址不提供浏览器 `crypto.randomUUID` 时，创建任务仍通过 `crypto.getRandomValues` 生成随机任务 ID。
 
 在工作台导航进入“定时任务”（手机位于“更多功能”），可以创建、编辑、复制、暂停和删除任务，也可以手动运行一次。聊天输入框的加号菜单提供“创建定时任务”，打开表单并自动填入当前持久会话；无需输入草稿，临时会话或断线时不可用。线程操作菜单不再提供此项。身份概览的“主线程与定时任务”打开该身份的任务列表。
 
@@ -39,15 +39,15 @@
 
 ## 执行设置、反馈与可选限额
 
-新任务使用第 2 版执行策略：工作模式默认最多 100 次模型调用、60 分钟；文字模式默认 8 次、5 分钟。单次和每日累计 Token、每日次数与估算费用默认不设硬上限，仍记录实际用量。任务使用目标线程的上下文、工具和权限；本版不自动另建独立任务会话或改写历史。
+新任务使用第 3 版执行策略：新建表单默认“执行工作”，工作和文字模式均默认不限制模型调用次数，最长 6 小时；文字模式仍不使用工作工具。单次和每日累计 Token、每日次数与估算费用默认不设硬上限，仍记录实际用量。任务使用目标线程的上下文、工具和权限；本版不自动另建独立任务会话或改写历史。
 
-“执行设置”可调整模型调用次数（1–10000）、最长执行时长（10 秒–24 小时）、停滞时长（30 秒–24 小时，可留空关闭）和相同工具连续失败次数（2–100，可留空关闭）。默认停滞时长 15 分钟，仅在没有模型新输出且没有工具执行时计时；运行中的工具仍受整次时长限制。同一顶层工具的输入和错误连续重复 5 次时停止，成功或不同错误重置计数。正常的重复查询不会仅因参数相同而停止。
+“执行设置”可调整模型调用次数（留空不限，或 1–10000）、最长执行时长（10 秒–24 小时）、停滞时长（30 秒–24 小时，可留空关闭）和相同工具连续失败次数（2–100，可留空关闭）。默认停滞时长 15 分钟，仅在没有模型新输出且没有工具执行时计时；运行中的工具仍受整次时长限制。同一顶层工具的输入和错误连续重复 5 次时停止，成功或不同错误重置计数。正常的重复查询不会仅因参数相同而停止。
 
 “模型、调度与可选限额”中，单次 Token、单次估算美元、每日次数／Token／美元均可留空。累计 Token 包含每次请求的输入、输出、缓存读取与缓存写入；20 万上下文执行 20 轮可能累计约 400 万 Token，不等于模型上下文窗口或新生成文字的长度。费用按实际用量中的分类价格累计，未知费用保留未知；零用量的中止占位不会把此前已知费用改为未知。
 
 “全局设置”提供 1–10 项并发（默认 2）及可选共享每日限额，按 UTC 日统计。达到并发时排队，同一任务始终不重叠。任务限额与实例限额同时生效；启用每日限额时，启动在同一个调度独占区预留本次可用额度。未设置单次限额时，最多预留剩余每日额度，并把有效上限传给 worker。已有不确定费用会阻止启用了费用上限的后续运行，不能当作免费。
 
-旧任务保存的显式限制与已保存的实例限额原位保留，升级不根据数值猜测是否为默认值。同一策略下的部分编辑会保留省略的费用和保护参数，显式 null 才清除可选限制，避免旧客户端无意取消新限额。编辑器会说明旧策略，并提供“使用推荐设置”：填入推荐时长／调用／停滞保护，清空此任务的单次和每日配额；点击保存后才生效。实例共享限额需在全局设置中单独调整。正在执行的运行保留准入时的策略，失败或已结束的运行不会因修改设置而自动重放。
+旧任务保存的显式限制与已保存的实例限额原位保留，升级不根据数值猜测是否为默认值。同一策略下的部分编辑会保留省略的费用和保护参数，显式 null 才清除可选限制，避免旧客户端无意取消新限额。编辑器会说明旧策略，并提供“使用推荐设置”：填入推荐时长／停滞保护，清空调用次数以及此任务的单次和每日配额；点击保存后才生效。实例共享限额需在全局设置中单独调整。正在执行的运行保留准入时的策略，失败或已结束的运行不会因修改设置而自动重放。
 
 停止或失败时，运行记录显示具体原因、可用的错误详情、处理建议，以及调用／Token／费用的已用量和有效上限。已提交执行的失败会在原线程追加 `pivane-cron-result` 结果卡，不触发新模型回合；启动前失败保存在调度记录中。已启用的浏览器通知显示原因，已配置的微信通知同样带原因和建议。微信未绑定、通知关闭或发送不确定时，不假称用户已收到；调度执行状态和投递状态分别保留。不确定执行必须先核对线程与外部操作，再决定是否结束或手动运行。
 
@@ -69,6 +69,7 @@
 |---|---|
 | `GET /api/pi/cron` | 任务、主线程、实例预算、今日占用、最后运行与容量；有调度故障时包含 `schedulerError` |
 | `PUT /api/pi/cron/jobs` | 稳定 UUID `id`；更新带 `revision`；`name,prompt,enabled,mode,weixinNotification,target,schedule,model,misfire,condition,execution,budget` |
+| `PATCH /api/pi/cron/jobs/:id/policy` | `{revision,execution?,budget?}` 仅调整执行与额度；保留目标、提示词、计划时间、启停和历史，允许已过期单次任务，拒绝有未结束运行的任务 |
 | `POST /api/pi/cron/jobs/:id/actions` | `revision,action`；`pause/resume/delete/run/stop/acknowledge`；run 必须带稳定 UUID `requestId`，stop/acknowledge 带 `runId` |
 | `GET /api/pi/cron/jobs/:id/runs` | 最近 100 项，包含原生结果 entry ID、实际目标、模型和用量，不复制回复 |
 | `POST /api/pi/cron/preview` | `{schedule}`，返回最多五个毫秒时间戳 |
@@ -78,7 +79,7 @@
 
 `weixinNotification:'inherit'|'on'|'off'` 分别为跟随线程（默认）、推送至已绑定微信、关闭通知。兼容旧客户端显式提交的 `notifyWeixin:true|false`，分别转换为 on/off；已存旧任务无新字段时，true 保持 on，false／缺失按 inherit。通知只面向任务完成时有效的绑定，不补发绑定前已完成的历史。
 
-`target` 为 `{kind:'thread',cwd,sessionId}` 或 `{kind:'profile',profileId}`。伙伴的 profile 目标还可带 `windowId`（UUID，必须是该伙伴的窗口）；省略时进入主聊天，提供时每次运行经 `bots.resolve(profileId,windowId)` 进入该窗口当前一代，不保存固定会话 ID。伙伴在聊天里创建的任务默认启用，话题窗口带 `windowId`，仍可在任务页面按原有修订编辑；同一 profile 的编辑请求省略 `windowId` 时保留已有窗口，避免旧表单无意转到主聊天，显式提供另一窗口 UUID 才更换窗口。`schedule` 为 `{kind:'cron',expression,timeZone}` 或 `{kind:'once',at,timeZone}`。`startsAt:null|毫秒时间戳` 指定自动执行的最早生效时刻，允许未来八年内；保存、启用和预览均应用该下限。`model:null` 跟随线程，否则为 `{provider,modelId,thinkingLevel}`。`misfire:{policy:'skip'|'latest',graceMinutes}`；`condition:null` 或 `{kind:'no-user-since',time:'HH:mm'}`；`policyVersion:2` 标明新执行策略。新任务缺省为 2，编辑旧任务省略时沿用旧策略；明确设置 2 和完整参数才切换。`execution:{maxCalls,maxTokens,maxCost,maxDurationSeconds,maxIdleSeconds,maxRepeatedErrors}` 中 maxTokens/maxCost/maxIdleSeconds/maxRepeatedErrors 接受 null；`budget/limits:{maxRunsPerDay,maxTokensPerDay,maxCostPerDay}` 均接受 null，表示只统计、不设硬上限。每日次数最大 100000，累计 Token 最大 1000000000000，估算美元上限最大 10000。`GET /cron` 的 `settings.maxConcurrent` 和 `capabilities.defaults` 提供当前并发与文字／工作默认策略，客户端不需要猜测后端默认值。运行的 `execution` 保存准入时的有效限额；`feedback:{code,title,suggestion,detail?,usage?,limits?}` 保存失败诊断，`usage` 另含 input/output/cacheRead/cacheWrite 分类。原因标识包括 token-limit/call-limit/cost-limit/cost-unknown/time-limit/idle-limit/repeated-errors/daily-runs/daily-tokens/daily-cost/model-error/user-stopped/worker-policy/submission-uncertain/reconciliation-error；旧 run-limit 保留解释。
+`target` 为 `{kind:'thread',cwd,sessionId}` 或 `{kind:'profile',profileId}`。伙伴的 profile 目标还可带 `windowId`（UUID，必须是该伙伴的窗口）；省略时进入主聊天，提供时每次运行经 `bots.resolve(profileId,windowId)` 进入该窗口当前一代，不保存固定会话 ID。伙伴在聊天里创建的任务默认启用，话题窗口带 `windowId`，仍可在任务页面按原有修订编辑；同一 profile 的编辑请求省略 `windowId` 时保留已有窗口，避免旧表单无意转到主聊天，显式提供另一窗口 UUID 才更换窗口。`schedule` 为 `{kind:'cron',expression,timeZone}` 或 `{kind:'once',at,timeZone}`。`startsAt:null|毫秒时间戳` 指定自动执行的最早生效时刻，允许未来八年内；保存、启用和预览均应用该下限。`model:null` 跟随线程，否则为 `{provider,modelId,thinkingLevel}`。`misfire:{policy:'skip'|'latest',graceMinutes}`；`condition:null` 或 `{kind:'no-user-since',time:'HH:mm'}`；`policyVersion:3` 标明可选调用上限的新执行策略。新任务缺省为 3；版本 1、2 仍可读取和编辑，省略版本时沿用原策略。明确设置 3 和完整参数才切换。`execution:{maxCalls,maxTokens,maxCost,maxDurationSeconds,maxIdleSeconds,maxRepeatedErrors}` 中 maxCalls/maxTokens/maxCost/maxIdleSeconds/maxRepeatedErrors 接受 null；`budget/limits:{maxRunsPerDay,maxTokensPerDay,maxCostPerDay}` 均接受 null，表示只统计、不设硬上限。每日次数最大 100000，累计 Token 最大 1000000000000，估算美元上限最大 10000。`GET /cron` 的 `settings.maxConcurrent` 和 `capabilities.defaults` 提供当前并发与文字／工作默认策略，客户端不需要猜测后端默认值。运行的 `execution` 保存准入时的有效限额；`feedback:{code,title,suggestion,detail?,usage?,limits?}` 保存失败诊断，`usage` 另含 input/output/cacheRead/cacheWrite 分类。原因标识包括 token-limit/call-limit/cost-limit/cost-unknown/time-limit/idle-limit/repeated-errors/daily-runs/daily-tokens/daily-cost/model-error/user-stopped/worker-policy/submission-uncertain/reconciliation-error；旧 run-limit 保留解释。
 
 运行状态为 `waiting/dispatching/running/completed/silent/skipped/failed/error/stopped/cancelled/uncertain`。修订冲突返回 409 并保留本地草稿。响应不确定先查询原 ID；不要生成新 ID 重复运行。运行未结束时拒绝编辑／删除任务，暂停仍可用。
 

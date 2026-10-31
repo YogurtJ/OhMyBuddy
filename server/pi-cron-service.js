@@ -35,7 +35,7 @@ function validateJob(input, now) {
     const misfire = input.misfire || { policy: 'skip', graceMinutes: 30 };
     if (!['skip', 'latest'].includes(misfire.policy) || !number(misfire.graceMinutes, 1, 1440)) fail('Invalid missed-run policy');
     const policyVersion = input.policyVersion ?? policy.POLICY_VERSION;
-    if (![1, policy.POLICY_VERSION].includes(policyVersion)) fail('Unsupported scheduled execution policy');
+    if (![1, 2, policy.POLICY_VERSION].includes(policyVersion)) fail('Unsupported scheduled execution policy');
     const execution = policy.execution(input.execution, input.mode, policyVersion);
     let model = null;
     if (input.model) {
@@ -162,6 +162,21 @@ class CronService {
             if (this.stopping || this.isSuspended()) fail('Workspace is stopping', 409);
             const record = { ...job, id: input.id, revision: (previous?.revision || 0) + 1, fingerprint: hash(job),
                 createdAt: previous?.createdAt || this.now(), updatedAt: this.now(), nextAt: nextTimes(job.schedule, Math.max(this.now(), (job.startsAt || 0) - 1), 1)[0] ?? null };
+            this.db.saveJob(record); return record;
+        });
+    }
+    configurePolicy(id, input) {
+        return this.reserve(() => {
+            const previous = this.db.job(id);
+            if (!previous || previous.deleted) fail('Task not found', 404);
+            if (previous.revision !== input.revision) fail('Task changed; reload before saving', 409);
+            if (this.db.activeRuns(id).length) fail('Finish or review the active run before editing', 409);
+            const execution = policy.execution({ ...previous.execution, ...input.execution }, previous.mode, policy.POLICY_VERSION);
+            const budget = limits({ ...previous.budget, ...input.budget });
+            const record = { ...previous, execution, budget, policyVersion: policy.POLICY_VERSION,
+                revision: previous.revision + 1, updatedAt: this.now(), fingerprint: null };
+            // A policy edit never revalidates or advances an expired schedule, resolves
+            // a new target, enables a task, or runs it. It can fix a paused old task too.
             this.db.saveJob(record); return record;
         });
     }
@@ -582,6 +597,7 @@ function mountCron(router, service) {
     };
     router.get('/cron', route(() => service.snapshot()));
     router.put('/cron/jobs', route(req => service.save(req.body)));
+    router.patch('/cron/jobs/:id/policy', route(req => service.configurePolicy(req.params.id, req.body)));
     router.post('/cron/jobs/:id/actions', route(req => service.action(req.params.id, req.body)));
     router.get('/cron/jobs/:id/runs', route(async req => { await service.ready; service.healthy(); return { runs: service.db.runs(req.params.id).slice(0, 100) }; }));
     router.post('/cron/preview', route(req => {
