@@ -714,6 +714,8 @@ class AgentWorker extends EventEmitter {
             if (!command) throw new Error('原生回退扩展未加载，请重新打开 runtime');
             if (payload.mode === 'channel' && !command.description?.includes('channels-v1')) throw new Error('消息渠道接口尚未加载，请在线程空闲后重开运行实例');
             if (payload.mode === 'cron' && !command.description?.includes('cron-v1')) throw new Error('Scheduled task bridge is not loaded; reopen the idle thread');
+            if (payload.mode === 'cron' && payload.input?.action === 'start' && payload.input.policyVersion >= 2
+                && !command.description?.includes('cron-v2')) throw Object.assign(new Error('Scheduled execution policy changed; reopen the idle thread before running'), { code: 'CRON_POLICY_UNAVAILABLE' });
             if (payload.mode === 'task-result' && !command.description?.includes('task-results-v1')) throw new Error('Task result bridge is not loaded');
             if (payload.mode === 'bot-notebook' && !command.description?.includes('bot-notebook-v1')) throw new Error('Notebook bridge is not loaded; reopen the chat');
             if (payload.mode === 'agent-message' && !command.description?.includes('agent-messages-v1')) throw new Error('Agent message bridge is not loaded; reopen the thread after it is idle');

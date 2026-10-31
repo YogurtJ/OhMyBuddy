@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { setTimeout: delay } = require('node:timers/promises');
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-channel-delivery-'));
+const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-channel-delivery-')));
 process.env.PI_CODING_AGENT_DIR = path.join(root, 'agent'); process.env.PI_PROJECT_ROOTS = root; process.env.PI_OFFLINE = '1';
 const { ChannelsService } = require('../server/channels/service');
 const { ChannelStore, blocksFollowing } = require('../server/channels/store');
@@ -42,6 +42,27 @@ test('cron admission persists only owned bounded artifacts, without inline netwo
     assert.equal(sends.length, 0); assert.equal(db.value.jobs[0].status, 'ready');
     assert.deepEqual(db.value.jobs[0].deliverables, [{ id: 'own-report', manifestRevision: 'v1' }]);
     assert.match(db.value.jobs[0].directReply, /Report complete/);
+});
+
+test('pre-execution failures require scheduler proof and deliver the concrete reason once', async t => {
+    const { s, db, event } = fixture(t);
+    Object.assign(event, { status: 'failed', admissionFailure: true });
+    s.store.withSessionRead = async () => { throw new Error('No native execution exists'); };
+    assert.equal((await s.notifyScheduledRun(event)).status, 'skipped');
+    s.getScheduledRun = () => ({ id: event.runId, jobId: event.jobId, status: 'failed', target: event.target,
+        feedback: { code: 'daily-tokens', title: '每日 Token 额度不足', suggestion: '调整任务或实例的每日 Token 上限，或等待次日。' } });
+    assert.equal((await s.notifyScheduledRun(event)).status, 'accepted');
+    assert.match(db.value.jobs[0].directReply, /每日 Token 额度不足/);
+    assert.match(db.value.jobs[0].directReply, /调整任务或实例/);
+    assert.equal((await s.notifyScheduledRun(event)).status, 'accepted'); assert.equal(db.value.jobs.length, 1);
+});
+
+test('runtime failure notifications read the reason from the proven native result', async t => {
+    const { s, db, event, branch } = fixture(t);
+    event.status = 'stopped'; branch[6].data.status = 'stopped';
+    branch[6].data.reason = 'token-limit'; branch[6].data.feedback = { code: 'token-limit', title: '单次 Token 上限已用尽', suggestion: '调高或关闭 Token 上限后，核对已执行的操作，再手动运行。' };
+    assert.equal((await s.notifyScheduledRun(event)).status, 'accepted');
+    assert.match(db.value.jobs[0].directReply, /Token 上限已用尽/);
 });
 
 test('lost admission acknowledgement and reopened channel storage do not duplicate a job', async t => {

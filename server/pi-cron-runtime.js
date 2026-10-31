@@ -1,6 +1,9 @@
 const { setPromptSection } = require('./pi-hook-prompt');
 const { Type } = require('typebox');
 const { localParts, dayKey } = require('./pi-cron-schedule');
+const policy = require('./pi-cron-policy');
+const { createHash } = require('node:crypto');
+const safeError = require('./pi-update-output').outputRedactor(process.env);
 const STATE = 'pivane-cron-run';
 const MESSAGE = 'pivane-cron-message';
 function lastRun(manager, id) {
@@ -14,21 +17,28 @@ function usageSince(manager, state) {
     const rows = after.filter(entry => entry.type === 'message' && entry.message?.role === 'assistant');
     const charged = after.filter(entry => entry.type === 'compaction' || entry.type === 'branch_summary'
         || entry.type === 'message' && (entry.message?.role === 'assistant' || entry.message?.usage));
-    const usage = { tokens: 0, cost: 0, calls: state.requests || rows.length };
+    const usage = { tokens: 0, cost: 0, calls: state.requests ?? rows.filter(row => row.message?.stopReason !== 'aborted').length,
+        input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
     let known = true;
     for (const row of charged) {
         const u = row.message?.usage || row.usage;
         if (!u) { known = false; continue; }
+        for (const key of ['input', 'output', 'cacheRead', 'cacheWrite']) usage[key] += Number(u[key]) || 0;
         usage.tokens += ['input', 'output', 'cacheRead', 'cacheWrite'].reduce((n, key) => n + (Number(u[key]) || 0), 0);
-        if (typeof u.cost?.total === 'number' && u.cost.total > 0) usage.cost += u.cost.total; else known = false;
+        if (typeof u.cost?.total === 'number' && Number.isFinite(u.cost.total) && u.cost.total >= 0) usage.cost += u.cost.total; else known = false;
     }
     if (!known || !rows.length) usage.cost = null;
-    if (usage.calls > 0 && usage.tokens === 0) usage.tokens = null;
+    if (usage.calls > 0 && usage.tokens === 0) { usage.tokens = null; usage.cost = null; }
     const last = rows.at(-1);
-    return { usage, replyEntryId: last?.id || null, stopReason: last?.message.stopReason };
+    return { usage, replyEntryId: last?.id || null, stopReason: last?.message.stopReason,
+        ...(last?.message.stopReason === 'error' ? { reason: 'model-error', errorDetail: safeError(last.message.errorMessage || '').slice(0, 500) } : {}) };
 }
 function registerCron(pi) {
-    let active = null, timer = null, silentToolRegistered = false;
+    let active = null, timer = null, idleTimer = null, silentToolRegistered = false;
+    let lastActivity = Date.now(), lastErrorKey = '', repeatedErrors = 0;
+    const runningTools = new Set();
+    const touch = () => { lastActivity = Date.now(); };
+    const clearTimers = () => { clearTimeout(timer); clearInterval(idleTimer); timer = idleTimer = null; runningTools.clear(); };
     const report = ctx => ctx.ui.notify(JSON.stringify({ pivaneCron: { sessionId: ctx.sessionManager.getSessionId(),
         runId: active?.runId, active: Boolean(active && !['completed', 'silent', 'skipped', 'error', 'stopped'].includes(active.status)),
         status: active?.status, silent: active?.silent === true } }));
@@ -80,30 +90,43 @@ function registerCron(pi) {
             return { block: true, reason: 'This scheduled run does not allow delegation, cross-thread messaging or media execution.' };
     });
     pi.on('cache_warming_decision', () => active ? { action: 'stop' } : undefined);
+    const stop = (ctx, reason) => {
+        if (!active || active.status !== 'running' || active.reason) return;
+        persist(ctx, { reason }); ctx.abort();
+    };
+    pi.on('message_update', touch);
+    pi.on('tool_execution_start', event => { if (active?.status === 'running') { runningTools.add(event.toolCallId); touch(); } });
+    pi.on('tool_execution_update', touch);
+    pi.on('tool_execution_end', event => { runningTools.delete(event.toolCallId); touch(); });
+    pi.on('tool_result', (event, ctx) => {
+        if (active?.status !== 'running' || event.parentToolCallId) return;
+        touch();
+        if (!event.isError) { lastErrorKey = ''; repeatedErrors = 0; return; }
+        const key = createHash('sha256').update(JSON.stringify([event.toolName, event.input, event.content])).digest('hex');
+        repeatedErrors = key === lastErrorKey ? repeatedErrors + 1 : 1; lastErrorKey = key;
+        if (active.maxRepeatedErrors != null && repeatedErrors >= active.maxRepeatedErrors) stop(ctx, 'repeated-errors');
+    });
     pi.on('before_provider_request', (_event, ctx) => {
         if (!active || active.status !== 'running') return;
-        if ((active.requests || 0) >= active.maxCalls || Date.now() >= active.deadline) {
-            persist(ctx, { reason: 'run-limit' }); ctx.abort(); return;
-        }
-        persist(ctx, { requests: (active.requests || 0) + 1 });
+        const reason = policy.stopReason(active, usageSince(ctx.sessionManager, active).usage);
+        if (reason) { stop(ctx, reason); return; }
+        touch(); persist(ctx, { requests: (active.requests || 0) + 1 });
     });
     pi.on('turn_start', (_event, ctx) => {
         if (!active || active.status !== 'running') return;
-        const usage = usageSince(ctx.sessionManager, active).usage;
-        if (usage.calls >= active.maxCalls || usage.tokens >= active.maxTokens || Date.now() >= active.deadline) {
-            persist(ctx, { reason: 'run-limit' }); ctx.abort();
-        }
+        const reason = policy.stopReason(active, usageSince(ctx.sessionManager, active).usage);
+        if (reason) stop(ctx, reason);
     });
     pi.on('agent_before_settle', (event, ctx) => {
         if (active?.status === 'running') persist(ctx, { outcome: event.outcome });
     });
     pi.on('agent_settled', (_event, ctx) => {
-        clearTimeout(timer); timer = null;
+        clearTimers();
         if (!active || active.status !== 'running') return;
         const result = usageSince(ctx.sessionManager, active);
         persist(ctx, { status: 'settled', ...result, settledAt: Date.now() });
     });
-    pi.on('session_shutdown', () => { clearTimeout(timer); });
+    pi.on('session_shutdown', clearTimers);
     async function restore(ctx, state) {
         if (state.originalModel) {
             const model = ctx.modelRegistry.find(state.originalModel.provider, state.originalModel.id);
@@ -120,9 +143,19 @@ function registerCron(pi) {
             if (state.status === 'settled') {
                 await restore(ctx, state);
                 active = state;
-                persist(ctx, { status: state.silent ? 'silent' : state.outcome === 'aborted' || ['run-limit', 'time-limit'].includes(state.reason) ? 'stopped'
-                    : state.stopReason === 'stop' ? 'completed' : state.stopReason === 'aborted' ? 'stopped' : 'error', completedAt: Date.now() });
-                const result = active; active = null; return result;
+                const status = state.silent ? 'silent' : state.reason && state.reason !== 'model-error' || state.outcome === 'aborted' ? 'stopped'
+                    : state.stopReason === 'stop' ? 'completed' : state.stopReason === 'aborted' ? 'stopped' : 'error';
+                const reason = state.reason || (status === 'error' ? 'model-error' : status === 'stopped' ? 'user-stopped' : undefined);
+                const feedback = ['stopped', 'error'].includes(status) ? { ...policy.diagnostic(reason, { usage: state.usage,
+                    limits: { maxCalls: state.maxCalls, maxTokens: state.maxTokens, maxCost: state.maxCost,
+                        maxDurationSeconds: state.maxDurationSeconds, maxIdleSeconds: state.maxIdleSeconds } }),
+                    ...(state.errorDetail ? { detail: state.errorDetail } : {}) } : null;
+                persist(ctx, { status, reason, ...(feedback ? { feedback } : {}), completedAt: Date.now() });
+                const result = active; active = null;
+                if (feedback && state.origin !== 'bot') pi.sendMessage({ customType: 'pivane-cron-result',
+                    content: policy.feedbackText(state.name, status, feedback), display: true,
+                    details: { runId: state.runId, jobId: state.jobId, name: state.name, status, feedback } }, { triggerTurn: false });
+                return result;
             }
             return state;
         }
@@ -163,7 +196,10 @@ function registerCron(pi) {
         const origin = input.origin === 'bot' ? 'bot' : undefined;
         if (origin && input.mode !== 'text') throw new Error('Invalid scheduled task');
         active = { version: 1, runId: input.runId, sessionId: input.sessionId, status: 'prepared', mode: input.mode, ...(origin ? { origin } : {}),
-            maxCalls: input.maxCalls, maxTokens: input.maxTokens, deadline: Date.now() + input.maxDurationSeconds * 1000,
+            name: input.name, jobId: input.jobId, policyVersion: input.policyVersion || 1,
+            maxCalls: input.maxCalls, maxTokens: input.maxTokens, maxCost: input.maxCost ?? null,
+            maxDurationSeconds: input.maxDurationSeconds, maxIdleSeconds: input.maxIdleSeconds ?? null,
+            maxRepeatedErrors: input.maxRepeatedErrors ?? null, deadline: Date.now() + input.maxDurationSeconds * 1000,
             originalModel: ctx.model ? { provider: ctx.model.provider, id: ctx.model.id } : null,
             originalThinking: pi.getThinkingLevel(), originalTools: pi.getActiveTools(),
             model: { provider: model.provider, modelId: model.id }, startedAt: Date.now() };
@@ -189,8 +225,15 @@ function registerCron(pi) {
         pi.sendMessage({ customType: MESSAGE, content: `${header}\n\n${input.prompt}`, display: true,
             details: { runId: input.runId, jobId: input.jobId, name: input.name, scheduledAt: input.scheduledAt, bodyOffset: header.length + 2,
                 ...(origin ? { origin, note } : {}) } }, { triggerTurn: true });
-        timer = setTimeout(() => { if (active?.runId === input.runId && active.status === 'running') { persist(ctx, { reason: 'time-limit' }); ctx.abort(); } }, input.maxDurationSeconds * 1000);
+        touch(); lastErrorKey = ''; repeatedErrors = 0;
+        timer = setTimeout(() => stop(ctx, 'time-limit'), input.maxDurationSeconds * 1000);
         timer.unref?.();
+        if (active.maxIdleSeconds != null) {
+            idleTimer = setInterval(() => {
+                if (!runningTools.size && Date.now() - lastActivity >= active?.maxIdleSeconds * 1000) stop(ctx, 'idle-limit');
+            }, 1000);
+            idleTimer.unref?.();
+        }
         return active;
     };
 }

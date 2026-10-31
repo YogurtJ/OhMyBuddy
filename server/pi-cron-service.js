@@ -1,5 +1,6 @@
 const path = require('node:path');
 const { createHash, randomUUID } = require('node:crypto');
+const safeError = require('./pi-update-output').outputRedactor(process.env);
 const { getSdk } = require('./pi-session-store');
 const { CronStore } = require('./pi-cron-store');
 const { nextTimes, parseCron, latestTime } = require('./pi-cron-schedule');
@@ -11,12 +12,8 @@ const TERMINAL = new Set(['completed', 'silent', 'skipped', 'stopped', 'error', 
 const notificationReason = value => String(value || 'Channel admission failed').slice(0, 500);
 // Legacy false was the editor default, not an explicit thread subscription opt-out.
 const weixinNotification = job => job?.weixinNotification || (job?.notifyWeixin ? 'on' : 'inherit');
-function limits(value, defaults = { maxRunsPerDay: 8, maxTokensPerDay: 200000, maxCostPerDay: null }) {
-    const result = Object.fromEntries(Object.keys(defaults).map(key => [key, value?.[key] === undefined ? defaults[key] : value[key]]));
-    if (!number(result.maxRunsPerDay, 1, 1000) || !number(result.maxTokensPerDay, 1000, 10000000)
-        || result.maxCostPerDay !== null && (!Number.isFinite(result.maxCostPerDay) || result.maxCostPerDay <= 0 || result.maxCostPerDay > 10000)) fail('Invalid daily budget');
-    return result;
-}
+const policy = require('./pi-cron-policy');
+const { limits } = policy;
 const PROACTIVE_RUNS_PER_DAY = 50;
 function validateJob(input, now) {
     if (!input || typeof input.name !== 'string' || !input.name.trim() || input.name.length > 120
@@ -37,10 +34,9 @@ function validateJob(input, now) {
     if (!preview.length) fail('No future execution time within eight years');
     const misfire = input.misfire || { policy: 'skip', graceMinutes: 30 };
     if (!['skip', 'latest'].includes(misfire.policy) || !number(misfire.graceMinutes, 1, 1440)) fail('Invalid missed-run policy');
-    const execution = { maxCalls: input.execution?.maxCalls ?? 4, maxTokens: input.execution?.maxTokens ?? 32000,
-        maxDurationSeconds: input.execution?.maxDurationSeconds ?? 300 };
-    if (!number(execution.maxCalls, 1, 50) || !number(execution.maxTokens, 1000, 1000000)
-        || !number(execution.maxDurationSeconds, 10, 3600)) fail('Invalid execution limits');
+    const policyVersion = input.policyVersion ?? policy.POLICY_VERSION;
+    if (![1, policy.POLICY_VERSION].includes(policyVersion)) fail('Unsupported scheduled execution policy');
+    const execution = policy.execution(input.execution, input.mode, policyVersion);
     let model = null;
     if (input.model) {
         if (['provider', 'modelId', 'thinkingLevel'].some(key => typeof input.model[key] !== 'string' || !input.model[key] || input.model[key].length > 500)) fail('Invalid model selection');
@@ -52,7 +48,8 @@ function validateJob(input, now) {
     return { name: input.name.trim(), prompt: input.prompt, enabled: input.enabled, mode: input.mode,
         weixinNotification: notification, notifyWeixin: notification !== 'off', target, schedule, startsAt, model,
         condition: condition ? { kind: condition.kind, time: condition.time } : null,
-        misfire: { policy: misfire.policy, graceMinutes: misfire.graceMinutes }, execution, budget: limits(input.budget) };
+        misfire: { policy: misfire.policy, graceMinutes: misfire.graceMinutes }, policyVersion, execution,
+        budget: limits(input.budget, policyVersion === 1 ? { maxRunsPerDay: 8, maxTokensPerDay: 200000, maxCostPerDay: null } : undefined) };
 }
 class CronService {
     constructor({ store, supervisor, profiles, catalog, bots = null, reloadBotWorker = null, isSuspended = () => false, now = Date.now, filename, captureChannelNotify, onChannelNotify }) {
@@ -94,7 +91,9 @@ class CronService {
         return { schedulerError: this.lastError || null, jobs: this.db.jobs().filter(job => !job.deleted).map(job => ({ ...job, today: this.db.usage(day, job.id),
             lastRun: this.db.runs(job.id)[0] || null })), homes: await this.homesView(), limits: this.db.limits(), today: this.db.usage(day),
             channelNotifications: this.db.channelNotificationSummary(),
-            capabilities: { maxJobs: 100, maxRuns: 10000, budgetDay: 'UTC', cost: 'estimated', maxConcurrent: 2 }, serverTime: now };
+            capabilities: { maxJobs: 100, maxRuns: 10000, budgetDay: 'UTC', cost: 'estimated', maxConcurrent: this.db.settings().maxConcurrent,
+                policyVersion: policy.POLICY_VERSION, defaults: { text: policy.executionDefaults('text'), work: policy.executionDefaults('work'), budget: policy.DEFAULT_LIMITS } },
+            settings: this.db.settings(), serverTime: now };
     }
     // Saved homes, with each Bot's home shown as its main chat (derived, never stored).
     async homesView() {
@@ -140,7 +139,7 @@ class CronService {
             const target = previous?.target.windowId !== undefined && input.target?.kind === 'profile'
                 && input.target.profileId === previous.target.profileId && !Object.hasOwn(input.target, 'windowId')
                 ? { ...input.target, windowId: previous.target.windowId } : input.target;
-            const job = validateJob({ ...input, target }, this.now());
+            const job = validateJob({ ...input, target, policyVersion: input.policyVersion ?? (previous ? previous.policyVersion || 1 : policy.POLICY_VERSION) }, this.now());
             if (previous?.deleted) fail('This task was deleted; use a new ID', 409);
             if (previous && previous.revision !== input.revision) {
                 if (previous.fingerprint === hash(job)) return previous;
@@ -281,7 +280,7 @@ class CronService {
             }
             for (const run of this.db.activeRuns().filter(run => run.status === 'waiting')) {
                 if (this.stopping || this.isSuspended() || this.mutating) break;
-                if (this.db.activeRuns().filter(run => ['dispatching', 'running'].includes(run.status)).length >= 2) break;
+                if (this.db.activeRuns().filter(run => ['dispatching', 'running', 'uncertain'].includes(run.status)).length >= this.db.settings().maxConcurrent) break;
                 await this.dispatch(run);
             }
             await this.reconcileChannelNotifications();
@@ -290,8 +289,9 @@ class CronService {
     }
     async dispatch(run) {
         let handedOff = false;
+        const job = run.job;
         try {
-            const job = run.job, now = this.now();
+            const now = this.now();
             const grace = job.misfire.policy === 'skip' ? 60000 : job.misfire.graceMinutes * 60000;
             if (now - run.scheduledAt > grace) { this.db.saveRun({ ...run, status: 'skipped', reason: 'expired', completedAt: now }); return; }
             if (job.origin === 'bot') {
@@ -302,6 +302,12 @@ class CronService {
                 }
             }
             const session = await this.target(job.target);
+            run = { ...run, target: { cwd: session.cwd, sessionId: session.id, name: session.name } };
+            if (job.target.kind === 'profile') {
+                const home = await this.homeRef(job.target.profileId, job.target.windowId);
+                if (home.sessionId !== session.id || home.cwd !== session.cwd) return;
+                if (home.bot) run.target.bot = { profileId: job.target.profileId, windowId: job.target.windowId ?? null };
+            }
             if (!this.supervisor.isSessionIdle(session.path)) return;
             let worker = await this.supervisor.getWorker({ cwd: session.cwd, sessionId: session.id, sessionPath: session.path });
             if (session.agentProfile) {
@@ -324,17 +330,27 @@ class CronService {
                     pricing = runtimeCatalog.models?.find(model => model.provider === job.model.provider && model.id === job.model.modelId)?.cost;
                 }
                 const rates = ['input', 'output', 'cacheRead', 'cacheWrite'].map(key => pricing?.[key]);
-                const reservedCost = rates.every(rate => Number.isFinite(rate) && rate >= 0) && Math.max(...rates) > 0
-                    ? Math.max(...rates) * job.execution.maxTokens / 1000000 : null;
+                const execution = policy.execution(job.execution, job.mode, job.policyVersion || 1);
+                let maxTokens = execution.maxTokens, maxCost = execution.maxCost;
+                const reject = (code, quota) => { throw Object.assign(new Error(code), { cronReason: code, cronQuota: quota }); };
+                const priced = rates.every(rate => Number.isFinite(rate) && rate >= 0) && Math.max(...rates) > 0;
                 if (job.origin === 'bot') {
-                    // A safety bound on runs a Bot starts by itself; pushes have their own limit (bot-proactive.js).
-                    if (this.db.proactiveRuns(day, job.target.profileId) >= PROACTIVE_RUNS_PER_DAY) fail('Daily limit of Bot follow-ups reached');
-                } else for (const [limit, usage] of [[this.db.limits(), this.db.usage(day)], [job.budget, this.db.usage(day, job.id)]]) {
-                    if (usage.runs >= limit.maxRunsPerDay || usage.tokens + job.execution.maxTokens > limit.maxTokensPerDay)
-                        fail('Daily execution or token budget exhausted');
-                    if (limit.maxCostPerDay !== null && (reservedCost === null || usage.unknownCost || usage.cost + reservedCost > limit.maxCostPerDay))
-                        fail('Daily money budget exhausted or model pricing is unknown');
+                    if (this.db.proactiveRuns(day, job.target.profileId) >= PROACTIVE_RUNS_PER_DAY) reject('daily-runs');
+                } else for (const [scope, limit, usage] of [['instance', this.db.limits(), this.db.usage(day)], ['task', job.budget, this.db.usage(day, job.id)]]) {
+                    if (limit.maxRunsPerDay != null && usage.runs >= limit.maxRunsPerDay) reject('daily-runs', { scope, metric: 'runs', used: usage.runs, limit: limit.maxRunsPerDay });
+                    if (limit.maxTokensPerDay != null) {
+                        const remaining = limit.maxTokensPerDay - usage.tokens;
+                        if (remaining <= 0 || execution.maxTokens != null && execution.maxTokens > remaining) reject('daily-tokens', { scope, metric: 'tokens', used: usage.tokens, limit: limit.maxTokensPerDay, requested: execution.maxTokens });
+                        maxTokens = policy.minimum(maxTokens, remaining);
+                    }
+                    if (limit.maxCostPerDay != null) {
+                        const remaining = limit.maxCostPerDay - usage.cost;
+                        if (!priced || usage.unknownCost || remaining <= 0) reject('daily-cost', { scope, metric: 'cost', used: usage.cost, limit: limit.maxCostPerDay, unknown: !priced || usage.unknownCost });
+                        maxCost = policy.minimum(maxCost, remaining);
+                    }
                 }
+                if (maxCost != null && !priced) reject('cost-unknown');
+                const reservedCost = maxCost ?? (maxTokens != null && priced ? Math.max(...rates) * maxTokens / 1000000 : null);
                 if (this.stopping || this.isSuspended() || this.mutating || this.db.run(run.id)?.status !== 'waiting') return;
                 let botWindow = null;
                 if (job.target.kind === 'profile') {
@@ -344,21 +360,37 @@ class CronService {
                     if (home.bot) botWindow = { profileId: job.target.profileId, windowId: job.target.windowId ?? null };
                 }
                 run = { ...run, status: 'dispatching', target: { cwd: session.cwd, sessionId: session.id, name: session.name, ...(botWindow ? { bot: botWindow } : {}) },
-                    budgetDay: day, reservedTokens: job.execution.maxTokens, reservedCost, startedAt: now };
+                    budgetDay: day, reservedTokens: maxTokens, reservedCost, startedAt: now,
+                    execution: { ...execution, maxTokens, maxCost } };
                 this.db.saveRun(run); handedOff = true;
             });
             if (!handedOff) return;
             const result = await worker.cron({ action: 'start', runId: run.id, jobId: job.id, sessionId: session.id,
                 name: job.name, prompt: job.prompt, scheduledAt: run.scheduledAt, timeZone: job.schedule.timeZone,
                 profile: session.agentProfile ? { id: worker.loadedAgentProfileId, revision: worker.loadedAgentProfileRevision } : null,
-                mode: job.mode, condition: job.condition, model: job.model, ...job.execution,
+                mode: job.mode, condition: job.condition, model: job.model, ...run.execution, policyVersion: policy.POLICY_VERSION,
                 ...(job.origin === 'bot' ? { origin: 'bot', note: job.note || '' } : {}) });
             this.applyResult(run, result);
         } catch (error) {
             if (error.code === 'SESSION_BUSY' && !handedOff) return;
-            const status = handedOff ? 'uncertain' : 'failed';
-            this.db.saveRun({ ...run, status, reason: error.message, completedAt: status === 'failed' ? this.now() : undefined });
+            const notSubmitted = error.code === 'CRON_POLICY_UNAVAILABLE';
+            const status = handedOff && !notSubmitted ? 'uncertain' : 'failed';
+            const reason = notSubmitted ? 'worker-policy' : error.cronReason || (handedOff ? 'submission-uncertain' : 'admission-error');
+            const feedback = { ...policy.diagnostic(reason), ...(error.cronQuota ? { quota: error.cronQuota } : {}),
+                ...(!error.cronReason ? { detail: safeError(error.message).slice(0, 500) } : {}) };
+            const channelNotify = status === 'failed' && run.target && job.origin !== 'bot' && weixinNotification(job) !== 'off'
+                ? this.captureNotification({ runId: run.id, jobId: job.id, name: job.name, status, target: run.target,
+                    notificationMode: weixinNotification(job), scheduledAt: run.scheduledAt, admissionFailure: true }) : null;
+            this.db.saveRun({ ...run, status, reason, feedback, ...(notSubmitted ? { usage: { calls: 0, tokens: 0, cost: 0 } } : {}),
+                ...(channelNotify ? { channelNotify } : {}), completedAt: status === 'failed' ? this.now() : undefined });
+            this.reportFailure({ ...run, status, feedback });
         }
+    }
+    reportFailure(run) {
+        if (!run.target || run.origin === 'bot') return;
+        this.supervisor.emit('attention', { cwd: run.target.cwd, sessionId: run.target.sessionId, kind: 'error',
+            completionId: run.id, scheduledFailure: true, reasonCode: run.feedback?.code || run.reason,
+            message: policy.feedbackText(run.job?.name || this.db.job(run.jobId)?.name, run.status, run.feedback || policy.diagnostic(run.reason)) });
     }
     captureNotification(event) {
         const notification = { status: 'pending', event: { ...event, recipients: [] }, attempts: 0, nextAttemptAt: this.now() };
@@ -393,10 +425,14 @@ class CronService {
                 runId: run.id, jobId: job.id, name: job.name, status, target: run.target, notificationMode: weixinNotification(job),
                 replyEntryId: result.replyEntryId || null, scheduledAt: run.scheduledAt
             }) : null;
+            const feedback = ['stopped', 'error'].includes(status)
+                ? result.feedback || policy.diagnostic(result.reason || (status === 'error' ? 'model-error' : 'user-stopped'), { usage: result.usage, limits: run.execution }) : null;
             this.db.saveRun({ ...run, status, reason: result.reason, model: result.model, thinkingLevel: result.thinkingLevel,
-                usage: result.usage, replyEntryId: result.replyEntryId, ...(complete ? { completedAt: result.completedAt || this.now() } : {}),
+                usage: result.usage, replyEntryId: result.replyEntryId, ...(feedback ? { feedback } : {}), ...(complete ? { completedAt: result.completedAt || this.now() } : {}),
                 ...(channelNotify ? { channelNotify } : {}) });
         });
+        const latest = this.db.run(run.id);
+        if (completed && ['error', 'stopped'].includes(latest?.status)) this.reportFailure(latest);
         if (completed) this.supervisor.emit('completion', { cwd: run.target.cwd, sessionId: run.target.sessionId,
             completionId: run.id, completedAt: new Date(this.now()).toISOString(),
             ...(run.origin === 'bot' ? { proactive: { profileId: run.profileId } } : {}) });
@@ -452,6 +488,10 @@ class CronService {
         this.notifying = pending;
         return pending.finally(() => { if (this.notifying === pending) this.notifying = null; });
     }
+    markUncertain(run, reason, detail) {
+        const feedback = { ...policy.diagnostic(reason), ...(detail ? { detail: safeError(detail).slice(0, 500) } : {}) }, next = { ...run, status: 'uncertain', reason, feedback };
+        this.db.saveRun(next); this.reportFailure(next);
+    }
     async reconcile() {
         for (const run of this.db.activeRuns().filter(run => ['running', 'dispatching', 'uncertain'].includes(run.status))) {
             if (!run.target) continue;
@@ -459,7 +499,7 @@ class CronService {
                 const session = await this.store.getSession(run.target.cwd, run.target.sessionId);
                 const worker = this.supervisor.getActiveWorker(session.path);
                 if (!worker) {
-                    if (run.status !== 'uncertain') this.db.saveRun({ ...run, status: 'uncertain', reason: 'worker-exited' });
+                    if (run.status !== 'uncertain') this.markUncertain(run, 'worker-exited');
                     continue;
                 }
                 const result = await worker.cron({ action: 'finish', runId: run.id });
@@ -467,7 +507,7 @@ class CronService {
             } catch (error) {
                 // Busy, or its file was being written while it was read: the next pass looks again.
                 const transient = error.code === 'SESSION_BUSY' || error.message === 'Session file changed';
-                if (!transient && run.status !== 'uncertain') this.db.saveRun({ ...run, status: 'uncertain', reason: error.message });
+                if (!transient && run.status !== 'uncertain') this.markUncertain(run, 'reconciliation-error', error.message);
             }
         }
         // A Bot-started message has no task page where someone could review an uncertain run. It is
@@ -544,11 +584,13 @@ function mountCron(router, service) {
         return { times: nextTimes(req.body.schedule, Math.max(service.now(), startsAt - 1)) };
     }));
     router.put('/cron/limits', route(req => service.reserve(() => {
-        const previous = service.db.limits();
-        if (hash(previous) !== req.body.revision) fail('Budget changed; reload first', 409);
-        const result = limits(req.body.limits, previous); service.db.setMeta('limits', result); return result;
+        const previous = service.db.limits(), previousSettings = service.db.settings();
+        if (hash({ limits: previous, settings: previousSettings }) !== req.body.revision) fail('Budget changed; reload first', 409);
+        const result = limits(req.body.limits, previous), settings = req.body.settings === undefined ? previousSettings : policy.settings(req.body.settings);
+        service.db.transaction(() => { service.db.setMeta('limits', result); service.db.setMeta('settings', settings); });
+        return { limits: result, settings, revision: hash({ limits: result, settings }) };
     })));
-    router.get('/cron/limits', route(async () => { await service.ready; service.healthy(); const result = service.db.limits(); return { limits: result, revision: hash(result) }; }));
+    router.get('/cron/limits', route(async () => { await service.ready; service.healthy(); const result = service.db.limits(), settings = service.db.settings(); return { limits: result, settings, revision: hash({ limits: result, settings }) }; }));
     router.put('/cron/homes/:id', route(req => service.home(req.params.id, req.body)));
     router.get('/cron/models', route(req => service.catalog(service.store.resolveProject(req.query.cwd))));
 }

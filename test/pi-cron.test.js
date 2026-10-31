@@ -27,14 +27,20 @@ test('Scheduled tasks wake one native worker, restore models, keep silence, dedu
         const chunk = (delta, finish = null) => res.write(`data: ${JSON.stringify({ id: 'fixture', object: 'chat.completion.chunk', model: input.model, choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`);
         if (text.includes('SILENT_FIXTURE')) {
             chunk({ role: 'assistant', tool_calls: [{ index: 0, id: `call-${calls.length}`, type: 'function', function: { name: 'cron_silent', arguments: JSON.stringify({ reason: 'Nothing useful to send' }) } }] }); chunk({}, 'tool_calls');
+        } else if (text.includes('LONG_FIXTURE')) {
+            if (input.messages.filter(message => message.role === 'tool').length < 3) {
+                chunk({ role: 'assistant', tool_calls: [{ index: 0, id: `call-${calls.length}`, type: 'function', function: { name: 'read', arguments: JSON.stringify({ path: path.join(cwd, 'note.txt') }) } }] }); chunk({}, 'tool_calls');
+            } else { chunk({ role: 'assistant', content: 'Long-context work completed' }); chunk({}, 'stop'); }
+            res.write(`data: ${JSON.stringify({ id: 'usage', choices: [], usage: { prompt_tokens: 200000, completion_tokens: 100, prompt_tokens_details: { cached_tokens: 190000 } } })}\n\n`);
         } else if (text.includes('LOOP_FIXTURE')) {
             chunk({ role: 'assistant', tool_calls: [{ index: 0, id: `call-${calls.length}`, type: 'function', function: { name: 'read', arguments: JSON.stringify({ path: path.join(cwd, 'note.txt') }) } }] }); chunk({}, 'tool_calls');
         } else { chunk({ role: 'assistant', content: 'Scheduled greeting fixture' }); chunk({}, 'stop'); }
+        if (!text.includes('LONG_FIXTURE')) res.write(`data: ${JSON.stringify({ id: 'usage', choices: [], usage: { prompt_tokens: 100, completion_tokens: 10 } })}\n\n`);
         res.end('data: [DONE]\n\n');
     });
     provider.listen(0, '127.0.0.1'); await once(provider, 'listening');
     fs.writeFileSync(path.join(process.env.PI_CODING_AGENT_DIR, 'settings.json'), JSON.stringify({ defaultProvider: 'fixture', defaultModel: 'normal', defaultThinkingLevel: 'off', defaultProjectTrust: 'never', enableInstallTelemetry: false }));
-    fs.writeFileSync(path.join(process.env.PI_CODING_AGENT_DIR, 'models.json'), JSON.stringify({ providers: { fixture: { baseUrl: `http://127.0.0.1:${provider.address().port}/v1`, api: 'openai-completions', apiKey: 'synthetic', models: ['normal', 'scheduled'].map(id => ({ id, reasoning: false, input: ['text'], contextWindow: 32000, maxTokens: 1000, cost: { input: 1, output: 2, cacheRead: 0.1, cacheWrite: 1 } })) } } }));
+    fs.writeFileSync(path.join(process.env.PI_CODING_AGENT_DIR, 'models.json'), JSON.stringify({ providers: { fixture: { baseUrl: `http://127.0.0.1:${provider.address().port}/v1`, api: 'openai-completions', apiKey: 'synthetic', models: ['normal', 'scheduled'].map(id => ({ id, reasoning: false, input: ['text'], contextWindow: 1000000, maxTokens: 1000, cost: { input: 1, output: 2, cacheRead: 0.1, cacheWrite: 1 } })) } } }));
     const access = new WorkspaceAccessService({ envToken: () => 'synthetic' });
     const gateway = createPiAgentGateway({ accessService: access });
     const app = require('express')(); app.use(require('express').json()); gateway.mount(app);
@@ -90,6 +96,26 @@ test('Scheduled tasks wake one native worker, restore models, keep silence, dedu
         const loopRun = await service.action(loopJob.id, { action: 'run', revision: loopJob.revision, requestId: randomUUID() });
         await deadline(async () => { await service.tick(); return service.db.run(loopRun.id).status === 'stopped'; });
         assert.equal(calls.length, 4, 'model-call limit ends a tool loop');
+        assert.equal(service.db.run(loopRun.id).reason, 'call-limit');
+        assert.ok(SessionManager.open(loopSession.path).getEntries().some(entry => entry.customType === 'pivane-cron-result'), 'stopped runs leave a visible native explanation');
+        service.db.setMeta('limits', { maxRunsPerDay: null, maxTokensPerDay: null, maxCostPerDay: null });
+        const longSession = await gateway.store.createSession(cwd, 'Long-context work');
+        const longJob = await service.save({ ...baseJob({ kind: 'thread', cwd, sessionId: longSession.id }), budget: {}, mode: 'work', prompt: 'LONG_FIXTURE' });
+        const longRun = await service.action(longJob.id, { action: 'run', revision: longJob.revision, requestId: randomUUID() });
+        await deadline(async () => { await service.tick(); return service.db.run(longRun.id).status === 'completed'; });
+        const longResult = service.db.run(longRun.id);
+        assert.equal(longJob.execution.maxTokens, null); assert.equal(longResult.usage.calls, 4);
+        assert.ok(longResult.usage.tokens > 400000, 'long cached contexts can exceed the former instance daily default');
+        assert.ok(longResult.usage.cacheRead >= 570000);
+        assert.equal(service.db.usage(longResult.budgetDay, longJob.id).runs, 1, 'unlimited runs still contribute to daily usage');
+        const limitsResponse = await fetch(api + '/limits', { headers: { Authorization: 'Bearer synthetic' } });
+        const globalPolicy = await limitsResponse.json();
+        const rejectedSettings = await fetch(api + '/limits', { method: 'PUT', headers: { Authorization: 'Bearer synthetic', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ revision: globalPolicy.revision, limits: { maxRunsPerDay: 1 }, settings: { maxConcurrent: 11 } }) });
+        assert.equal(rejectedSettings.status, 400); assert.equal(service.db.limits().maxRunsPerDay, null, 'invalid settings cannot partially save quotas');
+        const savedSettings = await fetch(api + '/limits', { method: 'PUT', headers: { Authorization: 'Bearer synthetic', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ revision: globalPolicy.revision, limits: globalPolicy.limits, settings: { maxConcurrent: 3 } }) });
+        assert.equal(savedSettings.status, 200); assert.equal(service.db.settings().maxConcurrent, 3);
         const before = await gateway.store.profiles.list();
         const profile = await gateway.store.profiles.save({ expectedRevision: before.revision, profile: { name: 'Example', description: '', soul: '', enabled: true } });
         const home = await service.home(profile.profile.id, { revision: 0, requestId: randomUUID(), cwd, create: true });

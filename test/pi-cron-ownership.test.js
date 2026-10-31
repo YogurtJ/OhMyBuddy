@@ -129,7 +129,8 @@ test('constructor failure releases ownership and permits a corrected database to
 test('simultaneous first starts grant ownership to exactly one process', { timeout: 20000 }, async t => {
     const filename = fixture(t);
     const results = await Promise.allSettled([startOwner(t, filename), startOwner(t, filename)]);
-    assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+    assert.equal(results.filter(result => result.status === 'fulfilled').length, 1,
+        JSON.stringify(results.map(result => result.status === 'rejected' ? { error: result.reason.message } : { owner: true })));
     const rejected = results.find(result => result.status === 'rejected');
     assert.match(rejected.reason.message, /already has a scheduler owner/);
 });

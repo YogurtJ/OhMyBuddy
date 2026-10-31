@@ -24,7 +24,7 @@ async function fixture(t, options = {}) {
         now: () => clock.value, isSuspended: () => suspended, profiles: {}, catalog: async () => ({ models: [] }),
         store: { getSession: async (cwd, id) => ({ cwd, id, path: path.join(cwd, id) }) },
         supervisor: { workers: new Map(), getWorker: async () => { throw new Error('Model execution forbidden in notification fixture'); },
-            getActiveWorker: () => null, emit: (kind, event) => completions.push({ kind, event }) },
+            getActiveWorker: () => null, emit: (kind, event) => { if (kind === 'completion') completions.push({ kind, event }); } },
         captureChannelNotify: () => recipients,
         onChannelNotify: event => { admissions.push(event); return { status: 'accepted' }; }, ...options });
     clearInterval(service.timer);
@@ -307,5 +307,6 @@ test('reconciliation leaves a running run alone while its session file is being 
     assert.equal(service.db.run(run.id).status, 'running', 'a transient read conflict is not an uncertain outcome');
     failure = new Error('disk unreadable');
     await service.reconcile();
-    assert.deepEqual([service.db.run(run.id).status, service.db.run(run.id).reason], ['uncertain', 'disk unreadable']);
+    assert.deepEqual([service.db.run(run.id).status, service.db.run(run.id).reason], ['uncertain', 'reconciliation-error']);
+    assert.equal(service.db.run(run.id).feedback.detail, 'disk unreadable');
 });

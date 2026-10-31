@@ -353,8 +353,14 @@ class ChannelsService {
         const key = binding => digest(['weixin-cron', event.runId, binding.accountId, binding.peerId]);
         if (bindings.every(b => this.job(key(b)))) return { status: 'accepted' };
         let result;
+        if (event.admissionFailure === true) {
+            const run = this.getScheduledRun?.(event.runId);
+            if (!run || run.id !== event.runId || event.status !== 'failed' || run.jobId !== event.jobId || run.status !== 'failed' || !same(run.target, event.target) || !run.feedback)
+                return { status: 'skipped', reason: 'admission-failure-unproven' };
+            result = { feedback: run.feedback, body: '', deliverables: [], mediaPlans: [] };
+        }
         try {
-            result = await this.store.withSessionRead(event.target.cwd, event.target.sessionId, (_s, read) => {
+            if (!result) result = await this.store.withSessionRead(event.target.cwd, event.target.sessionId, (_s, read) => {
                 const value = require('./turn-results').scheduledOutcome(read.manager(), event);
                 // A Bot window's own marker names the window the push came from.
                 if (value && event.target.bot) value.window = readWindowBinding(read.manager());
@@ -362,14 +368,14 @@ class ChannelsService {
             });
         } catch { return { status: 'retry', reason: 'native-result-unavailable' }; }
         if (!result) return { status: 'retry', reason: 'native-result-unproven' };
-        if (event.target.bot && (result.window?.profileId !== event.target.bot.profileId || result.window.sessionId !== event.target.sessionId))
+        if (event.target.bot && !event.admissionFailure && (result.window?.profileId !== event.target.bot.profileId || result.window.sessionId !== event.target.sessionId))
             return { status: 'skipped', reason: 'bot-window-unproven' };
         if (this.stopping || this.isSuspended()) return { status: 'retry', reason: 'channel-unavailable' };
         const header = '⏰ 定时任务「' + event.name + '」';
         // A message a Bot started itself reads like any message from it; failures are not pushed.
         if (event.proactive && (event.status !== 'completed' || !result.body)) return { status: 'skipped', reason: 'nothing-to-push' };
-        const body = event.proactive ? result.body : event.status === 'stopped' ? header + '已停止。'
-            : event.status === 'error' ? header + '执行失败，请在 OhMyBuddy 网页查看。'
+        const body = event.proactive ? result.body : ['stopped', 'error', 'failed'].includes(event.status)
+            ? require('../pi-cron-policy').feedbackText(event.name, event.status, result.feedback || require('../pi-cron-policy').diagnostic(result.reason))
             : header + '\n\n' + (result.body || '已完成，请在 OhMyBuddy 网页查看结果。');
         let accepted = false;
         this.db.change(v => {
@@ -384,7 +390,7 @@ class ChannelsService {
                 v.jobs.push({ id, kind: event.proactive ? 'bot-push' : 'cron', followsThread: event.notificationMode === 'inherit', cronRunId: event.runId, cronJobId: event.jobId,
                     accountId: binding.accountId, peerId: binding.peerId,
                     // A Bot push keeps the generation it came from as its target (bot-channel.js).
-                    ...(ref.bot ? { target: { cwd: event.target.cwd, sessionId: event.target.sessionId }, bot: { profileId: ref.bot.profileId, windowId: result.window.windowId } }
+                    ...(ref.bot ? { target: { cwd: event.target.cwd, sessionId: event.target.sessionId }, bot: { profileId: ref.bot.profileId, windowId: result.window?.windowId ?? event.target.bot?.windowId } }
                         : { target: { cwd: binding.cwd, sessionId: binding.sessionId } }), bindingId: binding.id,
                     status: 'ready', reason, at: Date.now(),
                     directReply: body.slice(0, 60000), deliverables: result.deliverables, mediaPlans: result.mediaPlans });
