@@ -261,12 +261,11 @@
                 this.quotes = this.quotes.filter(item => item !== quote); this.renderQuotes(); this.controls();
             })));
         }
-        async open({ question, quote, progress = false } = {}) {
+        async open({ question, quote } = {}) {
             const key = this.identity();
             if (!this.enabled) throw new Error(translateUi("当前后端尚未启用侧聊"));
             if (!this.host.context().connected) throw new Error(translateUi("请先连接主会话"));
             this.showPane('side'); this.unread = false;
-            if (progress) { this.updateParent(); this.progress.open = true; this.progress.querySelector('summary').focus({ preventScroll: true }); return true; }
             if (this.starting) await this.starting;
             if (!this.manager.lifecycleEnabled && !this.connected && !await this.startRuntime()) return false;
             if (this.manager.lifecycleEnabled && !this.connected) void this.run(() => this.loadModels());

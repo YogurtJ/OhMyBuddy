@@ -518,7 +518,7 @@
             const action = target.dataset.botAction;
             if (action !== 'more' && target.closest('.pi-bot-more-menu')) this.closeMore();
             if (action === 'more') { this.toggleMore(); return; }
-            if (action === 'side' || action === 'progress') { void this.sideChat?.({ progress: action === 'progress' }); return; }
+            if (action === 'side') { void this.sideChat?.(); return; }
             if (action === 'schedule') { window.PiWorkspaceRoute?.navigate('cron', { profileId: this.profileId }); return; }
             if (action === 'identity-details') { window.PiWorkspaceRoute?.navigate('profiles', { profileId: this.profileId }); return; }
             if (action === 'bot') this.go(target.dataset.botId);
@@ -913,7 +913,7 @@
             if (menu.matches(':popover-open')) { menu.hidePopover(); return; }
             const box = trigger.getBoundingClientRect();
             menu.style.top = (box.bottom + 6) + 'px'; menu.style.right = Math.max(12, innerWidth - box.right) + 'px';
-            for (const action of ['side', 'progress']) menu.querySelector('[data-bot-action="' + action + '"]').disabled = !this.sideAvailable?.();
+            menu.querySelector('[data-bot-action="side"]').disabled = !this.sideAvailable?.();
             menu.showPopover(); menu.querySelector('button:not(:disabled)')?.focus();
         }
         sideActivity(value = {}) {
@@ -945,7 +945,7 @@
             notes.append(icon('fa-ellipsis')); notes.hidden = !this.windowId;
             notes.setAttribute('aria-haspopup', 'menu'); notes.setAttribute('aria-expanded', 'false'); notes.setAttribute('aria-controls', 'pi-bot-more-menu');
             const more = el('div', 'pi-bot-more-menu'); more.id = 'pi-bot-more-menu'; more.popover = 'auto'; more.setAttribute('role', 'menu'); more.setAttribute('aria-label', translateUi('更多功能'));
-            for (const [action, label, glyph] of [['side', '侧聊', 'fa-comment-dots'], ['progress', '当前进度', 'fa-list-check'], ['notes', '我记着的事', 'fa-thumbtack'], ['schedule', '定时任务', 'fa-clock'], ['identity-details', '助手身份详情', 'fa-id-card'], ['settings', '伙伴设置', 'fa-gear']]) {
+            for (const [action, label, glyph] of [['side', '侧聊', 'fa-comment-dots'], ['notes', '我记着的事', 'fa-thumbtack'], ['schedule', '定时任务', 'fa-clock'], ['identity-details', '助手身份详情', 'fa-id-card'], ['settings', '伙伴设置', 'fa-gear']]) {
                 const item = button('', translateUi(label)); item.dataset.botAction = action; item.setAttribute('role', 'menuitem');
                 item.append(icon(glyph), el('span', null, translateUi(label)));
                 if (action === 'side') item.append(el('small', 'pi-bot-side-hint'));

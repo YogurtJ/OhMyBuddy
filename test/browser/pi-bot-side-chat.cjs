@@ -48,13 +48,16 @@ const { BOT, MAIN, botRecord, newWorld, serve, botPage, layout } = require('./pi
             const menu = page.locator('.pi-bot-more-menu');
             await more.click();
             await page.waitForFunction(() => document.querySelector('[data-bot-action="more"]').getAttribute('aria-expanded') === 'true');
-            assert.equal(await menu.locator('[role="menuitem"]').count(), 6);
+            assert.equal(await menu.locator('[role="menuitem"]').count(), 5);
+            assert.equal(await menu.locator('[data-bot-action="progress"]').count(), 0, 'progress is part of side chat, not a duplicate menu entry');
             await page.keyboard.press('End');
             assert.equal(await menu.locator('[data-bot-action="settings"]').evaluate(n => n === document.activeElement), true);
             await page.keyboard.press('Escape');
             await page.waitForFunction(() => !document.querySelector('.pi-bot-more-menu').matches(':popover-open'));
-            await more.click(); await menu.locator('[data-bot-action="progress"]').click();
-            assert.equal(prepares.length, 0, 'viewing progress must not capture context or start an agent');
+            await more.click(); await menu.locator('[data-bot-action="side"]').click();
+            assert.equal(await page.locator('.pi-side-main-progress').evaluate(n => n.open), false);
+            await page.locator('.pi-side-main-progress > summary').click();
+            assert.equal(prepares.length, 0, 'viewing progress inside side chat must not capture context or start an agent');
             assert.equal(await page.locator('.pi-side-main-progress').evaluate(n => n.open), true);
             main.send(JSON.stringify({ type: 'gateway_progress', progress: { version: 1, id: 'live-plan', explanation: '正在核对资料',
                 plan: [{ step: '收集资料', status: 'completed' }, { step: '比较两个方案', status: 'in_progress' }] } }));
