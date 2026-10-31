@@ -40,6 +40,7 @@ async function run(browser, base, width, locale) {
             else if (cmd.type === 'get_side_model_options') data = { model, thinkingLevel: 'off', models: [{ ...model, levels: ['off'] }, { ...alternate, levels: ['off', 'high'] }, ...Array.from({length: 350}, (_, i) => ({ provider: 'many', id: `extra-${i}`, name: `Extra model ${i}`, levels: ['off'] }))] };
             else if (cmd.type === 'prepare_side_chat') { prepares.push(cmd); if (rejectPrepare) error = 'context does not fit'; data = { ticket: String(prepares.length), reference: { mode: cmd.mode, capturedAt: new Date().toISOString(), messageCount: 0, source: { cwd }, preview: [] }, limits: { messageCharacters: 8000 } }; }
             else if (cmd.type === 'open_side_chat') { const prep = prepares[Number(cmd.ticket) - 1]; side = { ws, model: prep.model?.id === 'alternate' ? alternate : model, level: prep.thinkingLevel || 'off', busy: false, messages: [] }; sides.push(side); active = side; data = { state: state(side), reference: { mode: prep.mode, capturedAt: new Date().toISOString(), preview: [] }, messages: [], stats: {}, limits: { messageCharacters: 8000 } }; }
+            else if (cmd.type === 'set_side_model') { side.model = cmd.modelId === 'alternate' ? alternate : model; side.level = 'off'; data = { state: state(side), levels: side.model === alternate ? ['off', 'high'] : ['off'], limits: { messageCharacters: 8000 } }; }
             else if (cmd.type === 'get_side_models') data = { models: [model, alternate], levels: side.level === 'high' ? ['off', 'high'] : ['off'] };
             else if (cmd.type === 'get_state') data = state(side);
             else if (cmd.type === 'get_messages') data = { messages: side.messages };
@@ -171,14 +172,34 @@ async function run(browser, base, width, locale) {
     await page.screenshot({ path: `/tmp/pi-side-lifecycle-${width}-${locale}-history.png` });
     await page.locator('#pi-side-end').click();
     await page.waitForFunction(() => document.querySelectorAll('.pi-side-archive').length === 0 && document.querySelector('#pi-side-input').value === '');
-    assert.equal(await page.locator('#pi-side-history').textContent(), ''); assert.deepEqual(errors, []);
+    assert.equal(await page.locator('#pi-side-history').textContent(), '');
+    await page.locator('#pi-side-reference').evaluate(n => { n.open = true; });
+    assert.match(await page.locator('#pi-side-model-select').textContent(), /Alternative/);
+    await page.locator('#pi-side-input').fill('After clear uses selected model'); await page.locator('#pi-side-send').click();
+    await page.waitForFunction(() => document.querySelector('#pi-side-input').value === '');
+    assert.equal(prepares.at(-1).model.id, 'alternate', 'clear preserves the model shown in the picker');
+    assert.equal(prepares.at(-1).thinkingLevel, 'high'); assert.equal(active.model.id, 'alternate');
+    assert.match(await page.locator('#pi-side-model').textContent(), /Alternative/);
+    // Also change a running side from A to B, then clear and start again.
+    await page.locator('#pi-side-model-select').click();
+    await page.locator('dialog[open] .pi-model-search').fill('Default model'); await page.locator('dialog[open] .pi-model-option').click();
+    await page.waitForFunction(() => document.querySelector('#pi-side-model').textContent === 'Default model');
+    await page.locator('#pi-side-model-select').click();
+    await page.locator('dialog[open] .pi-model-search').fill('Alternative'); await page.locator('dialog[open] .pi-model-option').click();
+    await page.waitForFunction(() => document.querySelector('#pi-side-model').textContent === 'Alternative model');
+    await page.locator('#pi-side-end').click();
+    await page.waitForFunction(() => !document.querySelector('#pi-side-input').disabled);
+    await page.locator('#pi-side-input').fill('After runtime switch and clear'); await page.locator('#pi-side-send').click();
+    await page.waitForFunction(() => document.querySelector('#pi-side-input').value === '');
+    assert.equal(prepares.at(-1).model.id, 'alternate'); assert.equal(active.model.id, 'alternate');
+    assert.deepEqual(errors, []);
     await page.evaluate(() => window.dispatchEvent(new Event('beforeunload')));
     await page.waitForFunction(() => document.querySelectorAll('dialog[id^="pi-side-model-dialog-"]').length === 0);
     assert.equal(await page.locator('#pi-input').inputValue(), '');
     await context.close(); console.log(`PASS lifecycle ${width} ${locale}: deferred startup, model selection, local history, expiry, no inheritance, clear and safe layout`);
 }
 (async () => { const app = express(), root = path.resolve(__dirname, '../..'); app.use(express.static(path.join(root, 'public'))); for (const [n, d] of [['marked','marked/lib'], ['dompurify','dompurify/dist'], ['highlight','@highlightjs/cdn-assets']]) app.use('/vendor/' + n, express.static(path.join(root, 'node_modules', d)));
-    const server = app.listen(0, '127.0.0.1'); await once(server, 'listening'); const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
+    const server = app.listen(0, '127.0.0.1'); await once(server, 'listening'); const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
     try { for (const locale of ['zh-CN', 'en-US']) for (const width of [1440, 393, 320]) await run(browser, 'http://127.0.0.1:' + server.address().port, width, locale); }
     finally { await browser.close(); server.closeAllConnections(); await new Promise(r => server.close(r)); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

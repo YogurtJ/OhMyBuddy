@@ -81,7 +81,8 @@ async function run(browser, base, viewport, locale, preferred = 336, navExpanded
         }
         for (const selector of ['body', '.pi-transcript-shell', '#pi-transcript', '.pi-composer-wrap', '#pi-inspector', ...(tool === 'side' ? ['#pi-side-chat'] : tool === 'changes' ? ['#pi-file-reader'] : [])]) assert.ok(await page.locator(selector).evaluate(node => node.scrollWidth <= node.clientWidth + 1), selector);
     };
-    if (viewport.width > 900) await docked();
+    const splitFits = viewport.width > 900 && !(viewport.width === 901 && navExpanded);
+    if (splitFits) await docked();
     else { await page.waitForFunction(() => document.querySelector('.pi-transcript-shell').inert); assert.equal(await page.locator('#pi-inspector').getAttribute('aria-modal'), 'true'); }
     await page.locator('#pi-side-reference > summary').click();
     await page.waitForFunction(() => !document.querySelector('#pi-side-thinking-select').disabled);
@@ -98,7 +99,7 @@ async function run(browser, base, viewport, locale, preferred = 336, navExpanded
     await page.locator('#pi-side-input').fill('Retained side draft');
     await page.screenshot({ path: path.join(evidence, `${viewport.width}-${preferred}-${locale}-${navExpanded}-settings.png`) });
     await page.locator('#pi-side-reference > summary').click();
-    if (viewport.width > 900) {
+    if (splitFits) {
         await page.setViewportSize({ width: 393, height: 852 });
         await page.waitForFunction(() => document.querySelector('.pi-transcript-shell').inert);
         assert.equal(await page.locator('#pi-inspector').getAttribute('aria-modal'), 'true');
@@ -124,8 +125,9 @@ async function run(browser, base, viewport, locale, preferred = 336, navExpanded
                 await page.locator('#pi-inspector-split').focus(); await page.keyboard.press('Home');
                 await page.waitForFunction(() => document.querySelector('#pi-inspector').getBoundingClientRect().width <= 281);
                 await page.keyboard.press('End'); await docked(tool);
+                await page.waitForFunction(size => { const width = document.querySelector('#pi-inspector').getBoundingClientRect().width; return width >= size && width <= 1120; }, normal);
                 const expanded = await page.locator('#pi-inspector').evaluate(node => node.getBoundingClientRect().width);
-                assert.ok(expanded <= 1120 && expanded >= normal);
+                assert.ok(expanded <= 1120 && expanded >= normal, JSON.stringify({ viewport, normal, expanded, preferred }));
                 assert.equal(await page.evaluate(() => localStorage.getItem('pi.workspace.split:agent-inspector')), String(preferred), 'expanded resizing preserves ordinary tool preference');
                 // Let the reader's own ResizeObserver finish its column layout
                 // before comparing positions at the same expanded width.
@@ -157,6 +159,13 @@ async function run(browser, base, viewport, locale, preferred = 336, navExpanded
         assert.equal(await page.locator('#pi-file-body h1').textContent(), 'Synthetic file');
         await openInspector(page, 'side'); await docked();
     } else {
+        if (viewport.width > 900) {
+            await page.setViewportSize({ width: 1440, height: 900 }); await docked();
+            await page.setViewportSize(viewport);
+            await page.waitForFunction(() => document.querySelector('.pi-transcript-shell').inert);
+            assert.equal(await page.evaluate(() => localStorage.getItem('pi.workspace.split:agent-inspector')), String(preferred));
+            assert.equal(await page.locator('#workspace-sidebar').evaluate(n => n.getBoundingClientRect().width), 208, 'explicit navigation preference is preserved');
+        }
         for (const tool of ['details', 'changes', 'history', 'side']) {
             await page.locator('#pi-inspector-title').selectOption(tool);
             await page.waitForFunction(() => document.querySelector('.pi-transcript-shell').inert);
@@ -178,7 +187,7 @@ async function run(browser, base, viewport, locale, preferred = 336, navExpanded
     const root = path.resolve(__dirname, '../..'), app = express(); app.use(express.static(path.join(root, 'public')));
     for (const [n,d] of [['marked','marked/lib'],['dompurify','dompurify/dist'],['highlight','@highlightjs/cdn-assets']]) app.use('/vendor/'+n,express.static(path.join(root,'node_modules',d)));
     const server = app.listen(0,'127.0.0.1'); await once(server,'listening');
-    const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
+    const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
     try {
         for (const locale of ['zh-CN','en-US']) for (const [width,height,preferred,navExpanded] of [[1468,834,700],[1280,800,800],[1440,900,800,true],[1920,1080,800],[1024,768,336],[901,768,800],[901,768,800,true],[1199,800,700],[1200,800,700],[1200,800,800,true],[960,720,336],[900,720,700],[393,852,336],[320,740,336]]) {
             if (process.env.PI_SIDE_LAYOUT_WIDTH && process.env.PI_SIDE_LAYOUT_WIDTH !== String(width)) continue;

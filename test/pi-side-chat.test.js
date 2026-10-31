@@ -270,7 +270,7 @@ test('real side RPC is tool-free, ephemeral, parallel, auth-protected and isolat
     assert.equal(source.disposed, false);
     assert.equal((await side.call('quit_side_chat')).success, true);
     await waitFor(() => gateway.supervisor.ephemeralWorkers.size === 0);
-    const ledger = new DatabaseSync(path.join(process.env.PI_CODING_AGENT_DIR, 'pivane-usage', 'ledger.sqlite'), { readOnly: true });
+    const ledger = new DatabaseSync(path.join(require('../server/ohmybuddy-compat').dataFile(process.env.PI_CODING_AGENT_DIR, 'ohmybuddy-usage'), 'ledger.sqlite'), { readOnly: true });
     try {
         const sideRows = ledger.prepare("SELECT data FROM facts WHERE owner IN (SELECT key FROM owners WHERE name='侧聊')").all();
         assert.ok(sideRows.length >= 2, 'multi-turn side calls remain recorded after closing the ephemeral worker');

@@ -380,9 +380,9 @@ const NEW_FACE = { kind: 'preset', id: 'pivane-pebble' };
                 // Clicking the floating face, and keyboard activation of its button, still open settings.
                 await page.locator('.pi-bot-identity > .pi-bot-face').click();
                 await page.locator('.pi-bot-sheet[open]').waitFor();
-                await page.locator('.pi-bot-sheet-close').click();
+                await page.locator('.pi-bot-sheet[open] .pi-bot-sheet-close').click();
                 await page.locator('.pi-bot-identity').focus(); await page.keyboard.press('Enter');
-                await page.locator('.pi-bot-sheet[open]').waitFor(); await page.locator('.pi-bot-sheet-close').click();
+                await page.locator('.pi-bot-sheet[open]').waitFor(); await page.locator('.pi-bot-sheet[open] .pi-bot-sheet-close').click();
                 const pose = () => page.locator('#pi-bot-header .pi-bot-identity > .pi-bot-face').getAttribute('data-avatar-state');
                 socket.send(JSON.stringify({ type: 'agent_start' }));
                 await page.waitForFunction(() => document.querySelector('.pi-bot-identity > .pi-bot-face')?.dataset.avatarState === 'thinking');

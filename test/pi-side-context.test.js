@@ -129,7 +129,7 @@ test('official memory RPC accepts large context with no tool protocol, hides inh
                 assert.equal(stats.cost, 0);
                 assert.equal(stats.userMessages, 1); assert.equal(stats.assistantMessages, 1);
                 await side.flushUsage();
-                const db = new DatabaseSync(path.join(process.env.PI_CODING_AGENT_DIR, 'pivane-usage', 'ledger.sqlite'), { readOnly: true });
+                const db = new DatabaseSync(path.join(require('../server/ohmybuddy-compat').dataFile(process.env.PI_CODING_AGENT_DIR, 'ohmybuddy-usage'), 'ledger.sqlite'), { readOnly: true });
                 try {
                     const rows = db.prepare("SELECT data FROM facts WHERE owner IN (SELECT key FROM owners WHERE name='侧聊')").all()
                         .map(row => JSON.parse(row.data));

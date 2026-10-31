@@ -39,8 +39,8 @@
     };
 
     class PiBotUi {
-        constructor({ api, toast, open, say, pane, header, input, onChange, draft, focusComposer, focusAttention }) {
-            Object.assign(this, { api, toast, open, say, pane, header, input, onChange, draft, focusComposer, focusAttention });
+        constructor({ api, toast, open, say, pane, header, input, onChange, draft, focusComposer, focusAttention, sideChat, sideAvailable }) {
+            Object.assign(this, { api, toast, open, say, pane, header, input, onChange, draft, focusComposer, focusAttention, sideChat, sideAvailable });
             this.bots = []; this.revision = null; this.profileId = null; this.windowId = null;
             this.active = false; this.epoch = 0; this.loaded = false; this.creating = false; this.error = null;
             this.statusKind = 'connecting';
@@ -58,6 +58,22 @@
             pane.hidden = true; header.hidden = true;
             pane.addEventListener('click', event => this.click(event));
             header.addEventListener('click', event => this.click(event));
+            window.addEventListener('resize', () => {
+                const menu = this.header.querySelector('.pi-bot-more-menu');
+                const trigger = this.header.querySelector('[data-bot-action="more"]');
+                if (menu?.matches(':popover-open') && trigger) {
+                    const box = trigger.getBoundingClientRect();
+                    menu.style.top = (box.bottom + 6) + 'px'; menu.style.right = Math.max(12, innerWidth - box.right) + 'px';
+                }
+            });
+            header.addEventListener('keydown', event => {
+                const menu = event.target.closest('.pi-bot-more-menu');
+                if (!menu || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+                const items = [...menu.querySelectorAll('button:not(:disabled)')];
+                const index = items.indexOf(document.activeElement);
+                items[event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (index + (event.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length]?.focus();
+            });
             // Number of usable chat models; undefined until known, null when it cannot be read.
             this.models = undefined;
             window.addEventListener('workspace:models-changed', () => { if (this.active) void this.checkModels(); });
@@ -214,6 +230,7 @@
         }
 
         deactivate() {
+            this.closeMore();
             this.epoch++; this.active = false;
             clearTimeout(this.topicIndexTimer); this.topicIndexTimer = 0;
             this.closure?.hide();
@@ -499,6 +516,11 @@
             const target = event.target.closest('[data-bot-action]');
             if (!target) return;
             const action = target.dataset.botAction;
+            if (action !== 'more' && target.closest('.pi-bot-more-menu')) this.closeMore();
+            if (action === 'more') { this.toggleMore(); return; }
+            if (action === 'side' || action === 'progress') { void this.sideChat?.({ progress: action === 'progress' }); return; }
+            if (action === 'schedule') { window.PiWorkspaceRoute?.navigate('cron', { profileId: this.profileId }); return; }
+            if (action === 'identity-details') { window.PiWorkspaceRoute?.navigate('profiles', { profileId: this.profileId }); return; }
             if (action === 'bot') this.go(target.dataset.botId);
             else if (action === 'window') this.go(this.profileId, target.dataset.windowId);
             else if (action === 'create') void this.create();
@@ -884,8 +906,29 @@
             return box;
         }
 
+        closeMore() { this.header.querySelector('.pi-bot-more-menu')?.hidePopover(); }
+        toggleMore() {
+            const menu = this.header.querySelector('.pi-bot-more-menu'), trigger = this.header.querySelector('[data-bot-action="more"]');
+            if (!menu || !trigger) return;
+            if (menu.matches(':popover-open')) { menu.hidePopover(); return; }
+            const box = trigger.getBoundingClientRect();
+            menu.style.top = (box.bottom + 6) + 'px'; menu.style.right = Math.max(12, innerWidth - box.right) + 'px';
+            for (const action of ['side', 'progress']) menu.querySelector('[data-bot-action="' + action + '"]').disabled = !this.sideAvailable?.();
+            menu.showPopover(); menu.querySelector('button:not(:disabled)')?.focus();
+        }
+        sideActivity(value = {}) {
+            this.sideState = value;
+            const trigger = this.header.querySelector('[data-bot-action="more"]');
+            if (trigger) trigger.dataset.sideState = value.waiting ? 'waiting' : value.unread ? 'unread' : value.busy || value.starting ? 'busy' : '';
+            const hint = this.header.querySelector('.pi-bot-side-hint');
+            if (hint) hint.textContent = value.waiting ? translateUi('等待确认') : value.unread ? translateUi('有新回复') : value.busy || value.starting ? translateUi('回复中') : '';
+        }
         renderHeader() {
-            const bot = this.bot();
+            const bot = this.bot(), currentWindow = this.window();
+            const key = JSON.stringify([bot?.id, bot?.name, bot?.avatar, this.windowId, currentWindow?.kind, currentWindow?.title, currentWindow?.emoji]);
+            // Activity and background refreshes must not replace an open menu or its focus.
+            if (this.headerKey === key && this.header.childElementCount) { this.sideActivity(this.sideState); this.paintMotion(); return; }
+            this.headerKey = key;
             const menu = button('pi-bot-menu', translateUi("我的伙伴与聊天")); menu.dataset.botAction = 'menu';
             menu.append(icon('fa-bars'));
             if (!bot) { this.header.replaceChildren(menu); return; }
@@ -898,15 +941,26 @@
             // In a topic the badge also names it; the status line itself is repainted with each pose.
             if (current?.kind === 'topic') who.append(el('span', 'pi-bot-who-topic', current.emoji ? `${current.emoji} ${current.title}` : current.title));
             who.append(line);
-            const notes = button('pi-bot-notes-button', translateUi("我记着的事")); notes.dataset.botAction = 'notes';
-            notes.append(icon('fa-thumbtack'));
-            notes.hidden = !this.windowId;
+            const notes = button('pi-bot-notes-button pi-bot-more', translateUi('更多功能')); notes.dataset.botAction = 'more';
+            notes.append(icon('fa-ellipsis')); notes.hidden = !this.windowId;
+            notes.setAttribute('aria-haspopup', 'menu'); notes.setAttribute('aria-expanded', 'false'); notes.setAttribute('aria-controls', 'pi-bot-more-menu');
+            const more = el('div', 'pi-bot-more-menu'); more.id = 'pi-bot-more-menu'; more.popover = 'auto'; more.setAttribute('role', 'menu'); more.setAttribute('aria-label', translateUi('更多功能'));
+            for (const [action, label, glyph] of [['side', '侧聊', 'fa-comment-dots'], ['progress', '当前进度', 'fa-list-check'], ['notes', '我记着的事', 'fa-thumbtack'], ['schedule', '定时任务', 'fa-clock'], ['identity-details', '助手身份详情', 'fa-id-card'], ['settings', '伙伴设置', 'fa-gear']]) {
+                const item = button('', translateUi(label)); item.dataset.botAction = action; item.setAttribute('role', 'menuitem');
+                item.append(icon(glyph), el('span', null, translateUi(label)));
+                if (action === 'side') item.append(el('small', 'pi-bot-side-hint'));
+                more.append(item);
+            }
+            more.addEventListener('toggle', event => {
+                notes.setAttribute('aria-expanded', String(event.newState === 'open'));
+                if (event.newState === 'closed' && this.active && notes.isConnected && (document.activeElement === document.body || more.contains(document.activeElement))) notes.focus({ preventScroll: true });
+            });
             const identity = button('pi-bot-identity', translateUi("打开 {0} 的设置", bot.name)); identity.dataset.botAction = 'settings';
             identity.append(face(bot, 'xl'), who);
             const attention = button('pi-bot-attention'); attention.dataset.botAction = 'attention'; attention.hidden = true;
             attention.setAttribute('aria-live', 'polite'); attention.setAttribute('aria-atomic', 'true');
-            this.header.replaceChildren(menu, identity, notes, attention);
-            this.paintMotion();
+            this.header.replaceChildren(menu, identity, notes, attention, more);
+            this.sideActivity(this.sideState); this.paintMotion();
         }
 
         // Shown in the conversation area when nothing else is: no Bot yet, or a fresh chat.
