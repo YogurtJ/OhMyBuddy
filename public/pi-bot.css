@@ -16,7 +16,7 @@
 #chat-tab.pi-bot-mode #pi-toggle-sessions,
 #chat-tab.pi-bot-mode .pi-composer-models,
 #chat-tab.pi-bot-mode .pi-tool-rail,
-#chat-tab.pi-bot-mode .pi-inspector:not(.show-changes),
+#chat-tab.pi-bot-mode .pi-inspector:not(.show-changes):not(.show-side),
 #chat-tab.pi-bot-mode #pi-inspector-tabs,
 #chat-tab.pi-bot-mode #pi-inspector-title,
 #chat-tab.pi-bot-mode #pi-files-toolbar,

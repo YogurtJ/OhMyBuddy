@@ -11201,5 +11201,15 @@
         ["会话已移除，图片删除记录待核对；相关图片继续保留","The session was removed, but its image deletion record needs checking. Related images are preserved."],
         ["话题已删除，图片删除记录待核对；相关图片继续保留","The topic was deleted, but its image deletion record needs checking. Related images are preserved."]
     );
+    rows.push(
+        ["临时侧聊 · 刷新后不保留", "Temporary chat · cleared on refresh"],
+        ["当前任务", "Current task"],
+        ["尚未提供分步计划，当前状态会随主任务更新。", "No step-by-step plan has been provided. Status follows the main task."],
+        ["和 {0} 侧聊", "Side chat with {0}"],
+        ["正在等待回复…", "Waiting for a reply…"],
+        ["未发送，草稿已保留", "Not sent · draft kept"],
+        ["发送结果待核对", "Delivery needs checking"],
+        ["助手身份详情", "Assistant identity details"],
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

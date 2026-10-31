@@ -115,9 +115,11 @@
         function syncLayout() {
             frame = 0; syncTools();
             const mobile = innerWidth <= 900;
-            // All desktop tools share a fitted split, keeping the main conversation
-            // interactive even with a wide saved preference or expanded file reader.
-            const overlay = mobile;
+            // Keep the main conversation readable when an expanded navigation leaves
+            // too little space for the minimum split. This never changes saved widths.
+            const splitMin = Number($('pi-inspector-split').dataset.min) || 280;
+            const dockedMinimum = 360 + splitMin + 6 + rail.getBoundingClientRect().width;
+            const overlay = mobile || workbench.clientWidth < dockedMinimum;
             workbench.classList.toggle('pi-inspector-overlay', overlay);
             const open = inspector.classList.contains('open');
             if (open && !inspectorWasOpen) inspectorReturnFocus = inspector.contains(document.activeElement) ? lastOutsideFocus : document.activeElement;

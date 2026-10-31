@@ -45,7 +45,12 @@
             $('pi-side-stop').addEventListener('click', () => this.run(async () => { await this.request('abort', {}, 65000); await this.synchronize(); }));
             $('pi-side-parent-state').addEventListener('click', () => this.host.focusMain());
             $('pi-side-form').addEventListener('submit', event => { event.preventDefault(); void this.send(); });
-            this.input.addEventListener('input', () => this.controls());
+            this.input.addEventListener('input', () => { this.resizeInput(); this.controls(); });
+            this.progress = document.createElement('details'); this.progress.className = 'pi-side-main-progress';
+            this.progress.innerHTML = '<summary><span></span><strong></strong></summary><div><ol></ol><p></p></div>';
+            root.querySelector('.pi-side-heading').after(this.progress);
+            const localNote = document.createElement('p'); localNote.className = 'pi-side-local-note';
+            localNote.textContent = translateUi('临时侧聊 · 刷新后不保留'); $('pi-side-usage').after(localNote);
             this.input.addEventListener('keydown', event => {
                 if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); void this.send(); }
             });
@@ -104,7 +109,7 @@
         showPane(mode) { if (this.manager.current === this) this.manager.showPane(mode); }
         updateParent() {
             const ctx = this.host.context();
-            $('pi-side-parent-state').textContent = !ctx.connected ? translateUi("主会话未连接") : ctx.waiting ? translateUi("主会话等待确认") : ctx.busy ? translateUi("主会话处理中") : translateUi("主会话空闲");
+            this.updateMain();
             $('pi-side-parent-state').dataset.waiting = String(Boolean(ctx.waiting));
             if (!this.retainOnSwitch && this.parentKey && (this.parentKey !== this.identity() || !ctx.connected) && (this.connected || this.starting)) {
                 this.dropSocket(); this.starting = null;
@@ -112,9 +117,28 @@
             }
             this.controls();
         }
+        updateMain() {
+            const ctx = this.host.context();
+            const parentLabel = !ctx.connected ? translateUi('主会话未连接') : ctx.waiting ? translateUi('主会话等待确认') : ctx.busy ? translateUi('主会话处理中') : translateUi('主会话空闲');
+            $('pi-side-parent-state').textContent = parentLabel;
+            this.progress.querySelector('summary span').textContent = translateUi('当前任务');
+            const current = ctx.connected && ctx.progress?.plan?.find(item => item.status === 'in_progress');
+            this.progress.querySelector('summary strong').textContent = current?.step || translateUi('查看进度');
+            const progressKey = JSON.stringify([ctx.connected, ctx.progress]);
+            if (this.progressKey !== progressKey) {
+                this.progressKey = progressKey;
+                const plan = ctx.connected ? ctx.progress?.plan || [] : [];
+                this.progress.querySelector('ol').replaceChildren(...plan.map(item => {
+                    const li = document.createElement('li'); li.dataset.status = item.status; li.textContent = item.step; return li;
+                }));
+                this.progress.querySelector('p').textContent = !ctx.connected ? translateUi('主会话未连接') : ctx.progress?.explanation || (!plan.length ? translateUi('尚未提供分步计划，当前状态会随主任务更新。') : '');
+            }
+            this.input.placeholder = ctx.identity ? translateUi('和 {0} 侧聊', ctx.identity.name) : translateUi('想问些什么？');
+            if (this.manager.current === this && this.manager.title) this.manager.title.textContent = ctx.identity ? translateUi('和 {0} 侧聊', ctx.identity.name) : translateUi('侧聊');
+        }
         controls() {
             const ready = this.enabled && this.host.context().connected;
-            const locked = Boolean(this.busy || this.starting || this.submitting || this.configuring || this.confirmation || this.transitioning);
+            const locked = Boolean(this.busy || this.sending || this.starting || this.submitting || this.configuring || this.confirmation || this.transitioning);
             $('pi-side-refresh').disabled = !ready || locked;
             $('pi-side-new').disabled = !ready || locked;
             this.source.disabled = !ready || locked;
@@ -131,7 +155,22 @@
             $('pi-side-thinking-select').disabled = !ready || locked || !$('pi-side-thinking-select').options.length;
             this.speedSelect.disabled = !this.connected || !ready || locked || !this.modelState?.speed?.levels?.length;
             if (this.configuring) { this.input.disabled = true; $('pi-side-send').disabled = true; }
+            this.renderFeedback();
             this.manager.host.changed?.();
+        }
+        resizeInput() {
+            this.input.style.height = 'auto';
+            this.input.style.height = `${Math.min(160, Math.max(48, this.input.scrollHeight))}px`;
+        }
+        renderFeedback() {
+            let feedback = this.content.querySelector('.pi-side-pending-reply');
+            if (!(this.busy || this.sending) || this.live) { feedback?.remove(); return; }
+            if (!feedback) {
+                feedback = document.createElement('div'); feedback.className = 'pi-side-pending-reply'; feedback.setAttribute('role', 'status');
+                feedback.append(document.createElement('i'), document.createElement('span')); this.content.append(feedback);
+            }
+            feedback.querySelector('span').textContent = this.activityLabel || translateUi('正在等待回复…');
+            this.scroll.update();
         }
         showModel(state) {
             this.modelState = state;
@@ -209,6 +248,7 @@
         }
         status(text, error = false) {
             const quiet = ['', '侧聊已就绪', '侧聊已完成', '侧聊已结束', '侧聊模型设置已更新，记录保持不变', '新侧聊已准备，发送时才创建运行实例'].some(value => text === translateUi(value));
+            this.activityLabel = text; this.renderFeedback();
             $('pi-side-status').textContent = text;
             $('pi-side-status').dataset.error = String(error);
             $('pi-side-status').hidden = quiet && !error;
@@ -221,11 +261,12 @@
                 this.quotes = this.quotes.filter(item => item !== quote); this.renderQuotes(); this.controls();
             })));
         }
-        async open({ question, quote } = {}) {
+        async open({ question, quote, progress = false } = {}) {
             const key = this.identity();
             if (!this.enabled) throw new Error(translateUi("当前后端尚未启用侧聊"));
             if (!this.host.context().connected) throw new Error(translateUi("请先连接主会话"));
-            this.showPane('side');
+            this.showPane('side'); this.unread = false;
+            if (progress) { this.updateParent(); this.progress.open = true; this.progress.querySelector('summary').focus({ preventScroll: true }); return true; }
             if (this.starting) await this.starting;
             if (!this.manager.lifecycleEnabled && !this.connected && !await this.startRuntime()) return false;
             if (this.manager.lifecycleEnabled && !this.connected) void this.run(() => this.loadModels());
@@ -251,7 +292,7 @@
             $('pi-side-session-description').textContent = translateUi('记录和草稿仅保留在本页。新开后不会继承旧讨论；需要的内容请自行复制。');
         }
         async newSegment(options = this.options()) {
-            if (this.busy || this.confirmation || this.starting || this.submitting || this.configuring || this.transitioning) return false;
+            if (this.busy || this.sending || this.confirmation || this.starting || this.submitting || this.configuring || this.transitioning) return false;
             const hasRecord = this.messages.length > 0;
             if (hasRecord && this.history.length >= 20) throw new Error(translateUi('本线程已保留 20 段侧聊，请先复制所需内容并清空侧聊；已有记录不会自动删除。'));
             if ((this.connected && hasRecord || !this.manager.lifecycleEnabled && this.input.value.trim()) && !window.confirm(translateUi('将结束当前侧聊，下次发送使用新的背景。旧记录仍可查看，但不会传给新 Agent。继续？'))) return false;
@@ -287,7 +328,7 @@
                     }
                     this.history.push(details); $('pi-side-history').append(details); $('pi-side-history').hidden = false;
                 }
-                this.phase = 'draft'; this.live = null; this.uncertain = false; this.toolEvents.clear();
+                this.phase = 'draft'; this.live = null; this.delivery = null; this.uncertain = false; this.toolEvents.clear();
                 this.reference = null; this.referenceValue = options.mode === 'context' ? 'context' : options.mode === 'blank' ? 'blank' : `recent-${options.count || 6}`;
                 this.source.value = this.referenceValue;
                 $('pi-side-reference-label').textContent = translateUi('背景与模型'); $('pi-side-reference-preview').replaceChildren();
@@ -499,48 +540,74 @@
             this.dropSocket();
         }
         async end() {
+            if (this.transitioning) return false;
             if (this.hasState() && !window.confirm(translateUi('结束并清空当前主线程的全部侧聊、草稿和此前记录？主会话与其他线程不受影响。'))) return false;
-            this.starting = null;
-            await this.shutdownSocket();
-            this.history = []; $('pi-side-history').replaceChildren(); $('pi-side-history').hidden = true;
-            this.phase = 'draft'; this.modelState = null; this.modelOverride = false; this.updateSessionNote();
-            this.render([]); this.input.value = ''; this.quotes = []; this.renderQuotes(); this.live = null; this.uncertain = false; this.toolEvents.clear();
-            this.reference = null; this.referenceValue = this.defaultSource(); this.source.value = this.referenceValue;
-            $('pi-side-reference-label').textContent = translateUi('背景与模型'); $('pi-side-reference-preview').replaceChildren();
-            $('pi-side-model').textContent = translateUi("临时侧聊"); $('pi-side-model').title = ''; $('pi-side-usage').textContent = '';
-            this.status(translateUi("侧聊已结束")); this.controls(); this.manager.reconcile(this);
-            return true;
+            this.transitioning = true; this.starting = null; this.sending = null; this.controls();
+            try {
+                await this.shutdownSocket();
+                this.history = []; $('pi-side-history').replaceChildren(); $('pi-side-history').hidden = true;
+                // Clearing records keeps the user's explicit side model and thinking choice.
+                this.phase = 'draft'; this.delivery = null; this.unread = false; this.updateSessionNote();
+                if (!this.manager.lifecycleEnabled) {
+                    this.modelState = null; this.modelOverride = false; this.catalog = [];
+                    this.modelPicker?.update([], null, true); this.showLevels([]);
+                    $('pi-side-model').textContent = translateUi('临时侧聊'); $('pi-side-model').title = '';
+                }
+                this.live = null; this.uncertain = false; this.toolEvents.clear();
+                this.render([]); this.input.value = ''; this.quotes = []; this.renderQuotes(); this.resizeInput(); this.scroll.reset();
+                this.reference = null; this.referenceValue = this.defaultSource(); this.source.value = this.referenceValue;
+                $('pi-side-reference-label').textContent = translateUi('背景与模型'); $('pi-side-reference-preview').replaceChildren();
+                $('pi-side-usage').textContent = '';
+                if (this.modelState) this.showModel(this.modelState);
+                if (!this.modelOverride && this.manager.modelsEnabled) await this.loadModels();
+                this.status(translateUi('侧聊已结束')); this.manager.reconcile(this);
+                return true;
+            } finally { this.transitioning = false; this.controls(); }
         }
         async send() {
             if (this.manager.current !== this || this.destroyed) return false;
-            if (this.busy || this.submitting || this.starting || this.configuring || this.transitioning || ['expired', 'ended'].includes(this.phase)) return false;
-            if (!this.input.value.trim() && !this.quotes.length) return false;
-            if (!this.connected) {
-                try { if (!await this.startRuntime()) return false; } catch (error) { this.status(error.message, true); this.controls(); return false; }
-                if (this.destroyed || this.manager.current !== this) return false;
-            }
+            if (this.busy || this.sending || this.submitting || this.starting || this.configuring || this.transitioning || ['expired', 'ended'].includes(this.phase)) return false;
             const draft = this.input.value, quotes = this.quotes;
-            const message = quotes.map(window.PiQuotes.serialize).join('') + draft.trim(); if (!message.trim()) return false;
+            const message = quotes.map(window.PiQuotes.serialize).join('') + draft.trim();
+            if (!message.trim()) return false;
             if (message.length > this.limits.messageCharacters) { this.status(translateUi('引用与问题超过侧聊长度限制，请减少选中文字'), true); return false; }
-            if (/^\//.test(message)) { this.status(translateUi("侧聊不执行斜杠命令，请用普通文字提问"), true); return false; }
-            if (this.parentKey !== this.identity()) { this.status(translateUi("主会话已切换，请开始新的侧聊"), true); return false; }
-            const confirmUncertain = this.uncertain && window.confirm(translateUi("上次发送结果不确定，请先核对侧聊记录。确认仍要发送？"));
+            if (/^\//.test(message)) { this.status(translateUi('侧聊不执行斜杠命令，请用普通文字提问'), true); return false; }
+            const confirmUncertain = this.uncertain && window.confirm(translateUi('上次发送结果不确定，请先核对侧聊记录。确认仍要发送？'));
             if (this.uncertain && !confirmUncertain) return false;
-            const generation = this.generation;
-            this.submitting = true; this.status(translateUi("正在提交侧聊问题")); this.controls();
+            const attempt = { role: 'user', content: message, timestamp: Date.now(), delivery: 'sending', baseCount: null };
+            this.sending = attempt; this.delivery = attempt;
+            this.status(translateUi('正在发送…')); this.render(this.messages, this.live); this.scroll.jumpToLatest(); this.controls();
+            let generation = this.generation;
             try {
+                if (!this.connected) {
+                    if (!await this.startRuntime()) return false;
+                    generation = this.generation;
+                    if (this.destroyed || this.manager.current !== this) return false;
+                }
+                if (this.parentKey !== this.identity()) throw Object.assign(new Error(translateUi('主会话已切换，请开始新的侧聊')), { code: 'RPC_REJECTED' });
+                if (message.length > this.limits.messageCharacters) throw Object.assign(new Error(translateUi('引用与问题超过侧聊长度限制，请减少选中文字')), { code: 'RPC_REJECTED' });
+                attempt.baseCount = this.messages.length;
+                this.submitting = true; this.status(translateUi('正在发送…')); this.controls();
                 await this.request('prompt', { message, ...(confirmUncertain ? { confirmUncertain: true } : {}) }, 65000);
                 if (generation !== this.generation) return false;
-                if (this.input.value === draft && this.quotes === quotes) { this.input.value = ''; this.quotes = []; this.renderQuotes(); }
-                this.uncertain = false;
+                if (this.input.value === draft && this.quotes === quotes) { this.input.value = ''; this.quotes = []; this.renderQuotes(); this.resizeInput(); }
+                this.uncertain = false; attempt.delivery = 'accepted';
                 return true;
             } catch (error) {
-                if (generation === this.generation) {
-                    this.uncertain = !['RPC_REJECTED', 'SESSION_BUSY'].includes(error.code);
-                    this.status(error.message, true); void this.synchronize();
+                if (!this.destroyed && this.sending === attempt) {
+                    this.uncertain = attempt.baseCount !== null && !['RPC_REJECTED', 'SESSION_BUSY'].includes(error.code);
+                    attempt.delivery = this.uncertain ? 'uncertain' : 'failed';
+                    this.status(error.message, true);
+                    if (this.connected) void this.synchronize();
                 }
                 return false;
-            } finally { if (generation === this.generation) { this.submitting = false; this.controls(); } }
+            } finally {
+                if (this.sending === attempt) {
+                    if (attempt.delivery === 'sending') attempt.delivery = 'failed';
+                    this.sending = null; this.submitting = false;
+                    if (!this.destroyed) { this.render(this.messages, this.live); this.controls(); }
+                }
+            }
         }
         record(raw) {
             let event; try { event = JSON.parse(raw); } catch { return; }
@@ -597,7 +664,11 @@
             }
             if (event.type === 'message_end' && ['user', 'assistant', 'toolResult'].includes(event.message?.role)) {
                 if (!this.messages.some(item => item.role === event.message.role && (event.message.role !== 'toolResult' || item.toolCallId === event.message.toolCallId) && item.timestamp === event.message.timestamp && textOf(item) === textOf(event.message))) this.messages.push(event.message);
-                if (event.message.role === 'assistant') this.live = null;
+                if (event.message.role === 'assistant') {
+                    this.live = null;
+                    const panel = document.getElementById('pi-inspector');
+                    if (this.manager.current !== this || !panel.classList.contains('open') || !panel.classList.contains('show-side')) this.unread = true;
+                }
                 if (event.message.role === 'toolResult') this.toolEvents.delete(event.message.toolCallId);
                 this.render(this.messages, this.live);
             }
@@ -634,13 +705,18 @@
             if (output) {
                 const pre = document.createElement('pre'); pre.textContent = textOf(output) || translateUi('工具返回了非文本内容'); details.appendChild(pre);
             }
+            const saved = this.toolViewState?.get(call.id);
+            if (saved) details.open = saved.open;
             return details;
         }
         render(messages, live = null) {
             this.messages = messages;
             const position = this.scroll.capture();
+            this.toolViewState = new Map([...this.content.querySelectorAll('[data-detail-key]')].map(node => [node.dataset.detailKey,
+                { open: node.open, scroll: [...node.querySelectorAll('pre')].map(pre => ({ top: pre.scrollTop, left: pre.scrollLeft })) }]));
             this.content.replaceChildren(); this.liveNode = null;
-            const sequence = [...messages, ...(live ? [live] : [])];
+            if (this.delivery?.baseCount != null && messages.slice(this.delivery.baseCount).some(message => message.role === 'user' && textOf(message) === this.delivery.content)) this.delivery = null;
+            const sequence = [...messages, ...(this.delivery ? [this.delivery] : []), ...(live ? [live] : [])];
             const finalReplies = this.host.finalReplyIndices(sequence, this.busy);
             for (const [index, message] of sequence.entries()) {
                 if (!['user', 'assistant', 'toolResult', 'compactionSummary'].includes(message.role)) continue;
@@ -653,7 +729,11 @@
                 const article = document.createElement('article'); article.className = `pi-message ${message.role}`;
                 article.dataset.messageKey = JSON.stringify(['side', message.role, message.timestamp]);
                 const header = document.createElement('header'); const strong = document.createElement('strong');
-                strong.textContent = message.role === 'user' ? translateUi("你") : message.role === 'compactionSummary' ? translateUi("侧聊摘要") : translateUi("Pi · 侧聊"); header.appendChild(strong); article.appendChild(header);
+                strong.textContent = message.role === 'user' ? translateUi('你') : message.role === 'compactionSummary' ? translateUi('侧聊摘要') : this.host.context().identity?.name || translateUi('Pi · 侧聊'); header.appendChild(strong); article.appendChild(header);
+                if (message.delivery) {
+                    const receipt = document.createElement('small'); receipt.className = 'pi-side-delivery'; receipt.dataset.state = message.delivery;
+                    receipt.textContent = translateUi(message.delivery === 'failed' ? '未发送，草稿已保留' : message.delivery === 'uncertain' ? '发送结果待核对' : message.delivery === 'accepted' ? '已发送' : '正在发送…'); header.append(receipt);
+                }
                 const body = document.createElement('div'); body.className = 'pi-message-body'; body.dataset.readingKey = article.dataset.messageKey;
                 const markdown = document.createElement('div'); markdown.className = 'pi-markdown';
                 if (message.role === 'assistant') markdown.innerHTML = text ? this.host.renderMarkdown(text) : `<p class="pi-side-empty">${translateUi("思考中")}</p>`;
@@ -678,6 +758,11 @@
                 if (message === live) this.liveNode = article;
             }
             if (!this.content.children.length) { const empty = document.createElement('p'); empty.className = 'pi-side-empty'; empty.textContent = translateUi('在这里聊，不打断主对话。'); this.content.appendChild(empty); }
+            for (const details of this.content.querySelectorAll('[data-detail-key]')) {
+                const saved = this.toolViewState.get(details.dataset.detailKey);
+                if (saved) details.querySelectorAll('pre').forEach((pre, i) => { pre.scrollTop = saved.scroll[i]?.top || 0; pre.scrollLeft = saved.scroll[i]?.left || 0; });
+            }
+            this.renderFeedback();
             this.scroll.restore(position);
         }
         async synchronize() {
@@ -720,6 +805,8 @@
             this.entries = new Map();
             this.maxEntries = 3;
             this.nextPickerId = 1;
+            this.title = document.createElement('span'); this.title.className = 'pi-side-panel-title';
+            document.querySelector('.inspector-heading > div').prepend(this.title);
             const root = $('pi-side-chat');
             this.template = root.cloneNode(true);
             this.anchor = document.createComment('side-chat-panel'); root.before(this.anchor);
@@ -741,7 +828,7 @@
             // Retained work from another thread must never decorate this thread.
             if (!entry || entry.destroyed || (entry.retainOnSwitch ? entry.key : entry.parentKey) !== this.key()) return {};
             return { busy: entry.connected && (entry.busy || entry.submitting), waiting: entry.connected && Boolean(entry.confirmation),
-                starting: Boolean(entry.starting), uncertain: Boolean(entry.uncertain) };
+                starting: Boolean(entry.starting || entry.sending && !entry.connected), uncertain: Boolean(entry.uncertain), unread: Boolean(entry.unread) };
         }
         key(ctx = this.host.context()) { return JSON.stringify([ctx.cwd, ctx.session?.id]); }
         create(ctx, root = this.template.cloneNode(true)) {
@@ -833,6 +920,7 @@
         showPane(mode) {
             this.sync();
             const side = mode === 'side';
+            if (side) { this.current.unread = false; this.host.changed?.(); }
             $('pi-inspector-details').hidden = mode !== 'details';
             this.current.root.hidden = !side;
             $('pi-changes').hidden = mode !== 'changes';

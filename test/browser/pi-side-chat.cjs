@@ -150,7 +150,7 @@ async function run(browser, viewport, theme, fullContext = true, retention = ful
     assert.equal(await reference.evaluate(node => node.open), false);
     assert.equal(await page.locator('#pi-side-source').isVisible(), false);
     const collapsedTop = await page.evaluate(() => document.querySelector('.pi-side-viewport').getBoundingClientRect().top - document.querySelector('#pi-inspector').getBoundingClientRect().top);
-    assert.ok(collapsedTop <= 140, `compact header uses ${collapsedTop}px`);
+    assert.ok(collapsedTop <= 180, `compact header uses ${collapsedTop}px`);
     const collapsedHeight = await page.locator('.pi-side-viewport').evaluate(node => node.clientHeight);
     await page.locator('#pi-side-reference summary').click();
     assert.equal(await page.locator('#pi-side-source').isVisible(), true);
@@ -268,13 +268,20 @@ async function run(browser, viewport, theme, fullContext = true, retention = ful
         assert.equal(sideCount, 1);
         await page.locator('#pi-side-confirm button').last().click();
         await page.waitForFunction(() => document.querySelector('#pi-side-tool-mode').textContent === '本次可修改');
-        const result = { role: 'toolResult', toolCallId: call.id, toolName: 'edit', content: [{ type: 'text', text: 'TOOL_RESULT <script>window.badSide=true</script>' }], isError: false, timestamp: ++ticks };
+        const result = { role: 'toolResult', toolCallId: call.id, toolName: 'edit', content: [{ type: 'text', text: 'TOOL_RESULT <script>window.badSide=true</script>\n' + 'readable tool output\n'.repeat(100) }], isError: false, timestamp: ++ticks };
         activeSide.messages.push(result); activeSide.busy = false; activeSide.access = 'read';
         send(activeSide.ws, { type: 'tool_execution_end', toolCallId: call.id, toolName: 'edit', result, isError: false });
         send(activeSide.ws, { type: 'message_end', message: result }); send(activeSide.ws, { type: 'agent_settled' });
         await page.waitForFunction(() => document.querySelector('#pi-side-tool-mode').textContent === '可读取');
         await page.locator('.pi-side-tool summary').click();
         assert.match(await page.locator('.pi-side-tool').textContent(), /TOOL_RESULT/);
+        await page.locator('.pi-side-tool pre').last().evaluate(node => { node.scrollTop = 80; });
+        const toolReading = await page.locator('.pi-side-tool pre').last().evaluate(node => node.scrollTop);
+        assert.ok(toolReading > 0);
+        send(activeSide.ws, { type: 'tool_execution_update', toolCallId: call.id, toolName: 'edit', partialResult: result });
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        assert.equal(await page.locator('.pi-side-tool').evaluate(node => node.open), true, 'tool updates preserve disclosure');
+        assert.equal(await page.locator('.pi-side-tool pre').last().evaluate(node => node.scrollTop), toolReading, 'tool updates preserve internal reading position');
         assert.equal(await page.evaluate(() => window.badSide), undefined);
     }
     await page.locator('#pi-side-reference summary').click();

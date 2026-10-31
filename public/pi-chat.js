@@ -495,9 +495,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    const taskProgress = new window.PiTaskProgress(document.getElementById('pi-task-progress'));
     const sideChat = new window.PiSideChat({
         changed: () => queueMicrotask(refreshAgentState),
         context: () => ({ cwd: state.cwd, session: state.session, token: state.token, connected: state.connected,
+            identity: state.botMode ? botUi?.identity() : null, progress: taskProgress.value,
             busy: state.streaming || state.compacting || state.compactRequested, waiting: state.pendingUi.size > 0 }),
         prepare: options => requestRpc('prepare_side_chat', options, 65000),
         modelOptions: () => requestRpc('get_side_model_options', {}, 45000),
@@ -514,8 +516,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectionActions = new window.PiSelectionActions({
         context: () => ({ connected: state.connected, key: JSON.stringify([state.cwd, state.session?.id, state.socketGeneration]) }),
         sideEnabled: () => sideChat.enabled,
-        // A Bot chat has no side chat (its panel is not shown on the Bot page, UAT-05).
-        sideHidden: () => state.botMode,
+        sideHidden: () => false,
         addMain: quote => {
             if (state.attachmentReads || state.submittingDrafts.has(state.composerSessionKey)) throw new Error(translateUi('请等待附件读取或消息投递完成'));
             const file = { ...quote, kind: 'quote', id: attachments.id() };
@@ -763,7 +764,6 @@ document.addEventListener('DOMContentLoaded', () => {
             submitting: state.submittingDrafts.has(state.composerSessionKey), submissionVersion: state.composerSubmissionVersion }),
         api: apiFetch, toast, changed: autoResizeInput, reload: reloadResources,
         locals: () => LOCAL_COMMANDS.filter(c => c.name !== 'btw' || sideChat.enabled).map(c =>
-            c.name === 'btw' && state.botMode ? { ...c, available: false, description: translateUi("伙伴聊天里没有侧聊，直接在这里问就好") } :
             c.name === 'tree' && !historyView.tree.enabled ? { ...c, available: false, description: translateUi("当前后端尚未启用会话树") } :
             c.name === 'trust' && !state.nativeSettings ? { ...c, available: false, description: translateUi("当前后端尚未启用项目信任设置") } :
             ['import', 'export'].includes(c.name) && !transfer.enabled
@@ -910,6 +910,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const controls = nativeControls.value;
             const queue = (controls?.queue?.steering?.length || 0) + (controls?.queue?.followUp?.length || 0);
             const runs = controls?.subagents?.snapshot?.runs || [];
+            const active = runs.filter(run => ['queued', 'running'].includes(run.state)).length;
+            const attention = runs.filter(run => ['paused', 'partial', 'failed', 'rejected'].includes(run.state)).length;
             const working = Boolean(state.streaming || state.shellBusy || state.compacting || state.retrying || state.resourceRequested
                 || controls?.subagents?.background?.active || runs.some(run => run.state === 'running'));
             const queued = queue > 0 || runs.some(run => run.state === 'queued');
@@ -919,11 +921,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const pending = state.pendingUi.size;
             const attentionLabel = pending ? ([...state.pendingUi.values()].some(item => userQuestions.owns(item)) ? translateUi('等你回复') : translateUi('等你确认'))
                 + (pending > 1 ? ` · ${pending}` : '') : translateUi('等你处理');
-            botUi?.status(!state.connected ? (kind === 'connecting' ? 'connecting' : 'offline') : kind === 'waiting' ? 'waiting' : working ? 'working' : 'connected',
-                { key: botMotionKey(), label: title, working, thinking, queued, attentionLabel,
+            const mainWaiting = pending > 0 || attention > 0 && !active && !working;
+            const mainLabel = mainWaiting ? attentionLabel : controls?.stopping || state.controlRequested ? translateUi('正在停止 / 取回')
+                : state.compacting ? translateUi('压缩中') : state.retrying ? translateUi('重试中')
+                    : working ? translateUi('执行中') : queued ? (queue ? translateUi('待执行 {0} 条', queue) : translateUi('子 Agent 运行中 · {0}', active)) : translateUi('空闲');
+            botUi?.status(!state.connected ? (kind === 'connecting' ? 'connecting' : 'offline') : mainWaiting ? 'waiting' : working ? 'working' : 'connected',
+                { key: botMotionKey(), label: mainLabel, working, thinking, queued, attentionLabel,
                     sleepAllowed: !labels.length && !state.submittingDrafts.size && !state.attachmentReads && !state.treeBusy,
                     stopping: Boolean(controls?.stopping || state.controlRequested) });
         }
+        sideChat.current?.updateMain();
+        if (state.botMode) botUi?.sideActivity(sideChat.activity());
         elements.agentState.textContent = title;
         elements.agentDetail.textContent = detail;
         elements.agentState.parentElement.title = [...labels, detail].join('\n');
@@ -972,7 +980,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (cronAddButton.disabled || !state.scheduledTasks || !state.session || state.session.ephemeral) return;
         window.PiWorkspaceRoute.navigate('cron', { cwd: state.cwd, sessionId: state.session.id });
     });
-    const taskProgress = new window.PiTaskProgress(document.getElementById('pi-task-progress'));
     const taskResults = window.PiTaskResults?.create({ root: document.getElementById('pi-task-results'), fetch: apiFetch,
         scope: () => state.session && !state.session.ephemeral ? { cwd: state.cwd, id: state.session.id, generation: state.socketGeneration,
             busy: !state.connected || state.compacting || state.compactRequested || state.controlRequested || state.resourceRequested || state.shellBusy } : null,
@@ -3577,6 +3584,7 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'gateway_progress':
                 state.runtimeRevision++;
                 taskProgress.apply(event.progress);
+                sideChat.current?.updateMain();
                 break;
             case 'gateway_session_named':
                 if (event.cwd === state.cwd && event.sessionId === state.session?.id && typeof event.name === 'string') {
@@ -4409,7 +4417,6 @@ document.addEventListener('DOMContentLoaded', () => {
             $('settings-manage-templates').focus(); return true;
         }
         if (name === 'btw') {
-            if (state.botMode) throw new Error(translateUi("伙伴聊天里没有侧聊，直接在这里问就好"));
             return sideChat.run(() => sideChat.open({ question: args }));
         }
         if (name === 'copy') { await copyTextToClipboard(state.lastAssistantText); toast(translateUi("已复制最近一条 Agent 回复"), 'success'); return true; }
@@ -5121,10 +5128,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     new MutationObserver(() => { if (isViewingSession()) void acknowledgeRenderedReply(); })
         .observe(elements.inspector, { attributes: true, attributeFilter: ['class'] });
-    // Bot mode shows the right panel only as a file preview; any other pane closes it again
+    // Buddy permits file previews and side chat; workbench-only panes close again
     // (its phone scrim follows the open class, so a hidden pane must not stay open).
     const closeBotInspector = () => {
-        if (state.botMode && elements.inspector.classList.contains('open') && !elements.inspector.classList.contains('show-changes')) elements.inspector.classList.remove('open');
+        if (state.botMode && elements.inspector.classList.contains('open') && !elements.inspector.classList.contains('show-changes') && !elements.inspector.classList.contains('show-side')) elements.inspector.classList.remove('open');
     };
     new MutationObserver(closeBotInspector).observe(elements.inspector, { attributes: true, attributeFilter: ['class'] });
     $('pi-import-session').addEventListener('click', () => { closeProjectDialog(); transfer.openImport(state.cwd); });
@@ -5241,6 +5248,8 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     botUi = window.PiBot?.create({ api: apiFetch, toast, open: openBotWindow, say: botSay, pane: $('pi-bot-pane'), header: $('pi-bot-header'), input: elements.input,
         draft: botDraft, focusComposer: () => { if (!elements.input.disabled) elements.input.focus({ preventScroll: true }); },
+        sideChat: options => sideChat.run(() => sideChat.open(options)),
+        sideAvailable: () => sideChat.enabled && state.connected,
         focusAttention: key => {
             if (!state.botMode || !state.connected || !isViewingSession() || key !== botMotionKey()) return;
             if (state.pendingUi.size) openPendingRequest();

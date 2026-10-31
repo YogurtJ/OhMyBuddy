@@ -100,8 +100,11 @@ const startNotes = () => [
                 });
             });
             // Desktop: the entry sits above the Bot's settings in the side pane; phones: the header button.
-            const openNotes = () => width < 700 ? page.locator('#pi-bot-header .pi-bot-notes-button').click()
-                : page.locator('.pi-bot-side .pi-bot-notes-link').click();
+            const openNotes = async () => {
+                if (width >= 700) return page.locator('.pi-bot-side .pi-bot-notes-link').click();
+                await page.locator('#pi-bot-header [data-bot-action="more"]').click();
+                await page.locator('.pi-bot-more-menu [data-bot-action="notes"]').click();
+            };
             // A note's actions: icons with the row on a pointer screen, labelled choices under "more" on a phone.
             const act = async (id, action) => {
                 const note = page.locator(`.pi-bot-notes [data-note-id="${id}"]`);
