@@ -145,4 +145,16 @@ test('a rejected fee policy records feedback and a durable failure notification 
         assert.equal(events[0].type, 'attention'); assert.equal(f.calls.length, 0);
     } finally { await f.service.dispose(); }
 });
+test('older editors preserve hidden spending and stall controls until explicitly cleared', async () => {
+    const clock = { value: Date.parse('2026-10-31T06:00:00Z') }, f = fixture(path.join(root, 'partial-policy.sqlite'), clock);
+    try {
+        await f.service.ready;
+        const task = await f.service.save({ ...job(), enabled: false, execution: { maxCost: 2, maxIdleSeconds: 300, maxRepeatedErrors: 3 }, budget: { maxCostPerDay: 5 } });
+        const edited = await f.service.save({ ...task, name: 'Older client edit', execution: { maxCalls: 200 }, budget: { maxRunsPerDay: 12 } });
+        assert.equal(edited.execution.maxCost, 2); assert.equal(edited.execution.maxIdleSeconds, 300); assert.equal(edited.execution.maxRepeatedErrors, 3);
+        assert.equal(edited.budget.maxCostPerDay, 5);
+        const cleared = await f.service.save({ ...edited, execution: { maxCost: null }, budget: { maxCostPerDay: null } });
+        assert.equal(cleared.execution.maxCost, null); assert.equal(cleared.budget.maxCostPerDay, null);
+    } finally { await f.service.dispose(); }
+});
 test.after(() => fs.rmSync(root, { recursive: true, force: true }));
