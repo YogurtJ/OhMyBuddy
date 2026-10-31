@@ -50,8 +50,8 @@
         }
         const optionalValue = control => control.value === '' ? null : Number(control.value);
         const quota = (parent, label, value, options = {}) => field(parent, label, 'number', value, { placeholder: t('不限制'), ...options });
-        const defaults = mode => snapshot.capabilities?.defaults?.[mode] || { maxCalls: mode === 'work' ? 100 : 8, maxTokens: null,
-            maxCost: null, maxDurationSeconds: mode === 'work' ? 3600 : 300, maxIdleSeconds: 900, maxRepeatedErrors: 5 };
+        const defaults = mode => snapshot.capabilities?.defaults?.[mode] || { maxCalls: null, maxTokens: null,
+            maxCost: null, maxDurationSeconds: 21600, maxIdleSeconds: 900, maxRepeatedErrors: 5 };
         const unlimited = value => value == null ? t('不限制') : Number(value).toLocaleString();
         const confirm = (title, text, accept) => window.PiProfileDialog.confirm({ title: t(title), message: t(text), accept: t(accept), cancelLabel: t('取消') });
         async function leave() { return !dirty || await confirm('有未保存的修改', '放弃当前修改并继续？', '放弃修改'); }
@@ -234,10 +234,10 @@
         }
         async function edit(job, target) {
             if (!await leave()) return;
-            draft = structuredClone(job || { id: randomId(), name: '', prompt: '', enabled: false, mode: 'text',
+            draft = structuredClone(job || { id: randomId(), name: '', prompt: '', enabled: false, mode: 'work',
                 target: target || { kind: filterProfile ? 'profile' : 'thread', profileId: filterProfile || profiles[0]?.id || '', cwd: currentCwd() || projects[0]?.cwd || '', sessionId: '' },
                 schedule: { kind: 'cron', expression: '0 9 * * *', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' },
-                misfire: { policy: 'skip', graceMinutes: 30 }, policyVersion: 2, execution: defaults('text'), budget: { maxRunsPerDay: null, maxTokensPerDay: null, maxCostPerDay: null } });
+                misfire: { policy: 'skip', graceMinutes: 30 }, policyVersion: 3, execution: defaults('work'), budget: { maxRunsPerDay: null, maxTokensPerDay: null, maxCostPerDay: null } });
             dirty = false; selected = draft.id; renderList(); showDetail(); detail.replaceChildren();
             const form = node('form', 'cron-form'); form.append(back(), node('h2', '', t(job?.revision ? '编辑定时任务' : '新建定时任务')));
             const name = field(form, '任务名称', 'text', draft.name, { required: true, maxLength: 120, placeholder: t('例如：早间简报') });
@@ -308,8 +308,9 @@
             const mode = field(content, '执行方式', 'select', draft.mode, { choices: [['text', t('文字问候')], ['work', t('执行工作')]], hint: '文字模式不使用工作工具；工作模式使用目标线程的工具与权限。' });
             const prompt = field(content, '提示词', 'textarea', draft.prompt, { required: true, maxLength: 40000, placeholder: t('描述希望助手完成的事情，以及什么时候应该保持静默。') }); prompt.rows = 8;
             const executionPanel = panel('执行设置'), executionGrid = node('div', 'cron-grid');
-            executionPanel.append(node('p', 'cron-muted', t('给任务足够的时间。Token 默认只统计，费用与用量上限可按需开启。')), executionGrid);
-            const calls = field(executionGrid, '单次模型调用上限', 'number', draft.execution.maxCalls, { min: 1, max: 10000, required: true });
+            executionPanel.append(node('p', 'cron-muted', t('给任务足够的时间。调用次数与 Token 默认只统计，费用与用量上限可按需开启。')), executionGrid);
+            const calls = quota(executionGrid, '单次模型调用上限', draft.execution.maxCalls, { min: 1, max: 10000,
+                hint: '留空不限制调用次数；一次模型请求可能包含多个工具调用。' });
             const duration = field(executionGrid, '最长执行（分钟）', 'number', draft.execution.maxDurationSeconds / 60, { min: 1 / 6, max: 1440, step: 'any', required: true });
             const idle = quota(executionGrid, '停滞时长（分钟）', draft.execution.maxIdleSeconds == null ? '' : draft.execution.maxIdleSeconds / 60,
                 { min: 0.5, max: 1440, step: 'any', hint: '模型没有新输出且没有工具执行时开始计时。留空关闭。' });
@@ -318,8 +319,8 @@
             if (Object.values(snapshot.limits).some(value => value != null)) executionPanel.append(node('p', 'cron-legacy-note', t('实例仍设有共享每日限额；此任务使用推荐设置后，共享限额仍生效，可在全局设置调整。')));
             let executionEdited = false;
             executionGrid.oninput = () => { executionEdited = true; };
-            mode.onchange = () => { if (!job && !executionEdited) { const d = defaults(mode.value); calls.value = d.maxCalls; duration.value = d.maxDurationSeconds / 60; } };
-            if (job && job.policyVersion !== 2) executionPanel.append(node('p', 'cron-legacy-note', t('此任务保留旧版限制。使用推荐设置后，单次与每日 Token、费用和次数配额将解除，时长与调用保护仍生效。')));
+            mode.onchange = () => { if (!job && !executionEdited) { const d = defaults(mode.value); calls.value = d.maxCalls ?? ''; duration.value = d.maxDurationSeconds / 60; } };
+            if (job && job.policyVersion !== 3) executionPanel.append(node('p', 'cron-legacy-note', t('此任务保留旧版限制。使用推荐设置后，调用次数、单次与每日配额将解除，时长与停滞保护仍生效。')));
             const advanced = node('details', 'cron-card'); advanced.append(node('summary', '', t('模型、调度与可选限额'))); form.append(advanced);
             const grid = node('div', 'cron-grid'); advanced.append(grid);
             const modelMode = field(grid, '模型', 'select', draft.model ? 'fixed' : 'follow', { choices: [['follow', t('跟随目标线程')], ['fixed', t('固定模型')]] });
@@ -355,10 +356,10 @@
             const dailyTokens = quota(budgetGrid, '每日 Token 预算', draft.budget.maxTokensPerDay, { min: 1000, max: 1000000000000 });
             const money = quota(budgetGrid, '每日估算美元预算', draft.budget.maxCostPerDay, { min: 0.01, max: 10000, step: 'any' });
             strategyActions.append(button('使用推荐设置', 'fa-wand-magic-sparkles', () => {
-                const d = defaults(mode.value); calls.value = d.maxCalls; duration.value = d.maxDurationSeconds / 60;
+                const d = defaults(mode.value); calls.value = d.maxCalls ?? ''; duration.value = d.maxDurationSeconds / 60;
                 idle.value = d.maxIdleSeconds / 60; repeated.value = d.maxRepeatedErrors;
                 for (const control of [tokens, runCost, dailyRuns, dailyTokens, money]) control.value = '';
-                draft.policyVersion = 2; dirty = true; executionEdited = true;
+                draft.policyVersion = 3; dirty = true; executionEdited = true;
                 message(t('推荐设置已填入，保存后生效。实例总限额仍单独生效。'));
             }));
             advanced.append(node('p', 'cron-muted', t('预算按 UTC 日累计。限额在模型调用之间检查，已发出的请求可能超额；费用按模型价格估算，工具额外费用不包含在内。启用费用限制时，价格未知会停止执行。')));
@@ -376,8 +377,8 @@
                     target: kind.value === 'profile' ? { kind: 'profile', profileId: profile.value } : { kind: 'thread', cwd: cwd.value, sessionId: sessions.value },
                     schedule: scheduleValue(), startsAt: startsAt.value ? new Date(startsAt.value).getTime() : null, model: modelMode.value === 'fixed' && modelSelect.value ? { provider: JSON.parse(modelSelect.value)[0], modelId: JSON.parse(modelSelect.value)[1], thinkingLevel: thinking.value } : null,
                     misfire: { policy: misfire.value, graceMinutes: Number(grace.value) }, condition: condition.value ? { kind: 'no-user-since', time: condition.value } : null,
-                    policyVersion: 2,
-                    execution: { maxCalls: Number(calls.value), maxTokens: optionalValue(tokens), maxCost: optionalValue(runCost), maxDurationSeconds: Math.round(Number(duration.value) * 60),
+                    policyVersion: 3,
+                    execution: { maxCalls: optionalValue(calls), maxTokens: optionalValue(tokens), maxCost: optionalValue(runCost), maxDurationSeconds: Math.round(Number(duration.value) * 60),
                         maxIdleSeconds: idle.value === '' ? null : Math.round(Number(idle.value) * 60), maxRepeatedErrors: optionalValue(repeated) },
                     budget: { maxRunsPerDay: optionalValue(dailyRuns), maxTokensPerDay: optionalValue(dailyTokens), maxCostPerDay: optionalValue(money) } };
                 try { const saved = await mutate(save, () => send('/api/pi/cron/jobs', input, 'PUT')); if (!saved) return; selected = saved.id; draft = null; dirty = false; await load(); }

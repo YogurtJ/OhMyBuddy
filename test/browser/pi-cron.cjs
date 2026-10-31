@@ -72,9 +72,13 @@ async function check(browser, base, width, language, scenario = 'normal') {
     const futureStart = await page.evaluate(() => { const d = new Date(Date.now() + 86400000); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); });
     await page.getByLabel(zh ? '生效时间' : 'Starts on', { exact: true }).fill(futureStart);
     await page.getByLabel(zh ? '提示词' : 'Prompt', { exact: true }).fill('A warm, short greeting. Stay silent if the user is busy.');
+    assert.equal(await page.getByLabel(zh ? '执行方式' : 'Execution mode', { exact: true }).inputValue(), 'work');
+    assert.equal(await page.getByLabel(zh ? '单次模型调用上限' : 'Model calls per run', { exact: true }).inputValue(), '');
+    assert.equal(await page.getByLabel(zh ? '最长执行（分钟）' : 'Maximum duration (minutes)', { exact: true }).inputValue(), '360');
+    await page.getByLabel(zh ? '执行方式' : 'Execution mode', { exact: true }).selectOption('text');
+    assert.equal(await page.getByLabel(zh ? '单次模型调用上限' : 'Model calls per run', { exact: true }).inputValue(), '');
+    assert.equal(await page.getByLabel(zh ? '最长执行（分钟）' : 'Maximum duration (minutes)', { exact: true }).inputValue(), '360');
     await page.getByLabel(zh ? '执行方式' : 'Execution mode', { exact: true }).selectOption('work');
-    assert.equal(await page.getByLabel(zh ? '单次模型调用上限' : 'Model calls per run', { exact: true }).inputValue(), '100');
-    assert.equal(await page.getByLabel(zh ? '最长执行（分钟）' : 'Maximum duration (minutes)', { exact: true }).inputValue(), '60');
     await page.locator('.cron-card summary').click();
     assert.equal(await page.getByLabel(zh ? '单次 Token 预算' : 'Token budget per run', { exact: true }).inputValue(), '');
     assert.equal(await page.getByLabel(zh ? '每日 Token 预算' : 'Daily token budget', { exact: true }).inputValue(), '');
@@ -93,7 +97,7 @@ async function check(browser, base, width, language, scenario = 'normal') {
     assert.equal(jobs[0].enabled, false);
     assert.equal(jobs[0].weixinNotification, 'inherit');
     assert.ok(jobs[0].startsAt > now);
-    assert.equal(jobs[0].execution.maxTokens, null); assert.equal(jobs[0].execution.maxCalls, 100);
+    assert.equal(jobs[0].execution.maxTokens, null); assert.equal(jobs[0].execution.maxCalls, null);
     assert.equal(jobs[0].budget.maxTokensPerDay, null);
     await page.getByText(zh ? '单次 Token 上限已用尽' : 'Token limit for this run reached', { exact: true }).waitFor();
     assert.match(await page.locator('.cron-feedback').textContent(), /255,629.*180,000/);
@@ -115,7 +119,7 @@ async function check(browser, base, width, language, scenario = 'normal') {
     await page.getByRole('button', { name: zh ? '使用推荐设置' : 'Use recommended settings', exact: true }).click();
     await page.getByRole('button', { name: zh ? '保存任务' : 'Save task', exact: true }).click();
     await page.locator('.cron-detail-head').waitFor();
-    assert.equal(jobs[0].policyVersion, 2); assert.equal(jobs[0].execution.maxTokens, null); assert.equal(jobs[0].budget.maxTokensPerDay, null);
+    assert.equal(jobs[0].policyVersion, 3); assert.equal(jobs[0].execution.maxTokens, null); assert.equal(jobs[0].budget.maxTokensPerDay, null);
     assert.equal(writes.filter(write => write.body?.action === 'run').length, 0, 'policy migration never starts or replays a task');
     assert.equal(await page.locator('#cron-tab [onerror]').count(), 0);
     await page.screenshot({ path: `/tmp/pivane-cron-detail-${width}-${language}.png`, fullPage: true });

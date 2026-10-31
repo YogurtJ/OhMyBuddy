@@ -28,7 +28,7 @@ test('Scheduled tasks wake one native worker, restore models, keep silence, dedu
         if (text.includes('SILENT_FIXTURE')) {
             chunk({ role: 'assistant', tool_calls: [{ index: 0, id: `call-${calls.length}`, type: 'function', function: { name: 'cron_silent', arguments: JSON.stringify({ reason: 'Nothing useful to send' }) } }] }); chunk({}, 'tool_calls');
         } else if (text.includes('LONG_FIXTURE')) {
-            if (input.messages.filter(message => message.role === 'tool').length < 3) {
+            if (input.messages.filter(message => message.role === 'tool').length < 110) {
                 chunk({ role: 'assistant', tool_calls: [{ index: 0, id: `call-${calls.length}`, type: 'function', function: { name: 'read', arguments: JSON.stringify({ path: path.join(cwd, 'note.txt') }) } }] }); chunk({}, 'tool_calls');
             } else { chunk({ role: 'assistant', content: 'Long-context work completed' }); chunk({}, 'stop'); }
             res.write(`data: ${JSON.stringify({ id: 'usage', choices: [], usage: { prompt_tokens: 200000, completion_tokens: 100, prompt_tokens_details: { cached_tokens: 190000 } } })}\n\n`);
@@ -104,10 +104,15 @@ test('Scheduled tasks wake one native worker, restore models, keep silence, dedu
         const longRun = await service.action(longJob.id, { action: 'run', revision: longJob.revision, requestId: randomUUID() });
         await deadline(async () => { await service.tick(); return service.db.run(longRun.id).status === 'completed'; });
         const longResult = service.db.run(longRun.id);
-        assert.equal(longJob.execution.maxTokens, null); assert.equal(longResult.usage.calls, 4);
+        assert.equal(longJob.execution.maxTokens, null); assert.equal(longResult.usage.calls, 111);
         assert.ok(longResult.usage.tokens > 400000, 'long cached contexts can exceed the former instance daily default');
         assert.ok(longResult.usage.cacheRead >= 570000);
         assert.equal(service.db.usage(longResult.budgetDay, longJob.id).runs, 1, 'unlimited runs still contribute to daily usage');
+        const policyResponse = await fetch(api + '/jobs/' + longJob.id + '/policy', { method: 'PATCH', headers: { Authorization: 'Bearer synthetic', 'Content-Type': 'application/json' },
+            body: JSON.stringify({ revision: longJob.revision, execution: { maxCalls: null, maxTokens: null, maxDurationSeconds: 21600 } }) });
+        assert.equal(policyResponse.status, 200); const updatedPolicy = await policyResponse.json();
+        assert.equal(updatedPolicy.policyVersion, 3); assert.equal(updatedPolicy.enabled, longJob.enabled); assert.deepEqual(updatedPolicy.schedule, longJob.schedule);
+        assert.equal(service.db.runs(longJob.id).length, 1, 'policy edits never replay completed work');
         const limitsResponse = await fetch(api + '/limits', { headers: { Authorization: 'Bearer synthetic' } });
         const globalPolicy = await limitsResponse.json();
         const rejectedSettings = await fetch(api + '/limits', { method: 'PUT', headers: { Authorization: 'Bearer synthetic', 'Content-Type': 'application/json' },

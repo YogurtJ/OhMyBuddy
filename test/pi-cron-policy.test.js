@@ -24,9 +24,9 @@ function fixture(t, overrides = {}) {
 test('new policy meters long context across many calls and keeps optional limits null', async t => {
     assert.deepEqual(policy.limits(), { maxRunsPerDay: null, maxTokensPerDay: null, maxCostPerDay: null });
     const f = fixture(t); await f.execute(f.ctx, f.input);
-    for (let i = 0; i < 20; i++) { f.emit('turn_start'); f.emit('before_provider_request'); f.message(); }
+    for (let i = 0; i < 250; i++) { f.emit('turn_start'); f.emit('before_provider_request'); f.message(); }
     assert.equal(f.aborted(), 0);
-    assert.equal(usageSince(f.manager, f.entries.find(e => e.data?.status === 'prepared').data).usage.tokens, 4002000);
+    assert.equal(usageSince(f.manager, f.entries.find(e => e.data?.status === 'prepared').data).usage.tokens, 50025000);
     f.emit('agent_settled');
 });
 test('explicit token and call limits stop at boundaries with distinct reasons and one native receipt', async t => {
@@ -66,7 +66,12 @@ test('inactivity excludes running tools and resets with streaming progress', asy
 test('validation preserves explicit limits, separates old defaults and permits larger work policies', () => {
     const old = policy.execution({ maxCalls: 4, maxTokens: 32000, maxDurationSeconds: 300 }, 'work', 1);
     assert.equal(old.maxTokens, 32000); assert.equal(old.maxIdleSeconds, null);
-    assert.equal(policy.execution({}, 'work').maxCalls, 100);
+    assert.equal(policy.execution({}, 'work').maxCalls, null);
+    assert.equal(policy.execution({}, 'text').maxCalls, null);
+    assert.equal(policy.execution({}, 'text').maxDurationSeconds, 21600);
+    assert.equal(policy.execution({}, 'work', 2).maxCalls, 100);
+    assert.equal(policy.execution({}, 'text', 2).maxCalls, 8);
+    assert.throws(() => policy.execution({ maxCalls: 0 }, 'work'), /execution limits/);
     assert.equal(policy.execution({ maxTokens: null }, 'work').maxTokens, null);
     assert.throws(() => policy.execution({ maxTokens: 0 }, 'work'), /execution limits/);
     assert.throws(() => policy.limits({ maxCostPerDay: -1 }), /daily budget/);
