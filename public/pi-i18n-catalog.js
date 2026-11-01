@@ -8970,7 +8970,6 @@
     ,['累计 Token 包含重复输入与缓存。费用限额按模型价格估算，不能保证供应商扣款绝不超额。', 'Total tokens include repeated input and cache reads. Spending limits use estimated model prices and cannot guarantee a provider billing cap.']
     ,['累计 Token', 'Total tokens']
     ,['次模型调用', 'model calls']
-    ,['缓存读取', 'Cache reads']
     ,['调整执行设置', 'Adjust execution settings']
     ,['先核对已执行的操作，再决定是否重新运行。', 'Review actions already performed before deciding whether to run again.']
     ,['定时任务需要处理', 'Scheduled task needs attention']
@@ -9002,7 +9001,6 @@
     ,['查看用量，编辑任务可切换到推荐执行策略。', 'Review usage. Edit the task to apply recommended execution settings.']
     ,['运行实例已退出，执行结果待核对', 'Worker exited; review the execution outcome']
     ,['先核对线程与外部操作，勿直接重复执行。', 'Review the thread and external actions before starting another run.']
-    ,['服务重启，执行结果待核对', 'Service restarted; review the execution outcome']
     ,['任务未能完成', 'The task could not finish']
     ,['查看运行记录与目标线程，核对已执行的操作后再处理。', 'Review the run history, target thread and actions already performed before proceeding.']
     ,['执行策略与预算', 'Execution and budget']
@@ -11289,6 +11287,94 @@
         ["未发送，草稿已保留", "Not sent · draft kept"],
         ["发送结果待核对", "Delivery needs checking"],
         ["助手身份详情", "Assistant identity details"],
+    );
+    rows.push(
+        ["周期", "Recurring"],
+        ["单次", "One-off"],
+        ["周期任务", "Recurring task"],
+        ["单次任务", "One-off task"],
+        ["周期 · {0}", "Recurring · {0}"],
+        ["单次 · {0}", "One-off · {0}"],
+        ["已结束的单次任务（{0}）", "Finished one-off tasks ({0})"],
+        ["已结束单次任务不再自动执行，保留记录供核对或重新安排。", "Finished one-off tasks no longer run automatically; kept for review or rescheduling."],
+        ["单次已完成", "Finished (once)"],
+        ["单次已结束", "Ended (once)"],
+        ["执行于 {0}", "Ran {0}"],
+        ["计划于 {0}", "Scheduled {0}"],
+        ["重新安排", "Reschedule"],
+        ["常用项目", "Pinned projects"],
+        ["输入或选择项目路径…", "Type or choose a project path…"],
+        ["浏览服务器目录", "Browse server folders"],
+        ["使用此目录", "Use this folder"],
+        ["没有可显示的子目录，可直接选择当前位置。", "No subfolders to show. You can use the current location directly."],
+        ["搜索线程标题、首条消息或身份…", "Search thread title, first message or profile…"],
+        ["搜索或选择目标线程…", "Search or choose a target thread…"],
+        ["正在读取线程列表…", "Loading threads…"],
+        ["此目录下还没有可用线程", "No eligible threads in this folder yet"],
+        ["没有匹配的线程", "No matching threads"],
+        ["在此目录新建线程", "New thread in this folder"],
+        ["仅当前身份", "Current profile"],
+        ["每周", "Weekly"],
+        ["星期", "Weekday"],
+        ["周一", "Mon"],
+        ["周二", "Tue"],
+        ["周三", "Wed"],
+        ["周四", "Thu"],
+        ["周五", "Fri"],
+        ["周六", "Sat"],
+        ["周日", "Sun"],
+        ["每 4 小时", "Every 4 hours"],
+        ["每天 {0}", "Daily {0}"],
+        ["工作日 {0}", "Weekdays {0}"],
+        ["每周{0} {1}", "Every {0} {1}"],
+        ["常用时区", "Common time zones"],
+        ["当前设备时区", "Device time zone"],
+        ["所选单次执行时间已过，请选择未来的日期与时间。", "The chosen one-time date is in the past. Pick a future date and time."],
+        ["没有符合筛选条件的定时任务。", "No scheduled tasks match this filter."],
+        ["已选项目", "Selected project"],
+        ["搜索项目名称或路径…", "Search project name or path…"],
+        ["还没有项目记录，可直接输入绝对路径或浏览服务器目录。", "No saved projects yet. Type an absolute path or browse server folders."]
+    );
+    rows.push(
+        ['选择任务，查看安排与结果', 'Select a task to view its schedule and results'],
+        ['在列表中选择任务，或到历史任务查看已结束的单次安排。', 'Select a task from the list, or review finished one-time tasks in Past tasks.'],
+        ['重复任务', 'Recurring tasks'],
+        ['单次安排', 'One-time tasks'],
+        ['计划中', 'Scheduled'],
+        ['任务视图', 'Task views'],
+        ['历史任务', 'Past tasks'],
+        ['正在进行', 'In progress'],
+        ['上次', 'Last run'],
+        ['搜索包含当前任务与历史任务。', 'Search includes current and past tasks.'],
+        ['已结束的单次安排保留在这里，包括失败记录。', 'Finished one-time tasks stay here, including failed runs.'],
+        ['重复任务与待执行的单次安排。', 'Recurring tasks and upcoming one-time tasks.'],
+        ['没有匹配的任务，试试其他关键词。', 'No matching tasks. Try other keywords.'],
+        ['还没有已结束的单次任务。', 'No finished one-time tasks yet.'],
+        ['暂无当前任务。创建新安排，或到历史任务查看以往结果。', 'No current tasks. Create a schedule or review past tasks.'],
+        ['这次单次安排已结束，记录与线程会保留。重新安排需选择新的时间。', 'This one-time task has ended. Its history and thread are kept. Choose a new time to reschedule.'],
+        ['本次运行结束或核对后可操作。', 'Available after this run finishes or is reviewed.'],
+        ['执行时间预览', 'Scheduled time preview'],
+        ['保存与通知', 'Activation and notifications'],
+        ['保存为暂停，稍后可启用。', 'Saved as paused. You can enable it later.'],
+        ['请选择一个可用的目标线程。', 'Choose an available target thread.'],
+        ['正在读取线程…', 'Loading threads…'],
+        ['线程读取失败，请重试。', 'Threads could not be loaded. Try again.'],
+        ['{0} 个线程，可按名称、身份或 ID 搜索。', '{0} threads. Search by name, profile or ID.'],
+        ['此目录没有可用线程，请更换目录或在工作台新建线程。', 'No available threads here. Choose another folder or create a thread in the workspace.'],
+        ['选择目标线程', 'Choose target thread'],
+        ['搜索名称、身份或线程 ID，选择后回到任务。', 'Search by name, profile or thread ID, then select to return to the task.'],
+        ['搜索线程', 'Search threads'],
+        ['{0} 个匹配线程', '{0} matching threads'],
+        ['没有匹配的线程，试试其他关键词。', 'No matching threads. Try other keywords.'],
+        ['选择工作目录', 'Choose working directory'],
+        ['选择现有项目，或浏览服务器上的目录。', 'Choose an existing project or browse folders on the server.'],
+        ['现有项目', 'Existing projects'],
+        ['正在读取项目…', 'Loading projects…'],
+        ['搜索项目名称或路径', 'Search project name or path'],
+        ['没有匹配的项目，可切换到浏览目录。', 'No matching projects. Try browsing folders.'],
+        ['目录路径', 'Folder path'],
+        ['筛选子目录', 'Filter subfolders'],
+        ['没有可显示的子目录，可选择当前目录。', 'No subfolders to show. You can use the current folder.']
     );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

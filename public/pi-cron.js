@@ -19,7 +19,24 @@
     function create({ api, currentCwd, activate = true }) {
         const root = document.getElementById('cron-tab'); if (!root) return;
         let snapshot = null, profiles = [], projects = [], selected = '', draft = null, dirty = false, busy = false, visible = false, epoch = 0, query = '', filterProfile = '';
-        let runRequest = null, previewEpoch = 0, projectsRequested = false;
+        let runRequest = null, previewEpoch = 0, projectsPromise = null, listView = 'current';
+        const pickers = window.PiCronPickers;
+        async function getProjects() {
+            if (!projectsPromise) projectsPromise = api('/api/pi/projects').then(data => {
+                const hidden = new Set(data.hiddenProjects || []);
+                projects = (data.projects || []).filter(p => p?.cwd && !hidden.has(p.cwd)); return projects;
+            }).catch(error => { projectsPromise = null; throw error; });
+            return projectsPromise;
+        }
+        const activeRun = job => job.activeRun || (['waiting', 'dispatching', 'running', 'uncertain'].includes(job.lastRun?.status) ? job.lastRun : null);
+        const ended = job => job.schedule.kind === 'once' && !activeRun(job) && (job.nextAt === null || !job.enabled && job.schedule.at <= (snapshot?.serverTime || Date.now()));
+        function scheduleText(job) {
+            if (job.schedule.kind === 'once') return `${t('仅一次')} · ${date(job.schedule.at, job.schedule.timeZone)}`;
+            const [m, h, day, month, week] = job.schedule.expression.split(' ');
+            if (/^\d+$/.test(m) && /^\d+$/.test(h) && day === '*' && month === '*' && ['*', '1-5'].includes(week)) return `${t(week === '*' ? '每天' : '工作日')} ${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
+            if (/^\d+$/.test(m) && /^\d+$/.test(h) && day === '*' && month === '*' && /^[0-7]$/.test(week)) return `${t('每周')} ${t(['周日', '周一', '周二', '周三', '周四', '周五', '周六'][Number(week) % 7])} ${h.padStart(2, '0')}:${m.padStart(2, '0')}`;
+            return `${t('重复任务')} · ${job.schedule.expression}`;
+        }
         const header = node('header', 'cron-header'), heading = node('div');
         heading.append(node('span', 'cron-eyebrow', 'OHMYBUDDY'), node('h1', '', t('定时任务')), node('p', '', t('让日常安排，准时回到对话里。')));
         const actions = node('div', 'cron-actions');
@@ -34,7 +51,9 @@
         const stats = node('div', 'cron-stats'), layout = node('div', 'cron-layout'), aside = node('aside', 'cron-sidebar');
         const search = node('input', 'cron-search'); search.type = 'search'; search.placeholder = t('搜索定时任务'); search.setAttribute('aria-label', t('搜索定时任务'));
         const list = node('div', 'cron-list'); list.setAttribute('aria-label', t('定时任务'));
-        aside.append(search, list); const detail = node('section', 'cron-detail'); layout.append(aside, detail); root.append(header, notice, stats, layout);
+        const listTabs = node('div', 'cron-list-tabs'); listTabs.setAttribute('aria-label', t('任务视图'));
+        const listHint = node('p', 'cron-list-hint');
+        aside.append(search, listTabs, listHint, list); const detail = node('section', 'cron-detail'); layout.append(aside, detail); root.append(header, notice, stats, layout);
         function message(text = '', error = false) { notice.textContent = text; notice.classList.toggle('error', error); }
         function showDetail() { root.classList.add('cron-has-detail'); }
         function field(parent, label, type, value, options = {}) {
@@ -83,13 +102,7 @@
         async function load() {
             const version = ++epoch;
             if (!snapshot && !draft) { message(); loading(); }
-            if (!projectsRequested) {
-                projectsRequested = true;
-                void api('/api/pi/projects').then(data => {
-                    const hidden = new Set(data.hiddenProjects || []);
-                    projects = (data.projects || []).filter(p => p?.cwd && !hidden.has(p.cwd));
-                }).catch(() => { projectsRequested = false; });
-            }
+            void getProjects().catch(() => {});
             try {
                 const [data, profileData] = await Promise.all([api('/api/pi/cron'), api('/api/pi/profiles')]);
                 if (version !== epoch || !visible) return;
@@ -113,45 +126,85 @@
         function renderList() {
             if (!snapshot) return;
             stats.replaceChildren();
-            const enabled = snapshot.jobs.filter(job => job.enabled).length;
-            const attention = snapshot.jobs.filter(job => ['failed', 'error', 'uncertain', 'stopped'].includes(job.lastRun?.status)).length;
-            for (const [label, value] of [['已启用', enabled], ['今日执行', snapshot.limits.maxRunsPerDay == null ? snapshot.today.runs : `${snapshot.today.runs} / ${snapshot.limits.maxRunsPerDay}`], ['需要处理', attention]]) {
+            const enabled = snapshot.jobs.filter(job => job.enabled && !ended(job)).length;
+            const attention = snapshot.jobs.filter(job => activeRun(job)?.status === 'uncertain').length;
+            for (const [label, value] of [['计划中', enabled], ['今日执行', snapshot.limits.maxRunsPerDay == null ? snapshot.today.runs : `${snapshot.today.runs} / ${snapshot.limits.maxRunsPerDay}`], ['待核对', attention]]) {
                 const item = node('div', 'cron-stat'); item.append(node('span', '', t(label)), node('strong', '', String(value))); stats.append(item);
             }
-            list.replaceChildren();
-            const jobs = snapshot.jobs.filter(job => (!filterProfile || job.target.profileId === filterProfile)
-                && `${job.name} ${job.prompt}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
-            if (filterProfile) list.append(button('显示全部任务', 'fa-filter-circle-xmark', () => { filterProfile = ''; renderList(); }));
-            for (const job of jobs) {
-                const row = button('', null, async () => { if (!await leave()) return; draft = null; dirty = false; selected = job.id; renderList(); await renderDetail(); }, 'cron-row');
-                row.setAttribute('aria-current', selected === job.id ? 'true' : 'false'); row.replaceChildren();
-                const top = node('span', 'cron-row-top'); top.append(node('strong', '', job.name), node('span', `cron-dot ${job.enabled ? 'on' : ''}`));
-                const target = job.target.kind === 'profile' ? profiles.find(p => p.id === job.target.profileId)?.name || t('身份不可用') : t('指定线程');
-                row.append(top, node('span', 'cron-row-target', target), node('small', '', job.enabled ? `${t('下次')} ${date(job.nextAt, job.schedule.timeZone)}` : t('已暂停')));
-                if (job.lastRun) row.append(node('span', `cron-status ${job.lastRun.status}`, t(statusNames[job.lastRun.status] || job.lastRun.status)));
-                list.append(row);
+            const scrollTop = list.scrollTop;
+            list.replaceChildren(); listTabs.replaceChildren();
+            const scoped = snapshot.jobs.filter(job => !filterProfile || job.target.profileId === filterProfile);
+            for (const [key, label] of [['current', '当前任务'], ['history', '历史任务']]) {
+                const count = scoped.filter(job => ended(job) === (key === 'history')).length;
+                const tab = button('', null, () => { listView = key; query = search.value = ''; renderList(); });
+                tab.append(node('span', '', t(label)), node('span', 'cron-tab-count', String(count))); tab.setAttribute('aria-pressed', String(listView === key)); listTabs.append(tab);
             }
-            if (!jobs.length) list.append(node('p', 'cron-empty-small', t('还没有定时任务。安排一次简报，或一声日常问候。')));
+            listHint.textContent = t(query.trim() ? '搜索包含当前任务与历史任务。' : listView === 'history' ? '已结束的单次安排保留在这里，包括失败记录。' : '重复任务与待执行的单次安排。');
+            const jobs = scoped.filter(job => `${job.name} ${job.prompt} ${job.target.cwd || ''}`.toLocaleLowerCase().includes(query.toLocaleLowerCase())
+                && (query.trim() || ended(job) === (listView === 'history')));
+            if (filterProfile) list.append(button('显示全部任务', 'fa-filter-circle-xmark', () => { filterProfile = ''; renderList(); }));
+            const groups = [
+                ['正在进行', jobs.filter(job => activeRun(job))],
+                ['重复任务', jobs.filter(job => !activeRun(job) && !ended(job) && job.enabled && job.schedule.kind === 'cron')],
+                ['单次安排', jobs.filter(job => !activeRun(job) && !ended(job) && job.enabled && job.schedule.kind === 'once')],
+                ['已暂停', jobs.filter(job => !activeRun(job) && !ended(job) && !job.enabled)],
+                ['历史任务', jobs.filter(ended)]
+            ];
+            for (const [label, entries] of groups) {
+                if (!entries.length) continue;
+                entries.sort((a, b) => label === '历史任务' ? (b.lastRun?.completedAt || b.schedule.at) - (a.lastRun?.completedAt || a.schedule.at) : (a.nextAt || Infinity) - (b.nextAt || Infinity));
+                const group = node('section', 'cron-list-group'); group.append(node('h3', '', `${t(label)} · ${entries.length}`)); list.append(group);
+                for (const job of entries) {
+                    const row = button('', null, async () => { if (!await leave()) return; draft = null; dirty = false; selected = job.id; renderList(); await renderDetail(); }, 'cron-row');
+                    row.setAttribute('aria-current', selected === job.id ? 'true' : 'false'); row.title = job.name; row.replaceChildren();
+                    const top = node('span', 'cron-row-top'), icon = node('i', `fa-solid ${job.schedule.kind === 'once' ? 'fa-calendar-day' : 'fa-repeat'}`); icon.setAttribute('aria-hidden', 'true');
+                    top.append(icon, node('strong', '', job.name));
+                    const target = job.target.kind === 'profile' ? profiles.find(p => p.id === job.target.profileId)?.name || t('身份不可用') : job.target.cwd?.split(/[\\/]/).filter(Boolean).at(-1) || t('指定线程');
+                    const meta = node('span', 'cron-row-meta'); meta.append(node('span', 'cron-type', t(job.schedule.kind === 'once' ? '仅一次' : '重复任务')), node('span', 'cron-row-target', target));
+                    row.append(top, meta, node('small', '', ended(job) ? scheduleText(job) : job.enabled ? `${t('下次')} ${date(job.nextAt, job.schedule.timeZone)}` : `${t('已暂停')} · ${scheduleText(job)}`));
+                    const run = activeRun(job) || job.lastRun;
+                    if (run) row.append(node('span', `cron-status ${ended(job) ? 'historical' : run.status}`, `${activeRun(job) ? '' : `${t('上次')} · `}${t(statusNames[run.status] || run.status)}`));
+                    group.append(row);
+                }
+            }
+            if (!jobs.length) list.append(node('p', 'cron-empty-small', t(query.trim() ? '没有匹配的任务，试试其他关键词。' : listView === 'history' ? '还没有已结束的单次任务。' : '暂无当前任务。创建新安排，或到历史任务查看以往结果。')));
+            list.scrollTop = scrollTop;
         }
         function back() { return button('返回列表', 'fa-arrow-left', () => root.classList.remove('cron-has-detail'), 'cron-mobile-back'); }
         async function renderDetail() {
-            const job = snapshot?.jobs.find(item => item.id === selected);
+            let job = snapshot?.jobs.find(item => item.id === selected);
+            if (!job && !selected && window.matchMedia('(min-width: 681px)').matches) {
+                job = snapshot?.jobs.filter(item => !ended(item) && (!filterProfile || item.target.profileId === filterProfile))
+                    .sort((a, b) => Number(Boolean(activeRun(b))) - Number(Boolean(activeRun(a))) || Number(b.enabled) - Number(a.enabled) || (a.nextAt || Infinity) - (b.nextAt || Infinity))[0];
+                if (job) { selected = job.id; renderList(); }
+            }
             detail.replaceChildren();
             if (!job) {
-                const empty = node('div', 'cron-empty'); empty.append(node('i', 'fa-regular fa-calendar-check'), node('h2', '', t('把重复的事情，交给时间')),
-                    node('p', '', t('每日简报、项目检查、温柔问候。选择一个线程，让助手按时开始。')), button('创建第一个任务', 'fa-plus', () => edit(), 'primary'));
+                const hasJobs = snapshot?.jobs.length > 0;
+                const empty = node('div', 'cron-empty'); empty.append(node('i', 'fa-regular fa-calendar-check'), node('h2', '', t(hasJobs ? '选择任务，查看安排与结果' : '把重复的事情，交给时间')),
+                    node('p', '', t(hasJobs ? '在列表中选择任务，或到历史任务查看已结束的单次安排。' : '每日简报、项目检查、温柔问候。选择一个线程，让助手按时开始。')), button(hasJobs ? '新建任务' : '创建第一个任务', 'fa-plus', () => edit(), 'primary'));
                 detail.append(empty); return;
             }
             showDetail();
-            const top = node('div', 'cron-detail-head'), titles = node('div'); titles.append(back(), node('h2', '', job.name), node('p', '', job.schedule.timeZone));
+            const top = node('div', 'cron-detail-head'), titles = node('div'); titles.append(back(), node('span', 'cron-type', t(job.schedule.kind === 'once' ? '单次安排' : '重复任务')), node('h2', '', job.name), node('p', '', `${scheduleText(job)} · ${job.schedule.timeZone}`));
             const controls = node('div', 'cron-actions');
-            controls.append(button('运行一次', 'fa-play', b => action(b, job, 'run')), button(job.enabled ? '暂停' : '启用', job.enabled ? 'fa-pause' : 'fa-play', b => action(b, job, job.enabled ? 'pause' : 'resume')),
-                button('编辑', 'fa-pen', () => edit(job)), button('复制', 'fa-copy', () => edit({ ...job, id: randomId(), revision: undefined, enabled: false, name: `${job.name} · ${t('副本')}` })),
+            controls.append(button('运行一次', 'fa-play', b => action(b, job, 'run')));
+            if (!ended(job)) controls.append(button(job.enabled ? '暂停' : '启用', job.enabled ? 'fa-pause' : 'fa-play', b => action(b, job, job.enabled ? 'pause' : 'resume')));
+            else controls.append(button('重新安排', 'fa-calendar-plus', () => edit({ ...job, id: randomId(), revision: undefined, enabled: false, schedule: { ...job.schedule, at: null } }), 'primary'));
+            controls.append(button('编辑', 'fa-pen', () => edit(job)), button('复制', 'fa-copy', () => edit({ ...job, id: randomId(), revision: undefined, enabled: false, schedule: ended(job) ? { ...job.schedule, at: null } : job.schedule, name: `${job.name} · ${t('副本')}` })),
                 button('删除', 'fa-trash', async b => { if (await confirm('删除定时任务', '删除后保留执行记录和线程内容。', '删除')) await action(b, job, 'delete'); }));
             top.append(titles, controls); detail.append(top);
+            if (ended(job)) detail.append(node('p', 'cron-history-note', t('这次单次安排已结束，记录与线程会保留。重新安排需选择新的时间。')));
+            const live = activeRun(job);
+            if (live) {
+                for (const control of controls.children) if (!control.textContent.includes(t('暂停'))) { control.disabled = true; control.title = t('本次运行结束或核对后可操作。'); }
+                const banner = node('div', 'cron-live-banner'); banner.append(node('strong', `cron-status ${live.status}`, t(statusNames[live.status])));
+                if (live.status === 'uncertain') banner.append(node('p', 'cron-muted', t('先核对已执行的操作，再决定是否重新运行。')));
+                banner.append(runButtons(job, live)); detail.append(banner);
+            }
             const card = node('div', 'cron-card'), grid = node('dl', 'cron-facts');
             const target = job.target.kind === 'profile' ? profiles.find(p => p.id === job.target.profileId)?.name || job.target.profileId : job.target.cwd;
-            for (const [label, value] of [['调度', job.schedule.kind === 'cron' ? job.schedule.expression : date(job.schedule.at, job.schedule.timeZone)], ['目标', target],
+            for (const [label, value] of [['调度', scheduleText(job)], ['目标', target],
                 ['执行方式', t(job.mode === 'text' ? '文字问候' : '执行工作')], ['微信通知', t(notificationNames[notificationMode(job)])], ['模型', job.model ? `${job.model.provider}/${job.model.modelId} · ${job.model.thinkingLevel}` : t('跟随目标线程')],
                 ['错过执行', t(job.misfire.policy === 'skip' ? '直接跳过' : '宽限期内补最近一次')], ['生效时间', job.startsAt ? date(job.startsAt, job.schedule.timeZone) : t('立即生效')], ['下次执行', date(job.enabled ? job.nextAt : null, job.schedule.timeZone)]]) {
                 grid.append(node('dt', '', t(label)), node('dd', '', value));
@@ -207,16 +260,19 @@
                         copy.append(node('small', 'cron-run-meter', `${run.usage.calls ?? '—'} ${t('次模型调用')} · ${run.usage.tokens?.toLocaleString() ?? '—'} Token · ${run.usage.cost == null ? t('费用未知') : `$${run.usage.cost.toFixed(4)}`}`));
                         if (run.usage.cacheRead != null) copy.append(node('small', '', `${t('输入')} ${unlimited(run.usage.input)} · ${t('输出')} ${unlimited(run.usage.output)} · ${t('缓存读取')} ${unlimited(run.usage.cacheRead)}`));
                     }
-                    row.append(copy); const buttons = node('div', 'cron-actions');
-                    if (['failed', 'error', 'stopped'].includes(run.status)) buttons.append(button('调整执行设置', 'fa-sliders', () => edit(job)));
-                    if (run.target) buttons.append(button('查看线程', 'fa-arrow-up-right-from-square', () => openThread(run.target)));
-                    if (['waiting', 'running', 'dispatching'].includes(run.status)) buttons.append(button('停止', 'fa-stop', b => action(b, job, 'stop', { runId: run.id })));
-                    if (run.status === 'uncertain') buttons.append(button('核对并结束', 'fa-check', async b => {
-                        if (await confirm('核对执行结果', '请先查看目标线程。此操作结束待核对状态并恢复线程设置，不会重新执行任务。', '已核对，结束本次')) await action(b, job, 'acknowledge', { runId: run.id });
-                    }));
-                    row.append(buttons); history.append(row);
+                    row.append(copy, runButtons(job, run)); history.append(row);
                 }
             } catch (error) { if (history.isConnected) { history.querySelector('.pv-skeleton')?.parentElement.remove(); history.append(node('p', 'error', error.message)); } }
+        }
+        function runButtons(job, run) {
+            const buttons = node('div', 'cron-actions');
+            if (['failed', 'error', 'stopped'].includes(run.status)) buttons.append(button('调整执行设置', 'fa-sliders', () => edit(job)));
+            if (run.target) buttons.append(button('查看线程', 'fa-arrow-up-right-from-square', () => openThread(run.target)));
+            if (['waiting', 'running', 'dispatching'].includes(run.status)) buttons.append(button('停止', 'fa-stop', b => action(b, job, 'stop', { runId: run.id })));
+            if (run.status === 'uncertain') buttons.append(button('核对并结束', 'fa-check', async b => {
+                if (await confirm('核对执行结果', '请先查看目标线程。此操作结束待核对状态并恢复线程设置，不会重新执行任务。', '已核对，结束本次')) await action(b, job, 'acknowledge', { runId: run.id });
+            }));
+            return buttons;
         }
         function reason(value) {
             const reasons = { offline: '服务离线，已跳过', expired: '超过执行时间，已跳过', overlap: '上次任务尚未结束', 'user-active': '用户已在今天出现，保持静默', restart: '服务重启，执行结果待核对', 'worker-exited': '运行实例退出，执行结果待核对', 'time-limit': '已达到时长限制', 'run-limit': '已达到单次预算', 'target-deleted': '目标线程已删除' };
@@ -233,7 +289,8 @@
             runRequest = null; await load();
         }
         async function edit(job, target) {
-            if (!await leave()) return;
+            if (!snapshot || !await leave()) return;
+            const previousSelected = selected;
             draft = structuredClone(job || { id: randomId(), name: '', prompt: '', enabled: false, mode: 'work',
                 target: target || { kind: filterProfile ? 'profile' : 'thread', profileId: filterProfile || profiles[0]?.id || '', cwd: currentCwd() || projects[0]?.cwd || '', sessionId: '' },
                 schedule: { kind: 'cron', expression: '0 9 * * *', timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' },
@@ -245,26 +302,28 @@
             const destination = panel('发送到哪里'), destGrid = node('div', 'cron-grid'); destination.append(destGrid);
             const kind = field(destGrid, '目标类型', 'select', draft.target.kind, { choices: [['thread', t('指定线程')], ['profile', t('身份的主线程')]] });
             const profile = field(destGrid, '助手身份', 'select', draft.target.profileId || profiles[0]?.id, { choices: profiles.filter(p => p.enabled).map(p => [p.id, p.name]) });
-            const cwd = field(destGrid, '工作目录', 'text', draft.target.cwd || currentCwd() || projects[0]?.cwd || '', { placeholder: t('项目的绝对路径') });
-            const sessions = field(destGrid, '目标线程', 'select', '', { choices: [['', t('请选择线程')]] });
+            const initialHome = draft.target.kind === 'profile' ? snapshot.homes.find(home => home.profileId === draft.target.profileId) : null;
+            const cwd = field(destGrid, '工作目录', 'text', draft.target.cwd || initialHome?.cwd || currentCwd() || projects[0]?.cwd || '', { placeholder: t('项目的绝对路径') });
+            const directoryField = pickers.directory(cwd, { api, getProjects });
+            const sessions = pickers.thread(destGrid, () => { dirty = true; });
             const targetStatus = node('p', 'cron-muted'), targetActions = node('div', 'cron-actions'); destination.append(targetStatus, targetActions);
-            let sessionsEpoch = 0;
+            let sessionsEpoch = 0, destinationKey = '';
             async function destinations() {
                 const v = ++sessionsEpoch, isProfile = kind.value === 'profile', home = snapshot.homes.find(h => h.profileId === profile.value);
                 profile.parentElement.hidden = !isProfile; targetActions.replaceChildren();
                 const botHome = isProfile && home?.bot === true;
-                cwd.parentElement.hidden = sessions.parentElement.hidden = botHome;
+                directoryField.hidden = sessions.element.hidden = botHome;
+                const key = `${kind.value}:${profile.value}:${cwd.value}`, previous = destinationKey === key ? sessions.value : '';
+                destinationKey = key; sessions.pending();
                 if (botHome) { targetStatus.textContent = t(BOT_HOME); targetActions.append(openBotHome(home)); return; }
                 targetStatus.textContent = isProfile ? home?.status === 'ready' ? `${t('当前主线程')}：${home.name || home.sessionId}` : t('尚未设置主线程。可指定已有线程，或在这个目录创建。') : '';
                 try {
                     const data = await api(`/api/pi/sessions?cwd=${encodeURIComponent(cwd.value)}`);
                     if (v !== sessionsEpoch || !form.isConnected) return;
-                    sessions.replaceChildren(node('option', '', t('请选择线程'))); sessions.firstChild.value = '';
-                    for (const s of data.sessions.filter(s => !s.profileAuthoring && (!isProfile || s.agentProfile?.id === profile.value))) {
-                        const option = node('option', '', s.name || s.firstMessage || s.id); option.value = s.id; sessions.append(option);
-                    }
-                    sessions.value = isProfile ? home?.sessionId || '' : draft.target.sessionId || '';
-                } catch (error) { if (v === sessionsEpoch) targetStatus.textContent = error.message; }
+                    sessions.setItems(data.sessions.filter(s => !s.profileAuthoring && !s.assistant && (!isProfile || s.agentProfile?.id === profile.value)),
+                        previous || (isProfile ? home?.cwd === cwd.value ? home.sessionId : '' : draft.target.cwd === cwd.value ? draft.target.sessionId : ''));
+                } catch (error) { if (v === sessionsEpoch && form.isConnected) { sessions.fail(); targetStatus.textContent = error.message; targetActions.append(button('重试读取', 'fa-rotate', () => destinations())); } }
+                if (!form.isConnected) return;
                 if (isProfile && v === sessionsEpoch) {
                     const saveHome = async (b, create) => {
                         if (create && !await confirm('创建主线程', '将在所填工作目录创建一个持久线程，并设为此身份的主线程。', '创建')) return;
@@ -277,37 +336,51 @@
                     if (home?.status === 'ready') targetActions.append(button('打开主线程', 'fa-arrow-up-right-from-square', () => openThread(home)));
                 }
             }
-            kind.onchange = profile.onchange = cwd.onchange = () => { dirty = true; void destinations(); }; void destinations();
+            cwd.onchange = () => { dirty = true; void destinations(); };
+            kind.onchange = profile.onchange = () => {
+                const home = kind.value === 'profile' && snapshot.homes.find(item => item.profileId === profile.value);
+                if (home?.cwd) cwd.value = home.cwd;
+                cwd.dispatchEvent(new Event('change', { bubbles: true }));
+            }; void destinations();
             const schedule = panel('什么时候执行'), scheduleGrid = node('div', 'cron-grid'); schedule.append(scheduleGrid);
             const daily = /^\d+ \d+ \* \* \*$/.test(draft.schedule.expression || '');
-            const preset = field(scheduleGrid, '频率', 'select', draft.schedule.kind === 'once' ? 'once' : daily ? 'daily' : 'custom',
-                { choices: [['daily', t('每天')], ['weekdays', t('工作日')], ['custom', t('自定义 cron')], ['once', t('仅一次')]] });
+            const weekdays = /^\d+ \d+ \* \* 1-5$/.test(draft.schedule.expression || '');
+            const weekly = /^\d+ \d+ \* \* [0-7]$/.test(draft.schedule.expression || '');
+            const preset = field(scheduleGrid, '频率', 'select', draft.schedule.kind === 'once' ? 'once' : daily ? 'daily' : weekdays ? 'weekdays' : weekly ? 'weekly' : 'custom',
+                { choices: [['daily', t('每天')], ['weekdays', t('工作日')], ['weekly', t('每周')], ['once', t('仅一次')], ['custom', t('自定义 cron')]] });
             const parts = (draft.schedule.expression || '0 9 * * *').split(' ');
-            const time = field(scheduleGrid, '时间', 'time', daily ? `${parts[1].padStart(2, '0')}:${parts[0].padStart(2, '0')}` : '09:00');
+            const weekday = field(scheduleGrid, '星期', 'select', weekly ? String(Number(parts[4]) % 7) : '1',
+                { choices: ['周日', '周一', '周二', '周三', '周四', '周五', '周六'].map((day, i) => [String(i), t(day)]) });
+            const time = field(scheduleGrid, '时间', 'time', daily || weekdays || weekly ? `${parts[1].padStart(2, '0')}:${parts[0].padStart(2, '0')}` : '09:00');
             const expression = field(scheduleGrid, 'Cron 表达式', 'text', draft.schedule.expression || '0 9 * * *', { maxLength: 150, hint: '分钟 小时 日期 月份 星期' });
             const once = field(scheduleGrid, '执行日期与时间', 'datetime-local', draft.schedule.at ? new Date(draft.schedule.at - new Date(draft.schedule.at).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '');
             const zone = field(scheduleGrid, '时区', 'text', draft.schedule.timeZone, { required: true, hint: '使用 IANA 时区，例如 Asia/Shanghai。单次时间按当前设备时区输入。' });
             const startsAt = field(scheduleGrid, '生效时间', 'datetime-local', draft.startsAt ? new Date(draft.startsAt - new Date(draft.startsAt).getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '',
                 { hint: '留空立即生效；按当前设备时区输入。手动运行不受此时间限制。' });
+            const initialOnce = once.value, initialStart = startsAt.value;
+            const startsAtValue = () => !startsAt.value ? null : startsAt.value === initialStart && draft.startsAt != null ? draft.startsAt : new Date(startsAt.value).getTime();
             const preview = node('div', 'cron-preview'); schedule.append(preview);
-            function scheduleValue() { return preset.value === 'once' ? { kind: 'once', at: new Date(once.value).getTime(), timeZone: zone.value }
+            function scheduleValue() { return preset.value === 'once' ? { kind: 'once', at: once.value === initialOnce && draft.schedule.kind === 'once' && draft.schedule.at != null ? draft.schedule.at : new Date(once.value).getTime(), timeZone: zone.value }
                 : { kind: 'cron', expression: expression.value, timeZone: zone.value }; }
             async function previewTimes() {
-                expression.parentElement.hidden = preset.value !== 'custom'; time.parentElement.hidden = !['daily', 'weekdays'].includes(preset.value); once.parentElement.hidden = preset.value !== 'once';
-                if (['daily', 'weekdays'].includes(preset.value)) { const [h, m] = time.value.split(':'); expression.value = `${Number(m)} ${Number(h)} * * ${preset.value === 'daily' ? '*' : '1-5'}`; }
+                const timed = ['daily', 'weekdays', 'weekly'].includes(preset.value);
+                expression.parentElement.hidden = preset.value !== 'custom'; time.parentElement.hidden = !timed; once.parentElement.hidden = preset.value !== 'once'; weekday.parentElement.hidden = preset.value !== 'weekly';
+                once.required = preset.value === 'once'; time.required = timed; expression.required = preset.value === 'custom';
+                if (timed) { const [h, m] = time.value.split(':'); expression.value = `${Number(m)} ${Number(h)} * * ${preset.value === 'daily' ? '*' : preset.value === 'weekly' ? weekday.value : '1-5'}`; }
                 const version = ++previewEpoch;
                 try {
-                    const data = await send('/api/pi/cron/preview', { schedule: scheduleValue(), startsAt: startsAt.value ? new Date(startsAt.value).getTime() : null });
+                    const data = await send('/api/pi/cron/preview', { schedule: scheduleValue(), startsAt: startsAtValue() });
                     if (version !== previewEpoch || !form.isConnected) return;
-                    preview.replaceChildren(node('strong', '', t('接下来五次')));
+                    preview.replaceChildren(node('strong', '', t(preset.value === 'once' ? '执行时间预览' : '接下来五次')));
                     for (const at of data.times) preview.append(node('span', '', date(at, zone.value)));
                 } catch (error) { if (version === previewEpoch) preview.textContent = error.message; }
             }
-            for (const control of [preset, time, expression, once, zone, startsAt]) control.onchange = () => { dirty = true; void previewTimes(); };
+            for (const control of [preset, weekday, time, expression, once, zone, startsAt]) control.onchange = () => { dirty = true; void previewTimes(); };
             const content = panel('做什么');
             const mode = field(content, '执行方式', 'select', draft.mode, { choices: [['text', t('文字问候')], ['work', t('执行工作')]], hint: '文字模式不使用工作工具；工作模式使用目标线程的工具与权限。' });
             const prompt = field(content, '提示词', 'textarea', draft.prompt, { required: true, maxLength: 40000, placeholder: t('描述希望助手完成的事情，以及什么时候应该保持静默。') }); prompt.rows = 8;
-            const executionPanel = panel('执行设置'), executionGrid = node('div', 'cron-grid');
+            const executionPanel = node('details', 'cron-card cron-execution-settings'), executionGrid = node('div', 'cron-grid');
+            executionPanel.append(node('summary', '', t('执行设置'))); form.append(executionPanel);
             executionPanel.append(node('p', 'cron-muted', t('给任务足够的时间。调用次数与 Token 默认只统计，费用与用量上限可按需开启。')), executionGrid);
             const calls = quota(executionGrid, '单次模型调用上限', draft.execution.maxCalls, { min: 1, max: 10000,
                 hint: '留空不限制调用次数；一次模型请求可能包含多个工具调用。' });
@@ -363,19 +436,23 @@
                 message(t('推荐设置已填入，保存后生效。实例总限额仍单独生效。'));
             }));
             advanced.append(node('p', 'cron-muted', t('预算按 UTC 日累计。限额在模型调用之间检查，已发出的请求可能超额；费用按模型价格估算，工具额外费用不包含在内。启用费用限制时，价格未知会停止执行。')));
-            const enabled = field(form, '保存后启用', 'checkbox', draft.enabled);
-            const notifyWeixin = field(form, '微信通知', 'select', notificationMode(draft), {
+            const delivery = panel('保存与通知');
+            const enabled = field(delivery, '保存后启用', 'checkbox', draft.enabled);
+            const notifyWeixin = field(delivery, '微信通知', 'select', notificationMode(draft), {
                 choices: Object.entries(notificationNames).map(([value, caption]) => [value, t(caption)]),
                 hint: '默认跟随线程；绑定为接收全部结果时自动推送，静默任务不发送。' });
-            const footer = node('div', 'cron-form-footer'); footer.append(node('span', 'cron-muted', t('启用后，服务将在计划时间自动执行。')));
+            const footer = node('div', 'cron-form-footer'), saveHint = node('span', 'cron-muted');
+            const updateSaveHint = () => { saveHint.textContent = t(enabled.checked ? '启用后，服务将在计划时间自动执行。' : '保存为暂停，稍后可启用。'); }; enabled.onchange = updateSaveHint; updateSaveHint(); footer.append(saveHint);
             const save = button('保存任务', 'fa-check', () => {}, 'primary'); save.type = 'submit';
-            footer.append(button('取消', null, async () => { if (!await leave()) return; draft = null; dirty = false; await renderDetail(); }), save); form.append(footer);
+            footer.append(button('取消', null, async () => { if (!await leave()) return; draft = null; dirty = false; selected = previousSelected; renderList(); await renderDetail(); }), save); form.append(footer);
             form.oninput = () => { dirty = true; };
             form.onsubmit = async event => {
                 event.preventDefault();
+                if (busy) return;
+                if (kind.value === 'thread' && (!sessions.value || destinationKey !== `${kind.value}:${profile.value}:${cwd.value}`)) { message(t('请选择一个可用的目标线程。'), true); sessions.element.querySelector('button').focus(); return; }
                 const input = { ...draft, name: name.value, prompt: prompt.value, enabled: enabled.checked, weixinNotification: notifyWeixin.value, notifyWeixin: notifyWeixin.value !== 'off', mode: mode.value,
                     target: kind.value === 'profile' ? { kind: 'profile', profileId: profile.value } : { kind: 'thread', cwd: cwd.value, sessionId: sessions.value },
-                    schedule: scheduleValue(), startsAt: startsAt.value ? new Date(startsAt.value).getTime() : null, model: modelMode.value === 'fixed' && modelSelect.value ? { provider: JSON.parse(modelSelect.value)[0], modelId: JSON.parse(modelSelect.value)[1], thinkingLevel: thinking.value } : null,
+                    schedule: scheduleValue(), startsAt: startsAtValue(), model: modelMode.value === 'fixed' && modelSelect.value ? { provider: JSON.parse(modelSelect.value)[0], modelId: JSON.parse(modelSelect.value)[1], thinkingLevel: thinking.value } : null,
                     misfire: { policy: misfire.value, graceMinutes: Number(grace.value) }, condition: condition.value ? { kind: 'no-user-since', time: condition.value } : null,
                     policyVersion: 3,
                     execution: { maxCalls: optionalValue(calls), maxTokens: optionalValue(tokens), maxCost: optionalValue(runCost), maxDurationSeconds: Math.round(Number(duration.value) * 60),
@@ -392,25 +469,23 @@
             const form = node('div', 'cron-form'); form.append(back(), node('h2', '', t('主线程')), node('p', 'cron-muted', t('主线程按需创建，也可以指定已有线程作为定时任务的默认目标。')));
             const profile = field(form, '助手身份', 'select', filterProfile || profiles[0]?.id || '', { choices: profiles.filter(p => p.enabled).map(p => [p.id, p.name]) });
             const cwd = field(form, '工作目录', 'text', '', { placeholder: t('项目的绝对路径') });
-            const sessions = field(form, '目标线程', 'select', '');
+            pickers.directory(cwd, { api, getProjects });
+            const sessions = pickers.thread(form, () => { requestId = randomId(); dirty = true; });
             const status = node('p', 'cron-muted'), controls = node('div', 'cron-actions'); form.append(status, controls); detail.append(form);
             let generation = 0, requestId = randomId();
             async function render(resetDirectory = false) {
                 const version = ++generation, id = profile.value, home = snapshot.homes.find(h => h.profileId === id);
-                cwd.parentElement.hidden = sessions.parentElement.hidden = home?.bot === true;
+                cwd.closest('.cron-field').hidden = sessions.element.hidden = home?.bot === true;
+                sessions.pending();
                 if (home?.bot === true) { status.textContent = t(BOT_HOME); controls.replaceChildren(openBotHome(home)); return; }
                 if (resetDirectory || !cwd.value) cwd.value = home?.cwd || currentCwd() || projects[0]?.cwd || '';
                 status.textContent = home?.status === 'ready' ? `${t('当前主线程')}：${home.name || home.sessionId}` : t('尚未设置主线程。可指定已有线程，或在这个目录创建。');
-                controls.replaceChildren(); sessions.replaceChildren();
+                controls.replaceChildren();
                 try {
                     const data = await api(`/api/pi/sessions?cwd=${encodeURIComponent(cwd.value)}`);
                     if (version !== generation || !form.isConnected) return;
-                    const blank = node('option', '', t('请选择线程')); blank.value = ''; sessions.append(blank);
-                    for (const session of data.sessions.filter(s => s.agentProfile?.id === id && !s.profileAuthoring)) {
-                        const option = node('option', '', session.name || session.id); option.value = session.id; sessions.append(option);
-                    }
-                    sessions.value = home?.sessionId || '';
-                } catch (error) { if (version === generation) status.textContent = error.message; }
+                    sessions.setItems(data.sessions.filter(s => s.agentProfile?.id === id && !s.profileAuthoring && !s.assistant), home?.cwd === cwd.value ? home.sessionId : '');
+                } catch (error) { if (version === generation && form.isConnected) { sessions.fail(); status.textContent = error.message; controls.append(button('重试读取', 'fa-rotate', () => render())); } }
                 if (version !== generation || !form.isConnected) return;
                 const save = async (b, create) => {
                     if (create && !await confirm('创建主线程', '将在所填工作目录创建一个持久线程，并设为此身份的主线程。', '创建')) return;
@@ -451,7 +526,7 @@
         search.oninput = () => { query = search.value; renderList(); };
         window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
         window.addEventListener('workspace:tabchanged', event => {
-            visible = event.detail.tab === 'cron'; if (!visible) { epoch++; return; }
+            visible = event.detail.tab === 'cron'; if (!visible) { epoch++; pickers.close(); return; }
             filterProfile = event.detail.params.get('profileId') || '';
             if (event.detail.params.get('jobId') && !dirty && !busy) selected = event.detail.params.get('jobId');
             const newTarget = event.detail.params.get('sessionId') ? { kind: 'thread', cwd: event.detail.params.get('cwd'), sessionId: event.detail.params.get('sessionId') } : null;
