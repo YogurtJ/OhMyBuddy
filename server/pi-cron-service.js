@@ -89,7 +89,7 @@ class CronService {
         await this.ready; this.healthy();
         const now = this.now(), day = new Date(now).toISOString().slice(0, 10);
         return { schedulerError: this.lastError || null, jobs: this.db.jobs().filter(job => !job.deleted).map(job => ({ ...job, today: this.db.usage(day, job.id),
-            lastRun: this.db.runs(job.id)[0] || null })), homes: await this.homesView(), limits: this.db.limits(), today: this.db.usage(day),
+            lastRun: this.db.runs(job.id)[0] || null, activeRun: this.db.activeRuns(job.id)[0] || null })), homes: await this.homesView(), limits: this.db.limits(), today: this.db.usage(day),
             channelNotifications: this.db.channelNotificationSummary(),
             capabilities: { maxJobs: 100, maxRuns: 10000, budgetDay: 'UTC', cost: 'estimated', maxConcurrent: this.db.settings().maxConcurrent,
                 policyVersion: policy.POLICY_VERSION, defaults: { text: policy.executionDefaults('text'), work: policy.executionDefaults('work'), budget: policy.DEFAULT_LIMITS } },

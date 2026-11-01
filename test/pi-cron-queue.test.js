@@ -44,6 +44,10 @@ test('offline greetings skip, catch-up collapses to the latest occurrence, and u
         clock.value += 2 * 60000; await service.tick();
         assert.equal(service.db.activeRuns(catchup.id).length, 1, 'only one waiting run per task');
         assert.equal(service.db.activeRuns(uncertain.id).length, 1, 'unknown results block future execution');
+        const uncertainSnapshot = (await service.snapshot()).jobs.find(item => item.id === uncertain.id);
+        assert.equal(uncertainSnapshot.lastRun.status, 'skipped', 'a later overlap can be newer than an unfinished run');
+        assert.equal(uncertainSnapshot.activeRun.id, 'interrupted', 'unfinished execution remains visible independently of the latest history row');
+        assert.equal(uncertainSnapshot.activeRun.status, 'uncertain');
         setIdle(true); await service.tick();
         assert.equal(calls.filter(c => c.action === 'start').length, 1);
         assert.equal(calls[0].jobId, catchup.id);

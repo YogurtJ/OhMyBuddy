@@ -215,7 +215,7 @@
 
 ### 定时任务
 
-`GET /status.scheduledTasks=true` 表示服务支持周期与单次任务，`GET /activity.cronBusy` 表示正在保存／调度／核对。`GET /cron` 读取任务、主线程、预算与状态，`PUT /cron/jobs` 使用稳定 UUID 和修订保存任务，`POST /cron/jobs/:id/actions` 提供暂停、启用、运行、停止与核对操作。创建主线程使用 `PUT /cron/homes/:profileId`，沿用原生线程身份和工作目录验证。完整字段、去重、时区与费用边界见[定时任务契约](SCHEDULED_TASKS.md#数据与接口)。新任务 `policyVersion:3` 将模型调用次数、累计 Token 与每日配额改为可选（null 不限），工作和文字均默认最长 21600 秒，新建界面默认工作模式；可调整单次费用、停滞和重复错误保护。`PATCH /cron/jobs/:id/policy` 带 revision 和 execution/budget，仅更新策略，保留原时间、目标、启停和历史，也适用于过期单次任务；有未结束运行时拒绝。`GET/PUT /cron/limits` 以同一 revision 原子管理 `limits` 与 `settings:{maxConcurrent:1..10}`。`GET /cron` 提供 defaults/settings，运行返回结构化 feedback 和分类用量；旧策略和终态记录不自动迁移或重放。
+`GET /status.scheduledTasks=true` 表示服务支持周期与单次任务，`GET /activity.cronBusy` 表示正在保存／调度／核对。`GET /cron` 读取任务、主线程、预算与状态，`GET /cron` 任务同时提供 `lastRun`（最新记录）和 `activeRun`（尚未结束的运行，无则 null），后续的跳过记录不会遮住正在运行或待核对的项。`PUT /cron/jobs` 使用稳定 UUID 和修订保存任务，`POST /cron/jobs/:id/actions` 提供暂停、启用、运行、停止与核对操作。创建主线程使用 `PUT /cron/homes/:profileId`，沿用原生线程身份和工作目录验证。完整字段、去重、时区与费用边界见[定时任务契约](SCHEDULED_TASKS.md#数据与接口)。新任务 `policyVersion:3` 将模型调用次数、累计 Token 与每日配额改为可选（null 不限），工作和文字均默认最长 21600 秒，新建界面默认工作模式；可调整单次费用、停滞和重复错误保护。`PATCH /cron/jobs/:id/policy` 带 revision 和 execution/budget，仅更新策略，保留原时间、目标、启停和历史，也适用于过期单次任务；有未结束运行时拒绝。`GET/PUT /cron/limits` 以同一 revision 原子管理 `limits` 与 `settings:{maxConcurrent:1..10}`。`GET /cron` 提供 defaults/settings，运行返回结构化 feedback 和分类用量；旧策略和终态记录不自动迁移或重放。
 
 ### 可选助手档案
 

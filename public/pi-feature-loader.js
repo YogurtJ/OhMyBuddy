@@ -12,7 +12,7 @@
                 }
             }
         },
-        cron: { styles: ['pi-cron.css'], scripts: ['pi-cron.js'], start: () => window.PiCron.create({ ...cronOptions, activate: false }) },
+        cron: { styles: ['pi-cron.css'], scripts: ['pi-cron-pickers.js', 'pi-cron.js'], start: () => window.PiCron.create({ ...cronOptions, activate: false }) },
         media: { styles: [], scripts: ['media-lab.js'], start: () => window.PiMediaLabPage.start() },
         artifacts: { styles: ['pi-artifacts.css'], scripts: ['pi-artifacts-ui.js', 'pi-artifacts-preview.js', 'pi-artifacts-manage.js', 'pi-artifacts.js'], start: () => window.PiArtifactsPage.start({ activate: false }) },
         connections: { styles: ['media-connections.css', 'pi-transcription-settings.css'], scripts: ['pi-transcription-settings.js', 'media-connections.js'], start: () => window.PiMediaConnectionsPage.start() }
