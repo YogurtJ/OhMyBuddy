@@ -78,9 +78,16 @@ async function check(browser, base, width, language, scenario = 'normal') {
     });
     await page.goto(base + '/#/cron');
     const zh = language === 'zh-CN';
+    const assertCentered = async picker => {
+        const bounds = await picker.evaluate(dialog => { const r = dialog.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height, viewportWidth: innerWidth, viewportHeight: innerHeight }; });
+        assert.ok(Math.abs(bounds.x + bounds.width / 2 - bounds.viewportWidth / 2) < 1, `picker must be horizontally centered: ${JSON.stringify(bounds)}`);
+        assert.ok(Math.abs(bounds.y + bounds.height / 2 - bounds.viewportHeight / 2) < 1, `picker must be vertically centered: ${JSON.stringify(bounds)}`);
+        assert.ok(bounds.x >= 8 && bounds.y >= 8, 'picker keeps a visible viewport margin');
+    };
     const chooseThread = async () => {
         await page.getByRole('button', { name: zh ? '目标线程' : 'Target thread', exact: true }).click();
         const picker = page.getByRole('dialog', { name: zh ? '选择目标线程' : 'Choose target thread', exact: true });
+        await assertCentered(picker);
         await picker.getByRole('searchbox').fill(sessionId);
         await picker.getByRole('searchbox').press('ArrowDown'); await page.keyboard.press('Enter');
         await picker.waitFor({ state: 'detached' });
@@ -131,7 +138,10 @@ async function check(browser, base, width, language, scenario = 'normal') {
     await page.getByLabel(zh ? '任务名称' : 'Task name').fill('Daily briefing <img src=x onerror=alert(1)>');
     await page.locator('.cron-directory-input button').click();
     let picker = page.getByRole('dialog', { name: zh ? '选择工作目录' : 'Choose working directory', exact: true });
-    await picker.getByRole('searchbox').fill('Assistant'); await picker.locator('.cron-picker-result').click();
+    await picker.getByRole('searchbox').fill('Assistant');
+    await assertCentered(picker);
+    await page.screenshot({ path: `/tmp/pivane-cron-directory-${width}-${language}.png`, fullPage: true });
+    await picker.locator('.cron-picker-result').click();
     assert.equal(await page.getByLabel(zh ? '工作目录' : 'Working directory', { exact: true }).inputValue(), cwd);
     await chooseThread();
     await page.getByRole('button', { name: zh ? '目标线程' : 'Target thread', exact: true }).click();
