@@ -110,7 +110,7 @@
 .cron-thread-trigger { justify-content: space-between; padding: 12px; width: 100%; text-align: left; min-width: 0; }
 .cron-thread-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cron-thread-trigger > i { color: var(--text-muted); flex-shrink: 0; }
-.cron-picker { --text-primary: var(--text-main); --border-color: var(--line); color: var(--text-main); width: min(640px, calc(100vw - 40px)); height: min(650px, calc(100dvh - 48px)); max-height: calc(100dvh - 24px); max-width: none; padding: 0; border: 1px solid var(--line); border-radius: 18px; background: var(--surface-1); box-shadow: 0 20px 80px color-mix(in srgb, var(--shadow-tint) 24%, transparent); box-sizing: border-box; }
+.cron-picker { --text-primary: var(--text-main); --border-color: var(--line); color: var(--text-main); width: min(640px, calc(100vw - 40px)); height: min(650px, calc(100dvh - 48px)); max-height: calc(100dvh - 24px); max-width: none; position: fixed; inset: 0; margin: auto; padding: 0; border: 1px solid var(--line); border-radius: 18px; background: var(--surface-1); box-shadow: 0 20px 80px color-mix(in srgb, var(--shadow-tint) 24%, transparent); box-sizing: border-box; }
 .cron-picker[open] { display: flex; flex-direction: column; }
 .cron-picker::backdrop { background: color-mix(in srgb, var(--shadow-tint) 32%, transparent); }
 .cron-picker-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; padding: 22px 24px 16px; flex-shrink: 0; }
