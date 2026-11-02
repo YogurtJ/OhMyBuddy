@@ -51,9 +51,9 @@ html[data-avatar-motion="off"] .pi-bot-attention { animation: none; }
 .pi-bot-more { position: relative; }
 .pi-bot-more[data-side-state]:not([data-side-state=""])::after { content: ''; position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--primary, var(--green)); }
 .pi-bot-more[data-side-state="waiting"]::after { background: var(--amber); }
-.pi-bot-more-menu { position: fixed; inset: auto; margin: 0; padding: 7px; width: min(264px, calc(100vw - 24px)); max-height: calc(100dvh - 100px); overflow: auto; border: 1px solid var(--line-strong); border-radius: 16px; background: var(--surface-1); color: var(--text-main); box-shadow: 0 12px 36px var(--shadow-tint); pointer-events: auto; }
-.pi-bot-more-menu:popover-open { display: grid; gap: 2px; }
-.pi-bot-more-menu > button { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 10px 12px; border: 0; border-radius: 10px; background: transparent; color: inherit; font: inherit; font-size: .86rem; text-align: left; cursor: pointer; }
+.pi-bot-more-menu { position: fixed; inset: auto; margin: 0; padding: 7px; width: min(264px, calc(100vw - 24px)); height: max-content; min-height: 0; max-height: calc(100dvh - 100px); overflow: auto; border: 1px solid var(--line-strong); border-radius: 16px; background: var(--surface-1); color: var(--text-main); box-shadow: 0 12px 36px var(--shadow-tint); pointer-events: auto; }
+.pi-bot-more-menu:popover-open { display: flex; flex-direction: column; justify-content: flex-start; gap: 2px; }
+.pi-bot-more-menu > button { display: flex; flex: 0 0 auto; align-items: center; gap: 12px; min-height: 44px; padding: 10px 12px; border: 0; border-radius: 10px; background: transparent; color: inherit; font: inherit; font-size: .86rem; text-align: left; cursor: pointer; }
 .pi-bot-more-menu > button > i { width: 18px; text-align: center; color: var(--text-muted); }
 .pi-bot-more-menu > button:hover, .pi-bot-more-menu > button:focus-visible { background: var(--surface-2); outline: 2px solid var(--primary, var(--green)); outline-offset: -2px; }
 .pi-bot-more-menu > button:disabled { opacity: .45; cursor: default; }

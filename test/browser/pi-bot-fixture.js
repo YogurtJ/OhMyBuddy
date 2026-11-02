@@ -33,8 +33,8 @@ function botRecord({ id = BOT, name = '小狸', avatar = { kind: 'emoji', value:
 
 // world: { revision, bots: () => [...], messages(sessionId) => [...], prompts: [], responses: [], requests: [], socket }
 // api(request): an optional override; return a Playwright fulfill options object to answer.
-async function botPage(browser, base, world, { width, height = 860, reducedMotion = 'no-preference', api = () => undefined, hash = '#/bot' } = {}) {
-    const context = await browser.newContext({ viewport: { width, height }, locale: 'zh-CN', timezoneId: 'Asia/Shanghai', reducedMotion });
+async function botPage(browser, base, world, { width, height = 860, reducedMotion = 'no-preference', api = () => undefined, hash = '#/bot', mobile = false } = {}) {
+    const context = await browser.newContext({ viewport: { width, height }, locale: 'zh-CN', timezoneId: 'Asia/Shanghai', reducedMotion, isMobile: mobile, hasTouch: mobile });
     const page = await context.newPage(), errors = [];
     page.setDefaultTimeout(8000);
     page.on('pageerror', error => errors.push(error.message));

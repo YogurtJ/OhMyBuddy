@@ -499,7 +499,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const sideChat = new window.PiSideChat({
         changed: () => queueMicrotask(refreshAgentState),
         context: () => ({ cwd: state.cwd, session: state.session, token: state.token, connected: state.connected,
-            identity: state.botMode ? botUi?.identity() : null, progress: taskProgress.value,
+            identity: state.botMode ? botUi?.identity() : null,
             busy: state.streaming || state.compacting || state.compactRequested, waiting: state.pendingUi.size > 0 }),
         prepare: options => requestRpc('prepare_side_chat', options, 65000),
         modelOptions: () => requestRpc('get_side_model_options', {}, 45000),
@@ -3584,7 +3584,6 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'gateway_progress':
                 state.runtimeRevision++;
                 taskProgress.apply(event.progress);
-                sideChat.current?.updateMain();
                 break;
             case 'gateway_session_named':
                 if (event.cwd === state.cwd && event.sessionId === state.session?.id && typeof event.name === 'string') {
