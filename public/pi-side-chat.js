@@ -35,6 +35,7 @@
                 track: $('pi-side-track'), thumb: $('pi-side-thumb'), latest: $('pi-side-latest') });
             $('pi-side-reference').addEventListener('toggle', () => this.scroll.update());
             $('pi-side-refresh').querySelector('span').textContent = translateUi('更新背景并新开');
+            $('pi-side-refresh').title = translateUi('更新背景并新开');
             $('pi-side-refresh').addEventListener('click', () => this.run(() => this.newSegment({ mode: this.fullContext ? 'context' : 'recent', count: 6 })));
             $('pi-side-new').textContent = translateUi('新开侧聊');
             $('pi-side-new').addEventListener('click', () => this.run(() => this.newSegment()));
@@ -46,9 +47,6 @@
             $('pi-side-parent-state').addEventListener('click', () => this.host.focusMain());
             $('pi-side-form').addEventListener('submit', event => { event.preventDefault(); void this.send(); });
             this.input.addEventListener('input', () => { this.resizeInput(); this.controls(); });
-            this.progress = document.createElement('details'); this.progress.className = 'pi-side-main-progress';
-            this.progress.innerHTML = '<summary><span></span><strong></strong></summary><div><ol></ol><p></p></div>';
-            root.querySelector('.pi-side-heading').after(this.progress);
             const localNote = document.createElement('p'); localNote.className = 'pi-side-local-note';
             localNote.textContent = translateUi('临时侧聊 · 刷新后不保留'); $('pi-side-usage').after(localNote);
             this.input.addEventListener('keydown', event => {
@@ -121,18 +119,6 @@
             const ctx = this.host.context();
             const parentLabel = !ctx.connected ? translateUi('主会话未连接') : ctx.waiting ? translateUi('主会话等待确认') : ctx.busy ? translateUi('主会话处理中') : translateUi('主会话空闲');
             $('pi-side-parent-state').textContent = parentLabel;
-            this.progress.querySelector('summary span').textContent = translateUi('当前任务');
-            const current = ctx.connected && ctx.progress?.plan?.find(item => item.status === 'in_progress');
-            this.progress.querySelector('summary strong').textContent = current?.step || translateUi('查看进度');
-            const progressKey = JSON.stringify([ctx.connected, ctx.progress]);
-            if (this.progressKey !== progressKey) {
-                this.progressKey = progressKey;
-                const plan = ctx.connected ? ctx.progress?.plan || [] : [];
-                this.progress.querySelector('ol').replaceChildren(...plan.map(item => {
-                    const li = document.createElement('li'); li.dataset.status = item.status; li.textContent = item.step; return li;
-                }));
-                this.progress.querySelector('p').textContent = !ctx.connected ? translateUi('主会话未连接') : ctx.progress?.explanation || (!plan.length ? translateUi('尚未提供分步计划，当前状态会随主任务更新。') : '');
-            }
             this.input.placeholder = ctx.identity ? translateUi('和 {0} 侧聊', ctx.identity.name) : translateUi('想问些什么？');
             if (this.manager.current === this && this.manager.title) this.manager.title.textContent = ctx.identity ? translateUi('和 {0} 侧聊', ctx.identity.name) : translateUi('侧聊');
         }
@@ -204,7 +190,7 @@
         showLevels(levels) {
             const labels = { off: translateUi("不启用"), minimal: translateUi("极简"), low: translateUi("低"), medium: translateUi("中"), high: translateUi("高"), xhigh: translateUi("极高"), max: translateUi("最大") };
             $('pi-side-thinking-select').setAttribute('aria-label', translateUi('思考等级'));
-            $('pi-side-thinking-select').replaceChildren(...levels.map(level => new Option(translateUi('思考 {0}', labels[level] || level), level)));
+            $('pi-side-thinking-select').replaceChildren(...levels.map(level => new Option(labels[level] || level, level)));
         }
         async changeSpeed() {
             if (!this.connected || this.configuring || this.busy || this.confirmation || this.starting || this.destroyed) return;
@@ -805,7 +791,7 @@
             this.maxEntries = 3;
             this.nextPickerId = 1;
             this.title = document.createElement('span'); this.title.className = 'pi-side-panel-title';
-            document.querySelector('.inspector-heading > div').prepend(this.title);
+            document.querySelector('.inspector-heading').prepend(this.title);
             const root = $('pi-side-chat');
             this.template = root.cloneNode(true);
             this.anchor = document.createComment('side-chat-panel'); root.before(this.anchor);

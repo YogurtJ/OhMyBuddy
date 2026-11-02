@@ -89,7 +89,7 @@ async function run(browser, base, viewport, locale, preferred = 336, navExpanded
     const labels = await page.locator('#pi-side-thinking-select option').evaluateAll(options => options.map(option => ({ value: option.value, label: option.textContent })));
     assert.deepEqual(labels.map(option => option.value), levels);
     const english = locale === 'en-US';
-    assert.deepEqual(labels.map(option => option.label), (english ? ['Off', 'Minimal', 'Low', 'Medium', 'High', 'Very high', 'Maximum'] : ['不启用', '极简', '低', '中', '高', '极高', '最大']).map(label => `${english ? 'Thinking' : '思考'} ${label}`));
+    assert.deepEqual(labels.map(option => option.label), english ? ['Off', 'Minimal', 'Low', 'Medium', 'High', 'Very high', 'Maximum'] : ['不启用', '极简', '低', '中', '高', '极高', '最大']);
     assert.equal(await page.locator('#pi-side-thinking-select').getAttribute('aria-label'), english ? 'Thinking level' : '思考等级');
     await page.locator('#pi-side-thinking-select').selectOption('medium');
     assert.equal(preparations.length, 0); assert.equal(sockets, 0);
