@@ -99,18 +99,19 @@ function mountProfileAuthoringRoutes(router, { store, profiles } = {}) {
             if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !['cwd', 'profileId', 'language', 'draft'].includes(key))
                 || !['zh-CN', 'en'].includes(input.language) || input.profileId !== undefined && input.profileId !== null && !ID.test(input.profileId)) throw fail('Invalid drafting request');
             const result = await profiles.reserve(async () => {
-                const cwd = store.resolveProject(input.cwd === undefined ? store.defaultProject() : input.cwd);
-                const profile = input.profileId ? await profiles.getProfile(input.profileId) : null;
-                if (input.profileId && !profile) throw fail('Profile not found', 404);
+                const target = await require('./pi-helper-project').helperProject({ store, profiles, profileId: input.profileId, cwd: input.cwd });
+                const profile = target.profile;
                 const draft = validateProposal(input.draft ?? {});
                 const profileId = profile?.id ?? null, baseRevision = profileRevision(profile);
                 const prompt = promptFor(profile, draft, input.language);
-                const session = await store.createSession(cwd, input.language === 'en' ? 'Profile draft' : '档案草稿', {
+                const name = input.language === 'en' ? 'Profile draft' : '档案草稿';
+                const options = {
                     agentProfileId: null, initializeSession(manager) {
                         manager.appendCustomEntry(ENTRY, { version: 1, sessionId: manager.getSessionId(), profileId,
                             profileRevision: baseRevision, language: input.language });
                     },
-                });
+                };
+                const session = profile ? await store.createSession(target.cwd, name, options) : await store.createStandaloneSession(name, options);
                 return { session, prompt };
             });
             res.status(201).json(result);

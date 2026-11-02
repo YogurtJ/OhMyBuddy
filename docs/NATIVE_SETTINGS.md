@@ -53,7 +53,7 @@ Pi 包操作使用 `extensions_inventory` 和 `extensions_package`：读取真�
 
 | 方法 | 路径 | 内容 |
 |---|---|---|
-| POST | `/api/pi/extension-assistant/sessions` | `{cwd,scope:'global'或'project',language:'zh-CN'或'en',returnSessionId?:string或null}`；拒绝未知字段，验证项目和返回会话，201 返回原生 session 与 assistant 元数据，不调用模型 |
+| POST | `/api/pi/extension-assistant/sessions` | `{cwd?,profileId?,scope:'global'或'project',language:'zh-CN'或'en',returnSessionId?:string或null,returnCwd?:string}`；拒绝未知字段，验证项目和返回会话，201 返回原生 session 与 assistant 元数据，不调用模型。指定 Buddy 的 profileId 时使用其 workspace 并记录 ownerProfileId，辅助线程仍无身份；没有工作目录／归属时创建任务，跨目录返回原会话使用 returnCwd；原生窗口绑定经验证时另返回 returnBotWindow，以便回到对应 Buddy 当前聊天代际 |
 | POST | `/api/pi/extension-assistant/inventory` | `{cwd,sessionId}`；只服务已打开的扩展助手，返回其固定范围的原生资源快照与 revision |
 | POST | `/api/pi/extension-assistant/package` | `{cwd,sessionId,action,source,expectedRevision,confirmed:true}`；范围取自原生助手身份，不由调用方覆盖；复用原生包服务的预算、锁、信任与冲突检查 |
 

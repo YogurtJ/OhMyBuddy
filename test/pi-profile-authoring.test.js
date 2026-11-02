@@ -119,6 +119,7 @@ test('helper creation reserves maintenance activity before awaits and disposal w
     const store = { defaultProject: () => cwd, resolveProject: value => value,
         profileManager: (session, SessionManager) => SessionManager.open(session.path),
         async createSession() { creations++; started(); await hold; return { id: 'synthetic-session', cwd }; },
+        async createStandaloneSession() { creations++; started(); await hold; return { id: 'synthetic-session', cwd }; },
         async getSession() {} };
     const profiles = new PiProfileRegistry(store);
     profiles.nativeService = { busy: false };

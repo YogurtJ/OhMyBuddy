@@ -10,7 +10,7 @@ const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivan
 const agentDir = path.join(root, 'agent');
 fs.mkdirSync(agentDir, { recursive: true });
 process.env.PI_CODING_AGENT_DIR = agentDir;
-process.env.PI_PROJECT_ROOTS = root;
+process.env.PI_PROJECT_ROOTS = root; process.env.OHMYBUDDY_WORKSPACES_DIR = path.join(root, 'workspaces');
 process.env.PI_OFFLINE = '1';
 process.env.PI_WEB_DEFERRED_FILE = path.join(root, 'deferred.json');
 const { createPiAgentGateway } = require('../server/pi-agent-routes');
@@ -91,8 +91,8 @@ test('bots are profiles with a private workspace and a native-marked main window
     const profile = profiles.profiles.find(item => item.id === botId);
     assert.equal(profile.memory.enabled, true);
     const workspace = profile.bot.workspace;
-    assert.equal(path.dirname(path.dirname(workspace)), root);
-    assert.equal(path.basename(path.dirname(workspace)), 'OhMyBuddyBots');
+    assert.equal(path.dirname(path.dirname(workspace)), path.join(root, 'workspaces'));
+    assert.equal(path.basename(path.dirname(workspace)), 'bots');
     assert.match(fs.readFileSync(path.join(workspace, 'README.md'), 'utf8'), new RegExp(botId));
     if (process.platform !== 'win32') {
         assert.equal(fs.statSync(workspace).mode & 0o777, 0o700);

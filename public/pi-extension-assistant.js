@@ -47,14 +47,14 @@
             function open(detail = {}) {
                 if (!enabled || busy) return;
                 const current = host.context();
-                const cwd = detail.cwd || current.cwd || current.defaultProject;
-                if (!cwd) return host.toast(t('请先选择项目'), 'info');
+                const cwd = detail.cwd || current.cwd || '';
                 opener = document.activeElement;
                 dialog.dataset.cwd = cwd;
+                dialog.dataset.profileId = detail.profileId || current.profileId || '';
                 scope.replaceChildren(node('option', t('所有项目'), { value: 'global' }));
                 if (current.cwd) scope.append(node('option', t('当前项目'), { value: 'project' }));
                 scope.value = detail.scope === 'project' && current.cwd ? 'project' : 'global';
-                target.textContent = t('安装到运行 OhMyBuddy 的机器。项目上下文：{0}', cwd);
+                target.textContent = cwd ? t('安装到运行 OhMyBuddy 的机器。项目上下文：{0}', cwd) : t('会话保存在任务专区，安装范围仍由上方选项决定。');
                 need.value = typeof detail.need === 'string' ? detail.need.slice(0, 4000) : '';
                 location.open = false; body.scrollTop = 0;
                 status.textContent = ''; submit.disabled = false;
@@ -66,7 +66,7 @@
                 busy = true; submit.disabled = true; status.textContent = t('正在创建扩展助手会话…');
                 const generation = ++launchGeneration;
                 try {
-                    const opened = await host.start({ cwd: dialog.dataset.cwd, scope: scope.value, language: globalThis.PiI18n?.locale === 'en' ? 'en' : 'zh-CN', draft: need.value.trim(),
+                    const opened = await host.start({ cwd: dialog.dataset.cwd || undefined, profileId: dialog.dataset.profileId || undefined, scope: scope.value, language: globalThis.PiI18n?.locale === 'en' ? 'en' : 'zh-CN', draft: need.value.trim(),
                         canNavigate: () => dialog.open && generation === launchGeneration });
                     if (opened) { dialog.close(); document.getElementById('workspace-settings-close').click(); document.getElementById('pi-input').focus(); }
                     else dialog.close();

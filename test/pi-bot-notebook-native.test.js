@@ -13,7 +13,7 @@ const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivan
 const agentDir = path.join(root, 'agent'), cwd = path.join(root, 'project');
 for (const dir of [agentDir, cwd]) fs.mkdirSync(dir);
 process.env.PI_CODING_AGENT_DIR = agentDir;
-process.env.PI_PROJECT_ROOTS = root;
+process.env.PI_PROJECT_ROOTS = root; process.env.OHMYBUDDY_WORKSPACES_DIR = path.join(root, 'workspaces');
 process.env.PI_OFFLINE = '1';
 process.env.PI_TELEMETRY = '0';
 const ledger = require('../server/bot/bot-ledger');

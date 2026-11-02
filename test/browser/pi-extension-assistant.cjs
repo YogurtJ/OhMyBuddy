@@ -67,7 +67,7 @@ async function run(browser, base, width, locale, noProject = false) {
     });
     await page.goto(base, { waitUntil: 'domcontentloaded' });
     if (!noProject) await page.waitForFunction(() => !document.getElementById('pi-input').disabled);
-    else { await page.locator('#pi-project-dialog').waitFor({ state: 'visible' }); await page.locator('#pi-project-dialog-close').click(); }
+    else { await page.locator('.pi-empty-state').waitFor({ state: 'visible' }); assert.equal(await page.locator('#pi-project-dialog').isVisible(), false, 'standalone onboarding does not force a project chooser'); }
     await page.locator('#pi-extension-assistant-add').waitFor({ state: 'attached' });
     // Discovery never installs, creates a session, sends a prompt, or loses the composer.
     await page.locator('.extensions-explore').waitFor({ state: 'visible' });

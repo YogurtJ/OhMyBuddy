@@ -1,7 +1,9 @@
 const path = require('node:path');
 const { ManagedLauncher } = require('./pi-managed-launcher');
 function startManaged(root) {
-    require('./pi-local-env').loadLocalEnv(path.join(root, '.env'));
+    const storage = require('./ohmybuddy-storage');
+    require('./pi-local-env').loadLocalEnv(storage.configFile(root));
+    storage.applyEnvironment(root);
     let launcher;
     require('./pi-process-shutdown').registerProcessShutdown(async () => { await launcher?.close(); });
     try {

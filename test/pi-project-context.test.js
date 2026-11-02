@@ -1,0 +1,36 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),http=require('node:http'),{once}=require('node:events');
+const root=fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(),'omb-project-context-'))),agent=path.join(root,'agent'),cwd=path.join(root,'project');
+fs.mkdirSync(agent);fs.mkdirSync(cwd);Object.assign(process.env,{PI_CODING_AGENT_DIR:agent,PI_PROJECT_ROOTS:root,OHMYBUDDY_WORKSPACES_DIR:path.join(root,'workspaces'),PI_OFFLINE:'1',PI_WEB_DEFERRED_FILE:path.join(root,'deferred.json')});
+const {createPiAgentGateway}=require('../server/pi-agent-routes'),{WorkspaceAccessService}=require('../server/workspace-access-service');
+test('Buddy helpers use their Buddy project without assuming its identity; native picker keeps auth, scope and idle boundaries',async t=>{
+ const access=new WorkspaceAccessService({filePath:path.join(root,'access.json'),envToken:()=> 'synthetic-project-token'});
+ let picked=cwd,release,entered;const waiting=new Promise(resolve=>{entered=resolve;});
+ const gateway=createPiAgentGateway({accessService:access,deferredFilePath:process.env.PI_WEB_DEFERRED_FILE,directoryPickerOptions:{command:()=>({command:'synthetic',args:[]}),run:async(_spec,{signal})=>{entered();return new Promise(resolve=>{release=()=>resolve(picked);signal.addEventListener('abort',()=>resolve(null),{once:true});});}}});
+ const app=require('express')();app.use(require('express').json());gateway.mount(app);const server=http.createServer(app);server.listen(0,'127.0.0.1');await once(server,'listening');const base='http://127.0.0.1:'+server.address().port;
+ const call=async(route,body,token='synthetic-project-token')=>{const response=await fetch(base+'/api/pi'+route,{method:body?'POST':'GET',headers:{Origin:base,'Content-Type':'application/json',Authorization:'Bearer '+token},...(body?{body:JSON.stringify(body)}:{})});return{status:response.status,data:await response.json()};};
+ t.after(async()=>{await gateway.dispose();access.dispose();server.closeAllConnections();await new Promise(r=>server.close(r));fs.rmSync(root,{recursive:true,force:true});});
+ assert.equal((await call('/directories/picker',{path:cwd},'invalid')).status,401);
+ assert.equal((await call('/directories/picker',{path:cwd},access.internalToken)).status,401);
+ assert.equal((await call('/directories/picker',{path:os.tmpdir()})).status,400);
+ const selection=call('/directories/picker',{path:cwd});await waiting;
+ assert.equal((await call('/activity')).data.directoryPickerBusy,true);
+ assert.equal((await call('/directories/picker',{path:cwd})).status,409);
+ release();const selected=await selection;assert.equal(selected.status,200);assert.equal(selected.data.cwd,cwd);assert.equal((await call('/activity')).data.directoryPickerBusy,false);
+ const folders=await call('/directories?'+new URLSearchParams({path:cwd}));assert(folders.data.breadcrumbs.some(b=>b.path===root));assert.equal(folders.data.breadcrumbs.at(-1).path,cwd);
+ fs.mkdirSync(path.join(cwd,'needle'));fs.mkdirSync(path.join(cwd,'other'));const filtered=await call('/directories?'+new URLSearchParams({path:cwd,q:'NEED'}));assert.deepEqual(filtered.data.directories.map(r=>r.name),['needle']);
+ const bots=await call('/bots'),created=await call('/bots',{expectedRevision:bots.data.revision,language:'en'});assert.equal(created.status,200,JSON.stringify(created.data));
+ const profiles=await call('/profiles'),profile=profiles.data.profiles.find(p=>p.id===created.data.bot.id),workspace=profile.bot.workspace;
+ const original=await gateway.store.createSession(cwd,'Original');
+ const extension=await call('/extension-assistant/sessions',{cwd,profileId:profile.id,scope:'project',language:'en',returnCwd:cwd,returnSessionId:original.id});assert.equal(extension.status,201,JSON.stringify(extension.data));assert.equal(extension.data.cwd,workspace);assert.equal(extension.data.assistant.ownerProfileId,profile.id);assert.equal(extension.data.assistant.returnCwd,cwd);assert.equal(extension.data.agentProfile,null);
+ const authoring=await call('/profiles/authoring-sessions',{cwd,profileId:profile.id,language:'en',draft:{}});assert.equal(authoring.status,201,JSON.stringify(authoring.data));assert.equal(authoring.data.session.cwd,workspace);assert.equal(authoring.data.session.profileAuthoring.profileId,profile.id);assert.equal(authoring.data.session.agentProfile,null);
+ const unbound=await call('/profiles/authoring-sessions',{cwd,profileId:null,language:'en',draft:{}});assert.equal(unbound.status,201,JSON.stringify(unbound.data));assert.equal(unbound.data.session.standalone,true);assert.notEqual(unbound.data.session.cwd,cwd);
+ const aliases=await call('/projects?recent='+encodeURIComponent(JSON.stringify([unbound.data.session.cwd])));assert.equal(aliases.data.projectAliases[0].standalone,true);
+ const {SessionManager}=await require('../server/pi-session-store').getSdk(),{readProfileBinding}=require('../server/pi-profile-state');
+ for(const session of [extension.data,authoring.data.session])assert.equal(readProfileBinding(SessionManager.open(session.path)).profileId,null);
+ const {readWindowBinding}=require('../server/bot/bot-window-state');
+ let origin,binding;for(const row of await gateway.store.listSessions(workspace)){const value=readWindowBinding(gateway.store.profileManager(row,SessionManager));if(value){origin=row;binding=value;break;}}
+ assert(binding,'created Buddy has a native window binding');
+ const fromBuddy=await call('/extension-assistant/sessions',{cwd,profileId:profile.id,scope:'global',language:'en',returnCwd:workspace,returnSessionId:origin.id});
+ assert.equal(fromBuddy.status,201,JSON.stringify(fromBuddy.data));assert.deepEqual(fromBuddy.data.assistant.returnBotWindow,{profileId:profile.id,windowId:binding.windowId});
+});

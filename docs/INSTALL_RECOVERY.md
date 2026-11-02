@@ -39,7 +39,7 @@ ARCHIVE="$HOME/Downloads/ohmybuddy-1.6.0.tar.gz"
 BASE="$HOME/ohmybuddy"
 test ! -e "$BASE" || { echo "此目录已存在，请按更新流程操作或选择新的BASE"; exit 1; }
 umask 077
-mkdir -p "$BASE/releases/1.6.0" "$BASE/data/media" "$BASE/projects/demo" "$BASE/backups"
+mkdir -p "$BASE/releases/1.6.0"
 tar -xzf "$ARCHIVE" -C "$BASE/releases/1.6.0" --strip-components=1
 cd "$BASE/releases/1.6.0"
 node scripts/install.cjs
@@ -56,21 +56,11 @@ AGENT_DIR=$(node scripts/pi-agent-dir.cjs) || exit 1
 printf 'Pi identity: %s\n' "$AGENT_DIR"
 ```
 
-创建本实例配置，路径使用绝对路径。应用的 `.env` 读取器不会展开 `$HOME`、`${变量}` 或 `~`；下面的 Bash heredoc 在写文件前展开 BASE，因此得到正确的绝对路径：
+以下外部布局适用于包含 configure-instance.cjs 的当前源码；旧归档按随包指南继续识别原位置。生成本实例配置并检查实际路径，助手不复制认证或终端环境中的 Key；完整位置和迁移规则见[存储布局](STORAGE_LAYOUT.md)：
 
 ```bash
-cat > "$BASE/instance.env" <<EOF
-PORT=11408
-HOST=127.0.0.1
-PI_CODING_AGENT_DIR=$AGENT_DIR
-PI_MEDIA_CONFIG_DIR=$BASE/data/media-lab
-PI_MEDIA_DATA_DIR=$BASE/data/media
-PI_PROJECT_ROOTS=/
-PI_WEB_DEFERRED_FILE=$BASE/data/ohmybuddy-deferred-messages.json
-PI_WORKSPACE_BASE_URL=http://127.0.0.1:11408
-EOF
-chmod 600 "$BASE/instance.env"
-cp "$BASE/instance.env" .env
+PI_CODING_AGENT_DIR="$AGENT_DIR" node scripts/configure-instance.cjs
+node scripts/storage-layout.cjs
 ```
 
 安装后台服务，固定实际 Node、身份与启动配置：
@@ -97,16 +87,16 @@ curl -fsS http://127.0.0.1:11408/api/pi/status
 
 ## 3. 首次网页使用
 
-1. 首次会显示“打开项目”窗口，可先选择项目，或关闭窗口再配置模型。打开设置 → **供应商与模型**。复用 Pi 身份时应能看到原生配置中的供应商和认证；只有新身份才需要首次配置。
+1. 首次进入可“直接开始”独立会话，或“打开项目文件夹”；不会强制先选项目。打开设置 → **供应商与模型**。复用 Pi 身份时应能看到原生配置中的供应商和认证；只有新身份才需要首次配置。
 2. 没有可用认证时，展开自己的供应商，选择 API Key 或 OAuth 登录，按步骤提交。OAuth 回调中的 localhost 指服务器，远程浏览器需要服务方支持的设备码/手动回调。Key 只在网页输入，不发到聊天或截图。
 3. 自定义兼容服务通过“新增供应商”配置 ID、Base URL 与 API 类型，再添加模型；填真实模型 ID、窗口和输入能力。保存 Key 后选择一个模型设为默认。点击“测试”会产生一次小额真实请求；认证状态不等于请求已测试成功。
-4. 关闭设置，点击项目入口，选择已经存在的 `$BASE/projects/demo`；也可输入其绝对路径。项目框从服务器的有效默认目录开始，按钮可进入子目录、返回上级或返回可选位置，不再预填维护者路径。网页不创建服务器项目目录，浏览器本机路径不能代替服务器路径。未选择项目时，Pi配置、Packages和Skills只管理全局范围。
+4. 关闭设置后直接开始，或在项目入口浏览实际已有文件夹并点击“在此文件夹开始”；也可输入其绝对路径。项目框从服务器的有效默认目录开始，按钮可进入子目录、返回上级或返回可选位置，不再预填维护者路径。网页不创建服务器项目目录，浏览器本机路径不能代替服务器路径。未选择项目时，Pi配置、Packages和Skills只管理全局范围。
 5. 只读状态正常、网页可用即完成基础启动。若用户已授权真实模型验收，再新建线程发送“只回复 OK”，刷新后核对回复保留；该请求可能收费。
 6. 如需单独验证项目工具，使用合成 UTF-8 文件，不用私人项目作测试；失败或投递结果不明时先核对，不自动重发。
 
 本例默认 `PI_PROJECT_ROOTS=/`，可从用户主目录向上浏览服务器目录树，无需为 Documents 之外的项目另改配置。只有用户希望缩小范围时才改为主目录或多个冒号分隔的指定目录，并空闲重启；系统用户的读/进入权限仍生效，目录范围不是工具沙箱。
 
-如果项目或会话为空，先确认绝对路径存在、在 `PI_PROJECT_ROOTS` 内，且启动读取的是本实例配置。模型保存后已有 runtime 不自动重载，空闲时 `/quit` 再打开线程。项目资源是否信任由项目菜单 `/trust` 管理；未信任并不等于工具沙箱。
+如果项目或会话为空，先确认绝对路径存在、在 `PI_PROJECT_ROOTS` 内，且启动读取的是本实例配置。模型设置完成后会在空闲时更新会话目录；已打开会话的模型仍需明确选择，参数与原生资源按其重载契约生效。项目资源是否信任由项目菜单 `/trust` 管理；未信任并不等于工具沙箱。
 
 ### 媒体的安装前提
 
@@ -118,114 +108,42 @@ curl -fsS http://127.0.0.1:11408/api/pi/status
 
 当前网页不能修改实例的 `PI_PROJECT_ROOTS`。目标目录存在却不在可选范围时，先检查 `/api/pi/status` 返回的 `projectRoots`，再核对实例启动配置。这个问题不能通过创建线程、刷新网页或修改 Pi 项目信任解决。
 
-1. 在服务器实际加载的 `.env` 或服务环境中修改 `PI_PROJECT_ROOTS`；如按本指南保留了 `instance.env`，同步修改该配置源和当前 release 的 `.env`，避免下次升级恢复旧范围。非空进程环境优先于 `.env`，服务管理器中的旧值也要同步。
+1. 在检查器返回的实际外部实例配置或服务环境中修改 `PI_PROJECT_ROOTS`；旧 `.env` 继续按原位置修改，不再复制到每个 release。非空进程环境优先于 `.env`，服务管理器中的旧值也要同步。
 2. 例如个人 macOS 实例可改为 `PI_PROJECT_ROOTS=/`；仅开放主目录则填真实绝对路径，不能写 `~/Documents` 或 `$HOME`。无需移动项目、会话或数据目录。
 3. 保存草稿、暂停预约、等待 Agent/Shell/侧聊/媒体/配置与导入导出操作空闲，再按实例原有方式重启。不能从承载当前操作会话的服务内部停掉自身，应使用独立管理终端或通道。
 4. 重新检查 `projectRoots` 并打开目标目录。范围已包含目标但仍无法进入时，再检查目录是否存在、系统读/进入权限与 macOS 隐私控制；扩大根范围不会绕过这些权限。
 
 ## 4. 备份范围与一致性
 
-| 类别 | 本指南布局 | 恢复含义 |
-|---|---|---|
-| 代码/依赖清单 | 当前 release 目录、原发布包及哈希 | 重解压并执行包内安装入口；不跨平台复制 node_modules |
-| Pi 会话 | 实际 `PI_CODING_AGENT_DIR` 下的 `sessions/` 原生 JSONL | 完整原生树与活动位置；网页当前分支导出不等于完整备份 |
-| Pi 凭据/模型/设置 | 整个实际 Pi 身份目录，通常在 BASE 之外 | 含 auth、models、settings、trust 等；不要只挑 auth.json 或手工改写它 |
-| 工作台配置 | Agent 目录内所选的 workspace、access、notifications 配置（新名称为 `pivane-*`，既有 `pi5-*` 沿用） | 偏好、访问校验/登录、通知订阅；均作为私人数据处理 |
-| 预约 | 明确指定的预约 JSON 文件，例如 `ohmybuddy-deferred-messages.json` | 包含未发送内容；备份前暂停，恢复后核对，禁止自动补发 |
-| 媒体配置与 Key | `data/media-lab/` + 实际 Pi 身份的凭据库 | 配方、connections、registry、说明文件和 Key 必须配套 |
-| 媒体历史与文件 | 整个 `data/media/` | 三类 history JSON、prompts.json 与 public/images、videos、audio 必须同批恢复 |
-| 项目和项目资源 | `projects/` | 源码、未提交修改、`.pi`、项目模板/Package；会话不会替你备份项目文件 |
-| 启动环境 | `instance.env` 及实际服务配置 | 可能含秘密；自定义外置目录/证书/凭据命令的依赖也要另行备份 |
+先运行 `node scripts/storage-layout.cjs`，按实际清单备份，不假定个人数据仍在 BASE/data。完整生命周期、平台默认路径与旧布局迁移见[存储布局](STORAGE_LAYOUT.md)。旧安装维持原路径，不能因为新默认已实现就删除原数据。
 
-浏览器草稿、未发送附件、临时会话、BTW 侧聊、未确认媒体票据、未处理的内存取回/扩展建议不在磁盘备份中。先复制需要保留的内容。外置 Package source、符号链接指向的目录、系统钥匙串/外部凭据命令、远端媒体任务和外部数据库不由下述 tar 自动包含；单独登记并备份。
+| 范围 | 必须包含 |
+|---|---|
+| Pi 身份 | 实际 PI_CODING_AGENT_DIR 的全部配置、原生认证、完整 JSONL、外置图片、附件、档案、窗口索引、队列、预约、用量和来源证明 |
+| OMB 配置 | 检查器返回的实例配置、CONFIG_DIR，以及明确覆盖到其他位置的访问／通知／网络／媒体配置 |
+| OMB 持久文件 | 实际媒体原件、历史、提示词和其他已登记的数据路径 |
+| 用户工作 | 统一工作根、旧 Bot／独立会话工作根和用户项目；工作文件不是可清空缓存 |
+| 运行与回退 | 实际 runtime 状态、服务登记、当前／上一版本、恢复所需备份及包摘要 |
 
-备份步骤：
+保存草稿，暂停派发并等待所有主／侧／子 Agent、Shell、媒体、配置和传输完成，从独立管理通道正常停机；共享身份的 CLI 等外部 writer 同时停止。不能停止承载当前维护 Agent 的服务。备份保存原绝对路径、文件清单与 SHA256、POSIX 权限或 Windows DACL，使用私有位置，不放进源码、下载站或正在备份的树里。
 
-1. 停止提交新任务；等全部主/侧回复、Shell、摘要、媒体、导入导出和设置操作结束，处理等待确认，**在网页暂停所有待发送预约**，记录其状态。
-2. 结束临时/侧聊，保存草稿。停止拥有这些目录的服务和任何正在使用同一 Pi 身份/会话的 CLI，等进程完全退出。HTTP activity 不能证明外部 CLI 或远端任务停止。
-3. 对已停止的数据做一次完整快照，备份文件放在 data/projects 以外：
-
-```bash
-BASE="$HOME/ohmybuddy"
-STAMP=$(date -u +%Y%m%dT%H%M%SZ)
-BACKUP="$BASE/backups/data-$STAMP.tar.gz"
-umask 077
-tar -czf "$BACKUP" -C "$BASE" instance.env data projects
-(cd "$BASE/backups" && sha256sum "data-$STAMP.tar.gz" > "data-$STAMP.tar.gz.sha256")
-chmod 600 "$BACKUP" "$BACKUP.sha256"
-(cd "$BASE/backups" && sha256sum -c "data-$STAMP.tar.gz.sha256")
-```
-
-上面的 BASE 归档不包含其外的 Pi 身份。普通安装还须在同一次停机期间备份实际身份目录，`AGENT_DIR` 填已经核对的启动配置路径（不要重新用另一个终端的默认身份代替）：
-
-```bash
-AGENT_DIR="/absolute/path/from/instance-config"
-AGENT_BACKUP="$BASE/backups/pi-agent-$STAMP.tar.gz"
-tar -czf "$AGENT_BACKUP" -C "$AGENT_DIR" .
-chmod 600 "$AGENT_BACKUP"
-(cd "$BASE/backups" && sha256sum "pi-agent-$STAMP.tar.gz" > "pi-agent-$STAMP.tar.gz.sha256")
-chmod 600 "$AGENT_BACKUP.sha256"
-(cd "$BASE/backups" && sha256sum -c "pi-agent-$STAMP.tar.gz.sha256")
-```
-
-记录原身份绝对路径，将两份归档按同一时间戳配套保存。若显式隔离身份已完整位于 BASE/data 内，可省略第二份；外置链接与自定义会话目录仍须另行备份。
-
-只保存哈希不能防止备份内容泄露；把包存放于加密且有另一份副本的存储中。不要上传到源码仓库、release 或 public/downloads。确认备份无误后可按原方式启动原实例。
+应用更新的自动备份不等于完整用户备份：自动范围包含已登记的身份、配置和媒体来源，用户工作目录还需单独保存。只备份 JSONL 会遗漏其引用的图片和附件；只备份程序目录会遗漏外部配置与工作文件。
 
 ## 5. 更新演练
 
-新安装默认端口为 `11408`，已有实例可保留显式配置的端口。若更换端口，同步修改 `PORT`、工作台地址、服务覆盖、桌面入口和反向代理；使用默认预约路径时先将 `PI_WEB_DEFERRED_FILE` 固定为原队列的绝对路径，不能同时启动两个队列所有者。
+优先在“设置 → 版本与更新”使用受管更新，保留稳定程序入口，由独立启动器准备候选、正常停机、备份、核对并切换外部 active/previous。已有更新授权仍须满足空闲和一次性执行门槛，不确定结果先查看同一维护任务，不重复提交。
 
-可先在设置 → [版本与更新](UPDATES.md)检查版本。配置签名分发源的完整平台包提供“更新到…”确认入口，由独立启动器执行；macOS 预览安装方式见[macOS 指南](MACOS.md)。源码归档及旧安装继续使用官方发布页或独立 Agent 提示词，并按本节在安全停机窗口操作；网页不提供通用备份、重启或任意下载执行入口。全局 Pi CLI 的更新不改变工作台内核。
+手动更新源码时保留原程序、配置和数据清单作回退。新目录先安装锁定依赖，使用同一个外部实例配置；明确选择 `OHMYBUDDY_CONFIG_FILE`，并核对实际 runtime 身份及服务入口。程序路径改变属于安装身份调整，不能只在新目录 npm start，让它误用一套默认空状态。不要复制 .env 回候选版本，也不复制旧 node_modules；旧安装原有 .env 仅按兼容路径保留，搬迁另做。
 
-受管 Pi 版本位于原安装目录的 `.ohmybuddy-runtime` 中，始终从原目录启动。升级 OhMyBuddy 应用采用新的发布目录并沿用原数据配置，不将旧受管快照覆盖到新发布目录。备份、恢复及源码开发与受管快照的关系见[维护说明](UPDATES.md)。
-
-更新前阅读目标版本的迁移和兼容说明，不假设任意降级兼容。项目路径迁移属于独立维护操作，见[命名与迁移](development/NAMING.md)。
-
-1. 按上一节暂停预约、停止服务、备份；保留旧版本目录与对应的更新前备份。
-2. 解压目标包到**新的空目录**，安装其锁定依赖：
-
-```bash
-BASE="$HOME/ohmybuddy"
-NEXT_ARCHIVE="/absolute/path/to/new-release.tar.gz"
-mkdir "$BASE/releases/r2"
-tar -xzf "$NEXT_ARCHIVE" -C "$BASE/releases/r2" --strip-components=1
-cd "$BASE/releases/r2"
-if test -f scripts/install.cjs; then node scripts/install.cjs; else npm ci; fi &&
-cp "$BASE/instance.env" .env &&
-env -i PATH="$PATH" HOME="$HOME" USER="$USER" LANG=C.UTF-8 npm start
-```
-
-3. 只有新服务使用固定 data/projects；不要同时启动旧服务。使用服务管理器时同步修改 WorkingDirectory/ExecStart，并保持原用户/数据路径。
-4. 新浏览器/刷新页面，核对版本、原线程 ID/名称/正文/分支、项目文件、供应商认证状态/默认模型、工作台偏好、媒体记录与文件可下载。预约保持暂停，核对后逐项决定是否恢复。真实凭据请求测试由用户自行执行。
-5. 如失败，停止新进程，保留失败后的数据副本。若目标版本未改变数据格式，可用旧代码核对；存在迁移或不确定时，将**匹配旧版本的完整更新前备份**恢复后再运行旧代码。不要混合不同时点的会话、配置和媒体。
-
-采用外置数据后不用把旧 public 目录覆盖到新代码上。旧安装把媒体留在代码目录时，先停机把三类历史、prompts.json 和三个媒体文件目录迁入独立媒体根，逐文件核对，再改 `PI_MEDIA_DATA_DIR`；旧目录在验收前保留。
+启动后核对同一 Pi 身份、模型与认证、会话 ID、完整树／书签、图片／附件、媒体历史、工作文件和预约／队列。关闭旧实例后才能启动新实例；失败保留现场，按已验证的原路径备份回退，不重放不确定请求。
 
 ## 6. 从备份恢复
 
-恢复演练优先使用新 Linux 容器/虚拟机，在其内部保持与原实例相同的**绝对项目路径**。不要启动第二个进程共用原来的 data；即使只打算浏览，预约也可能触发投递。
+1. 从独立管理通道停机，保留当前数据的安全副本。检查备份完成证明、清单、SHA256、权限和匹配的程序版本；不能将备份覆盖到仍有 writer 的身份。
+2. 整套恢复到记录的原绝对路径，包含外部 Pi 身份、实例配置、媒体和工作文件。原路径恢复与目录迁移是不同操作；搬移 cwd 必须使用原生路径迁移和语义验证，不能批量替换 JSONL 正文。
+3. 恢复原服务入口与配置指针。启动前比对字节，启动后核对原生 ID、完整分支、书签、引用及任务状态。预约暂停状态无法确认时先隔离出站并核对队列，不直接补发未知结果。
 
-1. 校验备份 SHA-256；停止目标服务，保留已有目标目录副本。对可信的自己备份先 `tar -tzf` 检查成员，再解压到新的空 BASE。不要把不可信 tar 解压到系统目录。
-2. 恢复同一套 `instance.env`、data 和 projects；若 Pi 身份在 BASE 外，必须先将配套 `pi-agent-<时间戳>.tar.gz` 校验并解压到记录的原身份绝对路径（目标目录需已停止使用，并保留原内容副本）。BASE 的 tar 不包含这部分，不能先启动生成空身份。恢复文件所有者为运行用户，限制 Agent/备份/配置权限；不要把所有项目文件 chmod 为600而破坏可执行权限。
-3. 重新解压匹配版本源码，执行 `node scripts/install.cjs`（旧归档没有此脚本时使用 `npm ci`），复制 instance.env 到代码目录 `.env`，启动。服务器只能有一个进程拥有该数据目录。
-4. 如果备份时未确认预约已暂停，**首次恢复启动必须隔离出站网络**，先在待发送列表核对/暂停。旧快照中的 scheduled 可能仍是未来时间，不能依靠“过期不补发”保证不会重放。不要手工把 uncertain/dispatching 改为 scheduled。
-5. 核对与更新相同的数据清单；恢复前后对 JSONL/媒体/项目文件做哈希对照。首次打开 Pi runtime 可能追加原生状态条目，应在启动前比较字节，启动后检查语义与会话 ID。
-
-参考解压步骤（RESTORE_BASE 必须是目标系统中的新空目录；保持原项目绝对路径时将它设为原 BASE）：
-
-```bash
-RESTORE_BASE="/absolute/path/to/pivane"
-BACKUP="/absolute/path/to/data-<时间戳>.tar.gz"
-(cd "$(dirname "$BACKUP")" && sha256sum -c "$(basename "$BACKUP").sha256")
-mkdir -p "$RESTORE_BASE"
-tar -tzf "$BACKUP"
-tar -xzf "$BACKUP" -C "$RESTORE_BASE"
-```
-
-凭据恢复后不回显 Key。OAuth 可能已过期或被服务方撤销，需要重新登录；通知订阅可能绑定旧浏览器/来源，需要重新启用。恢复访问控制文件也会恢复旧登录状态，实际切换机器后可撤销设备登录。禁止两个独立副本同时使用同一个可刷新的 OAuth 身份执行请求。
-
-如果项目绝对路径改变，原 session header 与项目索引不会自动改写；先恢复原路径，或通过网页把当前分支 JSONL 导入新项目（新 ID、仅当前分支）。完整历史树跨路径迁移尚未提供，不用文本替换 JSONL 冒充迁移。外部 Package source 路径、trust、置顶和媒体连接也须分别核对。
+现有维护备份可在稳定程序入口用 `node scripts/restore-managed-backup.cjs <备份ID>` 只读验证；实际恢复需在全部 writer 已停止后按该工具的显式 apply 参数操作。它保留安全快照和原生校验，不合并两个身份。跨目录整理按[离线迁移清单](STORAGE_LAYOUT.md#兼容与离线迁移)另行准备与验证。
 
 ## 7. 发布验收记录
 

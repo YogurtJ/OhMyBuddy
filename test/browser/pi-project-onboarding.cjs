@@ -23,7 +23,7 @@ assert.match(path.basename(path.dirname(project)),/^pi-onboarding-.+$/);
   // Existing allowed server cwd may appear as a project, but no browser project is preselected in settings.
   await page.evaluate(()=>localStorage.removeItem('pi.web.cwd'));
   if(!await page.locator('#pi-project-dialog-close').isVisible())await openProjectPicker();
-  await page.waitForFunction(()=>document.querySelector('#pi-project-input').value===document.querySelector('#pi-directory-current').textContent);
+  await page.waitForFunction(()=>document.querySelector('#pi-project-input').value===document.querySelector('#pi-directory-current [aria-current]')?.title);
   assert.equal(await page.locator('#pi-project-input').inputValue(),status.defaultProject);
   await page.locator('#pi-project-dialog-close').click();await page.locator('#workspace-settings-toggle').click();
   await page.locator('[data-settings-tab=native]').click();await page.locator('#native-settings-scope').waitFor();
@@ -37,10 +37,13 @@ assert.match(path.basename(path.dirname(project)),/^pi-onboarding-.+$/);
   await page.locator('[data-manage-route=extensions]').click();await page.locator('#extensions-nav [data-extensions-tab=installed]').click();await page.locator('#native-installed-scope').waitFor();assert.equal(await page.locator('#native-installed-scope').inputValue(),'global');
   assert.ok(!/Project path must be absolute|outside allowed roots/.test(await page.locator('#workspace-settings-dialog').innerText()));
   await page.locator('#workspace-settings-close').click();await openProjectPicker();
-  // Fill a different real project; selecting a project does not create a runtime.
+  // Path entry browses; the footer explicitly opens the project and creates its chat.
   await page.locator('#pi-project-input').fill(project);await page.locator('#pi-project-form [type=submit]').click();
+  await page.waitForFunction(p=>document.querySelector('#pi-directory-current [aria-current]')?.title===p,project);
+  assert.equal(await page.evaluate(()=>localStorage.getItem('pi.web.cwd')),null);
+  await page.locator('#pi-directory-select').click();
   await page.waitForFunction(p=>localStorage.getItem('pi.web.cwd')===p,project);
-  await openProjectPicker();await page.waitForFunction(p=>document.querySelector('#pi-directory-current').textContent===p,project);
+  await openProjectPicker();await page.waitForFunction(p=>document.querySelector('#pi-directory-current [aria-current]')?.title===p,project);
   await page.locator('#pi-directory-up').click();const parent=path.dirname(project);
   await page.waitForFunction(p=>document.querySelector('#pi-project-input').value===p,parent);
   await page.locator('#pi-directory-list [data-path='+JSON.stringify(project)+']').click();

@@ -8,15 +8,21 @@ OhMyBuddy runs on your computer or server. Other devices can use its browser int
 
 1. Follow the [installation guide](INSTALL.md), start the instance and open its URL.
 2. In **Settings → Providers and models**, check existing Pi configuration. Add an API key or complete OAuth if credentials are missing. Keep credentials out of chat. For remote OAuth, localhost means the server; use the provider's device-code or manual-callback flow when available.
-3. Return to Workspace, select a server project directory and choose **New chat**, a model and its thinking level.
+3. Return to Workspace and choose **New task** to start without a project, or **Open project folder** for existing work. If no model is available, use **Set up a provider and model**. The catalog updates when you return; choose a model and its thinking level for the chat.
 4. Send a simple question, then refresh and reopen the persistent thread to check that the reply is retained. Requests use your provider account.
 
 If Pi CLI has models but the browser does not, check its identity directory and startup environment using [existing Pi users](INSTALL.md#existing-pi-cli-users). Global models and extensions can be managed before selecting a project.
 
+New independent chats each receive a persistent folder under the server user’s `~/OhMyBuddy Workspaces/tasks/<random ID>/`. `OHMYBUDDY_WORKSPACES_DIR` can select another external location. They never fall back into a checkout or installation; existing chats keep their saved directory. See the [storage layout and migration policy](../STORAGE_LAYOUT.md). They appear directly under **Tasks**, alongside **Projects**, while their automatic directories stay out of the project list. Refreshing or restarting keeps the conversation and files; deleting a chat keeps its work files. Back up the native Pi sessions, attachments and working folders together. Working folders organize files and do not provide a tool sandbox.
+
+Use **Open folder** next to Projects to work on an existing folder. Local access offers a system folder dialog on macOS, Windows and Linux desktops with Zenity or KDialog. The dialog opens on the machine running OhMyBuddy. Remote and headless access use the server folder browser, with clickable path levels, Up one level, path entry and folder-name filtering. Enter a folder and click the fixed **Open project** button. Create tasks from **New task** beside Tasks.
+
+Extension assistants started from a Buddy and drafts for that Buddy use its project folder. New drafts without a bound profile appear under Tasks.
+
 ## Workspace navigation
 
 - **Buddy** opens your personal assistants: one ongoing main chat per Buddy, topics, a notebook and memory you can review. See [Buddies](BUDDY.md).
-- **Workspace** groups threads by real directories and can start a thread with an identity. The old Assistant chat page and project categories are retired; use Buddy topics to separate conversations. Profiles, extensions, scheduled tasks and the media lab have separate pages.
+- **Workspace** offers independent chats and project threads grouped by real directories, and can start a project thread with an identity. The old Assistant chat page and project categories are retired; use Buddy topics to separate conversations. Profiles, extensions, scheduled tasks and the media lab have separate pages.
 - Phones place additional entries under **More**. Bottom and header navigation remain available while the project/thread drawer is open. The header drawer button closes it directly; the project name opens the project picker. Opening another entry or panel closes the drawer first.
 - **Projects** browses directories; **Activity** shows running work, items needing attention and recent threads. Sidebar search matches titles and first questions. **Search text** searches conversation content; Ctrl/Cmd+K focuses sidebar search.
 - Text search retains its query, results page and reading position within the current page. **Locate current thread** adjusts the list and focus without changing archive state or restarting the session.

@@ -267,7 +267,7 @@
 
 - `GET /bots` → `{version:1,revision,bots:[{id,name,description,avatar,enabled,profileRevision,bot,chosen,windowsRevision,groups,trashCount,windows}]}`，按 `bot.order` 排序，不含回收站档案。`chosen:{name,avatar}` 表示名字、头像是否已由用户定下：在设置卡或 Bot 设置中保存过即记下（服务端字段 `bot.chosen`，重新访谈后保留）；较早的记录和身份页修改按名字／头像各自的访谈步骤（或旧版合并的身份步骤）是否完成、是否与初始占位值不同推断。旧默认表情仍按 `✨` 判断；新建记录带 `onboarding.defaultAvatar:'pivane-pebble'`，只有这类记录的未确认默认“小石”不算已选，老记录中已使用的小石继续算已选。设置卡据此默认保留。`bot` 为 `{version,enabled,order,job,model:null|{provider,id,thinking?},thinking:null|string,permissions:{preset:'free'|'balanced'|'ask',rules:<数量>},notify,onboarding,createdAt}`；`onboarding` 为 `{version:1,phase:'greeting'|'interview'|'done'|'skipped',firstBot,steps,startedAt,completedAt,flowVersion?,firstTaskChoice?,defaultAvatar?}`，`steps` 值为 `done|skipped`，分别记录 `name`、`avatar`、`job`、`personality`、`work`（`workStyle`）、`about`（`aboutUser`）；头像不再是必问的访谈项，主动修改仍可记录。`known` 记录是否已处理其他 Bot 的“关于你”，兼容旧版 `identity:'done'` 同时完成名字和头像步骤。窗口为 `{id,kind:'main'|'topic',title,emoji,focus,instructions,groupId,trashedAt,deleting,createdAt,updatedAt,archivedAt,generation,sessionId,generations}`，不暴露文件路径；`instructions` 是话题指令，主聊天和较早没有该字段的记录为空字符串。
 - `GET /bots/readiness` → `{models:<可用聊天模型数>|null,error?}`；null 表示无法确定，不等于没有模型。
-- `POST /bots` `{expectedRevision,language?}` 创建 Bot、工作目录 `<默认项目>/OhMyBuddyBots/bot-<ID前8位>/` 与主聊天，返回 `{ok,revision,bot,window}`。新建头像为 `{kind:'preset',id:'pivane-pebble'}`，同时记录上述默认标记，不改已有 Bot。最多 50 个 Bot，且计入档案 50 个上限。
+- `POST /bots` `{expectedRevision,language?}` 创建 Bot、工作目录 `<WORKSPACES_DIR>/bots/bot-<完整ID>/` 与主聊天，返回 `{ok,revision,bot,window}`。新建头像为 `{kind:'preset',id:'pivane-pebble'}`，同时记录上述默认标记，不改已有 Bot。最多 50 个 Bot，且计入档案 50 个上限。
 - `GET /bots/:id/settings` → `{revision,bot:{id,name,avatar,soul,bot},models:null|{defaults,effectiveDefault:null|{provider,modelId},models:[{provider,id,name,thinkingLevels}]},modelsError?}`；模型目录按该 Bot 工作目录读取，失败时 `models:null`；这里的 `bot.bot.permissions.rules` 是完整规则数组，列表接口仍是规则数量。`models.defaults` 保留原目录默认值，`effectiveDefault` 是按实际可用模型和锁定 SDK 解析的有效默认；未保存全局默认时可返回 SDK 自动选择，不落盘，无法核实或已配置默认不可用时为 null。UI 优先使用该字段，只有旧服务缺少字段时兼容 `defaults`，不猜目录第一项。
 - `PATCH /bots/:id` `{expectedRevision,changes:{name?,description?,soul?,avatar?,bot?}}`；`avatar` 沿用上述 `profile.avatar` 契约；`bot` 只接受 `job`、`model`（null 为跟随默认）、`thinking`（null 为跟随原生默认思考等级，字符串为独立偏好）、`permissions:{preset?,rules?}`、`notify`、`order`。图片头像需先经头像接口上传。仅在访谈阶段为 `greeting|interview` 时，将实际改动的名字、头像、职责、性格和做事方式对应步骤记为 `done`（旧版 `identity:'done'` 已完成名字和头像）；上传图片后再通过 PATCH 保存该图片头像，即使版本未变，也计为已选头像，并在 `greeting|interview` 阶段完成头像步骤。
 
@@ -422,6 +422,8 @@ HTTP 成功响应也是工具结果 `details.pivaneBotSchedule` 的值（工具 
 
 从 `SessionManager.listAll()` 聚合允许根目录内的项目。可选 `recent` 为 JSON 编码的路径数组，最多 64 项、每项最多 4096 字符；服务端对每项执行 realpath/项目根检查，额外返回 `projectAliases: [{ input, cwd }]`，无效或越界项的 cwd 为 null。不创建目录、启动 runtime 或保存最近项目。
 
+项目行增加 `standalone:boolean`。独立会话的目录行还带 `sessions:[session object]`（同次原生元数据扫描的摘要投影），供网页集中展示，无需按自动目录逐个请求历史；普通项目仍按需读取会话列表。此投影不成为额外聊天记录。
+
 只读 `GET /projects/resolve?cwd=<absolute-path>` 返回规范 `{ cwd }`，无效路径 HTTP 400；复用 token/Origin/根校验。
 
 ```json
@@ -498,9 +500,9 @@ Body: `{ "cwd": "/workspace/demo" }`。先经过 token/Origin/realpath 根检查
 
 `GET /projects` 也返回 `pinnedProjects`，并包含没有 session 的有效置顶项目；不存在或不再允许的路径不会返回，也不会因此删除原偏好。
 
-### `GET /directories?path=<absolute-path>`
+### `GET /directories?path=<absolute-path>&q=<name>`
 
-列举项目目录。省略 `path` 时返回允许根目录。隐藏目录不出现在子目录浏览列表中，但已存在的隐藏项目 session 仍可能出现在 recent projects。
+列举项目目录。省略 `path` 时返回允许根目录。`q` 为不超过200字符的名称子串筛选（不区分大小写）；先筛选、排序再截取最多300项，以 `truncated` 标记省略。子目录及目录链接仍核对可访问性和允许根。返回 `breadcrumbs:[{name,path}]`（仅允许根内的层级）、`parent` 和 `directories`。兼容保留 `locations:[{name,path}]`，网页不再展示该快捷位置栏。隐藏目录不出现在子目录浏览列表中，但已存在的隐藏项目 session 仍可能出现在 recent projects。
 
 ```json
 {
@@ -509,6 +511,12 @@ Body: `{ "cwd": "/workspace/demo" }`。先经过 token/Origin/realpath 根检查
   "directories": [{ "name": "demo", "path": "/workspace/demo" }]
 }
 ```
+
+### 系统文件夹选择
+
+`GET /status.nativeDirectoryPicker` 和 `GET /directories/picker` 返回 `{available,platform,host}`。`POST /directories/picker` 接受 `{path?:string}`，在运行服务的电脑打开系统选窗，返回 `{cancelled:true}` 或 `{cancelled:false,cwd}`；返回路径重新通过普通项目范围验证，不创建会话。认证、Origin 和维护门禁保持生效；实际 socket、Host 与 Origin 均须为 loopback，远程浏览器使用 `/directories`。
+
+macOS 使用 AppleScript 系统选窗，Windows 使用交互用户会话的系统文件夹选择器，Linux 桌面需有 Zenity/KDialog。无可用桌面选窗返回503；同时仅允许一个选择（409），10分钟超时，断开请求取消本次进程。取消／超时后仍等实际进程退出再释放占用；`GET /activity.directoryPickerBusy` 与维护空闲检查同步，正常停机取消并等待该进程。子进程仅继承 GUI／系统所需环境，不传供应商与工作台凭据。
 
 ### `GET /sessions?cwd=<absolute-path>`
 
@@ -545,7 +553,7 @@ Body: `{ "cwd": "/workspace/demo" }`。先经过 token/Origin/realpath 根检查
 
 ### 扩展助手会话
 
-`/status.extensionAssistant=true` 时，`POST /extension-assistant/sessions` 接受 `{cwd,scope,language,returnSessionId?}`，创建独立原生会话并返回 `assistant` 元数据，不提交模型消息。`POST /extension-assistant/inventory` 和 `/extension-assistant/package` 为已打开的助手提供固定安装范围的配置读取与包操作，分别接受 `{cwd,sessionId}` 和附加的 `{action,source,expectedRevision,confirmed:true}`。包操作复用原生配置互斥、trust 和修订检查；独立进程凭据只授权这两个管理端点，不能用于其他 API，媒体规划凭据不能用于扩展管理。请求/响应、确认、取消、身份恢复和限制见[扩展助手契约](NATIVE_SETTINGS.md#扩展助手接口与持久化)。
+`/status.extensionAssistant=true` 时，`POST /extension-assistant/sessions` 接受 `{cwd?,profileId?,scope,language,returnSessionId?,returnCwd?}`，创建独立原生会话并返回 `assistant` 元数据，不提交模型消息。`profileId` 指向 Buddy 时由服务器确定其 workspace，辅助会话保持无身份；元数据包含 `ownerProfileId`。跨目录返回原线程使用经验证的 `returnCwd`；原线程为 Buddy 窗口时，服务端依据原生窗口绑定生成 `returnBotWindow:{profileId,windowId}`，网页按窗口返回当前聊天代际。没有目录和归属时创建任务工作目录。`POST /extension-assistant/inventory` 和 `/extension-assistant/package` 为已打开的助手提供固定安装范围的配置读取与包操作，分别接受 `{cwd,sessionId}` 和附加的 `{action,source,expectedRevision,confirmed:true}`。包操作复用原生配置互斥、trust 和修订检查；独立进程凭据只授权这两个管理端点，不能用于其他 API，媒体规划凭据不能用于扩展管理。请求/响应、确认、取消、身份恢复和限制见[扩展助手契约](NATIVE_SETTINGS.md#扩展助手接口与持久化)。
 
 旧会话分类读写接口已退役，统一返回 HTTP 410，见[逻辑助手项目](#逻辑助手项目)。不再发送 gateway_session_classified 事件或执行分类重连。
 
@@ -572,6 +580,8 @@ Body：
 ```json
 { "cwd": "/workspace/demo", "name": "optional", "profileId": "optional identity ID or null" }
 ```
+
+`GET /status.standaloneSessions=true` 时也可提交 `{ "standalone": true, "name": "optional", "profileId": null }`，不传 cwd。服务在统一外部工作根（默认 `~/OhMyBuddy Workspaces`，由 `OHMYBUDDY_WORKSPACES_DIR` 覆盖）下的 `tasks/<UUID>/` 创建独立工作目录，再按相同原生路径创建 session；每次提交都创建不同目录，不自动重放不确定请求。`standalone` 必须为 boolean，true 与非空 cwd 同传返回 400。真实路径解析后拒绝工作目录跳转到程序、仓库、受管版本或内部私有数据，仍受系统权限与项目范围限制；读取状态或项目列表不创建工作目录。会话对象增加 `standalone:boolean`，从规范 cwd 位置派生，不新增聊天存储或更改原生格式。删除会话不删除其工作文件。旧 `OhMyBuddy/Tasks` cwd 继续识别；工作根必须在项目允许范围内，并拒绝源码、Git checkout、安装／受管版本和内部私有数据重叠，不再回退到第一个项目根。布局与兼容范围见[存储布局](STORAGE_LAYOUT.md)。
 
 创建立即可见的原生空 Pi session，返回单个 session object。HTTP 201。`profileId` 为已启用身份（含 Bot）的 ID 时新会话使用该身份（普通线程，不是 Bot 窗口）；为 null 时无身份；省略时沿用项目默认身份（旧客户端兼容）。
 

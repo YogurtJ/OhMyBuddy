@@ -9,7 +9,7 @@ const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivan
 const agentDir = path.join(root, 'agent');
 fs.mkdirSync(agentDir, { recursive: true });
 process.env.PI_CODING_AGENT_DIR = agentDir;
-process.env.PI_PROJECT_ROOTS = root;
+process.env.PI_PROJECT_ROOTS = root; process.env.OHMYBUDDY_WORKSPACES_DIR = path.join(root, 'workspaces');
 process.env.PI_OFFLINE = '1';
 const { PiSessionStore } = require('../server/pi-session-store');
 const { PiProfileRegistry } = require('../server/pi-profile-registry');
@@ -376,7 +376,7 @@ test('the settings sheet reads identity, personality and the model list, and sav
     assert.deepEqual(read.models.models.map(model => model.id), ['small', 'large']);
     assert.equal(read.models.defaults.modelId, 'small');
     assert.equal(asked.length, 1);
-    assert.match(asked[0], /OhMyBuddyBots[\\/]bot-/, 'models are listed for the Bot workspace');
+    assert.match(asked[0], /workspaces[\\/]bots[\\/]bot-/, 'models are listed for the Bot workspace');
 
     const events = [];
     bots.on('botChanged', event => events.push(event));

@@ -5,8 +5,7 @@ const { readSafe } = require('../server/pi-maintenance-files');
 const { inspectPayload, prepareInstallation } = require('./platform-bootstrap.cjs');
 async function main() {
     if (process.argv.length !== 3) throw Error('Usage: macos-bootstrap.cjs /path/to/verified/payload');
-    const support = path.join(os.homedir(), 'Library/Application Support');
-    const source = path.resolve(process.argv[2]), root = path.join(support, require('../server/ohmybuddy-compat').selectName(support, ['OhMyBuddy', 'Pivane']), 'desktop');
+    const source = path.resolve(process.argv[2]), root = require('./platform-bootstrap.cjs').defaultRoot();
     const result = await prepareInstallation({ source, root });
     const serviceFile = path.join(require('../server/ohmybuddy-compat').runtimeDirectory(root), 'service/installation.json');
     if (!fs.existsSync(serviceFile)) {

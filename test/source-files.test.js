@@ -24,6 +24,8 @@ test('source discovery includes nested modules and tests without following user 
         'public/images/bot-avatar-minimal-20261026/pivane-minimal-bots.html',
         'public/legacy-workspace/chat.js', 'public/.private/record.js', 'server/pivane-queue/intentions.js',
         'public/pivane-session-moves/record.js', 'server/pivane-uploads/original.js',
+        'public/OhMyBuddy/Tasks/task/result.js', 'server/OhMyBuddy/Tasks/task/result.js', 'public/OhMyBuddy Workspaces/tasks/private.js',
+        'test/OhMyBuddy/Tasks/task/private.test.js',
         'test/session/runtime.test.js', 'test/browser/page.cjs', 'test/helpers/fixture.cjs']) put(root, file);
     assert.deepEqual(sourceFiles(root, 'server'), ['server/session/bridge.ts', 'server/session/runtime.js']);
     assert.deepEqual(sourceFiles(root, 'public'), ['public/bot-avatars/bean.svg', 'public/chat/transport.js', 'public/chat/view.css']);

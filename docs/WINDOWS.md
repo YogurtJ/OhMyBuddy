@@ -22,7 +22,7 @@ if ($expected -notmatch '^[a-fA-F0-9]{64}$' -or (Get-FileHash -LiteralPath $arch
 $base = Join-Path $env:USERPROFILE 'OhMyBuddy'
 if (Test-Path -LiteralPath $base) { throw '此目录已存在，请按更新流程操作或选择新的base' }
 $app = Join-Path $base 'releases\1.6.0'
-@($app, "$base\data\media", "$base\projects\demo", "$base\backups") | ForEach-Object { New-Item -ItemType Directory -Path $_ -Force | Out-Null }
+New-Item -ItemType Directory -Path $app -Force | Out-Null
 tar.exe -xzf $archive -C $app --strip-components=1
 if ($LASTEXITCODE -ne 0) { throw '解包失败' }
 Set-Location -LiteralPath $app
@@ -40,36 +40,24 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($agentDir)) { throw '�
 Write-Output "Pi identity: $agentDir"
 ```
 
-普通安装复用这个目录；不存在时由 Pi 启动初始化。只有需要独立身份时才将 `$agentDir` 改为 `Join-Path $base 'data\agent'`。保存实例启动配置，使用正斜杠绝对路径，避免手动替换用户名。这里的PowerShell字符串会展开变量，.env读取器本身不展开变量：
+普通安装复用这个目录；不存在时由 Pi 启动初始化。只有需要独立身份时才将 `$agentDir` 改为程序外的 `Join-Path $env:USERPROFILE '.pi\ohmybuddy-agent'`。以下外部布局适用于包含 configure-instance.cjs 的当前源码；旧发行包保持原位置。生成配置并检查实际路径：
 
 ```powershell
-$dataRoot = $base.Replace('\', '/')
-$piIdentity = $agentDir.Replace('\', '/')
-$projectRoots = ([IO.Directory]::GetLogicalDrives() -join ';').Replace('\', '/')
-$config = @"
-HOST=127.0.0.1
-PORT=11408
-PI_WORKSPACE_BASE_URL=http://127.0.0.1:11408
-PI_CODING_AGENT_DIR=$piIdentity
-PI_MEDIA_CONFIG_DIR=$dataRoot/data/media-lab
-PI_MEDIA_DATA_DIR=$dataRoot/data/media
-PI_WEB_DEFERRED_FILE=$dataRoot/data/ohmybuddy-deferred-messages.json
-PI_PROJECT_ROOTS=$projectRoots
-"@
-[IO.File]::WriteAllText((Join-Path $base 'instance.env'), $config, [Text.UTF8Encoding]::new($false))
-Copy-Item -LiteralPath (Join-Path $base 'instance.env') -Destination (Join-Path $app '.env')
+$env:PI_CODING_AGENT_DIR = $agentDir
+node.exe scripts/configure-instance.cjs
+node.exe scripts/storage-layout.cjs
 node.exe scripts/install-service.cjs
 ```
 
 打开http://127.0.0.1:11408或桌面 OhMyBuddy 入口。安装终端可以关闭，以后用户登录时由计划任务启动；首次安装成功后不用每次重装依赖。运行进程已有环境变量优先于.env，启动前核对实际身份和认证依赖；保留原 Pi 需要的 Provider 环境变量、代理和命令 PATH，清除其他实例的无关覆盖，不输出秘密值，也不修改其他应用的系统环境。打开“供应商与模型”检查复用的配置，缺少可用认证时才登录。
 
-上例默认开放安装时 Windows 可见的各盘符根目录（例如`C:/;D:/`），系统文件权限继续生效；新增盘符时更新此配置并空闲重启。只有用户明确要求缩小范围时才设置`C:/Projects;D:/Work`等指定目录，使用分号分隔。实际目录必须存在，仍经过系统realpath、目录与权限检查。按需要修改instance.env并同步复制到当前代码目录，端口变更需同时修改PORT和PI_WORKSPACE_BASE_URL。上例只监听本机；开放远程访问需要相应监听地址、防火墙及访问验证配置。常驻配置、计划任务和桌面入口的管理见[后台常驻](BACKGROUND_SERVICE.md)。前台 `npm.cmd start` 仅用于试用与排障；停止前先结束任务并暂停预约，不能把强制结束任务当作正常退出。普通关闭与远端/脱离进程不是事务性撤销。
+上例默认开放安装时 Windows 可见的各盘符根目录（例如`C:/;D:/`），系统文件权限继续生效；新增盘符时更新此配置并空闲重启。只有用户明确要求缩小范围时才设置`C:/Projects;D:/Work`等指定目录，使用分号分隔。实际目录必须存在，仍经过系统realpath、目录与权限检查。按需要修改检查器列出的外部实例配置，端口变更需同时修改PORT和PI_WORKSPACE_BASE_URL。上例只监听本机；开放远程访问需要相应监听地址、防火墙及访问验证配置。常驻配置、计划任务和桌面入口的管理见[后台常驻](BACKGROUND_SERVICE.md)。前台 `npm.cmd start` 仅用于试用与排障；停止前先结束任务并暂停预约，不能把强制结束任务当作正常退出。普通关闭与远端/脱离进程不是事务性撤销。
 
 ## 更新、备份与恢复
 
 备份前暂停预约、处理未保存草稿并等所有任务结束，按实际常驻方式正常停机并确认本实例进程退出。用用户自己的备份工具整批保存实际 Pi 身份目录、data、projects、instance.env、实际服务配置及发布包/校验文件；共享身份通常在安装目录之外，必须同时停止使用该身份的 CLI 并保存该目录，不能仅备份 BASE/data。不要只备份会话JSONL，也不要把备份放进公开下载目录。使用支持NTFS权限的备份方式；恢复后核对Agent目录的受保护DACL。
 
-升级时把新版本解压到另一个releases子目录，进入新目录执行 `node.exe scripts/install.cjs`（旧归档没有该脚本时使用 `npm.cmd ci`），复制固定的instance.env为.env，再启动新版本。旧版本必须已经停止，新旧版本不能同时打开同一身份或预约文件。数据绝对路径保持不变；不要复制旧node_modules或重建空身份。
+优先使用稳定入口的受管更新。手动更换代码位置时先安装锁定依赖，按[存储布局](STORAGE_LAYOUT.md)明确连接同一个外部配置和运行状态，并核对服务入口；不复制配置回新代码目录。旧版本必须已经停止，新旧版本不能同时打开同一身份或预约文件。数据绝对路径保持不变；不要复制旧node_modules或重建空身份。
 
 恢复时先停机，将实际 Pi 身份目录、data、projects和启动配置整批恢复到原绝对路径，启动前比较文件SHA256，启动后核对会话、模型、搜索、用量与暂停预约。备份时不能确认预约已暂停的，首次恢复须隔离出站网络后先核对队列。详细数据清单和回退要求见[安装与恢复](INSTALL_RECOVERY.md)，其中Bash命令需使用本页的Windows原生等价操作。
 
@@ -87,7 +75,7 @@ node.exe scripts/install-service.cjs
 - 拒绝 ADS、设备命名空间、保留设备名、盘符相对路径及含糊的末尾点/空格；网页文件链接支持盘符、反斜杠和行号。真实规范路径仍由后端核对。
 - 私密文件创建时携带受保护 DACL，只允许当前用户、SYSTEM 与管理员；专用 Pi 目录、项目原生配置目录和私有导出目录同步保护。不会用 POSIX mode 数值冒充 Windows ACL，也不修改系统临时目录权限。
 - 预约/访问/通知文件先通过可写句柄刷盘，再用 `MoveFileExW(REPLACE_EXISTING|WRITE_THROUGH)` 替换。Windows 不执行目录 fsync。打开文件导致系统拒绝替换时明确报错，不吞掉失败或重放外部请求。
-- 每个线程首次打开都会启动独立的 Pi worker，需要读取数千个依赖与扩展文件；实时病毒扫描可能使首次冷启动达到数十秒，之后的同线程操作复用已启动实例。worker 默认最多等待 120 秒就绪，可在 instance.env 设置 `OHMYBUDDY_WEB_STARTUP_TIMEOUT_MS`（20000–170000）。该值属于实例配置，升级复制同一 instance.env 后保留，无需修改源码。
+- 每个线程首次打开都会启动独立的 Pi worker，需要读取数千个依赖与扩展文件；实时病毒扫描可能使首次冷启动达到数十秒，之后的同线程操作复用已启动实例。worker 默认最多等待 120 秒就绪，可在 instance.env 设置 `OHMYBUDDY_WEB_STARTUP_TIMEOUT_MS`（20000–170000）。该值属于外部实例配置，正常升级保留，无需修改源码。
 - 常见 HTTP 媒体连接保持原协议。Windows 的 GPU bridge 可指向明确的 Node 脚本（.js/.cjs/.mjs）或可执行文件；Node 脚本通过当前 runtime 启动，远端命令仍是单个参数，用户正文仍经 stdin，不启用 cmd shell 解析。真实 GPU 服务未在本轮调用。
 
 ## 验证结果

@@ -13,7 +13,7 @@ const { WebSocket } = require('ws');
 // pages, and scheduled runs that reopen a stale Bot main chat.
 const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pi-bot-gateway-')));
 delete process.env.PORT;
-process.env.PI_CODING_AGENT_DIR = path.join(root, 'agent'); process.env.PI_PROJECT_ROOTS = root;
+process.env.PI_CODING_AGENT_DIR = path.join(root, 'agent'); process.env.PI_PROJECT_ROOTS = root; process.env.OHMYBUDDY_WORKSPACES_DIR = path.join(root, 'workspaces');
 process.env.PI_WEB_DEFERRED_FILE = path.join(root, 'deferred.json'); process.env.PI_OFFLINE = '1'; process.env.PI_WEB_TOKEN = 'bot-gateway-fixture';
 const TOKEN = 'bot-gateway-fixture';
 test.after(() => fs.rmSync(root, { recursive: true, force: true }));

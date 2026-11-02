@@ -13,7 +13,7 @@ const retention = require('./pi-managed-retention');
 class ManagedLauncher {
     constructor({ root, env = process.env, networkEnvironment = env, stage = stagePi, stageApp = stageApplication, backup = backupRoots, forkServer = fork } = {}) {
         this.root = fs.realpathSync.native(root);
-        this.directory = privateDir(path.join(require('./ohmybuddy-compat').runtimeDirectory(this.root)));
+        this.directory = privateDir(path.join(require('./ohmybuddy-compat').runtimeDirectory(this.root, env)));
         this.stateFile = path.join(this.directory, 'state.json');
         this.env = { ...env };
         this.networkEnvironment = { ...networkEnvironment };
@@ -118,7 +118,7 @@ class ManagedLauncher {
                 cwd: this.root, execPath: executable, execArgv: [],
                 env: { ...privateEnv, PI_MANAGED_LAUNCHER: this.nonce, PI_MANAGED_BASE: this.root,
                     PI_CODING_AGENT_DIR: this.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.pi/agent'),
-                    PI_MEDIA_DATA_DIR: this.env.PI_MEDIA_DATA_DIR || this.root },
+                    PI_MEDIA_DATA_DIR: this.env.PI_MEDIA_DATA_DIR || path.join(require('./ohmybuddy-storage').layout({ env: this.env }).data, 'media') },
                 stdio: ['inherit', 'inherit', 'inherit', 'ipc'], windowsHide: true
             });
             this.child = child; let ready = false;

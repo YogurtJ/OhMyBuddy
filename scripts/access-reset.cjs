@@ -7,6 +7,9 @@ if (process.argv.slice(2).join(' ') !== '--disable --confirm') {
     console.error('This local recovery command disables workspace-managed authentication and revokes browser logins. PI_WEB_TOKEN still takes precedence.');
     process.exitCode = 1;
 } else {
+    const storage = require('../server/ohmybuddy-storage');
+    require('../server/pi-local-env').normalizeEnvironment(process.env);
+    process.env.OHMYBUDDY_CONFIG_DIR ||= storage.layout().config;
     const service = new WorkspaceAccessService();
     try {
         let stat;
@@ -19,7 +22,7 @@ if (process.argv.slice(2).join(' ') !== '--disable --confirm') {
         service.write({ version: 1, enabled: false, revision: randomUUID(), sessions: [] });
         console.log('Workspace access reset. Previous configuration was preserved when present.');
         console.log('PI_WEB_TOKEN, if configured in the server environment or .env, still enforces authentication.');
-        console.log('Use the same PI_CODING_AGENT_DIR as the server; this command does not load the project .env.');
+        console.log('Use the same PI_CODING_AGENT_DIR and OHMYBUDDY_CONFIG_DIR as the server; this command does not load instance credentials from an environment file.');
     } catch { console.error('Access reset failed. Check the instance directory and file permissions; no credentials were printed.'); process.exitCode = 1; }
     finally { service.dispose(); }
 }

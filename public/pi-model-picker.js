@@ -228,8 +228,9 @@
         setPending(selection) { this.pendingSelection = selection; this.renderTrigger(); }
         renderTrigger() {
             const listed = this.models.find(item => this.current && keyOf(item) === keyOf(this.current));
-            const model = this.pendingSelection || listed || this.current;
-            const unavailable = Boolean(this.current && !listed && !this.pendingSelection && this.models.length);
+            const restored = this.current?.id === 'unknown' || this.current?.provider === 'unknown' ? null : this.current;
+            const model = this.pendingSelection || listed || restored;
+            const unavailable = Boolean(restored && !listed && !this.pendingSelection && this.models.length);
             const rawName = model?.name || model?.id;
             const name = unavailable && rawName ? t('{0}（现在不可用）', rawName) : rawName;
             this.label.textContent = this.pendingSelection ? t('切换至 {0}…', name) : name || this.defaultLabel || this.placeholder || t(this.models.length ? '请选择已接入的模型' : '尚无可用模型');

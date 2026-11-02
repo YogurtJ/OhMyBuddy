@@ -62,7 +62,7 @@ test('activity and pins are protected, root-checked and do not launch workers', 
     fs.symlinkSync(root, alias);
     const recent = [root + '/', alias, '/etc', path.join(root, 'missing')];
     const resolvedProjects = await (await request(`/projects?recent=${encodeURIComponent(JSON.stringify(recent))}`)).json();
-    assert.deepEqual(resolvedProjects.projectAliases, recent.map((input, index) => ({ input, cwd: index < 2 ? root : null })));
+    assert.deepEqual(resolvedProjects.projectAliases, recent.map((input, index) => ({ input, cwd: index < 2 ? root : null, ...(index < 2 ? { standalone: false } : {}) })));
     assert.deepEqual(await (await request(`/projects/resolve?cwd=${encodeURIComponent(alias)}`)).json(), { cwd: root });
     assert.equal((await request('/projects/resolve?cwd=/etc')).status, 400);
     assert.equal((await request('/projects?recent=invalid-json')).status, 400);

@@ -47,22 +47,45 @@ async function prepareInstallation({ source, root, agentDir, port = 11408, env =
     onProgress('probe', 0, 1);
     await require('../server/pi-platform-bundle').probeBundle(staging, manifest, { env, run });
     onProgress('probe', 1, 1);
-    const data = path.join(root, 'data');
+    const storage = require('../server/ohmybuddy-storage');
+    const folders = storage.layout({ env });
+    for (const directory of [agentDir, folders.config, folders.state, folders.data, folders.cache, folders.workspaces])
+        storage.assertExternal(directory, { root, env });
+    const configPath = path.join(folders.config, 'instances', storage.installationId(root) + '.env');
     const config = { PORT: String(port), HOST: '127.0.0.1', PI_CODING_AGENT_DIR: agentDir, OHMYBUDDY_PROJECT_ROOTS: process.platform === 'win32' ? '' : '/',
-        OHMYBUDDY_MEDIA_CONFIG_DIR: path.join(data, 'media-lab'), OHMYBUDDY_MEDIA_DATA_DIR: path.join(data, 'media'),
-        OHMYBUDDY_WEB_DEFERRED_FILE: path.join(data, 'ohmybuddy-deferred-messages.json'), OHMYBUDDY_WORKSPACE_BASE_URL: `http://127.0.0.1:${port}` };
-    fs.writeFileSync(path.join(staging, '.env'), Object.entries(config).map(([key, value]) => `${key}=${value}`).join('\n') + '\n', { flag: 'wx', mode: 0o600 });
-    atomicJson(path.join(staging, 'OHMYBUDDY_INSTALLATION.json'), { version: 1, product: 'OhMyBuddy', root, port, installedVersion: manifest.appVersion, createdAt: new Date().toISOString() });
+        OHMYBUDDY_CONFIG_DIR: folders.config, OHMYBUDDY_STATE_DIR: folders.state, OHMYBUDDY_DATA_DIR: folders.data,
+        OHMYBUDDY_CACHE_DIR: folders.cache, OHMYBUDDY_WORKSPACES_DIR: folders.workspaces,
+        OHMYBUDDY_MEDIA_CONFIG_DIR: fs.existsSync(path.join(agentDir, 'media-lab')) ? path.join(agentDir, 'media-lab') : path.join(folders.config, 'media-lab'),
+        OHMYBUDDY_MEDIA_DATA_DIR: path.join(folders.data, 'media'),
+        OHMYBUDDY_WORKSPACE_BASE_URL: `http://127.0.0.1:${port}` };
+    privateDir(path.dirname(configPath));
+    if (fs.existsSync(configPath)) {
+        // Reinstallation reattaches the existing external configuration, byte-for-byte.
+        // Never overwrite it with installer defaults or create a second Pi identity.
+        readSafe(configPath, 256 * 1024);
+        const retained = {}; require('../server/pi-local-env').loadLocalEnv(configPath, retained);
+        if (!retained.PI_CODING_AGENT_DIR || !Number.isInteger(Number(retained.PORT)) || Number(retained.PORT) < 1 || Number(retained.PORT) > 65535)
+            throw Error('Existing external configuration needs inspection; it was not replaced');
+        storage.assertExternal(retained.PI_CODING_AGENT_DIR, { root, env });
+        port = Number(retained.PORT);
+    } else require('../server/pi-private-files').writePrivateFileSync(configPath, Object.entries(config).map(([key, value]) => `${key}=${value}`).join('\n') + '\n', true);
+    atomicJson(path.join(staging, 'OHMYBUDDY_INSTALLATION.json'), { version: 1, product: 'OhMyBuddy', root, configFile: configPath, storageLayout: 1,
+        port, installedVersion: manifest.appVersion, createdAt: new Date().toISOString() });
     if (fs.existsSync(root)) throw Error('Installation destination appeared; retained prepared files');
     fs.renameSync(staging, root); return { root, port, existing: false };
 }
-function defaultRoot() {
-    if (process.platform === 'win32') {
-        const base = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData/Local');
-        return path.join(base, compat.selectName(base, ['OhMyBuddy', 'Pivane']), 'desktop');
-    }
-    const base = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local/share');
-    return path.join(base, compat.selectName(base, ['ohmybuddy', 'pivane']), 'desktop');
+function defaultRoot({ env = process.env, platform = process.platform, home = os.homedir() } = {}) {
+    const storage = require('../server/ohmybuddy-storage');
+    const desired = storage.layout({ env, platform, home }).program;
+    const p = platform === 'win32' ? path.win32 : path;
+    const base = platform === 'darwin' ? p.join(home, 'Library', 'Application Support')
+        : platform === 'win32' ? env.LOCALAPPDATA || p.join(home, 'AppData', 'Local')
+            : env.XDG_DATA_HOME || p.join(home, '.local', 'share');
+    const old = [p.join(base, platform === 'linux' ? 'ohmybuddy' : 'OhMyBuddy', 'desktop'),
+        p.join(base, platform === 'linux' ? 'pivane' : 'Pivane', 'desktop')].filter(directory => fs.existsSync(directory));
+    const candidates = [...new Set([...(fs.existsSync(desired) ? [desired] : []), ...old])];
+    if (candidates.length > 1) throw Error('Multiple application installations exist; inspect them before installing');
+    return candidates[0] || desired;
 }
 async function main() {
     const args = process.argv.slice(2), source = args.shift(), values = {};

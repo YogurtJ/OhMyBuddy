@@ -59,7 +59,7 @@ Continue only if verification succeeds. For a new instance, the base directory m
 BASE="$HOME/ohmybuddy"
 test ! -e "$BASE" || { echo "Directory exists; use the update procedure or another BASE"; exit 1; }
 umask 077
-mkdir -p "$BASE/releases/1.11.0" "$BASE/data/media" "$BASE/projects/demo" "$BASE/backups"
+mkdir -p "$BASE/releases/1.11.0"
 tar -xzf "$ARCHIVE" -C "$BASE/releases/1.11.0" --strip-components=1
 cd "$BASE/releases/1.11.0"
 node --version
@@ -74,21 +74,11 @@ AGENT_DIR=$(node scripts/pi-agent-dir.cjs) || exit 1
 printf 'Pi identity: %s\n' "$AGENT_DIR"
 ```
 
-Only for an explicitly isolated identity, replace this with `AGENT_DIR="$BASE/data/agent"`. Create a fixed instance configuration. The shell expands `BASE` before writing; OhMyBuddy's `.env` reader itself does **not** expand variables or `~`.
+Only for an explicitly isolated identity, use an external path such as `AGENT_DIR="$HOME/.pi/ohmybuddy-agent"`. Create a fixed instance configuration. The shell expands `BASE` before writing; OhMyBuddy's `.env` reader itself does **not** expand variables or `~`.
 
 ```bash
-cat > "$BASE/instance.env" <<EOF
-HOST=127.0.0.1
-PORT=11408
-PI_WORKSPACE_BASE_URL=http://127.0.0.1:11408
-PI_CODING_AGENT_DIR=$AGENT_DIR
-PI_MEDIA_CONFIG_DIR=$BASE/data/media-lab
-PI_MEDIA_DATA_DIR=$BASE/data/media
-PI_WEB_DEFERRED_FILE=$BASE/data/ohmybuddy-deferred-messages.json
-PI_PROJECT_ROOTS=/
-EOF
-chmod 600 "$BASE/instance.env"
-cp "$BASE/instance.env" .env
+PI_CODING_AGENT_DIR="$AGENT_DIR" node scripts/configure-instance.cjs
+node scripts/storage-layout.cjs
 node scripts/install-service.cjs
 ```
 
@@ -109,7 +99,7 @@ if ($expected -notmatch '^[a-fA-F0-9]{64}$' -or (Get-FileHash -LiteralPath $arch
 $base = Join-Path $env:USERPROFILE 'OhMyBuddy'
 if (Test-Path -LiteralPath $base) { throw 'Directory exists; use the update procedure or another base' }
 $app = Join-Path $base 'releases\1.11.0'
-@($app, "$base\data\media", "$base\projects\demo", "$base\backups") | ForEach-Object { New-Item -ItemType Directory -Path $_ -Force | Out-Null }
+New-Item -ItemType Directory -Path $app -Force | Out-Null
 tar.exe -xzf $archive -C $app --strip-components=1
 if ($LASTEXITCODE -ne 0) { throw 'Extraction failed' }
 Set-Location -LiteralPath $app
@@ -125,21 +115,9 @@ Resolve the Pi identity through the same public API, then save absolute paths wi
 $agentDir = & node.exe scripts/pi-agent-dir.cjs
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($agentDir)) { throw 'Cannot resolve the Pi identity; check the CLI startup environment' }
 Write-Output "Pi identity: $agentDir"
-$dataRoot = $base.Replace('\', '/')
-$piIdentity = $agentDir.Replace('\', '/')
-$projectRoots = ([IO.Directory]::GetLogicalDrives() -join ';').Replace('\', '/')
-$config = @"
-HOST=127.0.0.1
-PORT=11408
-PI_WORKSPACE_BASE_URL=http://127.0.0.1:11408
-PI_CODING_AGENT_DIR=$piIdentity
-PI_MEDIA_CONFIG_DIR=$dataRoot/data/media-lab
-PI_MEDIA_DATA_DIR=$dataRoot/data/media
-PI_WEB_DEFERRED_FILE=$dataRoot/data/ohmybuddy-deferred-messages.json
-PI_PROJECT_ROOTS=$projectRoots
-"@
-[IO.File]::WriteAllText((Join-Path $base 'instance.env'), $config, [Text.UTF8Encoding]::new($false))
-Copy-Item -LiteralPath (Join-Path $base 'instance.env') -Destination (Join-Path $app '.env')
+$env:PI_CODING_AGENT_DIR = $agentDir
+node.exe scripts/configure-instance.cjs
+node.exe scripts/storage-layout.cjs
 node.exe scripts/install-service.cjs
 ```
 
@@ -159,41 +137,14 @@ A fresh installation has no executable media service. Configure your own image, 
 
 ## Backups, upgrades and recovery
 
-New installations default to port `11408`; existing instances may keep an explicitly configured port. If changing it, update `PORT`, the workspace URL, service overrides, shortcuts and reverse proxy targets. First pin `PI_WEB_DEFERRED_FILE` to the existing queue’s absolute path if it used a port-dependent default. Never run two owners of the same queue.
+Current source supports an external layout and path-only configuration helper. Older archives retain their original locations; follow the instructions shipped with that version. See the [storage layout, platform defaults and migration policy](../STORAGE_LAYOUT.md).
 
-Preserve these together:
+Run `node scripts/storage-layout.cjs` to locate the actual instance configuration, runtime state, Pi identity, media and work roots. Do not assume personal data is under the program or BASE/data.
 
-| Data | Example location |
-|---|---|
-| Native sessions, model credentials, settings and private backups | Entire actual Pi identity directory, usually outside BASE |
-| Media connections and keys | `data/media-lab/` plus the Pi credential store |
-| Media history, prompts and generated files | Entire `data/media/` |
-| Project files, uncommitted work and `.pi` resources | `projects/` and any other configured project roots |
-| Startup environment and actual service configuration | `instance.env` and your service-manager configuration |
-| Matching application and checksum | Original release archive and checksum |
+Back up the entire native Pi identity (including original JSONL, external images, attachments, profiles, queues and proofs), OMB configuration, media/history/prompts, Bot and independent-chat working folders, user projects, actual service registration and matching program/checksums. Update snapshots do not replace a separate backup of working files.
 
-External Package sources, symlink targets, external credential commands, certificates and remote service tasks may need separate backups. The BASE archive below does not include an external shared Pi identity. While both OhMyBuddy and the CLI are stopped, separately back up that entire directory with private permissions and a checksum, and record its original absolute path. Restore it alongside the matching BASE archive before starting either application; on Windows preserve the actual DACL. The [full backup procedure](../INSTALL_RECOVERY.md#4-备份范围与一致性) includes the separate identity archive. Browser drafts, unsent attachments, temporary sessions, side chats and pending in-memory tickets are not included in a disk backup.
+Before copying, preserve drafts, pause dispatch and wait for Agent, Shell, side-chat, media, settings and import/export work to finish. Stop OhMyBuddy and external CLI writers through an independent management channel. Preserve private permissions or the actual Windows DACL, original absolute paths, manifests and checksums. Never stop the service hosting the migration agent itself.
 
-1. Stop submitting new work. Finish Agent, Shell, side-chat, media, settings and import/export tasks. **Pause all scheduled messages in the UI.** Preserve unsent content.
-2. Stop the service and any external CLI using the same Pi identity. Wait for exit before copying data. An HTTP activity check cannot prove an external CLI or remote provider task has stopped.
-3. Back up the complete data, project and startup configuration directories together, outside those directories and outside public downloads. Keep private permissions and an encrypted copy elsewhere. Verify backup checksums.
-4. For an upgrade, extract into a new release directory and run `node scripts/install.cjs` (use `npm ci` only for older archives without that script). Copy the fixed `instance.env` into it as `.env`. Keep the same absolute data/project paths. Start only the new service; never run two instances against the same identity or scheduled-message file.
-5. Verify thread IDs, history, model authentication, files, search, usage and media downloads. Keep scheduled messages paused until reviewed. Do not automatically replay uncertain requests.
+Prefer managed updates from a stable program entry. For manual code relocation, explicitly reuse the same external configuration and runtime identity; do not copy secrets into each release or start a second owner. Reinstallation at the same location retains external configuration bytes and working files. Normal program removal retains user data; shared Pi credentials must not be deleted as if they belonged only to OMB.
 
-On Linux/macOS, after stopping the service, an example snapshot is:
-
-```bash
-BASE="$HOME/ohmybuddy"
-STAMP=$(date -u +%Y%m%dT%H%M%SZ)
-umask 077
-tar -czf "$BASE/backups/data-$STAMP.tar.gz" -C "$BASE" instance.env data projects
-# Linux:
-(cd "$BASE/backups" && sha256sum "data-$STAMP.tar.gz" > "data-$STAMP.tar.gz.sha256")
-# macOS: use shasum -a 256 instead of sha256sum.
-```
-
-For recovery, stop the target instance, keep a copy of any existing target data and restore a trusted matching backup to the **original absolute paths**. Reinstall the matching application's locked dependencies. Compare file hashes before starting, then verify session semantics and IDs after opening the runtime. If you cannot verify that scheduled messages were paused in the backup, isolate outbound network access on the first recovery start and review the queue before reconnecting.
-
-If an upgrade fails, keep the failed data snapshot. Use old code only if formats remain compatible; otherwise restore the matching complete pre-upgrade backup. Do not mix credentials, sessions and media from different points in time.
-
-Changing project paths is not a full-history migration: native session headers and indexes are not rewritten automatically. Restore original paths or import an exported active JSONL branch into a new project as a new thread. Do not perform text replacement on JSONL to imitate a complete migration. See the [full recovery guide](../INSTALL_RECOVERY.md) for detailed limits.
+Restore a verified backup while all writers are stopped, to the original paths, then verify native session IDs, full branches/bookmarks, images/attachments, authentication, work files and queues. A directory move requires a separate offline plan and native semantic verification; never replace text globally in JSONL. Do not replay uncertain tasks. Detailed procedures are in the [recovery guide](../INSTALL_RECOVERY.md#4-备份范围与一致性).

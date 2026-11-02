@@ -1,0 +1,116 @@
+'use strict';
+const test = require('node:test'), assert = require('node:assert/strict');
+const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
+const storage = require('../server/ohmybuddy-storage');
+function fixture(t) {
+    const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'omb-storage-layout-')));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const program = path.join(root, 'OhMyBuddy'), agent = path.join(root, 'pi-agent'); fs.mkdirSync(program); fs.mkdirSync(agent);
+    const env = { OHMYBUDDY_HOME: path.join(root, 'private'), OHMYBUDDY_WORKSPACES_DIR: path.join(root, 'workspaces'), PI_CODING_AGENT_DIR: agent };
+    return { root, program, agent, env };
+}
+test('platform layouts distinguish program, configuration, persistent state/data, cache and work files', () => {
+    const mac = storage.layout({ platform: 'darwin', home: '/Users/fixture', env: {} });
+    assert.equal(mac.config, '/Users/fixture/Library/Application Support/OhMyBuddy/config');
+    assert.equal(mac.cache, '/Users/fixture/Library/Caches/OhMyBuddy');
+    assert.equal(mac.program, '/Users/fixture/Library/Application Support/OhMyBuddy/app');
+    const linux = storage.layout({ platform: 'linux', home: '/home/fixture', env: { XDG_STATE_HOME: '/persistent/state', XDG_DATA_HOME: '/persistent/data' } });
+    assert.equal(linux.state, '/persistent/state/ohmybuddy'); assert.equal(linux.data, '/persistent/data/ohmybuddy');
+    assert.equal(linux.program, '/home/fixture/.local/lib/ohmybuddy');
+    assert.equal(linux.workspaces, '/home/fixture/OhMyBuddy Workspaces');
+    const win = storage.layout({ platform: 'win32', home: 'C:\\Users\\fixture', env: { APPDATA: 'C:\\Roaming', LOCALAPPDATA: 'D:\\Local' } });
+    assert.equal(win.config, 'C:\\Roaming\\OhMyBuddy'); assert.equal(win.state, 'D:\\Local\\OhMyBuddy\\state');
+    assert.equal(win.program, 'D:\\Local\\Programs\\OhMyBuddy');
+    for (const platform of ['darwin', 'win32']) assert.equal(storage.overlaps(platform === 'win32' ? 'C:\\OhMyBuddy' : '/Users/me/OhMyBuddy', platform === 'win32' ? 'c:\\ohmybuddy\\Tasks' : '/users/me/ohmybuddy/Tasks', platform), true);
+    assert.equal(storage.overlaps('/Users/me/OhMyBuddy', '/Users/me/OhMyBuddy Workspaces', 'darwin'), false);
+});
+test('overrides are absolute, keep native Pi identity separate and reject ambiguous aliases', t => {
+    const f = fixture(t), folders = storage.applyEnvironment(f.program, f.env);
+    assert.equal(f.env.PI_CODING_AGENT_DIR, f.agent);
+    assert.equal(f.env.PI_MEDIA_DATA_DIR, path.join(f.root, 'private/data/media'));
+    assert.equal(f.env.PI_MEDIA_CONFIG_DIR, path.join(f.root, 'private/config/media-lab'));
+    assert.equal(folders.workspaces, path.join(f.root, 'workspaces'));
+    assert.equal(fs.existsSync(folders.config), false, 'path resolution is read-only');
+    assert.throws(() => storage.layout({ env: { OHMYBUDDY_DATA_DIR: 'relative' } }), /absolute/);
+    assert.throws(() => storage.layout({ env: { OHMYBUDDY_DATA_DIR: '/one', PIVANE_DATA_DIR: '/two' } }), /Conflicting/);
+    assert.throws(() => storage.applyEnvironment(f.program, { OHMYBUDDY_HOME: f.env.OHMYBUDDY_HOME, PI_CODING_AGENT_DIR: f.agent, OHMYBUDDY_WORKSPACES_DIR: folders.data }), /overlap/);
+});
+test('checkout and version collisions are resolved through real paths before creating work files', t => {
+    const f = fixture(t); fs.mkdirSync(path.join(f.program, '.git'));
+    assert.throws(() => storage.assertExternal(path.join(f.program, 'tasks'), { root: f.program }), /overlap/);
+    const separate = path.join(f.root, 'another-checkout'); fs.mkdirSync(separate); fs.writeFileSync(path.join(separate, '.git'), 'gitdir: elsewhere');
+    assert.throws(() => storage.prepareDirectory(path.join(separate, 'workspaces')), /checkout/);
+    assert.equal(fs.existsSync(path.join(separate, 'workspaces')), false);
+    const alias = path.join(f.root, 'linked'); fs.symlinkSync(f.program, alias, 'junction');
+    assert.throws(() => storage.assertExternal(path.join(alias, 'future/tasks'), { root: f.program }), /overlap/);
+    const version = path.join(f.root, 'release'); fs.mkdirSync(version); fs.writeFileSync(path.join(version, 'PI_INSTALL_COMPLETE.json'), '{}');
+    assert.throws(() => storage.prepareDirectory(path.join(version, 'workspaces')), /replaceable/);
+    const work = storage.prepareDirectory(storage.workspacesRoot({ env: f.env, root: f.program }), { root: f.program, env: f.env });
+    assert.equal(work, f.env.OHMYBUDDY_WORKSPACES_DIR);
+    if (process.platform !== 'win32') assert.equal(fs.statSync(work).mode & 0o777, 0o700);
+});
+test('existing native identity and application settings are adopted without copies, conflicts fail closed', t => {
+    const f = fixture(t); storage.applyEnvironment(f.program, f.env);
+    const native = path.join(f.agent, 'auth.json'); fs.writeFileSync(native, 'synthetic auth bytes', { mode: 0o600 });
+    const old = path.join(f.agent, 'pi5-access.json'); fs.writeFileSync(old, 'legacy bytes');
+    assert.equal(storage.settingsFile(f.agent, 'pivane-access.json', f.env), old);
+    const fresh = storage.settingsFile(f.agent, 'pivane-workspace.json', f.env);
+    assert.ok(storage.within(storage.layout({ env: f.env }).config, fresh));
+    const conflict = path.join(path.dirname(fresh), 'ohmybuddy-access.json'); fs.mkdirSync(path.dirname(conflict), { recursive: true }); fs.writeFileSync(conflict, '{}');
+    assert.throws(() => storage.settingsFile(f.agent, 'pivane-access.json', f.env), /Conflicting/);
+    assert.equal(fs.readFileSync(native, 'utf8'), 'synthetic auth bytes');
+    assert.equal(fs.readFileSync(old, 'utf8'), 'legacy bytes');
+    assert.deepEqual(fs.readdirSync(f.agent).sort(), ['auth.json', 'pi5-access.json']);
+});
+test('runtime state and external config survive code replacement; legacy state requires explicit offline migration', t => {
+    const f = fixture(t), runtime = storage.runtimeDirectory(f.program, f.env), config = storage.configFile(f.program, f.env);
+    assert.ok(storage.within(storage.layout({ env: f.env }).state, runtime));
+    assert.ok(storage.within(storage.layout({ env: f.env }).config, config));
+    fs.mkdirSync(runtime, { recursive: true }); fs.writeFileSync(path.join(runtime, 'state.json'), '{"version":1,"active":null}');
+    fs.mkdirSync(path.dirname(config), { recursive: true }); fs.writeFileSync(config, 'PORT=1234\n');
+    fs.writeFileSync(path.join(f.program, 'program.txt'), 'old'); fs.rmSync(f.program, { recursive: true }); fs.mkdirSync(f.program); fs.writeFileSync(path.join(f.program, 'program.txt'), 'new');
+    assert.equal(storage.runtimeDirectory(f.program, f.env), runtime); assert.equal(storage.configFile(f.program, f.env), config);
+    assert.equal(fs.readFileSync(path.join(runtime, 'state.json'), 'utf8'), '{"version":1,"active":null}');
+    fs.mkdirSync(path.join(f.program, '.pivane-runtime'));
+    assert.throws(() => storage.runtimeDirectory(f.program, f.env), /Both legacy/);
+    fs.rmSync(runtime, { recursive: true });
+    assert.equal(storage.runtimeDirectory(f.program, f.env), path.join(f.program, '.pivane-runtime'));
+    assert.throws(() => storage.runtimeDirectory(f.program, { ...f.env, OHMYBUDDY_RUNTIME_DIR: runtime }), /offline migration/);
+    fs.writeFileSync(path.join(f.program, '.env'), 'PORT=5678\n');
+    assert.throws(() => storage.configFile(f.program, f.env), /Both legacy/);
+});
+test('read-only diagnostics list paths and migration requirements without emitting environment credentials', t => {
+    const f = fixture(t); f.env.PI_WEB_TOKEN = 'must-not-appear'; f.env.OPENAI_API_KEY = 'must-not-appear';
+    fs.mkdirSync(path.join(f.program, '.pivane-runtime')); fs.writeFileSync(path.join(f.program, '.env'), 'PRIVATE_TEST_SECRET=must-not-appear');
+    const before = fs.readdirSync(f.program);
+    const report = storage.inspect(f.program, f.env);
+    assert.ok(report.issues.includes('LEGACY_RUNTIME_IN_PROGRAM'));
+    assert.ok(report.issues.includes('LEGACY_CONFIG_IN_PROGRAM'));
+    assert.equal(report.migration.automatic, false);
+    assert.doesNotMatch(JSON.stringify(report), /must-not-appear|OPENAI_API_KEY|PI_WEB_TOKEN/);
+    assert.deepEqual(fs.readdirSync(f.program), before);
+    assert.equal(fs.existsSync(f.env.OHMYBUDDY_HOME), false);
+});
+test('source configuration helper writes only external path defaults and reuses existing configuration', async t => {
+    const f = fixture(t), { configure } = require('../scripts/configure-instance.cjs');
+    const first = await configure({ root: f.program, env: { ...f.env, OPENAI_API_KEY: 'never-copy', PI_WEB_TOKEN: 'never-copy' }, agentDir: f.agent });
+    assert.equal(first.created, true); assert.ok(storage.within(path.join(f.root, 'private/config'), first.configFile));
+    const bytes = fs.readFileSync(first.configFile);
+    assert.doesNotMatch(bytes.toString(), /never-copy|OPENAI_API_KEY|WEB_TOKEN/);
+    assert.equal(fs.existsSync(path.join(f.program, '.env')), false);
+    assert.equal((await configure({ root: f.program, env: f.env, agentDir: f.agent })).created, false);
+    assert.deepEqual(fs.readFileSync(first.configFile), bytes);
+});
+test('the managed control container can retain a verified release while persistent data remains outside that release', t => {
+    const f = fixture(t), env = { ...f.env, PI_MANAGED_BASE: f.program }, folders = storage.layout({ env });
+    const runtime = storage.runtimeDirectory(f.program, env);
+    const candidate = path.join(runtime, 'releases', '12345678-1234-4234-8234-123456789abc');
+    fs.mkdirSync(candidate, { recursive: true }); fs.writeFileSync(path.join(candidate, 'PI_INSTALL_COMPLETE.json'), '{}');
+    assert.doesNotThrow(() => storage.applyEnvironment(candidate, env));
+    assert.equal(storage.runtimeDirectory(f.program, env), runtime);
+    assert.throws(() => storage.assertExternal(path.join(candidate, 'state'), { root: candidate, env, managedContainer: true }), /overlap/);
+    assert.equal(storage.within(candidate, folders.data), false);
+    assert.equal(storage.within(candidate, folders.workspaces), false);
+    const launcher = new (require('../server/pi-managed-launcher').ManagedLauncher)({ root: f.program, env });
+    assert.equal(launcher.directory, runtime);
+});

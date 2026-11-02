@@ -28,6 +28,8 @@ Pi Coding Agent及其包名、原生SessionManager、JSONL格式和原生环境�
 
 访问Cookie继续从原配置派生，改名不要求清空浏览器或重新创建身份。手工改变配置实际位置可能需要重新验证，不能只改文件名就声称会话已迁移。若跨域名，浏览器存储和Cookie按浏览器同源规则处理，源码兼容不等于跨域迁移。
 
+新建 Bot／独立会话统一使用外部 `WORKSPACES_DIR/bots/` 与 `WORKSPACES_DIR/tasks/`，默认根为 `~/OhMyBuddy Workspaces`。旧 `OhMyBuddyBots`、`PivaneBots` 和 `OhMyBuddy/Tasks` 保持原件与原生 cwd；程序、状态、配置及实际路径冲突规则见[存储布局](../STORAGE_LAYOUT.md)。不依赖大小写区分程序与用户数据，不因改名自动搬迁。
+
 ## 有意保持的持久格式和协议
 
 以下旧拼写是已保存或线上互通的格式标识，继续保持，不作品牌字符串替换：

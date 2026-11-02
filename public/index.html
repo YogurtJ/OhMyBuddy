@@ -154,7 +154,7 @@
                     <button id="pi-project-button" class="pi-project-button" type="button" title="切换项目目录" data-i18n-title="s1333">
                         <span class="pi-project-mark"><i class="fa-solid fa-folder-open" aria-hidden="true"></i></span>
                         <span class="pi-project-copy">
-                            <strong id="pi-project-name"><!--i18n:s475-->选择项目</strong>
+                            <strong id="pi-project-name"><!--i18n-->工作台</strong>
                             <span id="pi-project-path"><!--i18n:s357-->未连接</span>
                         </span>
                         <i class="fa-solid fa-chevron-down"></i>
@@ -268,7 +268,8 @@
                             <div id="pi-deferred-banner" class="pi-deferred-chip pi-status-chip" hidden><button id="pi-deferred-open" type="button" aria-haspopup="dialog"><i class="fa-regular fa-clock" aria-hidden="true"></i><strong id="pi-deferred-count"></strong><span id="pi-deferred-next" class="pi-deferred-next"></span></button></div>
                         </div>
                         <div id="pi-model-guidance" class="pi-model-guidance" role="status" hidden>
-                            <span id="pi-model-guidance-text"></span>
+                            <i class="fa-solid fa-plug pi-model-guidance-icon" aria-hidden="true"></i>
+                            <div class="pi-model-guidance-copy"><strong id="pi-model-guidance-title"></strong><span id="pi-model-guidance-text"></span></div>
                             <div class="pi-model-guidance-actions">
                                 <button id="pi-model-refresh" type="button" title="重新读取当前会话的模型目录" disabled data-i18n-title="s1357"><!--i18n:s1358-->刷新模型目录</button>
                                 <button id="pi-model-choose" type="button"><!--i18n:s1359-->选择模型</button>
@@ -610,32 +611,38 @@
     <div id="pi-project-dialog" class="pi-modal hidden" role="dialog" aria-modal="true" aria-labelledby="pi-project-dialog-title">
         <div class="pi-modal-dialog project-dialog">
             <div class="pi-modal-header">
-                <div><span class="pi-pane-kicker">WORKING DIRECTORY</span><h2 id="pi-project-dialog-title"><!--i18n:s1499-->打开项目</h2></div>
+                <div><span class="pi-pane-kicker">OhMyBuddy</span><h2 id="pi-project-dialog-title"><!--i18n-->打开项目文件夹</h2></div>
                 <button id="pi-project-dialog-close" class="icon-btn subtle" type="button" title="关闭" aria-label="关闭" data-i18n-title="s358" data-i18n-aria-label="s358"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <form id="pi-project-form" class="pi-project-form">
-                <label for="pi-project-input"><!--i18n:s1500-->绝对路径</label>
-                <div class="pi-path-entry">
-                    <input id="pi-project-input" type="text" placeholder="输入服务器上的绝对路径" autocomplete="off" spellcheck="false" data-i18n-placeholder="s1501">
-                    <button class="pi-primary-button" type="submit"><!--i18n:s1502-->打开</button>
+            <div class="pi-project-dialog-body">
+                <div id="pi-native-picker-section" class="pi-project-native" hidden>
+                    <button id="pi-native-directory-picker" class="pi-primary-button" type="button"><i class="fa-regular fa-folder-open" aria-hidden="true"></i><span><!--i18n-->用系统窗口选择文件夹</span></button>
+                    <small><!--i18n-->选择窗口会出现在运行 OhMyBuddy 的电脑上。</small>
                 </div>
-                <small id="pi-project-scope" class="pi-project-scope"></small>
-            </form>
-            <button id="pi-import-session" class="pi-secondary-button" type="button" hidden><!--i18n:s208-->导入 Pi 会话</button>
-            <div class="pi-directory-browser">
-                <div class="pi-directory-head">
-                    <button id="pi-directory-up" class="icon-btn subtle" type="button" title="上级目录" aria-label="上级目录" data-i18n-title="s225" data-i18n-aria-label="s225"><i class="fa-solid fa-arrow-up"></i></button>
-                    <span id="pi-directory-current"><!--i18n:s1503-->允许的项目根目录</span>
+                <form id="pi-project-form" class="pi-project-form">
+                    <label for="pi-project-input"><!--i18n-->文件夹路径</label>
+                    <div class="pi-path-entry">
+                        <input id="pi-project-input" type="text" placeholder="输入或粘贴文件夹路径" autocomplete="off" spellcheck="false" data-i18n-placeholder>
+                        <button class="pi-secondary-button" type="submit"><!--i18n-->前往</button>
+                    </div>
+                    <small id="pi-project-scope" class="pi-project-scope"></small>
+                </form>
+                <div class="pi-directory-browser">
+                    <div class="pi-directory-head">
+                        <button id="pi-directory-up" class="pi-directory-up" type="button" title="上级目录" aria-label="上级目录" data-i18n-title="s225" data-i18n-aria-label="s225"><i class="fa-solid fa-chevron-left" aria-hidden="true"></i><span><!--i18n-->上一级</span></button>
+                        <nav id="pi-directory-current" class="pi-directory-breadcrumbs" aria-label="文件夹路径" data-i18n-aria-label></nav>
+                    </div>
+                    <label class="pi-directory-filter"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input id="pi-directory-filter" type="search" placeholder="筛选当前文件夹" aria-label="筛选当前文件夹" data-i18n-placeholder data-i18n-aria-label></label>
+                    <div id="pi-directory-list" class="pi-directory-list"></div>
                 </div>
-                <div id="pi-directory-list" class="pi-directory-list"></div>
+                <details class="pi-recent-projects">
+                    <summary><!--i18n:s1504-->最近项目</summary>
+                    <div class="pi-recent-projects-heading"><label><input id="pi-show-hidden-projects" type="checkbox"><!--i18n:s1505--> 显示已移出</label></div>
+                    <div id="pi-project-list" class="pi-project-list"></div>
+                </details>
+                <button id="pi-import-session" class="pi-secondary-button" type="button" hidden><!--i18n:s208-->导入 Pi 会话</button>
             </div>
-            <div class="pi-recent-projects">
-                <div class="pi-recent-projects-heading">
-                    <h3><!--i18n:s1504-->最近项目</h3>
-                    <label><input id="pi-show-hidden-projects" type="checkbox"><!--i18n:s1505--> 显示已移出</label>
-                </div>
-                <div id="pi-project-list" class="pi-project-list"></div>
-            </div>
+            <div class="pi-directory-footer"><span><!--i18n-->选择要使用的项目文件夹</span><button id="pi-directory-select" class="pi-primary-button" type="button" disabled><!--i18n-->打开项目</button></div>
         </div>
     </div>
 

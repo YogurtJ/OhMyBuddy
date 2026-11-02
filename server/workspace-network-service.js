@@ -40,12 +40,12 @@ class WorkspaceNetworkService {
     constructor({ env = process.env, root = process.cwd(), filePath, fetch = require('node-fetch'), interfaces = os.networkInterfaces } = {}) {
         this.env = { ...env }; this.fetch = fetch; this.interfaces = interfaces;
         const agent = path.resolve((env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.pi/agent')).replace(/^~(?=$|[\\/])/, os.homedir()));
-        this.filePath = filePath || path.join(agent, 'pivane-network.json');
+        this.filePath = filePath || require('./ohmybuddy-storage').settingsFile(agent, 'pivane-network.json', env);
         this.config = readConfiguration(this.filePath);
         // A prior managed release proves an existing installation. Preserve its
         // unspecified bind instead of silently disconnecting remote users.
         this.legacy = false;
-        try { if (env.PI_MEDIA_PROFILE !== 'clean') { const state = JSON.parse(readSafe(path.join(require('./ohmybuddy-compat').runtimeDirectory(env.PI_MANAGED_BASE || root), 'state.json'), 1024 * 1024)); this.legacy = typeof state.active === 'string'; } }
+        try { if (env.PI_MEDIA_PROFILE !== 'clean') { const state = JSON.parse(readSafe(path.join(require('./ohmybuddy-compat').runtimeDirectory(env.PI_MANAGED_BASE || root, env), 'state.json'), 1024 * 1024)); this.legacy = typeof state.active === 'string'; } }
         catch (error) { if (error.code !== 'ENOENT') throw fail('无法核对原监听配置，请在部署配置中明确设置 HOST', 503); }
         if (this.config.defaultListen) this.legacy = this.config.defaultListen === 'legacy';
         this.host = this.resolveHost(this.config.listen);

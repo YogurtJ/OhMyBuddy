@@ -4,6 +4,7 @@ const { inspectBackup, restoreBackup } = require('../server/pi-maintenance-resto
     const [id, confirmation, ...extra] = process.argv.slice(2);
     if (!id || extra.length || confirmation && confirmation !== '--apply-when-stopped') throw new Error('Usage: node scripts/restore-managed-backup.cjs <backup-id> [--apply-when-stopped]');
     const root = path.resolve(__dirname, '..');
+    require('../server/pi-local-env').loadLocalEnv(require('../server/ohmybuddy-storage').configFile(root));
     if (confirmation) console.log(JSON.stringify(await restoreBackup(root, id), null, 2));
     else {
         const plan = inspectBackup(root, id);

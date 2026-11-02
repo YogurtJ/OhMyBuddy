@@ -83,6 +83,49 @@ class PiSessionStore {
             .filter(Boolean);
     }
 
+    // Independent conversations use ordinary native sessions, each with a durable cwd.
+    // This root is inside the configured project scope; it never broadens that scope.
+    standaloneRoot() {
+        return path.join(require('./ohmybuddy-storage').workspacesRoot(), 'tasks');
+    }
+
+    isStandaloneProject(cwd) {
+        try {
+            const legacy = [require('node:os').homedir(), ...this.roots].map(base => path.join(base, 'OhMyBuddy', 'Tasks'));
+            return [this.standaloneRoot(), ...legacy].some(root => path.dirname(cwd) === root)
+                && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(path.basename(cwd));
+        }
+        catch { return false; }
+    }
+
+    async createStandaloneSession(name = '', options = {}) {
+        const root = this.standaloneRoot();
+        // Never fall back to a project root: it may be a checkout or an installation.
+        if (!this.roots.some(parent => isWithin(parent, root))) throw new Error('独立会话工作目录不在允许范围，请配置 OHMYBUDDY_WORKSPACES_DIR 或项目范围');
+        require('./ohmybuddy-storage').prepareDirectory(root);
+        this.resolveProject(root);
+        const cwd = path.join(root, require('node:crypto').randomUUID());
+        fs.mkdirSync(cwd, { mode: 0o700 });
+        require('./pi-private-files').privateDirectory(cwd);
+        // A failed or uncertain creation is never replayed or recursively cleaned up.
+        return this.createSession(cwd, name, options);
+    }
+
+    directoryLocations() {
+        const home = require('node:os').homedir();
+        const candidates = [['主目录', home], ['桌面', path.join(home, 'Desktop')],
+            ['文稿', path.join(home, 'Documents')], ['下载', path.join(home, 'Downloads')],
+            ...this.roots.map(root => [root, root])];
+        const seen = new Set();
+        return candidates.flatMap(([name, input]) => {
+            try {
+                const directory = this.resolveProject(input);
+                if (seen.has(directory)) return [];
+                seen.add(directory); return [{ name, path: directory }];
+            } catch { return []; }
+        });
+    }
+
     defaultProject() {
         for (const candidate of [require('os').homedir(), process.cwd(), ...this.roots]) {
             try { const resolved = this.resolveProject(candidate); fs.accessSync(resolved, fs.constants.R_OK | fs.constants.X_OK); return resolved; } catch {}
@@ -131,12 +174,16 @@ class PiSessionStore {
             } catch {
                 continue;
             }
+            const standalone = this.isStandaloneProject(cwd);
             const current = projects.get(cwd) || {
                 cwd,
-                name: path.basename(cwd) || cwd,
+                name: standalone ? '独立会话' : path.basename(cwd) || cwd,
+                standalone,
+                ...(standalone ? { sessions: [] } : {}),
                 sessionCount: 0,
                 modified: null
             };
+            if (current.standalone) current.sessions.push(this._serializeSession(session));
             current.sessionCount += 1;
             if (!current.modified || session.modified > current.modified) current.modified = session.modified;
             projects.set(cwd, current);
@@ -150,24 +197,34 @@ class PiSessionStore {
             .sort((a, b) => String(b.modified || '').localeCompare(String(a.modified || '')));
     }
 
-    async listDirectories(input) {
+    async listDirectories(input, query = '') {
+        if (typeof query !== 'string' || query.length > 200) throw new Error('Invalid directory filter');
+        const filter = query.trim().toLocaleLowerCase();
         if (!input) {
             return {
                 current: null,
                 parent: null,
-                directories: this.roots.map(root => ({ name: root, path: root }))
+                breadcrumbs: [],
+                directories: this.roots.filter(root => !filter || root.toLocaleLowerCase().includes(filter)).map(root => ({ name: root, path: root })),
+                locations: this.directoryLocations()
             };
         }
 
         const current = this.resolveProject(input);
         const parentCandidate = path.dirname(current);
         const parent = parentCandidate !== current && this.roots.some(candidate => isWithin(candidate, parentCandidate)) ? parentCandidate : null;
-        const directories = fs.readdirSync(current, { withFileTypes: true })
-            .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
-            .slice(0, 300)
-            .map(entry => ({ name: entry.name, path: path.join(current, entry.name) }))
+        const breadcrumbs = [];
+        for (let directory = current; this.roots.some(root => isWithin(root, directory)); directory = path.dirname(directory)) {
+            breadcrumbs.unshift({ name: path.basename(directory) || directory, path: directory });
+            if (path.dirname(directory) === directory) break;
+        }
+        const candidates = fs.readdirSync(current, { withFileTypes: true })
+            .filter(entry => (entry.isDirectory() || entry.isSymbolicLink()) && !entry.name.startsWith('.') && (!filter || entry.name.toLocaleLowerCase().includes(filter)))
             .sort((a, b) => a.name.localeCompare(b.name));
-        return { current, parent, directories };
+        const directories = candidates.slice(0, 300).flatMap(entry => {
+            try { return [{ name: entry.name, path: this.resolveProject(path.join(current, entry.name)) }]; } catch { return []; }
+        });
+        return { current, parent, breadcrumbs, directories, truncated: candidates.length > 300, locations: this.directoryLocations() };
     }
 
     // Pi owns the parsing; pin the same native file identity around that parse.
@@ -335,6 +392,7 @@ class PiSessionStore {
         const selectedProfileId = inheritedProfileId !== undefined ? inheritedProfileId
             : assistant ? null : this.profiles ? await this.profiles.select(cwd, agentProfileId) : null;
         const { SessionManager } = await getSdk();
+        if (this.resolveProject(cwd) !== cwd) throw new Error('Project directory changed');
         const manager = SessionManager.create(cwd);
         const sessionPath = manager.getSessionFile();
         fs.mkdirSync(path.dirname(sessionPath), { recursive: true });
@@ -369,6 +427,7 @@ class PiSessionStore {
             id: persisted.getSessionId(),
             path: fs.realpathSync.native(sessionPath),
             cwd,
+            standalone: this.isStandaloneProject(cwd),
             name: persisted.getSessionName() || '',
             firstMessage: '',
             messageCount: 0,
@@ -498,6 +557,7 @@ class PiSessionStore {
             id: session.id,
             path: session.path,
             cwd: session.cwd,
+            standalone: this.isStandaloneProject(session.cwd),
             name: session.name || '',
             firstMessage: session.firstMessage || '',
             messageCount: session.messageCount || 0,

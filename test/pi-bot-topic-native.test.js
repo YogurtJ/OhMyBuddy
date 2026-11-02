@@ -14,7 +14,7 @@ const ledger = require('../server/bot/bot-ledger');
 const { TOPIC_INDEX_MESSAGE, TOPIC_INDEX_INTRO } = require('../server/bot/bot-topic-context');
 const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-bot-topic-native-')));
 const agentDir = path.join(root, 'agent'); fs.mkdirSync(agentDir);
-process.env.PI_CODING_AGENT_DIR = agentDir; process.env.PI_PROJECT_ROOTS = root; process.env.PI_OFFLINE = '1';
+process.env.PI_CODING_AGENT_DIR = agentDir; process.env.PI_PROJECT_ROOTS = root; process.env.OHMYBUDDY_WORKSPACES_DIR = path.join(root, 'workspaces'); process.env.PI_OFFLINE = '1';
 process.env.PI_WEB_DEFERRED_FILE = path.join(root, 'deferred.json');
 const TOKEN = 'synthetic-topic-management'; process.env.PI_WEB_TOKEN = TOKEN;
 test.after(() => fs.rmSync(root, { recursive: true, force: true }));
