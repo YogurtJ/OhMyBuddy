@@ -166,8 +166,10 @@ function createPiAgentGateway(options = {}) {
     // The shared application already admits requests; standalone gateway hosts
     // need the same boundary. MaintenanceClient deduplicates the exact request.
     router.use((req, res, next) => maintenance.http(req, res, next));
+    const directoryPicker = options.directoryPicker || new (require('./pi-native-directory-picker').NativeDirectoryPicker)(options.directoryPickerOptions);
+    require('./pi-native-directory-picker').mountNativeDirectoryPicker(router, { store, picker: directoryPicker });
     function workbenchIdle(documentOperations = 0) {
-        return !channels.busy && !artifacts.busy && !fileRoots.jobs.size && documents.active === documentOperations && !documents.writing
+        return !directoryPicker.busy && !channels.busy && !artifacts.busy && !fileRoots.jobs.size && documents.active === documentOperations && !documents.writing
             && !profiles.busy && !agentThreads.jobs.size && !agentThreads.catalogIndex.busy && !agentThreads.returns.busy && !agentThreads.messages.busy
             && !settingsService.mutating && !settingsService.loginService.busy && !nativeService.busy && !mcpSettingsService.busy
             && !sessionTransfer.running && !sessionMoves.running && !auxiliaryModels.busy
@@ -188,7 +190,7 @@ function createPiAgentGateway(options = {}) {
     require('./pi-document-uploads').mountDocumentUploads(router, documents);
     require('./pi-session-image-storage').mountSessionImageStorage(router, sessionImageStorage);
     notifications.mount(router);
-    require('./pi-extension-assistant').mountExtensionAssistant(router, { store, supervisor, resourceService, settingsService, access });
+    require('./pi-extension-assistant').mountExtensionAssistant(router, { store, profiles, supervisor, resourceService, settingsService, access });
     const assistantEnvironment = supervisor.workerEnvironment;
     supervisor.workerEnvironment = ({ cwd, sessionId, sessionPath }) => store.withSessionRead(cwd, sessionId, async (session, read) => {
         if (session.path !== sessionPath) throw new Error('Session path changed before runtime startup');
@@ -338,6 +340,8 @@ function createPiAgentGateway(options = {}) {
             accessControl: true,
             projectRoots: store.roots,
             defaultProject: store.defaultProject(),
+            standaloneSessions: true,
+            nativeDirectoryPicker: directoryPicker.capabilities(req),
             nativeResources: true,
             agentThreads: true,
             scheduledTasks: true,
@@ -571,7 +575,7 @@ function createPiAgentGateway(options = {}) {
 
     router.get('/activity', (req, res) => {
         res.set('Cache-Control', 'no-store');
-        res.json({ channelBusy: channels.busy, cronBusy: cron.busy, agentThreadLaunches: agentThreads.jobs.size, agentTaskIndexing: agentThreads.catalogIndex.busy, agentTaskReturns: agentThreads.returns.busy, agentMessages: agentThreads.messages.busy, learningBusy: learning.busy, learningRuns: learning.active.size, archives: archives(), titleRevision: titles.revisionId, titleGenerations: titles.jobs.size, transcriptionActive: transcription.active, documentOperations: documents.active, artifactOperations: artifacts.jobs.size, runtimes: supervisor.getActivity(), profilesBusy: profiles.busy, nativeSettingsBusy: nativeService.busy || settingsService.mutating || Boolean(titles.savingModel) || auxiliaryModels.busy, sessionTransfers: sessionTransfer.running, sessionMoves: sessionMoves.running, pinnedProjects: pinnedProjects(), hiddenProjects: hiddenProjects(), replyNotices: replyNotices(), deferred: deferred.summary() });
+        res.json({ directoryPickerBusy: directoryPicker.busy, channelBusy: channels.busy, cronBusy: cron.busy, agentThreadLaunches: agentThreads.jobs.size, agentTaskIndexing: agentThreads.catalogIndex.busy, agentTaskReturns: agentThreads.returns.busy, agentMessages: agentThreads.messages.busy, learningBusy: learning.busy, learningRuns: learning.active.size, archives: archives(), titleRevision: titles.revisionId, titleGenerations: titles.jobs.size, transcriptionActive: transcription.active, documentOperations: documents.active, artifactOperations: artifacts.jobs.size, runtimes: supervisor.getActivity(), profilesBusy: profiles.busy, nativeSettingsBusy: nativeService.busy || settingsService.mutating || Boolean(titles.savingModel) || auxiliaryModels.busy, sessionTransfers: sessionTransfer.running, sessionMoves: sessionMoves.running, pinnedProjects: pinnedProjects(), hiddenProjects: hiddenProjects(), replyNotices: replyNotices(), deferred: deferred.summary() });
     });
 
     router.patch('/projects/pin', (req, res) => {
@@ -600,7 +604,7 @@ function createPiAgentGateway(options = {}) {
                 return res.status(400).json({ error: 'Recent projects must be an array of at most 64 paths' });
             }
             const projectAliases = recent.map(input => {
-                try { return { input, cwd: store.resolveProject(input) }; }
+                try { const cwd = store.resolveProject(input); return { input, cwd, standalone: store.isStandaloneProject(cwd) }; }
                 catch { return { input, cwd: null }; }
             });
             const projects = await store.listProjects();
@@ -620,7 +624,7 @@ function createPiAgentGateway(options = {}) {
 
     router.get('/directories', async (req, res) => {
         try {
-            res.json(await store.listDirectories(req.query.path));
+            res.json(await store.listDirectories(req.query.path, req.query.q || ''));
         } catch (error) {
             res.status(400).json({ error: error.message });
         }
@@ -639,7 +643,11 @@ function createPiAgentGateway(options = {}) {
             const createOptions = { autoTitle: preferences.getSessionTitles().enabled,
                 agentProfileId: Object.hasOwn(req.body, 'profileId') ? req.body.profileId : undefined };
             if (Object.hasOwn(req.body, 'assistantProjectId')) return categoriesRetired(req, res);
-            const session = await store.createSession(req.body.cwd, req.body.name, createOptions);
+            if (Object.hasOwn(req.body, 'standalone') && typeof req.body.standalone !== 'boolean') throw new Error('standalone must be a boolean');
+            if (req.body.standalone && req.body.cwd) throw new Error('独立会话不能同时指定项目目录');
+            const session = req.body.standalone
+                ? await store.createStandaloneSession(req.body.name, createOptions)
+                : await store.createSession(req.body.cwd, req.body.name, createOptions);
             if (preferences.getHiddenProjects().includes(session.cwd)) preferences.setProjectHidden(session.cwd, false);
             res.status(201).json(session);
         } catch (error) {
@@ -1213,6 +1221,7 @@ function createPiAgentGateway(options = {}) {
     }
 
     return { mount, attachWebSocket, dispose: async () => {
+        const stoppingDirectoryPicker = directoryPicker.dispose();
         const stoppingChannels = channels.dispose();
         const stoppingFileRoots = fileRoots.dispose();
         const stoppingArtifacts = artifacts.dispose();
@@ -1237,10 +1246,10 @@ function createPiAgentGateway(options = {}) {
         await profiles.dispose();
         await usage.dispose();
         await stoppingThreads;
-        await Promise.all([stoppingChannels, stoppingFileRoots, stoppingDeferred, stoppingTitles, stoppingAuxiliaryModels, stoppingMoves, stoppingTranscription, stoppingDocuments]);
+        await Promise.all([stoppingDirectoryPicker, stoppingChannels, stoppingFileRoots, stoppingDeferred, stoppingTitles, stoppingAuxiliaryModels, stoppingMoves, stoppingTranscription, stoppingDocuments]);
         await stoppingProactive;
         await cron.dispose();
-    }, store, supervisor, bots, channels, cron, deferred, sideChat, titles, auxiliaryModels, learning, knowledgeService, agentThreads, sessionMoves, transcription, documents, sessionImageStorage, artifacts };
+    }, directoryPicker, store, supervisor, bots, channels, cron, deferred, sideChat, titles, auxiliaryModels, learning, knowledgeService, agentThreads, sessionMoves, transcription, documents, sessionImageStorage, artifacts };
 }
 
 module.exports = { createPiAgentGateway };

@@ -24,7 +24,9 @@ const { connectionSchema, validateConnectionDraft } = require('./server/media-co
 const { saveExternalMedia, mediaHistory, deleteMedia } = require('./server/media-lab-storage');
 
 const app = express();
-require('./server/pi-local-env').loadLocalEnv(path.join(__dirname, '.env'));
+const storage = require('./server/ohmybuddy-storage');
+require('./server/pi-local-env').loadLocalEnv(storage.configFile(process.env.PI_MANAGED_BASE || __dirname));
+storage.applyEnvironment(process.env.PI_MANAGED_BASE || __dirname);
 const maintenance = new (require('./server/pi-maintenance-client').MaintenanceClient)();
 app.use((req, res, next) => maintenance.http(req, res, next));
 const network = new (require('./server/workspace-network-service').WorkspaceNetworkService)({ root: __dirname });
@@ -43,7 +45,7 @@ const FLUX2_FILES = {
 const execFileAsync = promisify(execFile);
 
 const mediaProfile = loadMediaProfile(__dirname);
-const mediaDataRoot = path.resolve(process.env.PI_MEDIA_DATA_DIR || __dirname);
+const mediaDataRoot = path.resolve(process.env.PI_MEDIA_DATA_DIR);
 const GPU_EXEC = mediaProfile.gpuExec;
 const workspacePreferencesService = new WorkspacePreferencesService();
 const ttsProviderService = createTtsProviderService({ rootDir: __dirname, gpuExec: GPU_EXEC, configPath: mediaProfile.ttsConfigPath });
@@ -980,7 +982,7 @@ const httpServer = app.listen(PORT, network.host, () => {
     if (maintenance.managed) {
         const base = process.env.PI_MANAGED_BASE || __dirname;
         const agent = path.resolve((process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.pi/agent')).replace(/^~(?=$|[\\/])/, os.homedir()));
-        const backupInputs = [agent, piAgentGateway.deferred.filePath, mediaProfile.directory, path.join(base, '.env'),
+        const backupInputs = [agent, piAgentGateway.deferred.filePath, mediaProfile.directory, storage.configFile(base), storage.layout().config, path.dirname(workspaceAccess.filePath),
             ...['generation_history.json', 'video_history.json', 'tts_history.json', 'media_chat_requests.json', 'media_references', 'prompts.json', 'public/images', 'public/videos', 'public/audio'].map(p => path.join(mediaDataRoot, p)),
             ...(process.env.PI_CODING_AGENT_SESSION_DIR ? [path.resolve(process.env.PI_CODING_AGENT_SESSION_DIR)] : [])].filter(Boolean).map(p => path.resolve(p));
         process.send({ type: 'maintenance-ready', nonce: maintenance.nonce, backupInputs, port: address.port });

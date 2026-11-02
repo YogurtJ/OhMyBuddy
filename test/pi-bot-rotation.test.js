@@ -9,7 +9,7 @@ const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivan
 const agentDir = path.join(root, 'agent');
 fs.mkdirSync(agentDir, { recursive: true });
 process.env.PI_CODING_AGENT_DIR = agentDir;
-process.env.PI_PROJECT_ROOTS = root;
+process.env.PI_PROJECT_ROOTS = root; process.env.OHMYBUDDY_WORKSPACES_DIR = path.join(root, 'workspaces');
 process.env.PI_OFFLINE = '1';
 const { PiSessionStore } = require('../server/pi-session-store');
 const { PiProfileRegistry } = require('../server/pi-profile-registry');

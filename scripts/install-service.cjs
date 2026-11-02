@@ -9,13 +9,13 @@ const { privateDir } = require('../server/pi-maintenance-files');
 const xml = value => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[ch]));
 const ps = value => "'" + String(value).replace(/'/g, "''") + "'";
 const unit = value => '"' + String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/%/g, '%%') + '"';
-function plan({ root, home, node, platform, executablePath, url, desktop, user }) {
+function plan({ root, home, node, platform, executablePath, url, desktop, user, configFile, storageEnv = process.env }) {
     for (const value of [root, home, node, executablePath, url, desktop || '', user || '']) if (/[\r\n\x00]/.test(value)) throw Error('Unsupported control character in installation path');
     const id = 'ohmybuddy-' + createHash('sha256').update(root).digest('hex').slice(0, 12);
-    const directory = path.join(require('../server/ohmybuddy-compat').runtimeDirectory(root), 'service');
+    const directory = path.join(require('../server/ohmybuddy-compat').runtimeDirectory(root, storageEnv), 'service');
     const runner = path.join(directory, 'run.cjs');
     const log = path.join(directory, 'service.log');
-    const runnerText = `// Generated for this installation. No provider credentials are embedded.\nprocess.env.PATH = ${JSON.stringify(executablePath)};\nprocess.chdir(${JSON.stringify(root)});\nconst fs = require('node:fs');\nconst stopFile = ${JSON.stringify(path.join(directory, 'stop-request'))};\nif (fs.existsSync(stopFile)) { console.error('A stop request remains; inspect and remove it before starting.'); process.exit(1); }\nconst launcher = require(${JSON.stringify(path.join(root, 'server/pi-launcher-bootstrap.js'))}).start(${JSON.stringify(root)});\nconst timer = setInterval(() => { if (fs.existsSync(stopFile)) { clearInterval(timer); process.emit('SIGTERM'); } }, 1000);\nprocess.on('exit', () => { if (fs.existsSync(stopFile)) fs.unlinkSync(stopFile); });\n`;
+    const runnerText = `// Generated for this installation. No provider credentials are embedded.\nprocess.env.PATH = ${JSON.stringify(executablePath)};\nprocess.chdir(${JSON.stringify(root)});\n${configFile ? `process.env.OHMYBUDDY_CONFIG_FILE = ${JSON.stringify(configFile)};\n` : ''}const fs = require('node:fs');\nconst stopFile = ${JSON.stringify(path.join(directory, 'stop-request'))};\nif (fs.existsSync(stopFile)) { console.error('A stop request remains; inspect and remove it before starting.'); process.exit(1); }\nconst launcher = require(${JSON.stringify(path.join(root, 'server/pi-launcher-bootstrap.js'))}).start(${JSON.stringify(root)});\nconst timer = setInterval(() => { if (fs.existsSync(stopFile)) { clearInterval(timer); process.emit('SIGTERM'); } }, 1000);\nprocess.on('exit', () => { if (fs.existsSync(stopFile)) fs.unlinkSync(stopFile); });\n`;
     const result = { id, directory, runner, runnerText, url, log, platform, files: [] };
     if (platform === 'linux') {
         result.service = path.join(home, '.config/systemd/user', id + '.service');
@@ -42,15 +42,16 @@ async function install({ root = path.resolve(__dirname, '..'), noShortcut = fals
     root = fs.realpathSync.native(root);
     if (process.platform !== 'win32' && process.getuid?.() === 0) throw Error('Run as the intended ordinary user, not root');
     if (['.ohmybuddy-runtime', '.pivane-runtime'].some(name => root.includes(path.sep + name + path.sep))) throw Error('Install from the original application directory, not a managed release');
-    if (!fs.existsSync(path.join(root, '.env'))) throw Error('Create the instance .env with fixed absolute data paths before installing');
-    const env = {}; loadLocalEnv(path.join(root, '.env'), env);
+    const configFile = require('../server/ohmybuddy-storage').configFile(root);
+    if (!fs.existsSync(configFile)) throw Error('Create the external instance configuration with fixed absolute data paths before installing');
+    const env = {}; loadLocalEnv(configFile, env);
     const port = Number(env.PORT || 11408);
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw Error('A fixed valid PORT is required');
     const url = new URL(`http://127.0.0.1:${port}`);
     const home = os.homedir();
     const desktop = noShortcut || process.platform === 'linux' ? null : process.platform === 'win32' ? powershell('[Environment]::GetFolderPath("Desktop")') : path.join(home, 'Desktop');
     const user = process.platform === 'win32' ? powershell('[Security.Principal.WindowsIdentity]::GetCurrent().Name') : os.userInfo().username;
-    const value = plan({ root, home, node: process.execPath, platform: process.platform, executablePath: process.env.PATH || '', url: url.href, desktop, user });
+    const value = plan({ root, home, node: process.execPath, platform: process.platform, executablePath: process.env.PATH || '', url: url.href, desktop, user, configFile, storageEnv: env });
     // Never adopt an unknown process or replace an existing service/shortcut.
     if (fs.existsSync(value.directory) || value.files.some(f => fs.existsSync(f.path))) throw Error('Service files already exist; inspect the retained installation before changing it');
     if (process.platform === 'linux') execFileSync('systemctl', ['--user', 'show-environment'], { stdio: 'ignore', timeout: 10000 });

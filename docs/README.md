@@ -26,6 +26,7 @@
 | 任务 | 文档 |
 |---|---|
 | 部署、升级、备份和恢复 | [安装与恢复](INSTALL_RECOVERY.md) · [macOS](MACOS.md) · [Windows](WINDOWS.md) |
+| 程序与个人数据分离、各平台目录、备份及迁移 | [存储布局](STORAGE_LAYOUT.md) |
 | 后台常驻、登录启动与桌面入口 | [后台服务](BACKGROUND_SERVICE.md) |
 | 给已有 Pi CLI 接入网页，共用模型与身份 | [已有 Pi 接入](PI_CLI.md) |
 | 检查版本、交给独立 Agent 辅助更新 | [版本与更新](UPDATES.md) |

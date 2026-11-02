@@ -6,6 +6,7 @@ const path = require('node:path');
 const { readSafe } = require('./pi-maintenance-files');
 function start(root) {
     root = fs.realpathSync.native(root);
+    require('./pi-local-env').loadLocalEnv(require('./ohmybuddy-storage').configFile(root));
     const stateFile = path.join(require('./ohmybuddy-compat').runtimeDirectory(root), 'state.json');
     let entry = root;
     if (fs.existsSync(stateFile)) {

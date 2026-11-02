@@ -42,6 +42,10 @@ dist/
 /native/*.lib
 media_references/
 
+# Independent conversation work files can live under an explicitly restricted project root.
+**/OhMyBuddy/Tasks/
+**/OhMyBuddy Workspaces/
+
 # Bot workspaces are user data (older versions could create them in the service directory).
 /OhMyBuddyBots/
 

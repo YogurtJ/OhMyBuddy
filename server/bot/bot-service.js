@@ -35,7 +35,7 @@ function countLines(file) {
 const fail = (message, status = 400, code) => { throw Object.assign(new Error(message), { status, ...(code ? { code } : {}) }); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const UUID = /^[a-f0-9-]{36}$/;
-const WORKSPACE_PARENT = 'OhMyBuddyBots';
+const WORKSPACE_PARENT = 'bots';
 const MAX_BOTS = 50;
 const PLACEHOLDER = Object.freeze({ 'zh-CN': '新伙伴', en: 'New buddy' });
 const DEFAULT_AVATAR = Object.freeze({ kind: 'preset', id: 'pivane-pebble' });
@@ -195,41 +195,26 @@ class BotService extends EventEmitter {
         return { profile, bot };
     }
 
-    // Where Bot workspaces go: the home folder when it is an allowed project, else the first
-    // allowed project root. The workspaces themselves (<base>/OhMyBuddyBots/…) never land in the
-    // service's working directory or the OhMyBuddy install: that is where the generic default
-    // project falls back to.
+    // Existing Bot profiles keep their immutable cwd. Only new Bots use this root.
     workspaceExcluded(directory) {
-        const inside = (child, parent) => child === parent || child.startsWith(parent.endsWith(path.sep) ? parent : parent + path.sep);
-        const real = value => { try { return fs.realpathSync.native(value); } catch { return path.resolve(value); } };
-        return [real(process.cwd()), real(path.resolve(__dirname, '..', '..'))].some(blocked => inside(real(directory), blocked));
+        try { require('../ohmybuddy-storage').assertExternal(directory); return false; }
+        catch { return true; }
     }
 
     workspaceBase() {
-        for (const candidate of [os.homedir(), ...(this.store.roots || [])]) {
-            try {
-                const resolved = this.store.resolveProject(candidate);
-                if (this.workspaceExcluded(path.join(resolved, WORKSPACE_PARENT))) continue;
-                fs.accessSync(resolved, fs.constants.R_OK | fs.constants.W_OK | fs.constants.X_OK);
-                return resolved;
-            } catch {}
-        }
-        return null;
+        try {
+            const root = require('../ohmybuddy-storage').workspacesRoot();
+            if (!(this.store.roots || []).some(parent => require('../ohmybuddy-storage').within(parent, root))) return null;
+            return root;
+        } catch { return null; }
     }
 
-    // A private directory inside the allowed project roots; named by ID so renaming a Bot
-    // never moves its sessions (a native session cwd is immutable).
     prepareWorkspace(profileId, name, language) {
         const base = this.workspaceBase();
-        if (!base) fail('No accessible project directory is available for Bot workspaces', 409);
+        if (!base) fail('No external workspace directory is available; configure OHMYBUDDY_WORKSPACES_DIR and project roots', 409);
         const parent = path.join(base, WORKSPACE_PARENT);
-        for (const directory of [parent, path.join(parent, `bot-${profileId.slice(0, 8)}`)]) {
-            try { fs.mkdirSync(directory, { mode: 0o700 }); } catch (error) { if (error.code !== 'EEXIST') throw error; }
-            const stat = fs.lstatSync(directory);
-            if (!stat.isDirectory() || stat.isSymbolicLink()) fail('Bot workspace must be a real directory', 409);
-        }
-        const workspace = this.store.resolveProject(path.join(parent, `bot-${profileId.slice(0, 8)}`));
-        if (this.workspaceExcluded(workspace)) fail('Bot workspace would be inside the OhMyBuddy service directory', 409);
+        const prepared = require('../ohmybuddy-storage').prepareDirectory(path.join(parent, `bot-${profileId}`));
+        const workspace = this.store.resolveProject(prepared);
         if (process.platform !== 'win32') fs.chmodSync(workspace, 0o700);
         const readme = path.join(workspace, 'README.md');
         const note = language === 'en'

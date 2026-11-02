@@ -6,7 +6,7 @@ OhMyBuddy 在 macOS 上原生运行，原生组件同时包含 Apple Silicon 与
 
 新的平台包构建入口可生成自带 Node 22、锁定 Pi／依赖及 rg、fd 的 DMG；该能力仍在预览，正式发行与实机范围另行记录，不代表已有正式包已经切换。
 
-从可信下载站取得对应 Apple Silicon／Intel 包和校验信息，打开 DMG，将 OhMyBuddy 拖到“应用程序”，再打开 OhMyBuddy。首次启动会校验并复制运行文件到 `~/Library/Application Support/OhMyBuddy/desktop`，生成固定数据配置并注册当前用户 LaunchAgent，随后打开浏览器。已有 Pi 身份按原生规则识别复用；只有新身份需要首次配置模型。安装不修改系统 Node 或全局 Pi。端口 11408 或安装目录被已有未知实例占用时停止并报告，不覆盖已有安装。
+从可信下载站取得对应 Apple Silicon／Intel 包和校验信息，打开 DMG，将 OhMyBuddy 拖到“应用程序”，再打开 OhMyBuddy。首次启动会校验并复制运行文件到 `~/Library/Application Support/OhMyBuddy/app`（旧安装继续识别原 desktop 位置），生成固定数据配置并注册当前用户 LaunchAgent，随后打开浏览器。已有 Pi 身份按原生规则识别复用；只有新身份需要首次配置模型。安装不修改系统 Node 或全局 Pi。端口 11408 或安装目录被已有未知实例占用时停止并报告，不覆盖已有安装。
 
 预览包暂未做 Developer ID 签名与 Apple 公证，下载后可能被 macOS 拦截；只在核对来源后通过“系统设置 → 隐私与安全性”确认打开，不关闭系统保护。Intel 包须单独构建和实机验证；Apple Silicon 通过不代表 Intel 已验收。
 
@@ -45,7 +45,7 @@ ARCHIVE="$HOME/Downloads/ohmybuddy-1.6.0.tar.gz"
 BASE="$HOME/ohmybuddy"
 test ! -e "$BASE" || { echo "此目录已存在，请按更新流程操作或选择新的BASE"; exit 1; }
 umask 077
-mkdir -p "$BASE/releases/1.6.0" "$BASE/data/media" "$BASE/projects/demo" "$BASE/backups"
+mkdir -p "$BASE/releases/1.6.0"
 tar -xzf "$ARCHIVE" -C "$BASE/releases/1.6.0" --strip-components=1 &&
 cd "$BASE/releases/1.6.0" &&
 node -e 'if (process.versions.node.split(".")[0] !== "22") { console.error("请先切换到 Node 22.x；当前 " + process.version); process.exit(1); } console.log(process.version, process.execPath)' &&
@@ -61,23 +61,13 @@ AGENT_DIR=$(node scripts/pi-agent-dir.cjs) || exit 1
 printf 'Pi identity: %s\n' "$AGENT_DIR"
 ```
 
-命令只报告路径，优先读取 `PI_CODING_AGENT_DIR`，未设置时使用 Pi 原生主目录规则，macOS 通常为 `/Users/<用户>/.pi/agent`。已有目录直接复用，没有目录则由 Pi 启动初始化；不要求重新登录或复制认证。请在原 CLI 的配置环境运行，alias/服务覆盖、环境变量认证及共享范围见[已有 Pi 接入](PI_CLI.md)。仅需隔离身份时，显式改用 `AGENT_DIR="$BASE/data/agent"`。
+命令只报告路径，优先读取 `PI_CODING_AGENT_DIR`，未设置时使用 Pi 原生主目录规则，macOS 通常为 `/Users/<用户>/.pi/agent`。已有目录直接复用，没有目录则由 Pi 启动初始化；不要求重新登录或复制认证。请在原 CLI 的配置环境运行，alias/服务覆盖、环境变量认证及共享范围见[已有 Pi 接入](PI_CLI.md)。仅需隔离身份时，显式改用程序外的 `AGENT_DIR="$HOME/.pi/ohmybuddy-agent"`。
 
-创建固定的实例配置。这里使用终端heredoc展开BASE，写入的是真实绝对路径；.env读取器本身不展开变量：
+以下外部布局适用于包含 configure-instance.cjs 的当前源码；旧发行包按随包指南识别原位置，不自动搬迁。生成固定实例配置（仅保存路径和默认值，不复制认证）；检查器报告实际配置文件位置：
 
 ```sh
-cat > "$BASE/instance.env" <<EOF
-PORT=11408
-HOST=127.0.0.1
-PI_WORKSPACE_BASE_URL=http://127.0.0.1:11408
-PI_CODING_AGENT_DIR=$AGENT_DIR
-PI_MEDIA_CONFIG_DIR=$BASE/data/media-lab
-PI_MEDIA_DATA_DIR=$BASE/data/media
-PI_WEB_DEFERRED_FILE=$BASE/data/ohmybuddy-deferred-messages.json
-PI_PROJECT_ROOTS=/
-EOF
-chmod 600 "$BASE/instance.env"
-cp "$BASE/instance.env" .env
+PI_CODING_AGENT_DIR="$AGENT_DIR" node scripts/configure-instance.cjs
+node scripts/storage-layout.cjs
 node scripts/install-service.cjs
 ```
 
@@ -97,8 +87,8 @@ node scripts/install-service.cjs
 
 ## 更新、备份、恢复
 
-通用数据范围与同路径恢复流程见[INSTALL_RECOVERY.md](INSTALL_RECOVERY.md)。常驻实例按[后台常驻](BACKGROUND_SERVICE.md)停止 LaunchAgent：先暂停预约，等待线程/工具/设置/媒体操作空闲，再从独立终端正常停机；确认本实例停止后整批保存Agent目录、媒体配置/文件/历史、项目和启动配置。用`tar -czf`保存完整目录，保留原路径恢复；默认共享的 Pi 目录通常在 BASE 之外，必须按[共享身份备份](PI_CLI.md#备份和恢复共享身份)另存完整身份，并同时停止使用该身份的 CLI，不能只保存实例 data。跨路径恢复不能批量替换JSONL字符串冒充完整迁移。
+按[存储布局](STORAGE_LAYOUT.md)中的实际目录清单备份，通用一致性与同路径恢复见[INSTALL_RECOVERY.md](INSTALL_RECOVERY.md)。常驻实例按[后台常驻](BACKGROUND_SERVICE.md)停止 LaunchAgent：先暂停预约，等待线程/工具/设置/媒体操作空闲，再从独立终端正常停机；确认本实例停止后整批保存Agent目录、媒体配置/文件/历史、项目和启动配置。用`tar -czf`保存完整目录，保留原路径恢复；默认共享的 Pi 目录通常在 BASE 之外，必须按[共享身份备份](PI_CLI.md#备份和恢复共享身份)另存完整身份，并同时停止使用该身份的 CLI，不能只保存实例 data。跨路径恢复不能批量替换JSONL字符串冒充完整迁移。
 
-更新时解压到新的 release 目录，执行 `node scripts/install.cjs`（旧归档没有该脚本时使用 `npm ci`），复制本实例的启动配置，并继续指向同一数据与项目目录。保持native源码、二进制、manifest一起更新；旧代码目录可留作回退。不要清空身份或把测试合成Provider复制进正式身份。重启后核对模型认证、原生会话、文件全文、跨线程搜索、用量以及预约状态；结果不确定的生成任务不要自动重试。
+优先在稳定程序入口使用受管更新；手动变更程序位置前，按[存储布局](STORAGE_LAYOUT.md)固定同一个外部实例配置、runtime 与服务入口，不把配置复制回新代码目录。保持native源码、二进制、manifest一起更新；旧代码目录可留作回退。不要清空身份或把测试合成Provider复制进正式身份。重启后核对模型认证、原生会话、文件全文、跨线程搜索、用量以及预约状态；结果不确定的生成任务不要自动重试。
 
 macOS上的`npm run pack:trial`使用系统BSD tar，并逐项允许清单打包；不会把实例数据、node_modules、私人模型或备份带入。开发者重建native组件的说明见[native/README.md](../native/README.md)。Windows原生操作另见[WINDOWS.md](WINDOWS.md)。

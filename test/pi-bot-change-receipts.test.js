@@ -10,7 +10,7 @@ const { defaultBot } = require('../server/bot/bot-settings');
 const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-bot-changes-')));
 const agentDir = path.join(root, 'agent'); fs.mkdirSync(agentDir);
 process.env.PI_CODING_AGENT_DIR = agentDir;
-process.env.PI_PROJECT_ROOTS = root;
+process.env.PI_PROJECT_ROOTS = root; process.env.OHMYBUDDY_WORKSPACES_DIR = path.join(root, 'workspaces');
 process.env.PI_OFFLINE = '1';
 test.after(() => fs.rmSync(root, { recursive: true, force: true }));
 const id = '11111111-2222-3333-4444-555555555555';

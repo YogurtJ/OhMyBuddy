@@ -12,7 +12,7 @@ const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivan
 const agentDir = path.join(root, 'agent');
 fs.mkdirSync(agentDir, { recursive: true });
 process.env.PI_CODING_AGENT_DIR = agentDir;
-process.env.PI_PROJECT_ROOTS = root;
+process.env.PI_PROJECT_ROOTS = root; process.env.OHMYBUDDY_WORKSPACES_DIR = path.join(root, 'workspaces');
 process.env.PI_OFFLINE = '1';
 const { PiSessionStore } = require('../server/pi-session-store');
 const { PiProfileRegistry } = require('../server/pi-profile-registry');
@@ -48,7 +48,7 @@ test('an identity becomes a Bot once, keeping what it is; ineligible identities 
     assert.deepEqual(events, [{ profileId: tutor.id }]);
     const saved = await profiles.getProfile(tutor.id);
     assert.deepEqual([saved.name, saved.description, saved.soul, saved.avatar], ['数学老师', '陪我学数学', '说话耐心，先问思路。', { kind: 'emoji', value: '📐' }], 'nothing about it is replaced');
-    assert.match(saved.bot.workspace, /OhMyBuddyBots[\\/]bot-/);
+    assert.match(saved.bot.workspace, /workspaces[\\/]bots[\\/]bot-/);
     assert.equal(fs.statSync(saved.bot.workspace).isDirectory(), true);
     const onboarding = saved.bot.onboarding;
     assert.deepEqual([onboarding.phase, onboarding.converted, onboarding.flowVersion], ['greeting', true, 2]);

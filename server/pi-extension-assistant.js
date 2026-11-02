@@ -7,7 +7,11 @@ function assistantProfile(manager) {
         && entry.data?.version === 1 && entry.data?.sessionId === manager.getSessionId())?.data;
     if (!data || !['global', 'project'].includes(data.scope)) return null;
     return { kind: 'extensions', scope: data.scope, language: data.language === 'en' ? 'en' : 'zh-CN',
-        returnSessionId: typeof data.returnSessionId === 'string' ? data.returnSessionId : null };
+        returnSessionId: typeof data.returnSessionId === 'string' ? data.returnSessionId : null,
+        returnCwd: typeof data.returnCwd === 'string' ? data.returnCwd : null,
+        ownerProfileId: typeof data.ownerProfileId === 'string' && /^[a-f0-9-]{36}$/.test(data.ownerProfileId) ? data.ownerProfileId : null,
+        returnBotWindow: data.returnBotWindow && /^[a-f0-9-]{36}$/.test(data.returnBotWindow.profileId) && /^[a-f0-9-]{36}$/.test(data.returnBotWindow.windowId)
+            ? { profileId: data.returnBotWindow.profileId, windowId: data.returnBotWindow.windowId } : null };
 }
 
 function assistantInstructions({ profile, cwd, agentDir, cli, tools, trusted }) {
@@ -30,19 +34,31 @@ Workflow:
 `;
 }
 
-function mountExtensionAssistant(router, { store, supervisor, resourceService, settingsService, access }) {
+function mountExtensionAssistant(router, { store, profiles, supervisor, resourceService, settingsService, access }) {
     router.post('/extension-assistant/sessions', async (req, res) => {
         res.set('Cache-Control', 'no-store');
         try {
             const input = req.body;
             if (!input || typeof input !== 'object' || Array.isArray(input)
-                || Object.keys(input).some(key => !['cwd', 'scope', 'language', 'returnSessionId'].includes(key))
+                || Object.keys(input).some(key => !['cwd', 'scope', 'language', 'returnSessionId', 'returnCwd', 'profileId'].includes(key))
                 || !['global', 'project'].includes(input.scope) || !['zh-CN', 'en'].includes(input.language)) throw new Error('Invalid extension assistant request');
-            const cwd = store.resolveProject(input.cwd);
-            if (input.returnSessionId != null) await store.getSession(cwd, input.returnSessionId);
-            const assistant = { scope: input.scope, language: input.language, returnSessionId: input.returnSessionId || null };
-            res.status(201).json(await store.createSession(cwd, input.language === 'en' ? 'Extension Assistant' : '扩展助手', { assistant }));
-        } catch (error) { res.status(400).json({ error: error.message }); }
+            const create = async () => {
+                const target = await require('./pi-helper-project').helperProject({ store, profiles, profileId: input.profileId, cwd: input.cwd });
+                const returnCwd = input.returnSessionId != null ? store.resolveProject(input.returnCwd || input.cwd || target.cwd) : null;
+                let returnBotWindow = null;
+                if (input.returnSessionId != null) {
+                    const original = await store.getSession(returnCwd, input.returnSessionId);
+                    const { SessionManager } = await require('./pi-session-store').getSdk();
+                    const binding = require('./bot/bot-window-state').readWindowBinding(store.profileManager(original, SessionManager));
+                    if (binding) returnBotWindow = { profileId: binding.profileId, windowId: binding.windowId };
+                }
+                const assistant = { scope: input.scope, language: input.language, returnSessionId: input.returnSessionId || null,
+                    returnCwd, ownerProfileId: target.ownerProfileId, returnBotWindow };
+                const name = input.language === 'en' ? 'Extension Assistant' : '扩展助手';
+                return target.cwd ? store.createSession(target.cwd, name, { assistant }) : store.createStandaloneSession(name, { assistant });
+            };
+            res.status(201).json(await (input.profileId && profiles?.reserve ? profiles.reserve(create) : create()));
+        } catch (error) { res.status(error.status || 400).json({ error: error.message }); }
     });
     const sessionContext = async input => {
         if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid assistant request');

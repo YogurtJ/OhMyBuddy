@@ -8,7 +8,7 @@ const { once } = require('node:events');
 const { randomUUID } = require('node:crypto');
 const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-bot-topic-')));
 const agentDir = path.join(root, 'agent'); fs.mkdirSync(agentDir);
-process.env.PI_CODING_AGENT_DIR = agentDir; process.env.PI_PROJECT_ROOTS = root; process.env.PI_OFFLINE = '1';
+process.env.PI_CODING_AGENT_DIR = agentDir; process.env.PI_PROJECT_ROOTS = root; process.env.OHMYBUDDY_WORKSPACES_DIR = path.join(root, 'workspaces'); process.env.PI_OFFLINE = '1';
 process.env.PI_WEB_DEFERRED_FILE = path.join(root, 'deferred.json');
 const { createPiAgentGateway } = require('../server/pi-agent-routes');
 const { WorkspaceAccessService } = require('../server/workspace-access-service');
@@ -295,7 +295,8 @@ test('archive protects enabled scheduler targets and waiting runs; archived hist
     const failedDispatch = f.cron.enqueue(direct, f.cron.now(), randomUUID(), true);
     await f.cron.dispatch(failedDispatch);
     assert.equal(f.cron.db.run(failedDispatch.id).status, 'failed');
-    assert.match(f.cron.db.run(failedDispatch.id).reason, /archived/);
+    assert.equal(f.cron.db.run(failedDispatch.id).reason, 'admission-error');
+    assert.match(f.cron.db.run(failedDispatch.id).feedback.detail, /archived/);
     const { SessionManager } = await import('@earendil-works/pi-coding-agent');
     for (const session of [first, current]) {
         await assert.rejects(f.bots.windowContext(SessionManager.open(session.path), { cwd: session.cwd, sessionId: session.id, sessionPath: session.path }), error => error.code === 'BOT_WINDOW_ARCHIVED');

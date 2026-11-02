@@ -29,6 +29,7 @@ async function main() {
     const requestedPort = values['--resume'] === 'true' ? JSON.parse(readSafe(compat.metadataFile(installation, 'INSTALLATION'))).port : Number(values['--port'] || 0);
     socket.listen(requestedPort, '127.0.0.1'); await once(socket, 'listening'); const port = socket.address().port; await new Promise(resolve => socket.close(resolve));
     const env = { HOME: home, ...(process.platform === 'win32' ? { USERPROFILE: home, SystemRoot: process.env.SystemRoot, TEMP: home, TMP: home } : {}), HOST: '127.0.0.1', PORT: String(port),
+        OHMYBUDDY_HOME: path.join(output, 'private'), OHMYBUDDY_WORKSPACES_DIR: path.join(output, 'workspaces'),
         PI_CODING_AGENT_DIR: agent, PI_PROJECT_ROOTS: project, PI_WEB_TOKEN: 'pivane-platform-trial-only', PI_OFFLINE: '1', PI_TELEMETRY: '0', PI_SKIP_VERSION_CHECK: '1' };
     if (values['--tls-ca']) {
         assert.ok(path.isAbsolute(values['--tls-ca']), 'Test TLS CA path must be absolute');
@@ -39,8 +40,8 @@ async function main() {
     await prepareInstallation({ source: fs.realpathSync.native(values['--payload']), root: installation, agentDir: agent, port, env, run: require('../../server/pi-update-installer').runNode });
     const initial = JSON.parse(readSafe(path.join(installation, 'package.json'))).version;
     const node = nodePath(installation), logFile = fs.openSync(path.join(output, values['--resume'] ? 'service-resume.log' : 'service.log'), values['--resume'] ? 'a' : 'wx', 0o600);
-    const media = path.join(installation, 'data/media/public/audio'); fs.mkdirSync(media, { recursive: true }); const fixtureMedia = path.join(media, 'fixture.wav'); fs.writeFileSync(fixtureMedia, 'synthetic media bytes');
-    const servicePlan = require('../../scripts/install-service.cjs').plan({ root: installation, home, node, platform: process.platform, executablePath: runtimeEnvironment(installation, env).PATH, url: `http://127.0.0.1:${port}`, desktop: null, user: 'fixture' });
+    const media = path.join(require('../../server/ohmybuddy-storage').layout({ env }).data, 'media/public/audio'); fs.mkdirSync(media, { recursive: true }); const fixtureMedia = path.join(media, 'fixture.wav'); fs.writeFileSync(fixtureMedia, 'synthetic media bytes');
+    const servicePlan = require('../../scripts/install-service.cjs').plan({ root: installation, home, node, platform: process.platform, executablePath: runtimeEnvironment(installation, env).PATH, url: `http://127.0.0.1:${port}`, desktop: null, user: 'fixture', configFile: require('../../server/ohmybuddy-storage').configFile(installation, env), storageEnv: env });
     fs.mkdirSync(servicePlan.directory, { recursive: true }); fs.writeFileSync(servicePlan.runner, servicePlan.runnerText, { mode: 0o600 });
     const stopFile = path.join(servicePlan.directory, 'stop-request');
     let child, browser, page, session, snapshot;

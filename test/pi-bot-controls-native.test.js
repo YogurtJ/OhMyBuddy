@@ -6,7 +6,7 @@ const { once } = require('node:events');
 const { createHash } = require('node:crypto');
 const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-bot-controls-native-')));
 const agentDir = path.join(root, 'agent'); fs.mkdirSync(agentDir);
-process.env.PI_CODING_AGENT_DIR = agentDir; process.env.PI_PROJECT_ROOTS = root; process.env.PI_OFFLINE = '1';
+process.env.PI_CODING_AGENT_DIR = agentDir; process.env.PI_PROJECT_ROOTS = root; process.env.OHMYBUDDY_WORKSPACES_DIR = path.join(root, 'workspaces'); process.env.PI_OFFLINE = '1';
 process.env.PI_WEB_DEFERRED_FILE = path.join(root, 'deferred.json');
 test.after(() => fs.rmSync(root, { recursive: true, force: true }));
 

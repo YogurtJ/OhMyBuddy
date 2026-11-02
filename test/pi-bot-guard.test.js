@@ -93,13 +93,15 @@ test('the approval message carries a token, round-trips and rejects other confir
 test('Bot workspaces never land in the service directory, even when it is inside a project root', { timeout: 30000 }, async t => {
     const projects = path.join(root, 'projects'), app = path.join(projects, 'pivane'), other = path.join(root, 'other');
     fs.mkdirSync(app, { recursive: true }); fs.mkdirSync(other);
-    const prior = { roots: process.env.PI_PROJECT_ROOTS, agent: process.env.PI_CODING_AGENT_DIR, cwd: process.cwd(), offline: process.env.PI_OFFLINE };
+    const prior = { roots: process.env.PI_PROJECT_ROOTS, agent: process.env.PI_CODING_AGENT_DIR, cwd: process.cwd(), offline: process.env.PI_OFFLINE, workspaces: process.env.OHMYBUDDY_WORKSPACES_DIR };
     process.env.PI_PROJECT_ROOTS = `${projects}${path.delimiter}${other}`; process.env.PI_CODING_AGENT_DIR = path.join(root, 'agent'); process.env.PI_OFFLINE = '1';
+    process.env.OHMYBUDDY_WORKSPACES_DIR = path.join(other, 'workspaces');
+    fs.mkdirSync(path.join(app, '.git'));
     fs.mkdirSync(process.env.PI_CODING_AGENT_DIR, { recursive: true });
     process.chdir(app);
     t.after(() => {
         process.chdir(prior.cwd);
-        for (const [key, name] of [['roots', 'PI_PROJECT_ROOTS'], ['agent', 'PI_CODING_AGENT_DIR'], ['offline', 'PI_OFFLINE']])
+        for (const [key, name] of [['roots', 'PI_PROJECT_ROOTS'], ['agent', 'PI_CODING_AGENT_DIR'], ['offline', 'PI_OFFLINE'], ['workspaces', 'OHMYBUDDY_WORKSPACES_DIR']])
             if (prior[key] === undefined) delete process.env[name]; else process.env[name] = prior[key];
     });
     const { PiSessionStore } = require('../server/pi-session-store');
@@ -109,12 +111,11 @@ test('Bot workspaces never land in the service directory, even when it is inside
     assert.equal(store.defaultProject(), app, 'the generic default falls back to the working directory');
     const profiles = new PiProfileRegistry(store); store.profiles = profiles;
     const bots = new BotService({ store, profiles, supervisor: { on() {}, off() {} } });
-    assert.equal(bots.workspaceBase(), projects);
+    assert.equal(bots.workspaceBase(), path.join(other, 'workspaces'));
     const workspace = bots.prepareWorkspace('12345678-0000-4000-8000-000000000000', 'Test', 'en');
-    assert.equal(path.dirname(workspace), path.join(projects, 'OhMyBuddyBots'));
-    assert.equal(fs.existsSync(path.join(app, 'OhMyBuddyBots')), false);
-    // The service runs from <root>/OhMyBuddyBots itself: workspaces there would be inside it.
-    process.chdir(path.join(projects, 'OhMyBuddyBots'));
-    assert.equal(bots.workspaceBase(), other, 'the next root is used');
-    assert.equal(path.dirname(bots.prepareWorkspace('22345678-0000-4000-8000-000000000000', 'Test', 'en')), path.join(other, 'OhMyBuddyBots'));
+    assert.equal(path.dirname(workspace), path.join(other, 'workspaces', 'bots'));
+    process.env.OHMYBUDDY_WORKSPACES_DIR = path.join(app, 'workspaces');
+    assert.equal(bots.workspaceBase(), null, 'a checkout cannot become the managed work root');
+    assert.throws(() => bots.prepareWorkspace('22345678-0000-4000-8000-000000000000', 'Test', 'en'), /external workspace/);
+    assert.equal(fs.existsSync(path.join(app, 'workspaces')), false);
 });

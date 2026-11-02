@@ -36,7 +36,7 @@ function dataFile(directory, name) {
     const older = old.replace(/^pivane-/, 'pi5-');
     return path.join(directory, selectName(directory, [current, old, older]));
 }
-function runtimeDirectory(root) { return dataFile(root, '.ohmybuddy-runtime'); }
+function runtimeDirectory(root, env = process.env) { return require('./ohmybuddy-storage').runtimeDirectory(root, env); }
 function knowledgeFile(root, suffix) {
     if (!['.json', '.pending'].includes(suffix)) throw new Error('Unknown knowledge ledger');
     const current = ['.json', '.pending'].some(ext => exists(path.join(root, '.ohmybuddy-knowledge' + ext)));

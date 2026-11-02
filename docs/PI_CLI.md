@@ -27,7 +27,7 @@ node scripts/pi-agent-dir.cjs
 
 [macOS](MACOS.md)、[Linux](INSTALL_RECOVERY.md)和[Windows](WINDOWS.md)安装示例会捕获这个结果，写入实例的 `PI_CODING_AGENT_DIR`。配置文件保存真实绝对路径，避免服务管理器没有加载 shell 初始化而选错身份。`.env` 不展开 `~`、`$HOME`、`%USERPROFILE%` 或 PowerShell 变量。
 
-只在用户明确要求独立身份或进行隔离验收时，改用实例专用目录。例如 POSIX 设置 `AGENT_DIR="$BASE/data/agent"`，PowerShell 设置 `$agentDir = Join-Path $base 'data\agent'`，再生成配置。保留已有目录，不复制其他身份的认证文件。
+只在用户明确要求独立身份或进行隔离验收时，改用实例专用目录。例如 POSIX 设置 `AGENT_DIR="$HOME/.pi/ohmybuddy-agent"`，PowerShell 设置 `$agentDir = Join-Path $env:USERPROFILE '.pi\ohmybuddy-agent'`，再生成配置。保留已有目录，不复制其他身份的认证文件。
 
 ## 已经安装成空身份：切换到原 Pi 目录
 
@@ -49,7 +49,7 @@ CLI 通过 `--session-dir` 或 `PI_CODING_AGENT_SESSION_DIR` 存在别处的历�
 
 ## 备份和恢复共享身份
 
-平台安装示例将 OhMyBuddy 媒体配置、媒体文件与预约文件保留在实例的 `data` 下，Pi 身份通常在实例目录之外。只备份 `$BASE/data` 不会包含 `~/.pi/agent`；[通用备份](INSTALL_RECOVERY.md#4-备份范围与一致性)中的 BASE 归档必须再配套保存实际 Pi 身份。
+新安装的媒体、应用配置和维护状态使用[外部存储布局](STORAGE_LAYOUT.md)，Pi 身份保持原目录；旧实例的 `data` 路径仍原位保留。只备份 `$BASE/data` 不会包含 `~/.pi/agent`；[通用备份](INSTALL_RECOVERY.md#4-备份范围与一致性)中的 BASE 归档必须再配套保存实际 Pi 身份。
 
 备份共享身份前同时停止使用它的 OhMyBuddy 与 Pi CLI。将完整实际 Pi 目录另存为私有备份，包含原生认证、模型、设置、会话和 OhMyBuddy 写入其中的工作台偏好。恢复时将它还原到记录的原绝对路径，保持与同一时点的媒体、预约、项目和启动配置配套。Windows 保留实际 DACL，POSIX 保留权限；外置链接、命令依赖、项目目录和自定义会话目录另行登记。
 

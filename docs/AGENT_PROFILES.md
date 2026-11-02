@@ -98,7 +98,7 @@ OhMyBuddy 随包提供 pi-hermes-memory 0.9.10 的选定组件。`node scripts/i
 | `GET/PUT /api/pi/profiles/:id/documents` | GET 用 `target=user|memory`；PUT 用 `{target,content,expectedRevision,expectedProfileRevision}` 整篇提交；返回原生原文及 `usage:{used,limit,unit:'characters'}`，冲突409；禁用记忆时 MEMORY 为 disabled。若文档已发布但检索未同步则503携带`documentSaved:true,indexSynced:false`，GET显示待修复；不可盲目重试创建 |
 | `POST /api/pi/profiles/:id/avatar` | `{expectedRevision,dataUrl}`，仅最多1 MiB 的受校验 PNG；返回 `{ok,profile,revision}`；保存旧头像直到注册表CAS成功 |
 | `GET /api/pi/profiles/:id/avatar?version=hash` | 只返回注册表当前引用的本档案 PNG；无外部 URL |
-| `POST /api/pi/profiles/authoring-sessions` | `{cwd?,profileId:null|UUID,language:'zh-CN'|'en',draft?}` 创建原生无身份辅助线程并返回 `{session,prompt}`，不会触发模型请求或保存档案 |
+| `POST /api/pi/profiles/authoring-sessions` | `{cwd?,profileId:null|UUID,language:'zh-CN'|'en',draft?}` 创建原生无身份辅助线程并返回 `{session,prompt}`，不会触发模型请求或保存档案。目标为 Buddy 时使用其 workspace；未绑定档案时创建任务工作目录 |
 | `GET /api/pi/profiles/authoring-sessions/:id/draft?cwd=` | 返回当前原生分支最后一份经验证草稿；状态 ready/missing，只有用户选择导入后才进入编辑器。以完整原生文件身份和修订核对读取，超过64 MiB明确返回413 |
 
 结果不确定时先刷新核对，不自动重试创建。界面保留编辑草稿和项目默认选择；如果刷新后发现同名记录，需核对保存结果再继续，避免重复创建。

@@ -11,6 +11,8 @@ const { stagePi, PI_PACKAGES, installEnvironment } = require('../server/pi-updat
 const { assertPrivateFile } = require('./private-file-helper.cjs');
 function fixture(t) {
     const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-maintenance-')));
+    // These scenarios exercise existing installations; new external layouts have dedicated tests.
+    fs.mkdirSync(path.join(root, '.pivane-runtime'));
     t.after(() => fs.rmSync(root, { recursive: true, force: true })); return root;
 }
 function client() {

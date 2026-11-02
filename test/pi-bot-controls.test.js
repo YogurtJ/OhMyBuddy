@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
 const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-bot-controls-')));
 const agentDir = path.join(root, 'agent'); fs.mkdirSync(agentDir);
-process.env.PI_CODING_AGENT_DIR = agentDir; process.env.PI_PROJECT_ROOTS = root; process.env.PI_OFFLINE = '1';
+process.env.PI_CODING_AGENT_DIR = agentDir; process.env.PI_PROJECT_ROOTS = root; process.env.OHMYBUDDY_WORKSPACES_DIR = path.join(root, 'workspaces'); process.env.PI_OFFLINE = '1';
 const { PiSessionStore } = require('../server/pi-session-store');
 const { PiProfileRegistry } = require('../server/pi-profile-registry');
 const { PiAgentSupervisor } = require('../server/pi-agent-supervisor');

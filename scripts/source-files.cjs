@@ -23,6 +23,8 @@ function sourceFiles(root, group) {
         if (fs.lstatSync(directory).isSymbolicLink()) throw new Error(`Source directory is a symlink: ${relative}`);
         for (const entry of fs.readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
             if (entry.name.startsWith('.') || rule.excluded?.includes(entry.name) || ['node_modules', 'backups', 'ohmybuddy-usage', 'ohmybuddy-cron', 'ohmybuddy-channels', 'ohmybuddy-uploads', 'ohmybuddy-queue', 'ohmybuddy-session-moves', 'ohmybuddy-artifacts', 'ohmybuddy-profiles', 'ohmybuddy-bots', 'ohmybuddy-session-images', 'ohmybuddy-deliverables', 'pivane-profiles', 'pivane-bots', 'pivane-session-images', 'pivane-deliverables', 'pivane-usage', 'pivane-cron', 'pivane-channels', 'pivane-uploads', 'pivane-queue', 'pivane-session-moves', 'pivane-artifacts'].includes(entry.name) || /\.bak(?:[.-]|$)|\.tmp$|~$/i.test(entry.name)) continue;
+            // A restricted project scope can place independent workspaces under a source tree.
+            if (entry.name === 'OhMyBuddy Workspaces' || entry.name === 'Tasks' && path.basename(relative) === 'OhMyBuddy') continue;
             const file = `${relative}/${entry.name}`;
             if (entry.isSymbolicLink()) throw new Error(`Source entry is a symlink: ${file}`);
             if (entry.isDirectory()) visit(file);

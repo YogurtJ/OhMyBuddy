@@ -4,7 +4,7 @@
 
 ## 安装
 
-先完成对应平台的依赖安装与 `.env` 配置，使用绝对的数据路径和固定 PORT。已有服务保持原配置，不要重复安装。在最初安装目录执行：
+先完成对应平台的依赖安装，再运行 `node scripts/configure-instance.cjs` 生成外部实例配置，使用绝对的数据路径和固定 PORT。旧 `.env` 继续识别，不复制到新版本。布局见[存储布局](STORAGE_LAYOUT.md)。已有服务保持原配置，不要重复安装。在最初安装目录执行：
 
 ```sh
 node scripts/install-service.cjs
@@ -18,7 +18,7 @@ macOS 和 Windows 默认在当前用户桌面创建带实例标识的 OhMyBuddy 
 
 ## 启动时机与管理
 
-安装记录在原目录 `.ohmybuddy-runtime/service/installation.json`，包含实际服务名、路径和只读健康检查状态。以下 `<id>`、`<label>` 和 `<plist>` 用记录中的值替换。停止、卸载之前先保存草稿、结束任务并暂停预约；不能从正在承载当前 Agent 的服务内停止自身。
+新安装的记录位于外部运行目录的 `service/installation.json`；用 `node scripts/storage-layout.cjs` 查看实际 runtime 路径。旧程序内 `.ohmybuddy-runtime`／`.pivane-runtime` 继续原位识别，须离线迁移后才能移除。记录包含实际服务名、路径和只读健康检查状态。以下 `<id>`、`<label>` 和 `<plist>` 用记录中的值替换。停止、卸载之前先保存草稿、结束任务并暂停预约；不能从正在承载当前 Agent 的服务内停止自身。
 
 ### Linux
 
@@ -49,7 +49,7 @@ systemctl --user start <id>.service
 
 ```powershell
 Disable-ScheduledTask -TaskName '<id>'
-New-Item -ItemType File -Path '.ohmybuddy-runtime\service\stop-request'
+New-Item -ItemType File -Path '<检查器返回的 runtime 绝对路径>\service\stop-request'
 ```
 
 runner 会调用统一异步停机流程，等待 launcher 和 worker 退出后移除请求文件；必须继续确认任务已退出、端口关闭，才能备份。不要把“结束任务”或 `taskkill /F` 当作正常停机。重新启用使用 `Enable-ScheduledTask`，立即启动使用 `Start-ScheduledTask`；遗留的 stop-request 会阻止启动，应核对前次停机后再移除。卸载使用 `Unregister-ScheduledTask -TaskName '<id>' -Confirm:$false`，这不保证已运行进程退出；仍须单独核对。仅移除对应桌面 `.url`，不删除用户数据。

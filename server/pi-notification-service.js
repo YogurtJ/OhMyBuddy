@@ -25,7 +25,10 @@ function subscription(value) {
 class PiNotificationService {
     constructor({ access, store, filePath, send = webPush.sendNotification }) {
         this.access = access; this.store = store;
-        this.filePath = filePath || require('./ohmybuddy-compat').dataFile(path.dirname(access.filePath), 'pivane-notifications.json');
+        const external = require('./pi-local-env').environmentValue(process.env, 'CONFIG_DIR', false);
+        this.filePath = filePath || (external
+            ? require('./ohmybuddy-storage').settingsFile(require('./ohmybuddy-storage').nativeAgentDir(), 'pivane-notifications.json')
+            : require('./ohmybuddy-compat').dataFile(path.dirname(access.filePath), 'pivane-notifications.json'));
         this.send = send; this.running = 0; this.seen = new Set(); this.lastTest = new Map();
     }
     read() {

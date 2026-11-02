@@ -5,7 +5,7 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
 const { once } = require('node:events');
 const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-bot-integration-')));
 const agentDir = path.join(root, 'agent'); fs.mkdirSync(agentDir);
-process.env.PI_CODING_AGENT_DIR = agentDir; process.env.PI_PROJECT_ROOTS = root; process.env.PI_OFFLINE = '1';
+process.env.PI_CODING_AGENT_DIR = agentDir; process.env.PI_PROJECT_ROOTS = root; process.env.OHMYBUDDY_WORKSPACES_DIR = path.join(root, 'workspaces'); process.env.PI_OFFLINE = '1';
 process.env.PI_WEB_DEFERRED_FILE = path.join(root, 'deferred.json');
 test.after(() => fs.rmSync(root, { recursive: true, force: true }));
 
