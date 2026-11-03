@@ -308,6 +308,7 @@ async function composerLayout(browser, width, language, theme) {
         await chooseThinking('medium');
     }
     const idle = await geometry();
+    await page.locator('#pi-input').click();
     await page.locator('#pi-input').press('Enter');
     await page.waitForFunction(() => document.querySelector('#pi-transcript-activity .pi-activity-live')?.dataset.phase === 'sending');
     if (!baseline) {

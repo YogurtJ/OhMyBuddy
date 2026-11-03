@@ -7,14 +7,14 @@ const repository=path.resolve(__dirname,'../..');
 (async()=>{
  const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',headless:true});
  try{for(const width of [1440,393,320]){
-  const root=fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(),'omb-task-polish-'))),agent=root+'/agent',project=root+'/project';fs.mkdirSync(agent);fs.mkdirSync(project);
-  Object.assign(process.env,{PI_CODING_AGENT_DIR:agent,PI_PROJECT_ROOTS:root,PI_OFFLINE:'1',PI_WEB_DEFERRED_FILE:root+'/deferred.json',OHMYBUDDY_WORKSPACES_DIR:root+'/workspaces'});
-  const access=new WorkspaceAccessService({filePath:root+'/access.json',envToken:()=>''}),gateway=createPiAgentGateway({accessService:access,deferredFilePath:process.env.PI_WEB_DEFERRED_FILE});
+  const root=fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(),'omb-task-polish-'))),agent=path.join(root,'agent'),project=path.join(root,'project');fs.mkdirSync(agent);fs.mkdirSync(project);
+  Object.assign(process.env,{PI_CODING_AGENT_DIR:agent,PI_PROJECT_ROOTS:root,PI_OFFLINE:'1',PI_WEB_DEFERRED_FILE:path.join(root,'deferred.json'),OHMYBUDDY_WORKSPACES_DIR:path.join(root,'workspaces')});
+  const access=new WorkspaceAccessService({filePath:path.join(root,'access.json'),envToken:()=>''}),gateway=createPiAgentGateway({accessService:access,deferredFilePath:process.env.PI_WEB_DEFERRED_FILE});
   for(let i=1;i<=27;i++)await gateway.store.createStandaloneSession('Task '+String(i).padStart(2,'0'));
   await gateway.store.createSession(project,'Project thread');
   const app=require('express')();app.use(require('express').json());gateway.mount(app);
   for(const [route,dir]of[['marked','marked/lib'],['dompurify','dompurify/dist'],['highlight','@highlightjs/cdn-assets']])app.use('/vendor/'+route,require('express').static(path.join(repository,'node_modules',dir)));
-  app.use(require('express').static(repository+'/public'));const server=http.createServer(app),wss=gateway.attachWebSocket(server);server.listen(0,'127.0.0.1');await once(server,'listening');const base='http://127.0.0.1:'+server.address().port;
+  app.use(require('express').static(path.join(repository,'public')));const server=http.createServer(app),wss=gateway.attachWebSocket(server);server.listen(0,'127.0.0.1');await once(server,'listening');const base='http://127.0.0.1:'+server.address().port;
   const context=await browser.newContext({locale:width===320?'en':'zh-CN',viewport:{width,height:900},isMobile:width<681,hasTouch:width<681}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));await page.route('https://**',r=>r.abort());
   try{
    await page.goto(base,{waitUntil:'domcontentloaded'});await page.locator('.pv-boot').waitFor({state:'hidden'});await page.locator('[data-sidebar-section=tasks]').waitFor({state:'attached'});

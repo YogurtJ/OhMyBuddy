@@ -28,8 +28,9 @@ async function main() {
     const socket = net.createServer();
     const requestedPort = values['--resume'] === 'true' ? JSON.parse(readSafe(compat.metadataFile(installation, 'INSTALLATION'))).port : Number(values['--port'] || 0);
     socket.listen(requestedPort, '127.0.0.1'); await once(socket, 'listening'); const port = socket.address().port; await new Promise(resolve => socket.close(resolve));
-    const env = { HOME: home, ...(process.platform === 'win32' ? { USERPROFILE: home, SystemRoot: process.env.SystemRoot, TEMP: home, TMP: home } : {}), HOST: '127.0.0.1', PORT: String(port),
+    const env = { HOME: process.platform === 'win32' ? process.env.HOME || process.env.USERPROFILE : home, ...(process.platform === 'win32' ? { USERPROFILE: process.env.USERPROFILE, SystemRoot: process.env.SystemRoot, TEMP: process.env.TEMP, TMP: process.env.TMP } : {}), HOST: '127.0.0.1', PORT: String(port),
         OHMYBUDDY_HOME: path.join(output, 'private'), OHMYBUDDY_WORKSPACES_DIR: path.join(output, 'workspaces'),
+        PI_MEDIA_DATA_DIR: path.join(output, 'private', 'data', 'media'),
         PI_CODING_AGENT_DIR: agent, PI_PROJECT_ROOTS: project, PI_WEB_TOKEN: 'pivane-platform-trial-only', PI_OFFLINE: '1', PI_TELEMETRY: '0', PI_SKIP_VERSION_CHECK: '1' };
     if (values['--tls-ca']) {
         assert.ok(path.isAbsolute(values['--tls-ca']), 'Test TLS CA path must be absolute');
@@ -39,6 +40,7 @@ async function main() {
     }
     await prepareInstallation({ source: fs.realpathSync.native(values['--payload']), root: installation, agentDir: agent, port, env, run: require('../../server/pi-update-installer').runNode });
     const initial = JSON.parse(readSafe(path.join(installation, 'package.json'))).version;
+    fs.mkdirSync(require(path.join(installation, 'server/ohmybuddy-compat')).runtimeDirectory(installation), { recursive: true, mode: 0o700 });
     const node = nodePath(installation), logFile = fs.openSync(path.join(output, values['--resume'] ? 'service-resume.log' : 'service.log'), values['--resume'] ? 'a' : 'wx', 0o600);
     const media = path.join(require('../../server/ohmybuddy-storage').layout({ env }).data, 'media/public/audio'); fs.mkdirSync(media, { recursive: true }); const fixtureMedia = path.join(media, 'fixture.wav'); fs.writeFileSync(fixtureMedia, 'synthetic media bytes');
     const servicePlan = require('../../scripts/install-service.cjs').plan({ root: installation, home, node, platform: process.platform, executablePath: runtimeEnvironment(installation, env).PATH, url: `http://127.0.0.1:${port}`, desktop: null, user: 'fixture', configFile: require('../../server/ohmybuddy-storage').configFile(installation, env), storageEnv: env });
@@ -100,7 +102,7 @@ async function main() {
         }
         assert.equal(state?.job?.phase, 'succeeded'); assert.equal(executes, 1);
         assert.ok(!/\$ npm (?:ci|install)/.test(state.job.output), 'Client must not install npm dependencies');
-        const after = await api('settings/updates'); assert.equal(after.appVersion, values['--expected']); assert.equal(after.piVersion, versions.piVersion);
+        const after = await api('settings/updates'); assert.equal(after.appVersion, values['--expected']); assert.equal(after.piVersion, versions.pivane.piVersion);
         assert.deepEqual(hashFileSafe(session.path), snapshot); assert.deepEqual(hashFileSafe(fixtureMedia), mediaProof); assert.deepEqual(hashFileSafe(path.join(images.root, image.pivaneImage.sha256)), imageProof);
         require('../../server/pi-maintenance-backup').inspectBackupContents(state.job.backup.directory);
         await page.waitForFunction(expected => {

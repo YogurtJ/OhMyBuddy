@@ -296,7 +296,8 @@ async function run(browser, viewport, theme, fullContext = true, retention = ful
         let inputBox = await page.locator('#pi-side-input').boundingBox();
         if (inputBox.y + inputBox.height > box.y + box.height + 1) {
             assert.equal(await page.locator('#pi-side-chat').evaluate(node => getComputedStyle(node).overflowY), 'auto');
-            await page.locator('#pi-side-input').scrollIntoViewIfNeeded();
+            // Reach the complete composer; nearest-element scrolling can stop at a fractional border pixel.
+            await page.locator('#pi-side-chat').evaluate(node => node.scrollTo({ top: node.scrollHeight, behavior: 'instant' }));
             inputBox = await page.locator('#pi-side-input').boundingBox();
         }
         assert.ok(inputBox.x >= box.x && inputBox.x + inputBox.width <= box.x + box.width + 1);
