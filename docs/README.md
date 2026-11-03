@@ -15,9 +15,9 @@
 
 [1.12.0 发布候选说明](releases/1.12.0.md)涵盖 Pi 1.5、官方 Playwright MCP、任务与项目导航、存储布局、定时任务及流式渲染改进。候选尚未公开发布，三平台验证进展与准确包摘要以发行回执为准。
 
-当前正式版为 [OhMyBuddy 1.11.1](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.11.1)（2026-10-30 已发布）。[1.11.1 版本说明](releases/1.11.1.md)涵盖调度器异常退出后的恢复、伙伴头像与话题整理、旧分类退役和完整包安装支持；准确验证范围见对应 Release 附件及[平台验证范围](RELEASE_INSTALL_VALIDATION.md)。
+当前正式版为 [OhMyBuddy 1.11.1](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.11.1)（2026-10-30 已发布，Latest）。[1.11.1 版本说明](releases/1.11.1.md)涵盖调度器异常退出后的恢复、伙伴头像与话题整理、旧分类退役和完整包安装支持。九份源码发行附件匿名回下载的大小和 SHA256 均与上传原件一致；准确归档、四个原生目标的定向验证、Windows 单项补验及未变范围复用见[平台验证范围](RELEASE_INSTALL_VALIDATION.md)。完整安装包采用独立预览渠道和构建身份，已有 1.11.1-rc.2 不因源码发布自动包含本次调度器修复。
 
-[1.11.0 版本说明](releases/1.11.0.md)记录 OhMyBuddy 从 Pivane 更名、伙伴模式、微信操作与记忆、过程回执、原生会话图片外置以及 macOS 完整平台包预览。历史平台验收只适用于对应归档，不自动转为后续版本的支持证明。
+OhMyBuddy 原名 Pivane。上一正式版 [1.11.0 版本说明](releases/1.11.0.md)记录改名、伙伴模式、微信操作与记忆、过程和状态回执、原生会话图片外置以及 macOS 完整平台包预览；其完整安装／升级／恢复基线和已知限制继续由对应 Release 附件追溯。
 
 此前Windows微信组件安装与静态翻译修复见[1.10.2说明](releases/1.10.2.md)。1.10.1的安全与兼容说明继续适用；从更早版本更新时，留意旧内置MiniMax TTS adapter已移除，配置和历史音频保留，详见[1.10.1说明](releases/1.10.1.md)。
 
