@@ -7,7 +7,8 @@ const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'omb-browser-
 fs.mkdirSync(agent); fs.mkdirSync(cwd);
 process.env.PI_CODING_AGENT_DIR = agent; process.env.PI_PROJECT_ROOTS = root; process.env.PI_OFFLINE = '1';
 process.env.OHMYBUDDY_HOME = path.join(root, 'storage');
-process.env.HOME = root; process.env.USERPROFILE = root;
+// Keep Windows system identity intact; app and agent storage are already scoped above.
+if (process.platform !== 'win32') { process.env.HOME = root; process.env.USERPROFILE = root; }
 process.env.PI_WEB_DEFERRED_FILE = path.join(agent, 'deferred.json');
 process.env.PRIVATE_BROWSER_FIXTURE_SECRET = 'synthetic-value-that-must-not-reach-the-browser-server';
 test.after(() => fs.promises.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 }));

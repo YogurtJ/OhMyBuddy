@@ -100,3 +100,20 @@ test('framing flushes a fragmented unterminated record once and handles reentran
     assert.deepEqual(events, ['first', 'second', 'third', 'last']);
     assert.equal(client.stdoutChunks.length, 0);
 });
+
+test('Windows RPC disposal waits for asynchronous EOF cleanup and is not replayed', { skip: process.platform !== 'win32' }, async t => {
+    const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pi-rpc-eof-')));
+    const script = path.join(root, 'fixture.cjs'), marker = path.join(root, 'disposed.txt');
+    fs.writeFileSync(script, `const fs=require('node:fs'),readline=require('node:readline');
+        readline.createInterface({input:process.stdin}).on('line', line=>{const m=JSON.parse(line);process.stdout.write(JSON.stringify({type:'response',id:m.id,command:m.type,success:true,data:{}})+'\\n');});
+        process.stdin.once('end',async()=>{await new Promise(r=>setTimeout(r,80));fs.appendFileSync(${JSON.stringify(marker)},'disposed\\n');process.exit(0);});
+        setInterval(()=>{},1000);`);
+    const before = process.env.PI_WEB_CLI; process.env.PI_WEB_CLI = script;
+    const client = new PiRpcClient({ cwd: root, noSession: true });
+    t.after(async () => { await client.dispose(); if (before === undefined) delete process.env.PI_WEB_CLI; else process.env.PI_WEB_CLI = before; fs.rmSync(root, { recursive: true, force: true }); });
+    await client.start(); const child = client.child;
+    const first = client.dispose(); assert.equal(client.dispose(), first);
+    await first;
+    assert.equal(child.exitCode, 0); assert.equal(child.signalCode, null);
+    assert.equal(fs.readFileSync(marker, 'utf8'), 'disposed\n');
+});

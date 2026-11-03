@@ -27,7 +27,12 @@ function stopRpcProcess(child) {
     const stopping = new Promise(resolve => {
         const timer = setTimeout(() => child.kill('SIGKILL'), 2500);
         child.once('exit', () => { clearTimeout(timer); resolve(); });
-        child.kill('SIGTERM');
+        // Windows SIGTERM terminates Node immediately. Pi's documented stdin
+        // EOF path awaits runtime disposal, including persistent MCP browsers.
+        if (process.platform === 'win32' && child.stdin?.writable) {
+            child.stdin.once('error', () => child.kill('SIGTERM'));
+            child.stdin.end();
+        } else child.kill('SIGTERM');
     });
     stoppingProcesses.set(child, stopping);
     return stopping;
