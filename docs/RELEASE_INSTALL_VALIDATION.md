@@ -2,11 +2,27 @@
 
 本页是版本验收索引。**结果只适用于对应归档**：准确 SHA256、测试明细和失败尝试见各 [Release](https://github.com/YogurtJ/OhMyBuddy/releases) 的 `ohmybuddy-<版本>.validation.json`（旧发布仍用 `pivane-` 前缀）。源码、浏览器模拟和旧版结果不能替代新包的实机验收。
 
-## 1.11.1：发布准备
+## 后续版本的平台范围
 
-[1.11.1 说明](releases/1.11.1.md)。应用代码基线 `c1ee18ea5b538dd6ba7171ec6c568a8a2cbba271` 已完成 Linux ARM64 本机部署，263 项 HTTP 资源与独立后验通过；相关 Node、桌面／手机浏览器、独立安装及原生探针证据可按内容一致性复用。新调度器文件锁的其他目标系统验证、正式依赖审计和最终归档绑定属于本轮发布准备，不能用本机部署结果代替。
+后续完整包制作与发布前验收聚焦 macOS ARM64（Apple Silicon）、Windows x64 和 glibc Linux x64；暂停为新版本制作、验收和承诺更新 Linux ARM64 完整包。下方各版本的 ARM64 结果保留其历史适用范围，不自动转为后续版本的支持证明；源码兼容与实际分发范围分别记录。具体流程见[发布准备](development/RELEASING.md#后续发布平台)。
 
-GitHub 正式版仍为 1.11.0。完整平台包预览与源码发行分别记录，其准确源码、升级／恢复证据及未覆盖项以各自清单为准。最终冻结包的 SHA256、本次执行、有效复用及原失败记录由包外验证附件统一绑定；准备状态不代表已经公开发布。
+## 1.12.0：发布候选验收中
+
+[1.12.0 说明](releases/1.12.0.md)。当前候选为 1.12.0-rc.1，Pi 升至 1.5.0，并包含官方 Playwright MCP、外部存储、任务／项目导航和费用账本 v2。已有源码专项与 macOS 本机启用结果按内容复用；核心依赖和跨模块行为的变化需要在本轮目标系统建立相应发行基线。
+
+| 本轮目标 | Node／浏览器 | 准确包安装、正式 1.11.1 升级、正常停机与恢复 |
+|---|---|---|
+| macOS ARM64 | 待完成发行验证 | 待完成 |
+| Windows x64 | 待完成；普通令牌与符号链接夹具权限分别记录 | 待完成 |
+| glibc Linux x64 | 待完成发行验证 | 待完成 |
+
+表中待完成项不作为通过证据。最终记录由包外附件绑定源码提交、实际归档 SHA256、本次执行、有效复用、失败及补验。候选尚未公开发布，Linux ARM64 不纳入本轮新完整包。
+
+## 1.11.1：已正式发布
+
+2026-10-30 已[正式发布](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.11.1)。源码 `0808965f3d9b986bfd03118cf67b227c4a8f0f24`，源码归档 SHA256 `813e2e088dc450271b1abd5a2864f3e0efc9467f667823ff83288740a1296833`，Pi 1.4.0。四个历史原生目标的调度器专项、安装／SDK／HTTP／正常停机及升级／原路径恢复结果，见该版[验收说明](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.11.1/ohmybuddy-1.11.1.validation.md)与[验收 JSON](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.11.1/ohmybuddy-1.11.1.validation.json)。Windows 原首次失败及 native TEMP 定向补验保留，不能写为首次全绿。
+
+该版生产依赖图保持不变，未重跑全量；完整平台安装包与源码发行分别记录，不能把旧预览包当作对应正式源码的完整包。历史 Linux ARM64 结果仍仅适用于当时归档。
 
 ## 1.11.0：已正式发布
 

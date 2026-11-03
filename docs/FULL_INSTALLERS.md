@@ -14,7 +14,7 @@
 
 ## Linux
 
-当前构建目标为 glibc Linux x64、ARM64；不适用于 Alpine/musl。随包原生组件需要 glibc 2.34 及以上、支持 GLIBCXX 3.4.29 的 libstdc++，常见基线为 Ubuntu 22.04+ / Debian 12+；实际原生验收为 Ubuntu 24.04 x64、Debian 13 ARM64，ABI 基线不代表所有发行版均已实测。使用普通用户和具备用户级 systemd 的系统，不使用 `sudo ./Install.sh`。
+后续完整包发布以 **glibc Linux x64** 为维护目标；暂停为新版本制作和验收 Linux ARM64 完整包。历史 ARM64 包与对应验收仍可查阅，但不代表后续更新承诺；源码中保留既有架构适配。不适用于 Alpine/musl。随包原生组件需要 glibc 2.34 及以上、支持 GLIBCXX 3.4.29 的 libstdc++，常见基线为 Ubuntu 22.04+ / Debian 12+；既有原生验收包括 Ubuntu 24.04 x64 和历史 Debian 13 ARM64，ABI 基线不代表所有发行版均已实测。使用普通用户和具备用户级 systemd 的系统，不使用 `sudo ./Install.sh`。
 
 解压匹配架构的 `.tar.gz` 后进入目录运行：
 
