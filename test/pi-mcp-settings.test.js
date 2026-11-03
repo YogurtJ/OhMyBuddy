@@ -169,11 +169,27 @@ test('Pi 1.0.2 project partial overrides follow native merge without disclosing 
     assert.equal((await f.service.snapshot(f.cwd, 'project')).servers[0].valid, false);
 });
 
+test('OAuth registration controls are readable and editable without disclosing credentials', async t => {
+    const f = fixture(t);
+    f.write('mcp.json', { mcpServers: { remote: { url: 'https://example.invalid/mcp', oauth: { clientSecret: 'synthetic-private', future: 'preserve' } } } });
+    for (const mode of ['auto', 'dcr', 'cimd']) {
+        await f.save({ action: 'patch', name: 'remote', patch: { oauth: { clientRegistration: mode } } });
+        const row = (await f.service.snapshot(f.cwd)).servers[0];
+        assert.equal(row.config.oauth.clientRegistration, mode); assert.equal(row.secretFields['oauth.clientRegistration'], undefined);
+        assert.doesNotMatch(JSON.stringify(row), /synthetic-private/);
+    }
+    for (const mode of ['unknown', 42, { op: 'replace', value: 'dcr' }])
+        await assert.rejects(f.save({ action: 'patch', name: 'remote', patch: { oauth: { clientRegistration: mode } } }), { code: 'MCP_INVALID_SERVER' });
+    await f.save({ action: 'patch', name: 'remote', patch: { oauth: { clientRegistration: null } } });
+    assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.agent, 'mcp.json'))).mcpServers.remote.oauth, { clientSecret: 'synthetic-private', future: 'preserve' });
+});
+
 test('manually configured CIMD survives unrelated web edits and native validation remains authoritative', async t => {
     const f = fixture(t);
     f.write('mcp.json', { mcpServers: { remote: { url: 'https://example.invalid/mcp', oauth: { clientRegistration: 'cimd', callbackUrl: 'http://localhost:1234/callback', future: 'retained-private' } } } });
     const dto = await f.service.snapshot(f.cwd);
-    assert.equal(dto.servers[0].valid, true); assert.equal(dto.servers[0].config.oauth.clientRegistration, null);
+    assert.equal(dto.servers[0].valid, true); assert.equal(dto.servers[0].config.oauth.clientRegistration, 'cimd');
+    assert.equal(dto.servers[0].secretFields['oauth.clientRegistration'], undefined);
     await f.save({ action: 'patch', name: 'remote', patch: { enabled: false } });
     assert.equal(JSON.parse(fs.readFileSync(path.join(f.agent, 'mcp.json'))).mcpServers.remote.oauth.clientRegistration, 'cimd');
     for (const patch of [{ oauth: { clientId: { op: 'replace', value: 'not-cimd' } } }, { oauth: { clientName: { op: 'replace', value: 'not-cimd' } } }, { oauth: { callbackUrl: { op: 'replace', value: 'http://[::1]:1234/callback' } } }])

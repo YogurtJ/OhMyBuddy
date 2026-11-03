@@ -251,6 +251,12 @@
             readers.push(config => { if (provider.value !== previousProvider) config.auth = { provider: provider.value || null }; });
             const oauth = group('OAuth', t('元数据地址必须为 HTTPS 或本机回环 HTTP；仅填写可信的授权服务器文档地址。', 'Metadata URL must use HTTPS or loopback HTTP; use only an authorization server document you trust.'));
             for (const key of ['clientId', 'clientSecret', 'callbackUrl', 'scope', 'clientName', 'authServerMetadataUrl']) privateField(oauth, `oauth.${key}`, server?.secretFields?.[`oauth.${key}`]?.present === true);
+            const registration = select([['', t('默认（自动）', 'Default (automatic)')], ['auto', t('自动选择', 'Automatic')], ['dcr', t('动态注册（DCR）', 'Dynamic registration (DCR)')], ['cimd', t('客户端元数据文档（CIMD）', 'Client metadata document (CIMD)')]], server?.config?.oauth?.clientRegistration ?? '');
+            registration.setAttribute('aria-label', 'oauth.clientRegistration'); registration.dataset.mcpWrite = '';
+            oauth.append(fieldLabel(t('客户端注册方式', 'Client registration'), 'oauth.clientRegistration', registration));
+            oauth.append(el('p', t('通常使用自动选择。授权页面提示客户端无效时可尝试 DCR；CIMD 需要服务器支持，且不能同时设置 clientId 或 clientName。', 'Use automatic selection normally. Try DCR if the authorization page reports an invalid client. CIMD requires server support and cannot be combined with clientId or clientName.')));
+            const previousRegistration = registration.value;
+            readers.push(config => { if (registration.value === previousRegistration) return; config.oauth ||= Object.create(null); config.oauth.clientRegistration = registration.value || null; });
             const port = el('input', null, { type: 'number', min: '1', max: '65535', 'aria-label': 'oauth.callbackPort' }); port.value = server?.config?.oauth?.callbackPort ?? ''; port.dataset.mcpWrite = '';
             oauth.append(fieldLabel('', 'oauth.callbackPort', port)); const previousPort = port.value;
             readers.push(config => { if (port.value === previousPort) return; const value = port.value === '' ? null : Number(port.value); if (value !== null && (!Number.isInteger(value) || value < 1 || value > 65535)) throw new Error('callbackPort'); config.oauth ||= Object.create(null); config.oauth.callbackPort = value; });

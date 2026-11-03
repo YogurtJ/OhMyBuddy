@@ -5,7 +5,7 @@ const cwd = '/srv/mermaid-fixture', session = { id: 'mermaid-fixture', cwd, name
 const fence = source => '```mermaid\n' + source + '\n```';
 const diagrams = ['flowchart LR\n A[网页] --> B[网关] --> C[Pi 会话]', 'sequenceDiagram\n participant A as 网页\n participant B as 服务\n A->>B: 请求\n B-->>A: 回复', 'stateDiagram-v2\n [*] --> Idle\n Idle --> Running\n Running --> Idle'];
 (async () => {
-    const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
+    const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
     try {
         for (const width of [1440, 393, 320]) {
             const context = await browser.newContext({ locale: 'zh-CN', viewport: { width, height: 950 }, isMobile: width < 900, hasTouch: width < 900 });

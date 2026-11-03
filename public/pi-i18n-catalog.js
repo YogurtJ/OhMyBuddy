@@ -11443,5 +11443,17 @@
         ['会话已开始，不能再从输入框更换项目', 'This conversation has started. Its project can no longer be changed from the composer.'],
         ['{0}。请先核对项目与会话列表，原请求不会自动重试。', '{0}. Check the project and conversation lists first. The original request will not be retried automatically.']
     );
+    rows.push(
+        ['费用（USD）', 'Cost (USD)'],
+        ['费用 USD', 'Cost USD'],
+        ['其中实报 USD', 'Provider-reported USD'],
+        ['供应商实报 {0}（{1} 条）；其余 {2} 为目录价或档位估算。', 'Provider-reported: {0} ({1} records); the remaining {2} is estimated from catalog prices or service tiers.'],
+        ['更新说明', 'Release notes'],
+        ['正在读取已安装包的更新说明…', 'Reading release notes from the installed package…'],
+        ['包作者关闭了更新说明。', 'The package author disabled release notes.'],
+        ['此安装包没有提供更新说明。', 'This installed package does not include release notes.'],
+        ['无法读取更新说明，请刷新列表后重试。', 'Could not read release notes. Refresh the list and try again.'],
+        ['已更新 {0} → {1}；可从包菜单查看更新说明，空闲时重新加载资源。', 'Updated {0} → {1}. Read release notes from the package menu, then reload resources when idle.']
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

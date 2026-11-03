@@ -36,7 +36,7 @@ test('resize derives request copies and final stream guard blocks images injecte
     const seen = [], notices = [];
     const { installImageCompatibility } = await import('../server/pi-image-runtime.mjs');
     const history = [{ role: 'user', content: [image] }];
-    const session = { settingsManager: { getImageAutoResize: () => false, getBlockImages: () => false },
+    const session = { modelRuntime: {}, settingsManager: { getImageAutoResize: () => false, getBlockImages: () => false },
         sessionManager: { buildSessionContext: () => ({ messages: history }) }, model: vision, messages: history, isStreaming: false,
         agent: { convertToLlm: messages => messages, streamFunction: async (model, context) => { seen.push(context); return 'stream'; } },
         prompt: async () => 'accepted', setModel: async function (model) { this.model = model; } };

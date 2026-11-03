@@ -1,6 +1,6 @@
 # 持久会话与侧聊用量统计
 
-设置 → 用量统计提供今天、最近 7 天、本月及自定义日期（最多 366 天），包含输入、输出、缓存读写、总 Token 和估算美元费用。趋势可以按日、周和自然月查看；周从周一开始，周期只累计所选日期范围，不把范围外的日期算入。供应商、模型、项目和会话明细按 Token 降序，每批显示 20 行。
+设置 → 用量统计提供今天、最近 7 天、本月及自定义日期（最多 366 天），包含输入、输出、缓存读写、总 Token 和美元费用，并区分供应商实报总额与估算部分。趋势可以按日、周和自然月查看；周从周一开始，周期只累计所选日期范围，不把范围外的日期算入。供应商、模型、项目和会话明细按 Token 降序，每批显示 20 行。
 
 ## 持久账本
 
@@ -28,13 +28,19 @@
 
 模型按 assistant.provider 和 responseModel（缺省 model）归属；工具与摘要单列，不猜测模型。侧聊以独立会话身份归属（名称“侧聊”），同一内存条目的重复回传只入账一次；每笔仅保存用量/价格/时间/归属，不保存引用、问题、回复或工具参数。入账失败会在侧聊存活期间及关闭时重试；若账本持续不可用而内存会话终止，尚未成功入账的临时用量无法事后恢复。此功能启用前已结束的旧侧聊亦无法补录。普通临时会话、标题生成、媒体 planner、模型测试和其他未落盘请求仍不在本账本范围。标题生成窗口的一次请求用量展示不等于累计标题日志。
 
+## 费用来源
+
+原生 `usage.cost.totalFromProvider=true` 表示总额由供应商报告。该标记随精简用量事实保存，主线程、工具／摘要和侧聊一致处理。实报零费用也是有效账单，不使用目录价补算；标记缺省或为 false 的费用按估算展示。分项 input/output/cache 的目录估算不冒充供应商账单明细。页面显示实报合计、笔数与剩余估算金额，各分组明细另列实报金额。
+
+旧 v1 账本通过同一 SQLite 事务追加两个来源汇总列并升级为 v2；旧事实、日汇总和累计费用原位保留，没有来源证据的旧记录仍按估算处理，不改写原生 JSONL。代码回退需匹配升级前的完整账本备份，不能把旧程序拒绝新 schema 当作空账本。
+
 ## 模型加速档位
 
-支持速度配置的请求在原生 assistant 消息保存 `pivaneSpeed`：请求档位、实际 service tier、费用倍率与计价依据。费用从模型标准/阶梯价格和 token 重新计算一次，Fast/Ultrafast 不重复乘上底层适配的旧倍率；供应商返回 default 的降档请求采用标准价。没有返回档位时保持实际值未知，以请求档位估算并标记 requested-tier-estimate。账本沿用已经计算的非零 usage.cost.total；缺少基准价格而用官方参考价补算时保留本笔速度倍率，未知倍率不按标准档位补算。聊天消息可核对实际档位，历史不会因后来修改速度或倍率而重写。内置倍率与模型基准价可能滞后于供应商，中转与订阅仍按各自配置/账单核对。配置入口与渠道声明见[模型设置](PROVIDER_SETTINGS.md)。
+支持速度配置的请求在原生 assistant 消息保存 `pivaneSpeed`：请求档位、实际 service tier、费用倍率与计价依据。供应商已实报总额（包括零值）原样保留且不再乘倍率；其余费用从模型标准/阶梯价格和 token 重新计算一次，Fast/Ultrafast 不重复乘上底层适配的旧倍率；供应商返回 default 的降档请求采用标准价。没有返回档位时保持实际值未知，以请求档位估算并标记 requested-tier-estimate。账本沿用已经计算的非零 usage.cost.total；缺少基准价格而用官方参考价补算时保留本笔速度倍率，未知倍率不按标准档位补算。聊天消息可核对实际档位，历史不会因后来修改速度或倍率而重写。内置倍率与模型基准价可能滞后于供应商，中转与订阅仍按各自配置/账单核对。配置入口与渠道声明见[模型设置](PROVIDER_SETTINGS.md)。
 
 ## 官方参考价格
 
-保留原始 `usage.cost.total`。有完整用量且原始费用为零或缺失时，精确匹配随 Pi 安装的 OpenAI、Google、xAI、Anthropic 官方供应商目录，按每百万 Token 单价补算。包含长上下文阶梯和已记录的一小时缓存写入量。目录读取不加载认证、不发网络或模型请求。
+保留原始 `usage.cost.total`。有完整用量且原始费用为零或缺失、同时没有供应商实报标记时，精确匹配随 Pi 安装的 OpenAI、Google、xAI、Anthropic 官方供应商目录，按每百万 Token 单价补算。包含长上下文阶梯和已记录的一小时缓存写入量。目录读取不加载认证、不发网络或模型请求。
 
 不模糊匹配显示名，不删除模型后缀，不把 `gpt-5.6` 猜成 `gpt-5.6-sol`，也不把 `grok-4.6-build` 猜成 `grok-4.6`。未知型号、价格字段不足或有缓存写入但目录没有写入价时保留原始费用并标明仍无确认价格。非零原始费用保留。新建自定义模型在 ID 精确匹配且尚未设置价格时使用官方目录价（包括阶梯）；已有显式价格不自动覆盖。
 
@@ -53,6 +59,7 @@
 - `from/to/timeZone/generatedAt/scope` 保留，scope 为 `persistent-sessions-and-side-chats`，增加 `ledger:true`。
 - `total`、`daily`、`providers/models/projects/sessions` 保留 `input/output/cacheRead/cacheWrite/total/cost/records/missingUsage/missingCost/zeroCost`。
 - 各汇总增加 `recordedCost`（原始费用合计）、`estimatedRecords`（官方价补算笔数）、`unpricedRecords`（非零用量但仍无确认价格的笔数）。
+- 各汇总增加 `providerReportedCost`（供应商实报费用合计）与 `providerReportedRecords`（有完整用量及有效实报费用的笔数，含零值）；`cost-providerReportedCost` 为估算部分，`estimatedRecords` 仍仅表示本地官方价补算笔数。
 - 增加 `weekly/monthly`，date 分别为周一日期或 YYYY-MM；只合计筛选内日期。
 - `coverage` 为本次同步的 `scannedFiles/cachedFiles/skippedFiles/excludedProjects/duplicates/invalidDates/limited/syncedAt`。cachedFiles 表示身份、修订和完整内容指纹均已核实；`cachedVerifiedBytes` 表示复用事实前的完整字节校验量。`appendedFiles` 表示仅解析后缀的文件数，`parsedBytes` 与 `verifiedBytes` 分别表示送入 JSONL 解析与仅做前缀校验的读取字节数（均含失败尝试）。duplicates 表示本次读取中已入账的指纹数，并非账本历史副本总数。
 - `partial` 在跳过文件、日期异常、达到限额或用量缺失时为 true；价格缺失另行显示。总数包括早先已保存的数据，不能将 partial 报告当作本次完整补录证明。

@@ -10,7 +10,7 @@ const { privateDir, atomicJson, readSafe } = require('../server/pi-maintenance-f
 
 const legacyPackages = ['chord', 'pi-protocol', 'pi-server'].map(name => '@earendil-works/' + name);
 function fixture(t) {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-pi-install-'));
+    const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-pi-install-')));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
     return root;
 }
@@ -35,7 +35,7 @@ function legacyManifest() {
     } };
 }
 
-test('current bound Pi install verifies all seven packages without retired experimental dependencies', async t => {
+test('current bound Pi install verifies the complete package group without retired experimental dependencies', async t => {
     const root = fixture(t), manifest = require('../package.json'), calls = [];
     assert.deepEqual(new Set(piPackageNames(manifest)), new Set(PI_PACKAGES));
     for (const name of legacyPackages) assert.equal(manifest.dependencies[name] || manifest.overrides[name], undefined);

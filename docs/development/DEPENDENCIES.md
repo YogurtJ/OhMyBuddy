@@ -2,7 +2,7 @@
 
 ## 版本来源
 
-应用版本和默认 Pi 依赖取自 package.json，与 package-lock 根版本及锁定条目一致。Pi Coding Agent、pi-ai、pi-agent-core、pi-tui、pi-codemode、pi-mcp、pi-telemetry 成组使用精确版本；当前绑定不依赖已退役的 pi-server、pi-protocol 或 Chord。历史归档只按其明确声明的受限布局验证。不要在另一份通用文档长期重复一组“当前版本”；发布说明记录当时的版本，运行状态报告实际加载的版本。
+应用版本和默认 Pi 依赖取自 package.json，与 package-lock 根版本及锁定条目一致。Pi Coding Agent、pi-ai、pi-agent-core、pi-tui、pi-codemode、pi-mcp、pi-telemetry、pi-schema 成组使用精确版本；当前绑定不依赖已退役的 pi-server、pi-protocol 或 Chord。历史归档只按其明确声明的受限布局验证。不要在另一份通用文档长期重复一组“当前版本”；发布说明记录当时的版本，运行状态报告实际加载的版本。
 
 历史受管 Pi 更新可能与发布包原配不同；当前绑定版拒绝独立切换 Pi，必须随应用与适配层验证。源码工作区、运行 release 和下载归档分别核对，不能通过一个版本字符串推断所有文件一致。普通安装使用锁定依赖；详细升级和失败语义见 [版本与更新](../UPDATES.md)。
 
@@ -38,6 +38,10 @@ OhMyBuddy 使用未打包的 Pi SDK／RPC 入口；Pi 自带 `dist/bundle` 中�
 Pi 1.3 审查新增：默认工具从 transcript 恢复与显式选择的优先级、Kimi Coding Chat Completions 及官方地址 `/v1`、最终工具参数 `argumentsError`、Responses 的 `providerThinkingLevel` 和模型范围歧义诊断。原生 JSONL 管理格式不迁移；字段往返、跨模型上下文和工具权限通过 SDK/RPC 验证。`pi-reviewed-host.js` 保存显式审查版本，主题门禁与独立记忆 recipe 复用它，并核对 package/lock。更改该常量仍须审查适配边界，不自动兼容任意版本。
 
 Pi 1.4 审查新增：Codemode FIFO 准入、按调用读取的容量覆盖、等待期限和迟到启动保护；恢复尝试与工具结果成对省略并保留原生 JSONL；压缩的分段自定义重点、先前 checkpoint 和模型输出预算；原生扩展默认工具与显式选择优先级。MCP 迁移只在解析时去除首个 UTF-8 BOM，私有备份保持原始字节。双向会话读取须在独立 fixture 上核对完整树、custom entries 和原文件不变，不通过正文替换实现兼容。
+
+Pi 1.5 审查新增：工具参数统一使用原生 pi-schema 校验与转换；TypeBox 和普通 MCP JSON Schema 均保留，权限钩子与执行接收同一份规范化参数，原生 toolCall 参数不被修改。TypeBox 的 Refine/BigInt/Undefined、codec 与自定义 Format 不参与工具参数验证，不在适配层另造校验器。主锁、独立记忆锁和安装校验包含 pi-schema；pi-subagents 与记忆包保持各自原版本。
+
+图片兼容包装后的 stream 通过 `pi-runtime-stream.mjs` 重新登记同一 ModelRuntime 的身份，使压缩与分支摘要继续由 runtime 解析 OAuth，不将存储的订阅令牌作为显式 API key 传回。所用 `dist/core/agent-session.js` 的 markRuntimeStreamFunction 是内部导出，不是根 SDK 公共接口；入口核对包身份、审查版本和函数存在性，升级须复核。合成 OAuth 回归同时覆盖图片包装后的压缩和分支摘要。费用保留 `cost.totalFromProvider`，实报总额含零值不重算／重复乘倍率；MCP 注册方式由原生验证器决定，接口字段见 [API](../API.md)。
 
 模型高级 compat 控件直接投影 `@earendil-works/pi-ai/providers/compat-schema` 公开的 `CompatSchemasByApi[api]`，只开放布尔和字面量选项；复杂对象保留在原生配置，删除覆盖保留未知或其他 API 字段。
 

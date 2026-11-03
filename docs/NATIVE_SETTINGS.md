@@ -180,9 +180,15 @@ Package 的安装/移除使用公开 installAndPersist/removeAndPersist，local 
 
 资源选择由服务端重新解析后的 ID 决定，不接受浏览器提供任意文件/模式。单项启用/停用/恢复默认写原生 +path/-path 与 package object filters。项目对全局 package 使用 autoload:false delta；恢复继承移除对应 delta，不覆盖其他资源/类型。[] 停用整类后只启用一项时，保留其他项目停用。资源写入使用公开 SettingsManager setters 和 flush，错误要求核对；保留原配置备份。
 
+资源清单的 `packageChangelogs:true` 表示支持上述日志接口；更新操作成功响应可带 `previousVersion/version`，仅为已安装包的前后版本，不证明当前会话已重载。日志修订／版本冲突 409、读取超限 413、并发超限 429，其他无效或无法安全读取的请求 400，沿用 Origin/token 和 no-store。
+
 资源清单为每个 Package 返回 `updateMode`（`check`、`pinned`、`local` 或 `managed`），能读取安装目录 `package.json` 时返回 `version`；技能读取 SKILL.md frontmatter 的 `version` 或 `metadata.version`（最多 500 个技能、64 KiB/文件，按文件身份缓存）。版本只作展示，只接受 40 字符内的字母、数字和 `.+_-`，其他值省略。
 
 检查更新是显式只读操作：`POST /settings/native/packages/updates {cwd, scope}` 调用公开的 `checkForAvailableUpdates()`，全局范围从身份目录执行，不读取未受信项目的 npm 配置；项目范围要求受信。固定版本、本地路径和 OhMyBuddy 内置组件不检查；`PI_OFFLINE` 时不联网并返回 `offline:true`。上游把单个包的查询失败视为没有更新，因此“未发现更新”不等于确认已是最新。结果只保存在服务内存，同一范围的并发请求共享一次检查；资源清单在配置修订未变且 24 小时内通过 `updates:{checkedAt,offline,available:[{source,scope,type}]}` 返回，任何包操作后清除。检查不安装、不写配置；更新仍走需确认的 `action:update`。
+
+已安装 Package 的“⋯ → 更新说明”按需读取安装目录中的日志，显示安装版本及包内相对位置；更新成功后同时显示前后版本。默认读取 `CHANGELOG.md`，遵循 `pi.changelogPath` 的包内 `.md` 路径和空字符串关闭设置，不联网拉取未安装版本，也不写 Pi 的已读版本或另存包历史。项目包要求受信；从项目页查看继承的全局包时仍绑定其全局来源。日志内容只作为说明展示，不视为执行授权。
+
+读取绑定来源、范围、配置修订和安装版本；拒绝浏览器指定路径、包外路径、符号链接、非 Markdown、非 UTF-8 和超过 128 KiB 的日志，最多两个并发读取。读取前后核对文件完整身份、包清单及配置；变化时要求刷新，不返回截断正文。不存在或作者关闭日志时明确提示。网页经 marked + DOMPurify 清理，预览不加载图片／媒体，只允许 HTTP(S) 外链；关闭、换范围或换页后迟到响应失效。读取不安装、不启动 worker、不调用模型。
 
 新 Package 和资源写入要求 expectedRevision/confirmed:true。与原设置写入和登录流程互斥；不在后台静默安装、不调用模型。旧 Package API 保留兼容，界面在新后端使用新范围接口。
 
@@ -213,6 +219,7 @@ Skills 页复用上述 GET/PUT 资源接口，不新增禁用配置或改写 SKI
 | PUT | `/api/pi/settings/native/resources` | cwd/scope/resourceId/state=on或off或inherit/confirmed/expectedRevision |
 | POST | `/api/pi/settings/native/packages` | cwd/scope/source/action=install或remove或update/confirmed/expectedRevision |
 | POST | `/api/pi/settings/native/packages/updates` | cwd/scope；只读检查更新，返回 checkedAt/offline/available |
+| POST | `/api/pi/settings/native/packages/changelog` | cwd/scope/source/expectedRevision/expectedVersion；只读已安装日志，返回 source/scope/version/status/content 及 ready 时的 path/revision/maxBytes；status 为 ready/missing/disabled |
 | GET | `/api/pi/settings/native/skill?cwd&scope&name` | 完整 content 与内容 revision，不存在返回空草稿和 null revision |
 | PUT | `/api/pi/settings/native/skill` | cwd/scope/name/content/confirmed/expectedRevision |
 | GET | `/api/pi/settings/models/advanced?provider&modelId` | 允许参数 schema、本地覆盖及有效价格 |

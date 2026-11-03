@@ -23,7 +23,7 @@ const server = http.createServer((req, res) => {
                 const host = { currentCwd: () => '/mock/project', currentSession: () => window.selected, apiFetch: async (url, options) => {
                     if (options) { const body = JSON.parse(options.body); window.writes.push({ url, body }); if (window.conflict) throw Error('secret-error-must-not-render'); if (url.includes('/sessions/')) return { runtimeId: body.runtimeId, servers: [{ name: 'fixture', state: 'unknown', toolCount: 1, exposure: 'codemode' }], tools: [{ name: '<script>' + 'x'.repeat(350), active: true }] }; return { ok: true, requiresRuntimeRestart: true }; }
                     window.reads.push(url); const scope = new URL(url, location.origin).searchParams.get('scope');
-                    return { cwd: '/mock/project', scope, revision: 'r1', trust: { effective: window.trusted }, autoEnableCodemode: { global: null, project: null, value: true }, servers: window.partial ? [{ name: 'fixture', scope, override: true, valid: true, enabled: true, exposure: 'codemode', timeout: 60, transport: 'http', config: {}, secretFields: {} }] : [{ name: 'fixture', scope, valid: true, enabled: true, exposure: 'codemode', timeout: 60, transport: 'http', config: { description: '<script>Safe description</script>', auth: scope === 'global' ? { provider: 'fixture-provider' } : undefined, oauth: { clientName: null, authServerMetadataUrl: null }, url: null, headers: { Authorization: null }, toolExposure: { ['long_' + 'x'.repeat(400)]: 'hidden' } }, secretFields: { 'oauth.clientName': { present: true }, 'oauth.authServerMetadataUrl': { present: true }, url: { present: true }, 'headers.Authorization': { present: true } } }] };
+                    return { cwd: '/mock/project', scope, revision: 'r1', trust: { effective: window.trusted }, autoEnableCodemode: { global: null, project: null, value: true }, servers: window.partial ? [{ name: 'fixture', scope, override: true, valid: true, enabled: true, exposure: 'codemode', timeout: 60, transport: 'http', config: {}, secretFields: {} }] : [{ name: 'fixture', scope, valid: true, enabled: true, exposure: 'codemode', timeout: 60, transport: 'http', config: { description: '<script>Safe description</script>', auth: scope === 'global' ? { provider: 'fixture-provider' } : undefined, oauth: { clientName: null, authServerMetadataUrl: null, clientRegistration: 'dcr' }, url: null, headers: { Authorization: null }, toolExposure: { ['long_' + 'x'.repeat(400)]: 'hidden' } }, secretFields: { 'oauth.clientName': { present: true }, 'oauth.authServerMetadataUrl': { present: true }, url: { present: true }, 'headers.Authorization': { present: true } } }] };
                 } };
                 window.panel = PiMcpSettings.create(host); document.querySelector('.workspace-settings-content').append(panel.root); panel.open();
             });
@@ -39,6 +39,8 @@ const server = http.createServer((req, res) => {
             await page.getByRole('button', { name: 'Refresh saved configuration' }).click();
             await page.getByRole('button', { name: 'Edit', exact: true }).click();
             assert.equal(await page.getByRole('textbox', { name: 'auth.provider', exact: true }).inputValue(), 'fixture-provider');
+            assert.equal(await page.getByRole('combobox', { name: 'oauth.clientRegistration', exact: true }).inputValue(), 'dcr');
+            await page.getByRole('combobox', { name: 'oauth.clientRegistration', exact: true }).selectOption('auto');
             assert.equal(await page.locator('.mcp-editor option[value="codemode-deferred"]').count(), 0);
             await page.getByRole('textbox', { name: 'Server description', exact: true }).fill('Search fixture docs');
             await page.getByRole('textbox', { name: 'auth.provider', exact: true }).fill('new-fixture-provider');
@@ -55,6 +57,7 @@ const server = http.createServer((req, res) => {
             body = await page.evaluate(() => writes[1].body);
             assert.deepEqual(body.config.headers.Authorization, { op: 'replace', value: 'Bearer ${MOCK_SECRET}' }); assert.deepEqual(body.config.url, { op: 'remove' });
             assert.equal(body.config.description, 'Search fixture docs'); assert.deepEqual(body.config.auth, { provider: 'new-fixture-provider' });
+            assert.equal(body.config.oauth.clientRegistration, 'auto');
             assert.deepEqual(body.config.oauth.clientName, { op: 'replace', value: 'Fixture client' });
             assert.deepEqual(body.config.oauth.authServerMetadataUrl, { op: 'replace', value: 'https://fixture.invalid/metadata' });
             assert.equal(await page.getByRole('button', { name: 'Save server', exact: true }).isDisabled(), true);

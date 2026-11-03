@@ -15,7 +15,10 @@ const OFFICIAL = {
     'gpt-5.6-luna': { fast: { serviceTier: 'priority', costMultiplier: 2 } },
     'gpt-6-sol': { fast: { serviceTier: 'fast', costMultiplier: 2 } },
     'gpt-6-luna': { fast: { serviceTier: 'fast', costMultiplier: 2 } },
-    'gpt-6.1-sol': { fast: { serviceTier: 'fast', costMultiplier: 2 } },
+    // Official API pricing: Fast 2x; Sol Ultrafast 6x. Terra has no
+    // Ultrafast price/availability declaration (reviewed November 3, 2026).
+    'gpt-6.1-sol': { fast: { serviceTier: 'fast', costMultiplier: 2 }, ultrafast: { serviceTier: 'ultrafast', costMultiplier: 6 } },
+    'gpt-6.1-terra': { fast: { serviceTier: 'fast', costMultiplier: 2 } },
     'gpt-6-astra': { fast: { serviceTier: 'fast', costMultiplier: 2 }, ultrafast: { serviceTier: 'ultrafast', costMultiplier: 6 } },
 };
 function readSpeedConfig(agentDir) {

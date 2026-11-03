@@ -25,7 +25,7 @@ test('capabilities use exact connections; explicit channel declarations and pric
 });
 
 test('GPT-5.6 and GPT-6 Fast coverage uses 2x pricing independently of advertised speedup', () => {
-    for (const id of ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-6-sol', 'gpt-6-luna', 'gpt-6.1-sol', 'gpt-6-astra']) {
+    for (const id of ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-6-sol', 'gpt-6-luna', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6-astra']) {
         for (const api of ['openai-responses', 'openai-completions']) {
             const model = { id, api, provider: 'openai', baseUrl: 'https://api.openai.com/v1' };
             const capability = speed.speedCapability(model);
@@ -37,6 +37,33 @@ test('GPT-5.6 and GPT-6 Fast coverage uses 2x pricing independently of advertise
             const channel = { ...model, provider: 'tang' };
             assert.deepEqual(speed.speedCapability(channel, { [key(channel.provider, id)]: declared }).levels, ['auto', 'standard', 'fast']);
         }
+    }
+});
+
+test('Terra Fast and Sol Ultrafast follow exact official API capability and pricing', () => {
+    for (const id of ['gpt-6.1-terra', 'gpt-6.1-sol']) {
+        const model = { id, api: 'openai-responses', provider: 'openai', baseUrl: 'https://api.openai.com/v1' };
+        const capability = speed.speedCapability(model);
+        assert.equal(speed.requestTier('fast', capability), 'fast'); assert.equal(speed.tierMultiplier('fast', capability), 2);
+        assert.equal(capability.levels.includes('ultrafast'), id === 'gpt-6.1-sol');
+        if (id === 'gpt-6.1-sol') assert.equal(speed.tierMultiplier('ultrafast', capability), 6);
+        assert.ok(!speed.speedCapability({ ...model, api: 'openai-completions' }).levels.includes('ultrafast'));
+        assert.deepEqual(speed.speedCapability({ ...model, provider: 'openai-codex', api: 'openai-codex-responses' }).levels, []);
+        assert.deepEqual(speed.speedCapability({ ...model, baseUrl: 'https://proxy.invalid/v1' }).levels, []);
+    }
+});
+
+test('provider-reported totals, including zero bills, survive speed pricing without a second multiplier', async () => {
+    const { finalizeSpeedUsage } = await import('../server/pi-model-speed-runtime.mjs');
+    const model = { cost: { input: 2, output: 10, cacheRead: .2, cacheWrite: 0 } };
+    const capability = { levels: ['auto', 'fast'], modes: { fast: { serviceTier: 'priority', costMultiplier: 2 } } };
+    for (const total of [0, .0123]) {
+        const message = { usage: { input: 1000, output: 100, cacheRead: 0, cacheWrite: 0,
+            cost: { input: .002, output: .001, cacheRead: 0, cacheWrite: 0, total, totalFromProvider: true } } };
+        const before = structuredClone(message);
+        const result = finalizeSpeedUsage(message, model, capability, 'fast', 'priority');
+        assert.deepEqual(result.usage.cost, before.usage.cost); assert.deepEqual(message, before);
+        assert.equal(result.pivaneSpeed.costMultiplier, 2);
     }
 });
 

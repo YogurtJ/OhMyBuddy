@@ -78,9 +78,9 @@ Kimi Coding 内置模型使用 OpenAI Chat Completions，默认地址为 `https:
 
 ## 模型速度（Fast / Ultrafast）
 
-速度与思考等级分别选择。桌面输入区在有加速能力的模型旁显示“速度”，手机从上下文圆环进入模型面板选择；未声明 Fast/Ultrafast 的模型隐藏速度入口。选择器提供跟随供应商（auto，不增加请求参数）、标准（standard，发送 default）和该渠道实际支持的 Fast/Ultrafast。选项显示相对于模型标准价格的费用倍率；加速不改变 Thinking。
+速度与思考等级分别选择。供应商已实报的费用总额（包括零值）原样保留，不重复乘速度倍率；其他费用继续按目录与档位估算，来源在[用量统计](USAGE.md#费用来源)中区分。桌面输入区在有加速能力的模型旁显示“速度”，手机从上下文圆环进入模型面板选择；未声明 Fast/Ultrafast 的模型隐藏速度入口。选择器提供跟随供应商（auto，不增加请求参数）、标准（standard，发送 default）和该渠道实际支持的 Fast/Ultrafast。选项显示相对于模型标准价格的费用倍率；加速不改变 Thinking。
 
-设置 → 供应商与模型 → 模型行“速度”保存此模型默认速度，也可在高级区域声明渠道能力、Fast 的 fast/priority 参数和费用倍率。档位支持只按精确供应商、模型 ID、API 和官方连接判断；同名中转模型不会自动获得官方能力。当前内置目录覆盖官方 OpenAI API 的 gpt-5.4、gpt-5.5、gpt-5.6-sol/terra/luna、gpt-6-sol/luna、gpt-6.1-sol 的 Fast，以及 gpt-6-astra 的 Fast/Ultrafast；官方 Ultrafast 只在 Responses API 显示。GPT-5.6 与 GPT-6 系列内置 Fast 费用按对应 Standard 价格的 2 倍估算；“最高 2.5 倍更快”指速度，不是费用倍率。GPT-5.6 Sol 当前促销价至少持续到 2026-11-21；供应商或官方改价后需更新倍率。账号权限与远端可用性仍由供应商判定。其他 OpenAI Responses、Chat Completions 或 Codex Responses 渠道需要明确配置。
+设置 → 供应商与模型 → 模型行“速度”保存此模型默认速度，也可在高级区域声明渠道能力、Fast 的 fast/priority 参数和费用倍率。档位支持只按精确供应商、模型 ID、API 和官方连接判断；同名中转模型不会自动获得官方能力。当前内置目录覆盖官方 OpenAI API 的 gpt-5.4、gpt-5.5、gpt-5.6-sol/terra/luna、gpt-6-sol/luna、gpt-6.1-terra 的 Fast，以及 gpt-6.1-sol 与 gpt-6-astra 的 Fast/Ultrafast；官方 Ultrafast 只在 Responses API 显示。GPT-5.6 与 GPT-6 系列内置 Fast 费用按对应 Standard 价格的 2 倍估算；“最高 2.5 倍更快”指速度，不是费用倍率。GPT-5.6 Sol 当前促销价至少持续到 2026-11-21；供应商或官方改价后需更新倍率。Terra Fast 使用 `service_tier:fast`，按 Standard 的 2 倍估算，不提供内置 Ultrafast；Sol Ultrafast 使用 `service_tier:ultrafast`，按 Standard 的 6 倍估算。依据 2026-11-03 核对的官方[价格表](https://developers.openai.com/api/docs/pricing)、[Fast](https://developers.openai.com/api/docs/guides/fast-mode) 与 [Ultrafast](https://developers.openai.com/api/docs/guides/ultrafast-mode) 指南。账号权限与远端可用性仍由供应商判定。其他 OpenAI Responses、Chat Completions 或 Codex Responses 渠道需要明确配置。
 
 渠道覆盖保存在原生 models.json 的 custom model 或 modelOverrides 条目的 `pivaneSpeed`；没有覆盖时使用内置声明。保存保留其他能力、认证、价格和未知字段，采用现有修订与原子保存。高级区域全部取消加速会隐藏会话入口；“恢复内置速度配置”删除该模型覆盖。只保存配置不请求模型，也不默认开启加速。运行中的实例通过空闲刷新模型目录或重开加载新配置。示例：
 

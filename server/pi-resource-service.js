@@ -33,7 +33,7 @@ function updateMode(source, managed) {
     return /[@#]/.test(rest.split(/[/:]/).at(-1) || '') ? 'pinned' : 'check';
 }
 class PiResourceService {
-    constructor(native) { this.native = native; this.skillVersions = new Map(); this.updateChecks = new Map(); this.updateResults = new Map(); }
+    constructor(native) { this.native = native; this.skillVersions = new Map(); this.updateChecks = new Map(); this.updateResults = new Map(); this.changelogReads = 0; }
     async packageVersion(installedPath) {
         if (!installedPath) return null;
         try {
@@ -156,13 +156,41 @@ class PiResourceService {
             const version = await this.skillVersion(ctx, item.path);
             if (version) skillVersions.set(item.id, version);
         }
-        return { cwd: ctx.cwd, scope, revision: ctx.revision, trust: ctx.trust, featuredSkills, featuredSkillNeedsReview, packages, updates: this.updateSnapshot(ctx, scope),
+        return { cwd: ctx.cwd, scope, revision: ctx.revision, trust: ctx.trust, packageChangelogs: true, featuredSkills, featuredSkillNeedsReview, packages, updates: this.updateSnapshot(ctx, scope),
             resources: ctx.resources.map(item => {
                 const pattern = item.metadata.origin === 'package' ? path.relative(item.metadata.baseDir, item.path) : item.path;
                 const exact = this.patterns(ctx, item, scope).filter(p => target(p) === pattern || path.resolve(item.metadata.baseDir || ctx.agentDir, target(p)) === item.path).at(-1);
                 return { id: item.id, type: item.type, path: item.path, enabled: item.enabled, source: item.metadata.source, scope: item.metadata.scope,
                     override: exact ? /^[!-]/.test(exact) ? 'off' : 'on' : 'inherit', ...(skillVersions.has(item.id) ? { version: skillVersions.get(item.id) } : {}) };
             }), compatibility: '工具、命令与标准对话框使用原生 RPC；终端组件、快捷键和自定义渲染不等同于网页组件。扩展会话替换受网站管理限制。' };
+    }
+    async packageChangelog(input) {
+        if (!input || Object.keys(input).some(key => !['cwd', 'scope', 'source', 'expectedRevision', 'expectedVersion'].includes(key))
+            || !['global', 'project'].includes(input.scope) || typeof input.source !== 'string' || input.source.length > 1000)
+            throw fail('更新日志请求无效');
+        if (this.changelogReads >= 2) throw fail('正在读取其他更新日志，请稍后再试', 429);
+        this.changelogReads++;
+        try {
+            const ctx = await this.context(input.cwd, input.scope);
+            if (ctx.revision !== input.expectedRevision || this.native.busy) throw fail('配置已变化或正在更新，请刷新后核对', 409);
+            if (input.scope === 'project' && !ctx.trust.effective) throw fail('请先信任项目');
+            const pkg = ctx.manager.listConfiguredPackages().find(item => item.source === input.source
+                && item.scope === (input.scope === 'global' ? 'user' : 'project'));
+            if (!pkg?.installedPath) throw fail('该范围内没有已安装的扩展包');
+            const version = await this.packageVersion(pkg.installedPath);
+            if (version !== (input.expectedVersion ?? null)) throw fail('扩展版本已变化，请刷新后核对', 409);
+            let result;
+            try { result = await require('./pi-package-changelog').readPackageChangelog(pkg.installedPath); }
+            catch (error) {
+                if (error.statusCode === 409) throw fail('扩展包已变化，请刷新后核对', 409);
+                if (error.code === 'FILE_SIZE') throw fail('更新日志超过 128 KiB，请查看包的上游仓库', 413);
+                throw fail('无法安全读取此包的更新日志');
+            }
+            if ((await this.native.context(ctx.cwd)).revision !== input.expectedRevision
+                || await this.packageVersion(pkg.installedPath) !== version || this.native.busy)
+                throw fail('配置或扩展版本已变化，请刷新后核对', 409);
+            return { source: pkg.source, scope: pkg.scope, version, ...result };
+        } finally { this.changelogReads--; }
     }
     async toggle(input) {
         if (!['on', 'off', 'inherit'].includes(input.state) || input.confirmed !== true) throw fail('请确认资源开关');
@@ -253,6 +281,8 @@ class PiResourceService {
             if (input.action !== 'install' && !matches.some(p => p.scope === wantedScope)) throw fail('该范围内不存在此包');
             // Native update(source) acts on all matching scopes; never silently update two installations.
             if (input.action === 'update' && matches.some(p => p.scope !== wantedScope)) throw fail('此包有多个安装范围，请在终端指定更新范围');
+            const previousVersion = input.action === 'update' ? await this.packageVersion(matches.find(p => p.scope === wantedScope)?.installedPath) : null;
+            if ((await this.native.context(ctx.cwd)).revision !== input.expectedRevision) throw fail('配置已变化，请刷新', 409);
             const options = { local: input.scope === 'project' };
             if (input.action === 'install') await ctx.manager.installAndPersist(input.source, options);
             if (input.action === 'remove') await ctx.manager.removeAndPersist(input.source, options);
@@ -261,7 +291,9 @@ class PiResourceService {
             if (input.action === 'update') await ctx.manager.update(input.source);
             const file = input.scope === 'project' ? ctx.projectFile : ctx.globalFile;
             if (fs.existsSync(file)) privateFiles.privateFileMode(file);
-            return { ok: true, requiresReload: true };
+            const installed = ctx.manager.listConfiguredPackages().find(p => p.source === input.source && p.scope === wantedScope);
+            const version = input.action === 'update' ? await this.packageVersion(installed?.installedPath) : null;
+            return { ok: true, requiresReload: true, ...(input.action === 'update' ? { previousVersion, version } : {}) };
         });
     }
     async skillPath(input, create = false) {

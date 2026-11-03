@@ -24,8 +24,7 @@
         if (base && !file.startsWith('/') && !windowsDrive) file = `${base.slice(0, base.lastIndexOf('/') + 1)}${file}`;
         return { path: file, line: Number.isSafeInteger(line) && line > 0 ? line : null };
     }
-    function markdown(text, base = '', preview = false) {
-        if (!window.marked || !window.DOMPurify) return '';
+    function markdownParser(base = '', preview = false) {
         const renderer = new window.marked.Renderer(), original = renderer.link;
         const originalCode = renderer.code;
         renderer.code = function(token) {
@@ -69,12 +68,20 @@
         };
         const options = { tokenizer };
         const math = window.PiMath?.create(renderer, options);
-        const source = text.replace(/^\uFEFF/, ''); // BOM belongs to the downloadable bytes, not the first heading.
-        const html = window.DOMPurify.sanitize(math ? math.parse(source) : new window.marked.Marked({ ...options, renderer }).parse(source), {
-            USE_PROFILES: { html: true }, FORBID_TAGS: ['style', 'iframe', 'form', 'input', 'button', ...(preview ? ['img', 'video', 'audio', 'source', 'object', 'embed'] : [])],
-            FORBID_ATTR: ['style', 'onerror', 'onclick']
-        });
-        return math ? math.finish(html) : html;
+        const parser = math || new window.marked.Marked({ ...options, renderer });
+        const sanitize = raw => {
+            const html = window.DOMPurify.sanitize(raw, {
+                USE_PROFILES: { html: true }, FORBID_TAGS: ['style', 'iframe', 'form', 'input', 'button', ...(preview ? ['img', 'video', 'audio', 'source', 'object', 'embed'] : [])],
+                FORBID_ATTR: ['style', 'onerror', 'onclick']
+            });
+            return math ? math.finish(html) : html;
+        };
+        return { parse: text => sanitize(parser.parse(text)), lex: text => parser.lexer(text),
+            render: tokens => sanitize(parser.parser(tokens)) };
+    }
+    function markdown(text, base = '', preview = false) {
+        if (!window.marked || !window.DOMPurify) return '';
+        return markdownParser(base, preview).parse(text.replace(/^\uFEFF/, ''));
     }
 
     // Signatures describe the sanitized, undecorated output, never source Markdown.
@@ -113,6 +120,79 @@
             decorate?.(fragment);
             root.appendChild(fragment);
         }
+    }
+
+    // A cache belongs to one mounted message. Lex the whole source each time so
+    // late references and container changes still invalidate earlier tokens.
+    const streamingMarkdown = new WeakMap();
+    const STREAM_BYTES = 2 * 1024 * 1024, STREAM_BLOCKS = 1024;
+    function renderStreamingMarkdown(root, text, { base = '', decorate } = {}) {
+        const originalSource = String(text || '');
+        const source = originalSource.replace(/^\uFEFF/, '');
+        const previous = streamingMarkdown.get(root);
+        const environment = [base, window.marked, window.marked?.defaults?.gfm, window.marked?.defaults?.breaks,
+            window.DOMPurify, window.DOMPurify?.sanitize, window.PiMath, window.PiMath?.create, window.katex];
+        const sameEnvironment = previous?.environment.every((value, index) => value === environment[index]);
+        const mounted = previous && [...root.childNodes].every((node, index) => node === previous.nodes[index])
+            && root.childNodes.length === previous.nodes.length;
+        if (sameEnvironment && mounted && previous.source === source) return;
+        const fallback = () => {
+            streamingMarkdown.delete(root);
+            const html = window.marked && window.DOMPurify ? markdown(originalSource, base)
+                : `<p>${originalSource.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])).replace(/\n/g, '<br>')}</p>`;
+            updateMarkdown(root, html, decorate);
+        };
+        if (!window.marked || !window.DOMPurify || source.length * 2 > STREAM_BYTES
+            || /\$|\\[([]|<\/?[a-z][^>]*>/i.test(source)) return fallback();
+        const parser = markdownParser(base), tokens = parser.lex(source);
+        // Raw HTML can span blocks and require browser tree repair. Math keeps
+        // whole-message budgets; Mermaid owns asynchronous replacement. Use the
+        // complete renderer for these rather than caching isolated fragments.
+        const ordinary = new Set(['space', 'code', 'heading', 'table', 'hr', 'blockquote', 'list', 'list_item', 'paragraph',
+            'text', 'escape', 'link', 'image', 'strong', 'em', 'codespan', 'br', 'del', 'def']);
+        let safe = true, visited = 0;
+        const inspect = (value, depth = 0) => {
+            if (!value || typeof value !== 'object' || !safe) return;
+            if (depth > 64 || ++visited > 20000) { safe = false; return; }
+            if (value.type && !ordinary.has(value.type)
+                || value.type === 'code' && /^(math|latex|mermaid)\s*$/i.test(value.lang || '')) { safe = false; return; }
+            for (const child of Object.values(value)) if (child && typeof child === 'object') inspect(child, depth + 1);
+        };
+        inspect(tokens);
+        if (!safe || tokens.length > STREAM_BLOCKS) return fallback();
+        const units = [];
+        for (const token of tokens) {
+            if (token.type === 'text' && units.at(-1)?.at(-1)?.type === 'text') units.at(-1).push(token);
+            else units.push([token]);
+        }
+        let bytes = source.length * 2;
+        const blocks = [];
+        for (let index = 0; index < units.length; index++) {
+            const key = JSON.stringify(units[index]);
+            const old = sameEnvironment && previous.blocks[index];
+            const block = old?.key === key ? old : { key, html: parser.render(units[index]) };
+            bytes += 2 * (key.length + block.html.length);
+            if (bytes > STREAM_BYTES) return fallback();
+            blocks.push(block);
+        }
+        let retained = 0;
+        if (sameEnvironment && mounted) while (retained < blocks.length && blocks[retained] === previous.blocks[retained]) retained++;
+        // Empty whitespace blocks may have no nodes; find the last retained node.
+        const retainedNodes = blocks.slice(0, retained).flatMap(block => block.nodes);
+        let current = retainedNodes.length ? retainedNodes.at(-1).nextSibling : root.firstChild;
+        while (current) { const next = current.nextSibling; markdownSignatures.delete(current); current.remove(); current = next; }
+        const fragment = document.createDocumentFragment(), range = document.createRange(); range.selectNodeContents(root);
+        for (let index = retained; index < blocks.length; index++) {
+            const block = blocks[index], content = range.createContextualFragment(block.html);
+            // Do not attach old nodes from a changed suffix, even when its HTML
+            // was reused. Decoration remains bound to this render's new nodes.
+            blocks[index] = { key: block.key, html: block.html, nodes: [...content.childNodes] };
+            for (const node of blocks[index].nodes)
+                markdownSignatures.set(node, `${node.nodeType}:${node.nodeType === Node.ELEMENT_NODE ? node.outerHTML : node.nodeValue}`);
+            fragment.appendChild(content);
+        }
+        if (fragment.childNodes.length) { decorate?.(fragment); root.appendChild(fragment); }
+        streamingMarkdown.set(root, { source, environment, blocks, nodes: [...root.childNodes] });
     }
 
     class PiFileViewer {
@@ -452,4 +532,5 @@
     window.PiFileViewer.linkTarget = linkTarget;
     window.PiFileViewer.markdown = markdown;
     window.PiFileViewer.updateMarkdown = updateMarkdown;
+    window.PiFileViewer.renderStreamingMarkdown = renderStreamingMarkdown;
 })();
