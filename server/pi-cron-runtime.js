@@ -70,6 +70,10 @@ function registerCron(pi) {
             if (silentToolRegistered) {
                 const tools = pi.getActiveTools();
                 if (tools.includes('cron_silent')) pi.setActiveTools(tools.filter(name => name !== 'cron_silent'));
+                // Pi 1.5 lets an explicit prompt loadout win over the live tools.
+                // Compose with later extension edits without restoring this private tool.
+                if (Array.isArray(event?.systemPromptOptions?.selectedTools))
+                    event.systemPromptOptions.selectedTools = event.systemPromptOptions.selectedTools.filter(name => name !== 'cron_silent');
             }
             return;
         }
