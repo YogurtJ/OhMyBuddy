@@ -28,6 +28,7 @@ async function main() {
     socket.listen(requestedPort, '127.0.0.1'); await once(socket, 'listening'); const port = socket.address().port; await new Promise(resolve => socket.close(resolve));
     const env = { HOME: home, PATH: '/usr/bin:/bin:/usr/sbin:/sbin', HOST: '127.0.0.1', PORT: String(port),
         OHMYBUDDY_HOME: path.join(output, 'private'), OHMYBUDDY_WORKSPACES_DIR: path.join(output, 'workspaces'),
+        PI_MEDIA_DATA_DIR: path.join(output, 'private', 'data', 'media'),
         PI_CODING_AGENT_DIR: agent, PI_PROJECT_ROOTS: project, PI_WEB_TOKEN: 'pivane-platform-trial-only', PI_OFFLINE: '1', PI_TELEMETRY: '0', PI_SKIP_VERSION_CHECK: '1' };
     if (values['--tls-ca']) {
         assert.ok(path.isAbsolute(values['--tls-ca']), 'Test TLS CA path must be absolute');
@@ -92,7 +93,7 @@ async function main() {
         }
         assert.equal(state?.job?.phase, 'succeeded'); assert.equal(executes, 1);
         assert.ok(!/\$ npm (?:ci|install)/.test(state.job.output), 'Client must not install npm dependencies');
-        const after = await api('settings/updates'); assert.equal(after.appVersion, values['--expected']); assert.equal(after.piVersion, versions.piVersion);
+        const after = await api('settings/updates'); assert.equal(after.appVersion, values['--expected']); assert.equal(after.piVersion, versions.pivane.piVersion);
         assert.deepEqual(hashFileSafe(session.path), snapshot); assert.deepEqual(hashFileSafe(fixtureMedia), mediaProof);
         require('../../server/pi-maintenance-backup').inspectBackupContents(state.job.backup.directory);
         await page.waitForFunction(expected => {
