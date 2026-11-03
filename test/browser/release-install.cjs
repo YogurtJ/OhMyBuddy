@@ -35,7 +35,10 @@ async function get(url) { const response = await fetch(base + url); assert.equal
             const errors=[]; page.on('pageerror',e=>errors.push(e.message));
             // External decoration is irrelevant to this onboarding test; all application API/WS are real.
             await page.route(/https:\/\/(fonts\.googleapis\.com|fonts\.gstatic\.com|cdnjs\.cloudflare\.com)\//,r=>r.abort());
-            await page.goto(base,{waitUntil:'domcontentloaded'});
+            const saved = (await get('/api/pi/sessions?'+new URLSearchParams({cwd}))).sessions.find(session => session.messageCount > 0);
+            if (phase==='verify' || width===393) assert.ok(saved, 'the previously seeded conversation is available');
+            const target = saved ? base+'/#/chat?'+new URLSearchParams({cwd,sessionId:saved.id}) : base;
+            await page.goto(target,{waitUntil:'domcontentloaded'});
             const iconFonts=await page.evaluate(async()=>{
                 const fonts=await document.fonts.load('900 16px "Font Awesome 6 Free"', '\uf013');
                 return fonts.map(font=>({family:font.family,status:font.status}));
@@ -72,17 +75,19 @@ async function get(url) { const response = await fetch(base + url); assert.equal
                 await page.waitForFunction(()=>document.querySelector('.settings-model-group')?.textContent.includes('默认'));
                 await page.locator('#workspace-settings-close').click();
             }
-            if (width<=680 && await page.locator('#pi-mobile-summary').isVisible()) { await page.locator('#pi-mobile-summary').click(); }
-            else await page.locator('#pi-project-button').click();
-            await page.locator('#pi-project-input').fill(cwd);
-            await page.locator('#pi-project-form [type=submit]').click();
-            await page.waitForFunction(()=>document.querySelector('#pi-project-dialog').classList.contains('hidden'));
-            if (width<900) await page.locator('#pi-toggle-sessions').click();
-            if (phase==='install' && width===1440) {
-                await page.locator('#pi-new-session').click();
-            } else {
-                await page.locator('[data-filter="all"]').click();
-                await page.locator('.pi-session-main').first().click();
+            if (!saved) {
+                if (width<=680 && await page.locator('#pi-mobile-summary').isVisible()) await page.locator('#pi-mobile-summary').click();
+                else await page.locator('#pi-project-button').click();
+                await page.locator('#pi-project-input').fill(cwd);
+                await page.locator('#pi-project-form [type=submit]').click();
+                const directoryChoice = page.locator('#pi-directory-select');
+                const directoryBrowser = await directoryChoice.count() > 0;
+                if (directoryBrowser) {
+                    await page.waitForFunction(() => !document.querySelector('#pi-directory-select').disabled);
+                    await directoryChoice.click();
+                }
+                await page.waitForFunction(()=>document.querySelector('#pi-project-dialog').classList.contains('hidden'));
+                if (!directoryBrowser) await page.locator('#pi-new-session').click();
             }
             await page.waitForFunction(()=>{
                 const control=document.querySelector('#pi-model-select');
