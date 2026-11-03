@@ -69,6 +69,7 @@ async function run(browser, base, width, scenario) {
                     messages: { messages: [] }, stats: {}, models: { models: [model] }, thinkingLevels: { levels: ['off'] }, commands: { commands: [] } } : {} }));
         });
     });
+    const chooseOtherProject = () => page.evaluate(cwd => window.PiWorkspaceRoute.navigate('chat', { cwd, sessionId: 'other-thread' }), other);
     try {
         const start = Date.now();
         await page.goto(base, { waitUntil: 'domcontentloaded' });
@@ -82,11 +83,8 @@ async function run(browser, base, width, scenario) {
             assert.equal(rpc.some(command => command.sessionId === 'saved-thread'), false);
         } else if (scenario === 'switch') {
             await waitFor(() => requests.some(request => request.includes(`/projects/resolve?cwd=${encodeURIComponent(saved)}`)));
-            // An explicit user navigation overtakes the saved-cwd validation response.
-            await page.locator('#pi-project-form').evaluate((node, cwd) => {
-                node.querySelector('input').value = cwd;
-                node.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-            }, other);
+            // A complete thread address overtakes the saved-cwd validation response.
+            await chooseOtherProject();
             await waitFor(() => requests.some(request => request.includes(`/projects/resolve?cwd=${encodeURIComponent(other)}`)));
             await page.waitForFunction(cwd => document.querySelector('#pi-project-path')?.textContent === cwd, other);
             releaseResolve();
@@ -96,10 +94,7 @@ async function run(browser, base, width, scenario) {
             assert.equal(rpc.some(command => command.sessionId === 'saved-thread'), false);
         } else if (scenario === 'stale-list') {
             await waitFor(() => requests.some(request => request.includes(`/api/pi/sessions?cwd=${encodeURIComponent(saved)}`)));
-            await page.locator('#pi-project-form').evaluate((node, cwd) => {
-                node.querySelector('input').value = cwd;
-                node.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-            }, other);
+            await chooseOtherProject();
             await page.waitForFunction(cwd => document.querySelector('#pi-project-path')?.textContent === cwd, other);
             releaseSaved();
             releaseGlobal();
@@ -136,7 +131,12 @@ async function run(browser, base, width, scenario) {
         assert.deepEqual(errors, []);
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `document fits ${width}px`);
         assert.equal(rpc.some(command => command.type === 'prompt'), false);
-    } catch (error) { error.message = `${width}/${scenario}: ${error.message}`; throw error; }
+    } catch (error) {
+        console.error(JSON.stringify({ width, scenario, requests, rpc, errors, view: await page.evaluate(() => ({ tab: location.hash,
+            chatVisible: Boolean(document.getElementById('chat-tab').offsetParent), cwd: localStorage.getItem('pi.web.cwd'),
+            project: document.getElementById('pi-project-path').textContent, inputDisabled: document.getElementById('pi-input').disabled })) }));
+        error.message = `${width}/${scenario}: ${error.message}`; throw error;
+    }
     finally { releaseActivity(); releaseResolve(); releaseSaved(); releaseGlobal(); releaseOther(); await context.close(); }
 }
 (async () => {

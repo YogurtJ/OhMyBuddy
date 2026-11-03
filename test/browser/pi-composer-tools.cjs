@@ -155,7 +155,7 @@ async function run(browser, viewport) {
     assert.equal(await page.locator('#pi-cron-add-button').evaluate(n => n === document.activeElement), true);
     await page.keyboard.press('Enter');
     await page.getByLabel('目标线程', { exact: true }).waitFor();
-    await page.waitForFunction(() => document.querySelector('[aria-label="目标线程"]').value === 'a');
+    await page.waitForFunction(() => document.querySelector('[aria-label="目标线程"]').title.split('\n').at(-1) === 'a');
     assert.equal(await page.getByLabel('工作目录', { exact: false }).inputValue(), cwd);
     assert.equal(await addMenu.isVisible(), false, 'plus closes before entering the task form');
     assert.equal(mutations.length, 0, 'opening the task form creates no task');

@@ -233,28 +233,51 @@ async function composerLayout(browser, width, language, theme) {
     }
     await page.locator('#pi-input').fill('Composer layout draft');
     await capture('idle-medium');
-    const thinking = page.locator(width <= 680 ? '#pi-mobile-thinking' : '#pi-thinking-select');
-    if (width <= 680) await page.locator('#pi-mobile-context-trigger').click();
+    const compact = width <= (baseline ? 680 : 900);
+    const thinkingId = compact ? 'pi-mobile-thinking' : 'pi-thinking-select';
+    const usingPicker = await page.locator(`#${thinkingId}-trigger`).count() > 0;
+    const thinking = page.locator(`#${thinkingId}${usingPicker ? '-trigger' : ''}`);
+    const revealThinking = async () => {
+        if (compact && !await thinking.isVisible()) await page.locator('#pi-mobile-context-trigger').click();
+    };
+    const chooseThinking = async level => {
+        await revealThinking();
+        if (usingPicker) {
+            await thinking.click();
+            await page.locator(`#${thinkingId}-dialog [data-level="${level}"]`).click();
+        } else await thinking.selectOption(level);
+        await page.waitForFunction(({ id, level, picker }) => {
+            const select = document.getElementById(id), trigger = document.getElementById(id + '-trigger');
+            return select.value === level && !select.disabled && (!picker || trigger.textContent === select.selectedOptions[0].textContent);
+        }, { id: thinkingId, level, picker: usingPicker });
+        await revealThinking();
+    };
+    const thinkingMetrics = () => thinking.evaluate(control => {
+        const style = getComputedStyle(control), rect = control.getBoundingClientRect();
+        const label = control.tagName === 'SELECT' ? control.selectedOptions[0].textContent : control.textContent;
+        const ctx = document.createElement('canvas').getContext('2d'); ctx.font = style.font;
+        const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+        let decoration = 0;
+        if (control.tagName !== 'SELECT') {
+            const arrow = getComputedStyle(control, '::after'), px = value => parseFloat(value) || 0;
+            decoration = px(arrow.width) + px(arrow.marginLeft) + px(arrow.marginRight) + px(style.columnGap)
+                + (arrow.boxSizing === 'border-box' ? 0 : px(arrow.borderLeftWidth) + px(arrow.borderRightWidth));
+        }
+        const parent = control.closest('.pi-composer, dialog').getBoundingClientRect();
+        return { label, width: rect.width, textWidth: ctx.measureText(label).width, padding, decoration, fontSize: parseFloat(style.fontSize),
+            inside: rect.left >= parent.left && rect.right <= parent.right + 1 };
+    });
     for (const level of levels) {
-        await thinking.selectOption(level);
-        await page.waitForFunction(level => document.querySelector('#pi-thinking-select').value === level && !document.querySelector('#pi-thinking-select').disabled, level);
-        const metrics = await thinking.evaluate(select => {
-            const style = getComputedStyle(select), rect = select.getBoundingClientRect();
-            const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d');
-            ctx.font = style.font;
-            const textWidth = ctx.measureText(select.selectedOptions[0].textContent).width;
-            const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-            const parent = select.closest('.pi-composer, dialog').getBoundingClientRect();
-            return { level: select.value, label: select.selectedOptions[0].textContent, width: rect.width, textWidth, padding, fontSize: parseFloat(style.fontSize),
-                inside: rect.left >= parent.left && rect.right <= parent.right + 1 };
-        });
+        await chooseThinking(level);
+        const metrics = { level, ...await thinkingMetrics() };
         measurements.push(metrics);
         if (!baseline) {
-            assert.ok(metrics.width >= metrics.textWidth + metrics.padding - 1, `selected thinking label fits: ${JSON.stringify(metrics)}`);
+            const needed = metrics.textWidth + metrics.padding + metrics.decoration;
+            assert.ok(metrics.width >= needed - 1, `selected thinking label fits: ${JSON.stringify(metrics)}`);
             assert.ok(metrics.inside, `thinking control stays inside composer/sheet: ${JSON.stringify(metrics)}`);
-            if (width <= 680) assert.ok(metrics.fontSize >= 16, 'phone thinking select keeps a 16px font');
+            if (compact) assert.ok(metrics.fontSize >= 16, 'phone thinking control keeps a 16px font');
             else {
-                assert.ok(metrics.width - metrics.textWidth - metrics.padding <= 8, `select has no oversized gap: ${JSON.stringify(metrics)}`);
+                assert.ok(metrics.width - needed <= 8, `control has no oversized gap: ${JSON.stringify(metrics)}`);
                 const rowFits = await page.locator('.pi-composer-models').evaluate(row => {
                     const bounds = row.getBoundingClientRect();
                     return [...row.children].filter(node => !node.hidden).every(node => {
@@ -266,28 +289,23 @@ async function composerLayout(browser, width, language, theme) {
             }
         }
     }
-    await thinking.selectOption('medium');
-    await page.waitForFunction(() => !document.querySelector('#pi-thinking-select').disabled);
-    if (width <= 680) {
+    await chooseThinking('medium');
+    if (compact) {
         await capture('thinking-medium');
         await page.locator('#pi-mobile-session-dialog .pi-mobile-sheet-head button').click();
     }
-    // Exercise the measured-label fallback even in a Chromium that supports field-sizing.
-    if (!baseline && width > 680) {
-        const fallback = await page.addStyleTag({ content: '.pi-composer-models #pi-thinking-select { field-sizing: fixed; width: calc(var(--pi-thinking-label-width, 4em) + 34px); }' });
+    // Labels also fit when field-sizing is unavailable; measure the visible control.
+    if (!baseline && !compact) {
+        const fallback = await page.addStyleTag({ content: usingPicker
+            ? '.pi-composer-models .pi-thinking-trigger { field-sizing: fixed; }'
+            : '.pi-composer-models #pi-thinking-select { field-sizing: fixed; width: calc(var(--pi-thinking-label-width, 4em) + 34px); }' });
         for (const level of ['low', 'medium', 'xhigh']) {
-            await thinking.selectOption(level);
-            await page.waitForFunction(() => !document.querySelector('#pi-thinking-select').disabled);
-            const fits = await thinking.evaluate(select => {
-                const style = getComputedStyle(select), ctx = document.createElement('canvas').getContext('2d'); ctx.font = style.font;
-                const needed = ctx.measureText(select.selectedOptions[0].textContent).width + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-                return Math.abs(select.getBoundingClientRect().width - needed) <= 3;
-            });
-            assert.equal(fits, true, `fallback fits ${language}/${level}`);
+            await chooseThinking(level);
+            const metrics = await thinkingMetrics();
+            assert.ok(Math.abs(metrics.width - metrics.textWidth - metrics.padding - metrics.decoration) <= 3, `fallback fits ${language}/${level}`);
         }
         await fallback.evaluate(node => node.remove());
-        await thinking.selectOption('medium');
-        await page.waitForFunction(() => !document.querySelector('#pi-thinking-select').disabled);
+        await chooseThinking('medium');
     }
     const idle = await geometry();
     await page.locator('#pi-input').press('Enter');

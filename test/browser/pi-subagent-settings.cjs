@@ -40,7 +40,7 @@ async function run(browser, base, width, locale) {
         }
         await route.fulfill({ status: code, json: data });
     });
-    await page.goto(base, { waitUntil: 'domcontentloaded' }); await page.locator('#pi-project-dialog-close').click();
+    await page.goto(base, { waitUntil: 'domcontentloaded' });
     await page.locator('#workspace-settings-toggle').click(); await page.locator('[data-settings-tab="media"]').click();
     const card = page.locator('#settings-subagents'), trigger = card.locator('[data-model-key="defaultModel"]'), picker = page.locator('.sa-picker');
     await card.getByText(locale === 'en' ? /pi-subagents is not installed/ : /尚未安装 pi-subagents/).waitFor(); assert.equal(await card.locator('form').count(), 0);

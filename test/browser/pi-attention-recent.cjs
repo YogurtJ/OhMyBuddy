@@ -83,7 +83,7 @@ async function run(browser, viewport) {
         if (viewport.width < 900 && !await page.locator('#pi-session-pane').evaluate(node => node.classList.contains('open'))) await page.locator('#pi-toggle-sessions').click();
         await page.waitForFunction(() => document.getElementById('pi-session-pane').getBoundingClientRect().left >= -1);
     };
-    const choose = filter => page.locator(`#pi-session-filters [data-filter="${filter}"]`).click();
+    const choose = async filter => { await drawer(); await page.locator(`#pi-session-filters [data-filter="${filter}"]`).click(); };
     const section = kind => page.locator(`[data-work-section="${kind}"]`);
     const ids = kind => section(kind).locator('[data-session-id]').evaluateAll(rows => rows.map(row => row.dataset.sessionId));
     const expectIds = async (kind, expected) => {
@@ -249,6 +249,7 @@ async function run(browser, viewport) {
     await choose('all');
     await page.locator(`[data-project-cwd="${cwdA}"] [data-project-action="menu"]`).click();
     await page.locator('.pi-thread-menu:not(.hidden)').getByRole('menuitem', { name: '临时会话（不保存）', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('.pi-session-item.ephemeral.active') && !document.querySelector('#pi-input').disabled);
     await drawer();
     await choose('work');
     await page.waitForFunction(() => document.querySelector('[data-work-section="running"] .ephemeral'));

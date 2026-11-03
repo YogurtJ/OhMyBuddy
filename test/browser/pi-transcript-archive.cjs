@@ -446,11 +446,13 @@ async function boundaries(browser, sdk) {
         await eventually(h.page, () => h.ctl.held, 'turns response held before thread switch');
         const held = h.ctl.held;
         await h.page.locator('[data-filter="all"]').click();
-        // The old thread's archive leaves with its transcript, before the new thread finishes opening.
-        const immediate = await h.page.locator('[data-session-id="b"] .pi-session-main').evaluate(n => {
-            n.click(); return { hidden: document.querySelector('#pi-transcript-archive').hidden, children: document.querySelector('#pi-transcript-archive').childElementCount };
-        });
-        assert.deepEqual(immediate, { hidden: true, children: 0 }, 'archive cleared synchronously on thread switch');
+        // Navigation may await the leave guard. Once the new identity is committed,
+        // the old archive must be gone before its held response can arrive.
+        await h.page.locator('[data-session-id="b"] .pi-session-main').click();
+        await h.page.waitForFunction(() => document.querySelector('#pi-meta-id').textContent === 'b');
+        const committed = await h.page.evaluate(() => ({ hidden: document.querySelector('#pi-transcript-archive').hidden,
+            children: document.querySelector('#pi-transcript-archive').childElementCount }));
+        assert.deepEqual(committed, { hidden: true, children: 0 }, 'archive cleared at the committed thread switch');
         await h.page.waitForFunction(() => document.querySelector('#pi-meta-id').textContent === 'b' && !document.querySelector('#pi-input').disabled && document.querySelectorAll('.pi-timeline-tick').length === 2);
         const record = JSON.stringify({ type: 'response', id: held.cmd.id, command: held.cmd.type, success: true, data: held.response });
         held.finish(held.response);

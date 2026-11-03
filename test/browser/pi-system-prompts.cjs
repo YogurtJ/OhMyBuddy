@@ -270,8 +270,6 @@ async function noProject(browser, base) {
     });
     await page.routeWebSocket('**/api/pi/ws', () => { throw new Error('No project must not start a worker'); });
     await page.goto(base);
-    await page.locator('#pi-project-dialog').waitFor({ state: 'visible' });
-    await page.locator('#pi-project-dialog-close').click();
     await page.locator('#workspace-settings-toggle').click();
     await page.locator('[data-settings-tab="system-prompts"]').click();
     await page.locator('#system-prompt-append-text').waitFor();

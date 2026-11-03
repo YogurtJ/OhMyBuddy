@@ -30,4 +30,18 @@ async function openInspector(page, mode = 'details') {
     }
     await page.locator('#pi-inspector.open').waitFor({ state: 'visible' });
 }
-module.exports = { selectMessageView, openWorkspaceTab, openInspector };
+// Use visible header controls; recent projects are an explicit disclosure.
+async function openProjectDialog(page, { recent = false } = {}) {
+    let opened = false;
+    for (const selector of ['#pi-project-button', '#pi-mobile-summary']) {
+        const trigger = page.locator(selector);
+        if (await trigger.isVisible()) { await trigger.click(); opened = true; break; }
+    }
+    if (!opened) {
+        if (!await page.locator('#pi-session-pane').evaluate(node => node.classList.contains('open'))) await page.locator('#pi-toggle-sessions').click();
+        await page.locator('[data-project-open]').click();
+    }
+    await page.locator('#pi-project-dialog').waitFor({ state: 'visible' });
+    if (recent && !await page.locator('.pi-recent-projects').evaluate(node => node.open)) await page.locator('.pi-recent-projects > summary').click();
+}
+module.exports = { selectMessageView, openWorkspaceTab, openInspector, openProjectDialog };

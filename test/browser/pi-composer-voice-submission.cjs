@@ -10,6 +10,7 @@ async function run(browser, width) {
     const existingJob = { id: 'existing', revision: 1, status: 'scheduled', dueAt: Date.now() + 600000, payload: { message: 'existing job', images: [] } };
     let transcription, transcriptionReady, scheduled, socket, sendError, holdSend = false, pendingSend, uploads = 0;
     page.on('pageerror', error => errors.push(error.message));
+    await page.route(/https:\/\/(fonts\.googleapis\.com|fonts\.gstatic\.com)\//, route => route.abort());
     page.on('dialog', dialog => dialog.accept());
     await page.addInitScript(({ cwd }) => {
         localStorage.setItem('pi.web.cwd', cwd); localStorage.setItem(`pi.web.session:${cwd}`, 'one');
@@ -65,11 +66,20 @@ async function run(browser, width) {
         try { await page.waitForFunction(id => document.querySelector('#pi-meta-id').textContent === id && !document.querySelector('#pi-input').disabled, id); }
         catch (error) { console.error(JSON.stringify({ errors, commands, view: await page.locator('#chat-tab').innerText() })); throw error; }
     };
+    const waitTranscription = async pending => {
+        let timer;
+        try { await Promise.race([pending, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('No synthetic transcription POST within 10s')), 10000); })]); }
+        catch (error) {
+            console.error(JSON.stringify({ width, uploads, voice: await page.evaluate(() => ({ phase: voiceFixture.phase, samples: voiceFixture.samples,
+                audioState: voiceFixture.audio?.state, message: voiceFixture.message.textContent, context: voiceFixture.host.context() })) }));
+            throw error;
+        } finally { clearTimeout(timer); }
+    };
     const start = async () => {
         transcription = null;
         const uploaded = new Promise(resolve => { transcriptionReady = resolve; });
         await page.evaluate(() => { window.voiceDone = voiceFixture.submit(new Blob(['synthetic WAV'], { type: 'audio/wav' }), voiceFixture.host.context(), 'synthetic', 'synthetic'); });
-        await uploaded;
+        await waitTranscription(uploaded);
     };
     const finish = async text => { assert.ok(transcription); await transcription.fulfill({ json: { text } }); await page.evaluate(() => voiceDone); };
     const manual = async (draft, text) => {
@@ -87,7 +97,7 @@ async function run(browser, width) {
     await page.locator('#pi-input').fill('recording draft'); await page.locator('#pi-transcribe-button').click();
     await page.waitForFunction(() => document.querySelector('#pi-transcribe-button').dataset.recording === 'true' && document.querySelector('#pi-voice-bar').textContent.includes('1 秒'));
     await page.locator('#pi-input').fill('typed during recording');
-    const recorded = new Promise(resolve => { transcriptionReady = resolve; }); await page.locator('#pi-transcribe-button').click(); await recorded;
+    const recorded = new Promise(resolve => { transcriptionReady = resolve; }); await page.locator('#pi-transcribe-button').click(); await waitTranscription(recorded);
     const wav = transcription.request().postDataJSON(); assert.equal(wav.audio.format, 'wav');
     assert.equal(Buffer.from(wav.audio.data, 'base64').toString('ascii', 0, 4), 'RIFF');
     await transcription.fulfill({ json: { text: 'recorded speech' } });

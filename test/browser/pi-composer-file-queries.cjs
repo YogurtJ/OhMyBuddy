@@ -312,7 +312,7 @@ const cases = {
     async 'cwd-A-B-A-keeps-new-owner'(h) {
         const old = await h.start('project');
         const project = async (projectCwd, id) => {
-            await h.page.locator(widthOf(h) === 393 ? '#pi-mobile-summary' : '#pi-project-button').click();
+            await require('./pi-mobile-view-helper.cjs').openProjectDialog(h.page, { recent: true });
             await h.page.locator(`#pi-project-list [data-cwd="${projectCwd}"]`).click(); await h.switchSession(id);
         };
         await project(otherCwd, 'c'); await project(cwd, 'a');
