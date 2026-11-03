@@ -25,10 +25,11 @@ const root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'piva
 const runId = randomUUID();
 fs.writeFileSync(path.join(root, '.pivane-release.json'), JSON.stringify({ kind: 'pivane-release-acceptance-v1', runId }), { mode: 0o600 });
 const app = path.join(root, 'app'), previous = path.join(root, 'previous');
+const dataDirectories = ['data', 'projects', 'private', 'workspaces'];
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const systemNames = new Set(['HOME', 'USER', 'LOGNAME', 'PATH', 'LANG', 'LC_ALL', 'TMPDIR', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'SYSTEMDRIVE', 'USERPROFILE', 'USERNAME', 'USERDOMAIN', 'APPDATA', 'LOCALAPPDATA', 'TEMP', 'TMP', 'PROGRAMDATA', 'PROGRAMFILES', 'PROGRAMFILES(X86)', 'COMMONPROGRAMFILES', 'COMMONPROGRAMFILES(X86)', 'PATHEXT', 'OS', 'PROCESSOR_ARCHITECTURE', 'NUMBER_OF_PROCESSORS', 'COMPUTERNAME']);
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => systemNames.has(key.toUpperCase())));
-Object.assign(env, { PI_OFFLINE: '1', PI_TELEMETRY: '0', PI_CODING_AGENT_DIR: path.join(root, 'data/agent'), PI_MEDIA_CONFIG_DIR: path.join(root, 'data/agent/media-lab'), PI_MEDIA_DATA_DIR: path.join(root, 'data/media'), PI_WEB_DEFERRED_FILE: path.join(root, 'data/agent/pi5-deferred-messages.json'), PI_PROJECT_ROOTS: path.join(root, 'projects'), PI_RELEASE_BASE_DIR: root, PI_RELEASE_PROJECT_DIR: path.join(root, 'projects/demo'), PI_RELEASE_RUN_ID: runId, PI_RELEASE_VIDEO_FILE: args['--video'] ? path.resolve(args['--video']) : path.join(app, 'test/fixtures/release-video.mp4'), PLAYWRIGHT_MODULE: path.resolve(args['--playwright']), CHROMIUM_PATH: path.resolve(args['--browser']) });
+Object.assign(env, { OHMYBUDDY_HOME: path.join(root, 'private'), OHMYBUDDY_WORKSPACES_DIR: path.join(root, 'workspaces'), PI_OFFLINE: '1', PI_TELEMETRY: '0', PI_CODING_AGENT_DIR: path.join(root, 'data/agent'), PI_MEDIA_CONFIG_DIR: path.join(root, 'data/agent/media-lab'), PI_MEDIA_DATA_DIR: path.join(root, 'data/media'), PI_WEB_DEFERRED_FILE: path.join(root, 'data/agent/pi5-deferred-messages.json'), PI_PROJECT_ROOTS: path.join(root, 'projects'), PI_RELEASE_BASE_DIR: root, PI_RELEASE_PROJECT_DIR: path.join(root, 'projects/demo'), PI_RELEASE_RUN_ID: runId, PI_RELEASE_VIDEO_FILE: args['--video'] ? path.resolve(args['--video']) : path.join(app, 'test/fixtures/release-video.mp4'), PLAYWRIGHT_MODULE: path.resolve(args['--playwright']), CHROMIUM_PATH: path.resolve(args['--browser']) });
 // npm configuration is independent of the user's registry/auth configuration.
 for (const kind of ['user', 'global']) fs.writeFileSync(path.join(root, `npm-${kind}.conf`), '');
 env.npm_config_userconfig = path.join(root, 'npm-user.conf');
@@ -132,13 +133,14 @@ async function stopServer() {
     server = null;
 }
 function initializeData() {
-    for (const directory of [env.PI_CODING_AGENT_DIR, env.PI_MEDIA_DATA_DIR, env.PI_RELEASE_PROJECT_DIR]) fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+    for (const directory of [env.PI_CODING_AGENT_DIR, env.PI_MEDIA_CONFIG_DIR, env.PI_MEDIA_DATA_DIR, env.PI_RELEASE_PROJECT_DIR, env.OHMYBUDDY_HOME, env.OHMYBUDDY_WORKSPACES_DIR]) fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+    require('./guard.cjs').rehearsalEnvironment(root, env);
     fs.writeFileSync(path.join(env.PI_RELEASE_PROJECT_DIR, 'release-marker.txt'), 'pi-release-rehearsal-v1\n');
 }
 function hashes() {
     const values = {};
     function visit(directory) { for (const entry of fs.readdirSync(directory, { withFileTypes: true })) { const file = path.join(directory, entry.name); if (entry.isDirectory()) visit(file); else if (entry.isFile()) values[path.relative(root, file).replace(/\\/g, '/')] = digest(fs.readFileSync(file)); else throw Error('unexpected backup object'); } }
-    visit(path.join(root, 'data')); visit(path.join(root, 'projects')); return values;
+    for (const name of dataDirectories) visit(path.join(root, name)); return values;
 }
 async function browser(phase, label) { env.PI_RELEASE_PHASE = phase; await run(path.join(app, 'test/browser/release-install.cjs'), [], label); }
 async function state(mode, label) { await run(path.join(app, 'test/release/state.cjs'), [mode], label); }
@@ -183,7 +185,7 @@ async function cleanup() {
             extract(args['--previous-archive'], args['--previous-sha256'], previous);
             if (fs.existsSync(path.join(previous, 'scripts/install.cjs'))) await run(path.join(previous, 'scripts/install.cjs'), [], 'locked-install-previous', previous);
             else await run(npm, ['ci', '--no-audit', '--no-fund'], 'npm-ci-previous', previous);
-            for (const name of ['data', 'projects']) fs.renameSync(path.join(root, name), path.join(root, 'clean-install-' + name));
+            for (const name of dataDirectories) fs.renameSync(path.join(root, name), path.join(root, 'clean-install-' + name));
             initializeData();
             await startServer(previous, 'server-previous');
             await browser('install', 'browser-previous-install');
@@ -192,13 +194,13 @@ async function cleanup() {
         await stopServer();
         await run(path.join(app, 'test/release/data.cjs'), [], 'synthetic-media');
         const before = hashes();
-        for (const name of ['data', 'projects']) fs.cpSync(path.join(root, name), path.join(root, 'backup', name), { recursive: true });
+        for (const name of dataDirectories) fs.cpSync(path.join(root, name), path.join(root, 'backup', name), { recursive: true });
         assert.deepEqual(hashes(), before);
         await startServer(app, 'server-update');
         await browser('verify', 'browser-update');
         await state('verify', 'state-update');
         await stopServer();
-        for (const name of ['data', 'projects']) { fs.renameSync(path.join(root, name), path.join(root, 'after-update-' + name)); fs.cpSync(path.join(root, 'backup', name), path.join(root, name), { recursive: true }); }
+        for (const name of dataDirectories) { fs.renameSync(path.join(root, name), path.join(root, 'after-update-' + name)); fs.cpSync(path.join(root, 'backup', name), path.join(root, name), { recursive: true }); }
         assert.deepEqual(hashes(), before, 'same-path restore must match before opening Pi');
         result.restoredFiles = Object.keys(before).length;
         result.restoreHashes = before;
