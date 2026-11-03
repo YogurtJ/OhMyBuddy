@@ -39,7 +39,7 @@ Pi 1.3 审查新增：默认工具从 transcript 恢复与显式选择的优先�
 
 Pi 1.4 审查新增：Codemode FIFO 准入、按调用读取的容量覆盖、等待期限和迟到启动保护；恢复尝试与工具结果成对省略并保留原生 JSONL；压缩的分段自定义重点、先前 checkpoint 和模型输出预算；原生扩展默认工具与显式选择优先级。MCP 迁移只在解析时去除首个 UTF-8 BOM，私有备份保持原始字节。双向会话读取须在独立 fixture 上核对完整树、custom entries 和原文件不变，不通过正文替换实现兼容。
 
-Pi 1.5 审查新增：工具参数统一使用原生 pi-schema 校验与转换；TypeBox 和普通 MCP JSON Schema 均保留，权限钩子与执行接收同一份规范化参数，原生 toolCall 参数不被修改。TypeBox 的 Refine/BigInt/Undefined、codec 与自定义 Format 不参与工具参数验证，不在适配层另造校验器。主锁、独立记忆锁和安装校验包含 pi-schema；pi-subagents 与记忆包保持各自原版本。
+Pi 1.5 审查新增：`before_agent_start` 的显式 `systemPromptOptions.selectedTools` 优先于活动工具；定时工具清理须同时更新两者，以便与后续扩展组合，同时保持其余工具选择与原生检查点。工具参数统一使用原生 pi-schema 校验与转换；TypeBox 和普通 MCP JSON Schema 均保留，权限钩子与执行接收同一份规范化参数，原生 toolCall 参数不被修改。TypeBox 的 Refine/BigInt/Undefined、codec 与自定义 Format 不参与工具参数验证，不在适配层另造校验器。主锁、独立记忆锁和安装校验包含 pi-schema；pi-subagents 与记忆包保持各自原版本。
 
 图片兼容包装后的 stream 通过 `pi-runtime-stream.mjs` 重新登记同一 ModelRuntime 的身份，使压缩与分支摘要继续由 runtime 解析 OAuth，不将存储的订阅令牌作为显式 API key 传回。所用 `dist/core/agent-session.js` 的 markRuntimeStreamFunction 是内部导出，不是根 SDK 公共接口；入口核对包身份、审查版本和函数存在性，升级须复核。合成 OAuth 回归同时覆盖图片包装后的压缩和分支摘要。费用保留 `cost.totalFromProvider`，实报总额含零值不重算／重复乘倍率；MCP 注册方式由原生验证器决定，接口字段见 [API](../API.md)。
 
