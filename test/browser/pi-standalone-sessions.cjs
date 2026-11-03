@@ -70,6 +70,9 @@ const { WorkspaceAccessService } = require('../../server/workspace-access-servic
                 assert.equal(fs.readFileSync(path.join(first, 'retained.txt'), 'utf8'), 'persistent task output');
                 const openPicker = () => page.locator(width <= 680 ? '#pi-mobile-summary' : '#pi-project-button').click();
                 if (width <= 680) await page.locator('#pi-toggle-sessions').click();
+                assert.deepEqual(errors, [], 'no UI errors before creating another task');
+                assert.equal(await page.locator('[data-standalone-create]').count(), 1, (await page.locator('#pi-session-list').innerHTML()).slice(0, 1800) + JSON.stringify(await page.locator('.pi-toast').allTextContents()));
+                await page.locator('.pi-standalone-heading').hover();
                 await page.locator('[data-standalone-create]').click();
                 await page.waitForFunction(previous => localStorage.getItem('pi.web.cwd') !== previous, first);
                 await page.waitForFunction(() => !document.querySelector('#pi-model-guidance').hidden);

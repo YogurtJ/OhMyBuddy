@@ -143,6 +143,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const RECENT_PROJECTS_KEY = 'pi.web.recentProjects';
     const EXPANDED_PROJECTS_KEY = 'pi.web.expandedProjects';
+    const COLLAPSED_WORK_SECTIONS_KEY = 'pi.web.collapsedWorkSections';
+    const TASK_BATCH_SIZE = 10;
 
     function readStoredArray(key) {
         try {
@@ -211,9 +213,16 @@ document.addEventListener('DOMContentLoaded', () => {
         projectSelectionEpoch: 0,
         expandedProjects: new Set(readStoredArray(EXPANDED_PROJECTS_KEY).filter(value => typeof value === 'string')),
         expandedThreadLists: new Set(),
+        collapsedWorkSections: new Set(readStoredArray(COLLAPSED_WORK_SECTIONS_KEY).filter(value => ['tasks', 'projects'].includes(value))),
+        taskVisibleLimit: TASK_BATCH_SIZE,
+        archivedTaskVisibleLimit: TASK_BATCH_SIZE,
+        archiveTasksOpen: false,
+        taskListQuery: '',
+        choosingComposerProject: false,
         roots: [],
         defaultProject: null,
         standaloneSupported: false,
+        composerProjectChoiceSupported: false,
         nativeDirectoryPicker: false,
         directoryRequest: 0,
         cwd: '',
@@ -1030,6 +1039,7 @@ document.addEventListener('DOMContentLoaded', () => {
             accessBootstrapped = true;
             state.modelCatalogSupported = status.modelCatalog === true;
             state.standaloneSupported = status.standaloneSessions === true;
+            state.composerProjectChoiceSupported = status.composerProjectChoice === true;
             state.nativeDirectoryPicker = status.nativeDirectoryPicker?.available === true;
             $('pi-native-picker-section').hidden = !state.nativeDirectoryPicker;
             taskResults?.setEnabled(status.agentTaskResults === true);
@@ -1139,7 +1149,7 @@ document.addEventListener('DOMContentLoaded', () => {
             toast(error.message, 'error');
         } finally {
             elements.projectButton.disabled = false;
-            if (accessBootstrapped) { state.transcriptBooting = false; settleTranscriptPlaceholder(); }
+            if (accessBootstrapped) { state.transcriptBooting = false; settleTranscriptPlaceholder(); syncComposerProject(); }
         }
     }
 
@@ -1705,7 +1715,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return isCurrentNavigation(navigation, cwd) ? navigation : false;
         } finally {
             if (isCurrentNavigation(navigation)) {
-                state.pendingRestore = false; settleTranscriptPlaceholder();
+                state.pendingRestore = false; settleTranscriptPlaceholder(); syncComposerProject();
                 elements.newSession.disabled = false;
             }
         }
@@ -1902,6 +1912,10 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
     }
 
+    function persistWorkSections() {
+        try { localStorage.setItem(COLLAPSED_WORK_SECTIONS_KEY, JSON.stringify([...state.collapsedWorkSections])); } catch {}
+    }
+
     function renderSessions() {
         if (state.botMode) return;
         const anchor = captureSessionListAnchor();
@@ -1913,6 +1927,10 @@ document.addEventListener('DOMContentLoaded', () => {
             : focused?.dataset.projectAction ? `[data-project-action="${CSS.escape(focused.dataset.projectAction)}"]`
             : focused?.dataset.action ? `[data-action="${CSS.escape(focused.dataset.action)}"]` : '.pi-session-main';
         const query = elements.sessionSearch.value.trim().toLowerCase();
+        if (query !== state.taskListQuery) {
+            state.taskListQuery = query;
+            state.taskVisibleLimit = state.archivedTaskVisibleLimit = TASK_BATCH_SIZE;
+        }
         const standaloneRows = [], standaloneArchived = [];
         let archivedGroups = '', archivedCount = 0;
         const groups = orderedProjects().map(project => {
@@ -1978,19 +1996,39 @@ document.addEventListener('DOMContentLoaded', () => {
         }).join('');
         const archiveSection = archivedCount ? `<details class="pi-archive-group pi-archived-projects" data-archive-kind="projects" ${state.archiveProjectsOpen || query ? 'open' : ''}><summary>${translateUi('已归档项目（{0}）', archivedCount)}</summary>${archivedGroups}</details>` : '';
 
-        const standaloneMarkup = (rows) => rows.sort((a, b) => String(b.session.modified).localeCompare(String(a.session.modified)))
-            .map(({ session, cwd }) => renderSessionItem(session, cwd)).join('');
+        const sectionHeader = (kind, label, count, action) => {
+            const collapsed = state.collapsedWorkSections.has(kind) && !query;
+            const toggleLabel = translateUi(collapsed ? '展开{0}' : '折叠{0}', label);
+            const controls = `pi-work-${kind}-content`;
+            return `<div class="pi-work-section-heading ${kind === 'tasks' ? 'pi-standalone-heading' : 'pi-project-section-heading'}">
+                <button type="button" class="pi-work-section-label" data-section-toggle="${kind}" data-work-action="toggle-${kind}" aria-expanded="${!collapsed}" aria-controls="${controls}" aria-label="${escapeHtml(toggleLabel)}" ${query ? 'disabled' : ''}><strong>${label}</strong><em>${count}</em></button>
+                <div class="pi-work-section-actions">${action}<button type="button" class="pi-section-icon pi-section-collapse" data-section-toggle="${kind}" data-work-action="toggle-${kind}-icon" title="${escapeHtml(toggleLabel)}" aria-label="${escapeHtml(toggleLabel)}" aria-expanded="${!collapsed}" aria-controls="${controls}" ${query ? 'disabled' : ''}><i class="fa-solid fa-chevron-${collapsed ? 'right' : 'down'}" aria-hidden="true"></i></button></div>
+            </div>`;
+        };
+        const standaloneMarkup = (rows, archived = false) => {
+            rows.sort((a, b) => String(b.session.modified).localeCompare(String(a.session.modified)) || a.session.id.localeCompare(b.session.id));
+            const limit = archived ? state.archivedTaskVisibleLimit : state.taskVisibleLimit;
+            const visible = rows.slice(0, limit);
+            const currentIndex = rows.findIndex(row => row.cwd === state.cwd && row.session.id === state.session?.id);
+            if (currentIndex >= limit) visible.push(rows[currentIndex]);
+            const next = Math.min(rows.length, limit + TASK_BATCH_SIZE) + (currentIndex >= limit + TASK_BATCH_SIZE ? 1 : 0) - visible.length;
+            return visible.map(({ session, cwd }) => renderSessionItem(session, cwd)).join('')
+                + (next ? `<button type="button" class="pi-task-more pi-thread-more" data-task-more="${archived ? 'archived' : 'active'}" data-work-action="more-${archived ? 'archived-' : ''}tasks"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i><span>${translateUi('再显示 {0} 个任务', next)}</span><small>${translateUi('已显示 {0} / {1}', visible.length, rows.length)}</small></button>` : '');
+        };
         const taskCount = standaloneRows.length + standaloneArchived.length;
-        const standaloneSection = state.sessionFilter === 'all' && (state.standaloneSupported || taskCount) ? `<section class="pi-standalone-group"><div class="pi-standalone-heading"><strong>${translateUi('任务')}<em>${taskCount}</em></strong>${state.standaloneSupported ? `<button type="button" class="pi-new-task" data-standalone-create data-work-action="new-task" ${state.creatingSession ? 'disabled' : ''}><i class="fa-solid fa-plus" aria-hidden="true"></i>${translateUi('新任务')}</button>` : ''}</div>${standaloneMarkup(standaloneRows)}${standaloneArchived.length ? `<details class="pi-archive-group"><summary>${translateUi('已归档线程（{0}）', standaloneArchived.length)}</summary>${standaloneMarkup(standaloneArchived)}</details>` : ''}${!taskCount ? `<p class="pi-task-empty">${query ? translateUi('没有匹配的任务，试试其他关键词。') : translateUi('不需要选择项目，直接创建任务。')}</p>` : ''}</section>` : '';
+        const taskCollapsed = state.collapsedWorkSections.has('tasks') && !query;
+        const newTask = state.standaloneSupported ? `<button type="button" class="pi-section-icon pi-new-task" data-standalone-create data-work-action="new-task" title="${translateUi('新任务')}" aria-label="${translateUi('新任务')}" ${state.creatingSession ? 'disabled' : ''}><i class="fa-solid fa-plus" aria-hidden="true"></i></button>` : '';
+        const standaloneSection = state.sessionFilter === 'all' && (state.standaloneSupported || taskCount) ? `<section class="pi-standalone-group pi-work-section ${taskCollapsed ? 'is-collapsed' : ''}" data-sidebar-section="tasks">${sectionHeader('tasks', translateUi('任务'), taskCount, newTask)}<div id="pi-work-tasks-content" class="pi-work-section-content" ${taskCollapsed ? 'hidden' : ''}>${standaloneMarkup(standaloneRows)}${standaloneArchived.length ? `<details class="pi-archive-group" data-archive-kind="tasks" ${state.archiveTasksOpen || query ? 'open' : ''}><summary>${translateUi('已归档线程（{0}）', standaloneArchived.length)}</summary>${standaloneMarkup(standaloneArchived, true)}</details>` : ''}${!taskCount ? `<p class="pi-task-empty">${query ? translateUi('没有匹配的任务，试试其他关键词。') : translateUi('不需要选择项目，直接创建任务。')}</p>` : ''}</div></section>` : '';
         // Discovery is independent of the always-available task entry.
         const discovering = !groups && !archiveSection && !query && !state.projectsDiscovered;
         const projectCount = orderedProjects().filter(project => !project.standalone).length;
         elements.sessionCount.textContent = discovering ? '' : state.standaloneSupported ? translateUi('{0} 个任务 · {1} 个项目', taskCount, projectCount) : translateUi('{0} 个项目', projectCount);
         elements.sessionCount.title = translateUi("{0} 个项目 · {1} 个当前线程", projectCount, state.sessions.length);
-        const projectHeading = standaloneSection ? `<div class="pi-project-section-heading"><strong>${translateUi('项目')}</strong><button type="button" data-project-open data-work-action="open-project"><i class="fa-regular fa-folder-open" aria-hidden="true"></i>${translateUi('打开文件夹')}</button></div>` : '';
+        const projectCollapsed = state.collapsedWorkSections.has('projects') && !query;
+        const projectHeading = standaloneSection ? sectionHeader('projects', translateUi('项目'), projectCount, `<button type="button" class="pi-section-icon" data-project-open data-work-action="open-project" title="${translateUi('打开文件夹')}" aria-label="${translateUi('打开文件夹')}"><i class="fa-regular fa-folder-open" aria-hidden="true"></i></button>`) : '';
         const projectContent = groups + archiveSection || (discovering ? window.PiSkeleton?.html('projects', { rows: 4, label: translateUi('正在读取') }) || `<div class="pi-list-state"><span class="pi-spinner"></span>${translateUi('正在读取')}</div>`
             : state.sessionFilter === 'work' ? '' : `<div class="pi-list-state">${query ? translateUi("没有匹配的项目或线程") : translateUi("还没有项目文件夹")}</div>`);
-        elements.sessionList.innerHTML = standaloneSection + projectHeading + projectContent;
+        elements.sessionList.innerHTML = standaloneSection + (standaloneSection ? `<section class="pi-work-section ${projectCollapsed ? 'is-collapsed' : ''}" data-sidebar-section="projects">${projectHeading}<div id="pi-work-projects-content" class="pi-work-section-content" ${projectCollapsed ? 'hidden' : ''}>${projectContent}</div></section>` : projectContent);
         renderActivityBadges();
         if (!groups && !standaloneSection && !archiveSection && !discovering && state.sessionFilter !== 'work') {
             const action = document.createElement('button'); action.type = 'button'; action.className = 'pi-list-state-action';
@@ -2138,6 +2176,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!state.session) return;
         // Presentation only: never unhide/unarchive a project or open a worker.
         if (!elements.sessionSearchField.hidden) setSessionSearchOpen(false);
+        const task = state.session.standalone || state.projects.find(project => project.cwd === state.cwd)?.standalone;
+        state.collapsedWorkSections.delete(task ? 'tasks' : 'projects');
+        if (task) { state.archiveTasksOpen = true; state.archivedTaskVisibleLimit = Math.max(state.archivedTaskVisibleLimit, TASK_BATCH_SIZE); }
+        persistWorkSections();
         state.expandedProjects.add(state.cwd);
         state.archiveThreadsOpen.add(state.cwd); state.archiveProjectsOpen = true;
         elements.sessionFilters.querySelector('[data-filter="all"]').click();
@@ -2247,7 +2289,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function createSession(navigation = beginConversationNavigation(), { profileId = null } = {}) {
-        if (!isCurrentNavigation(navigation) || state.creatingSession) return;
+        if (!isCurrentNavigation(navigation) || state.creatingSession || state.choosingComposerProject) return;
         if (!state.cwd) return state.standaloneSupported ? createStandaloneSession(navigation) : openProjectDialog();
         if (state.projects.find(project => project.cwd === state.cwd)?.standalone) return createStandaloneSession(navigation);
         const cwd = state.cwd;
@@ -2281,7 +2323,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function createStandaloneSession(navigation = beginConversationNavigation()) {
-        if (!state.standaloneSupported || !isCurrentNavigation(navigation) || state.creatingSession) return;
+        if (!state.standaloneSupported || !isCurrentNavigation(navigation) || state.creatingSession || state.choosingComposerProject) return;
         state.creatingSession = true;
         elements.newSession.disabled = true;
         document.querySelectorAll('[data-standalone-create]').forEach(button => { button.disabled = true; });
@@ -2293,6 +2335,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             if (!state.projects.some(project => project.cwd === session.cwd))
                 state.projects.push({ cwd: session.cwd, name: translateUi('任务'), standalone: true, sessionCount: 1 });
+            state.collapsedWorkSections.delete('tasks'); persistWorkSections();
             state.projectSessions.set(session.cwd, [session]);
             rememberProject(session.cwd);
             renderSessions();
@@ -3438,6 +3481,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         state.renderedTranscript = { context, records };
+        syncComposerProject();
         if (removed.length) { mediaRequests?.prune(); deliveryCards.prune(); questionReceipts.prune(); scheduleCards.prune(); topicCards?.prune(); botTurnReceipts.prune(); }
         mediaRequests?.refresh(messages);
         state.dirtyTranscriptIndex = Infinity;
@@ -3484,6 +3528,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderEmptySession() {
+        syncComposerProject();
         if (!state.session && (state.transcriptBooting || state.pendingRestore)) {
             elements.transcript.innerHTML = transcriptLoadingMarkup(elements.connectionText.textContent || translateUi("正在连接 Agent"), 'boot');
             return;
@@ -3719,6 +3764,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             case 'message_start':
                 startLiveMessage(event.message);
+                syncComposerProject();
                 break;
             case 'message_update':
                 updateLiveMessage(event.assistantMessageEvent);
@@ -4693,7 +4739,33 @@ document.addEventListener('DOMContentLoaded', () => {
         transcriptScroll.update();
     }
 
+    function isUnstartedComposerSession() {
+        const session = state.session;
+        return !state.botMode && !state.transcriptBooting && !state.pendingRestore
+            && (!session || !session.ephemeral && !session.assistant && !session.profileAuthoring && !session.agentProfile
+                && !(session.messageCount > 0) && !(state.stats?.totalMessages > 0))
+            && !state.renderedTranscript?.records.some(record => ['user', 'assistant', 'toolResult'].includes(record.role))
+            && !elements.transcript.querySelector('.pi-message.user, .pi-message.assistant, .pi-tool-card')
+            && !state.submittingDrafts.has(state.composerSessionKey) && !state.uncertainDrafts.has(state.composerSessionKey);
+    }
+
+    function syncComposerProject() {
+        const button = $('pi-composer-project');
+        const available = state.composerProjectChoiceSupported && isUnstartedComposerSession() && (!state.session || transfer.movesEnabled);
+        button.hidden = !available;
+        button.disabled = state.choosingComposerProject || state.creatingSession || state.attachmentReads > 0 || state.treeBusy
+            || state.streaming || state.shellBusy || state.compacting || state.compactRequested || state.resourceRequested
+            || state.controlRequested || state.pendingUi.size > 0 || Boolean(state.session && !state.connected)
+            || state.attachmentFiles.some(file => file.kind === 'pending-upload');
+        const project = state.projects.find(project => project.cwd === state.cwd);
+        const label = state.cwd && !state.session?.standalone && !project?.standalone ? getProjectName(state.cwd) : translateUi('选择项目');
+        button.querySelector('span').textContent = label;
+        button.title = state.cwd && !state.session?.standalone && !project?.standalone ? state.cwd : translateUi('选择项目');
+        button.setAttribute('aria-label', translateUi('选择项目，当前：{0}', label));
+    }
+
     function autoResizeInput() {
+        syncComposerProject();
         composer.observeEditor();
         elements.input.style.height = 'auto';
         elements.input.style.height = `${Math.min(180, Math.max(26, elements.input.scrollHeight))}px`;
@@ -4999,8 +5071,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    let directoryPickerController = null, directoryFilterTimer = 0;
-    function openProjectDialog() {
+    let directoryPickerController = null, directoryFilterTimer = 0, projectDialogContext = null;
+    function openProjectDialog({ composer = false } = {}) {
+        if (state.choosingComposerProject || composer && !isUnstartedComposerSession()) return;
+        projectDialogContext = composer ? { cwd: state.cwd, sessionId: state.session?.id || null, generation: state.socketGeneration } : null;
+        $('pi-directory-select').textContent = translateUi(composer ? '使用此项目' : '打开项目');
         directoryPickerController?.abort(); directoryPickerController = null;
         elements.projectDialog.classList.remove('hidden');
         const start = state.projects.find(project => project.cwd === state.cwd)?.standalone
@@ -5019,6 +5094,37 @@ document.addEventListener('DOMContentLoaded', () => {
         state.directoryRequest++; clearTimeout(directoryFilterTimer);
         directoryPickerController?.abort(); directoryPickerController = null;
         elements.projectDialog.classList.add('hidden');
+        projectDialogContext = null;
+    }
+
+    async function applySelectedProject(cwd, navigation = beginConversationNavigation()) {
+        const context = projectDialogContext;
+        if (!context) return createSessionInProject(cwd, navigation);
+        const current = () => projectDialogContext === context && !elements.projectDialog.classList.contains('hidden')
+            && isCurrentNavigation(navigation) && state.cwd === context.cwd && (state.session?.id || null) === context.sessionId
+            && state.socketGeneration === context.generation && isUnstartedComposerSession();
+        if (!current() || state.choosingComposerProject) return;
+        if (!context.sessionId) return createSessionInProject(cwd, navigation);
+        if (cwd === context.cwd) { closeProjectDialog(); elements.input.focus(); return; }
+        state.choosingComposerProject = true; syncComposerProject();
+        $('pi-directory-select').disabled = true;
+        let submitted = false;
+        try {
+            const preview = await apiFetch(`/api/pi/sessions/${encodeURIComponent(context.sessionId)}/move?${new URLSearchParams({ cwd: context.cwd, targetCwd: cwd, onlyEmpty: 'true' })}`, { signal: AbortSignal.timeout(120000) });
+            if (!current()) return;
+            if (!preview.canMove) throw new Error(preview.blockers.join('；'));
+            const requestId = 'draft-project-' + Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, '0')).join('');
+            submitted = true; closeProjectDialog();
+            const result = await apiFetch(`/api/pi/sessions/${encodeURIComponent(context.sessionId)}/move`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cwd: context.cwd, targetCwd: preview.targetCwd, onlyEmpty: true, expectedRevision: preview.revision, requestId }), signal: AbortSignal.timeout(120000) });
+            await sessionMoved(context.cwd, result.session);
+            if (isCurrentNavigation(navigation) && window.PiWorkspaceRoute.current().tab === 'chat') await navigateToSession(result.session, navigation);
+        } catch (error) {
+            toast(submitted ? translateUi('{0}。请先核对项目与会话列表，原请求不会自动重试。', error.message) : error.message, 'error', 7000);
+        } finally {
+            state.choosingComposerProject = false; syncComposerProject();
+            if (projectDialogContext === context) $('pi-directory-select').disabled = !state.currentDirectory;
+        }
     }
 
     async function pickNativeDirectory() {
@@ -5032,7 +5138,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (controller.signal.aborted || revision !== state.directoryRequest || !isCurrentNavigation(navigation)
                 || elements.projectDialog.classList.contains('hidden') || data.cancelled) return;
             directoryPickerController = null;
-            await createSessionInProject(data.cwd, navigation);
+            await applySelectedProject(data.cwd, navigation);
         } catch (error) { if (!controller.signal.aborted) toast(error.message, 'error'); }
         finally {
             if (directoryPickerController === controller) directoryPickerController = null;
@@ -5200,6 +5306,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!details?.matches('details[data-archive-kind]')) return;
         const opening = !details.open;
         if (details.dataset.archiveKind === 'projects') state.archiveProjectsOpen = opening;
+        else if (details.dataset.archiveKind === 'tasks') state.archiveTasksOpen = opening;
         else if (opening) state.archiveThreadsOpen.add(details.dataset.cwd);
         else state.archiveThreadsOpen.delete(details.dataset.cwd);
     });
@@ -5249,9 +5356,10 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     new MutationObserver(closeBotInspector).observe(elements.inspector, { attributes: true, attributeFilter: ['class'] });
     $('pi-import-session').addEventListener('click', () => { closeProjectDialog(); transfer.openImport(state.cwd); });
+    $('pi-composer-project').addEventListener('click', () => openProjectDialog({ composer: true }));
     $('pi-native-directory-picker').addEventListener('click', () => void pickNativeDirectory());
     $('pi-directory-select').addEventListener('click', () => {
-        if (state.currentDirectory) void createSessionInProject(state.currentDirectory).catch(error => toast(error.message, 'error'));
+        if (state.currentDirectory) void applySelectedProject(state.currentDirectory).catch(error => toast(error.message, 'error'));
     });
     elements.projectInput.addEventListener('input', () => {
         $('pi-directory-select').disabled = !state.currentDirectory || elements.projectInput.value.trim() !== state.currentDirectory;
@@ -5444,6 +5552,27 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     elements.sessionSearch.addEventListener('input', () => handleSessionSearch().catch(error => toast(error.message, 'error')));
     elements.sessionList.addEventListener('click', event => {
+        const sectionToggle = event.target.closest('[data-section-toggle]');
+        if (sectionToggle && !sectionToggle.disabled) {
+            const kind = sectionToggle.dataset.sectionToggle;
+            if (state.collapsedWorkSections.has(kind)) state.collapsedWorkSections.delete(kind);
+            else state.collapsedWorkSections.add(kind);
+            persistWorkSections();
+            renderSessions(); return;
+        }
+        const moreTasks = event.target.closest('[data-task-more]');
+        if (moreTasks) {
+            const archived = moreTasks.dataset.taskMore === 'archived';
+            const before = moreTasks.parentElement.querySelectorAll(':scope > .pi-session-item').length;
+            if (archived) state.archivedTaskVisibleLimit += TASK_BATCH_SIZE;
+            else state.taskVisibleLimit += TASK_BATCH_SIZE;
+            renderSessions();
+            const container = archived ? elements.sessionList.querySelector('[data-archive-kind="tasks"]') : $('pi-work-tasks-content');
+            const next = container?.querySelector(`[data-task-more="${archived ? 'archived' : 'active'}"]`);
+            const rows = container?.querySelectorAll(':scope > .pi-session-item');
+            (next || rows?.[Math.min(before, rows.length - 1)]?.querySelector('.pi-session-main'))?.focus({ preventScroll: true });
+            return;
+        }
         if (event.target.closest('[data-project-open]')) { openProjectDialog(); return; }
         if (event.target.closest('[data-standalone-create]')) { void createStandaloneSession(); return; }
         const recentToggle = event.target.closest('[data-work-action="toggle-recent"]');

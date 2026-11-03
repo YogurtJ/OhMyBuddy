@@ -370,6 +370,7 @@ function createPiAgentGateway(options = {}) {
             auxiliaryModels: true,
             sessionTransfer: true,
             sessionMoves: true,
+            composerProjectChoice: true,
             runtimeConfiguration: true,
             sessionSearch: descriptorBackendAvailable(),
             liveRecovery: true,

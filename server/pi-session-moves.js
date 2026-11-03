@@ -141,11 +141,12 @@ class PiSessionMoves {
             reasons.push('线程有侧聊，请先关闭侧聊后再移动');
         return reasons;
     }
-    async inspect(session, targetCwd, { locked = false } = {}) {
+    async inspect(session, targetCwd, { locked = false, onlyEmpty = false } = {}) {
         const { SessionManager, getAgentDir } = await getSdk();
         const { bytes, sourceStamp, identity } = readSource(session.path), parsed = decodeSession(bytes);
         if (parsed.header.id !== session.id || parsed.header.cwd !== session.cwd) throw fail('原生会话身份已变化');
         const reasons = this.globalBlockers(session);
+        if (onlyEmpty && parsed.records.some(entry => entry.type === 'message')) reasons.push('会话已开始，不能再从输入框更换项目');
         const add = reason => { if (!reasons.includes(reason)) reasons.push(reason); };
         const worker = this.supervisor.getActiveWorker(session.path);
         if (!locked && (!this.supervisor.isSessionIdle(session.path) || worker?.titleGeneration)) add('请等待线程、标题生成和后台子 Agent 空闲后再移动');
@@ -201,15 +202,17 @@ class PiSessionMoves {
         if (hash(readSafe(session.path, MAX_BYTES)) !== hash(bytes)) throw fail('线程在引用检查期间变化，请重新预览');
         return { bytes, parsed, target, reasons, sourceStamp, identity, revision: hash(bytes) };
     }
-    async preview(cwdInput, id, targetInput) {
+    async preview(cwdInput, id, targetInput, onlyEmpty = false) {
+        if (typeof onlyEmpty !== 'boolean') throw fail('空白会话检查参数无效');
         const session = await this.store.getSession(cwdInput, id), targetCwd = this.store.resolveProject(targetInput);
         if (targetCwd === session.cwd) throw fail('请选择不同的目标项目');
-        const inspected = await this.inspect(session, targetCwd);
+        const inspected = await this.inspect(session, targetCwd, { onlyEmpty });
         return { source: { cwd: session.cwd, id, name: session.name }, targetCwd, revision: inspected.revision,
             canMove: inspected.reasons.length === 0, blockers: inspected.reasons };
     }
     move(cwd, id, input) {
-        if (!input || Object.keys(input).some(key => !['cwd', 'targetCwd', 'expectedRevision', 'requestId'].includes(key))
+        if (!input || Object.keys(input).some(key => !['cwd', 'targetCwd', 'expectedRevision', 'requestId', 'onlyEmpty'].includes(key))
+            || input.onlyEmpty !== undefined && typeof input.onlyEmpty !== 'boolean'
             || !/^[A-Za-z0-9-]{16,80}$/.test(input.requestId) || !/^[a-f0-9]{64}$/.test(input.expectedRevision))
             return Promise.reject(fail('移动参数无效，请重新预览'));
         if (this.running || this.stopping) return Promise.reject(fail('已有线程移动进行中，请先核对结果'));
@@ -228,7 +231,7 @@ class PiSessionMoves {
                 return cwd;
             };
             const sourceCwd = historic(cwdInput), targetCwd = historic(input.targetCwd);
-            if (previous.id !== id || previous.source.cwd !== sourceCwd || previous.target.cwd !== targetCwd || previous.revision !== input.expectedRevision)
+            if (previous.id !== id || previous.source.cwd !== sourceCwd || previous.target.cwd !== targetCwd || previous.revision !== input.expectedRevision || Boolean(previous.onlyEmpty) !== Boolean(input.onlyEmpty))
                 throw fail('移动请求 ID 已用于其他参数');
             if (previous.status === 'committed') return { ...await this.resolve(sourceCwd, id), requestId: input.requestId };
             throw fail('该移动请求已执行或结果不确定，请先核对记录；不会再次执行');
@@ -243,7 +246,7 @@ class PiSessionMoves {
         let stopped = false;
         try {
             const result = await this.supervisor.withSessionMove(session.path, target.path, async worker => {
-                const inspected = await this.inspect(session, targetCwd, { locked: true });
+                const inspected = await this.inspect(session, targetCwd, { locked: true, onlyEmpty: input.onlyEmpty === true });
                 if (inspected.reasons.length) throw fail(inspected.reasons.join('；'));
                 if (inspected.revision !== input.expectedRevision) throw fail('线程已变化，请重新预览');
                 return this.usage.withSessionRelocation(async usage => {
@@ -267,7 +270,7 @@ class PiSessionMoves {
                     fs.utimesSync(staged, modified, modified.getTime() / 1000 + 0.000001);
                     if (fs.statSync(staged).mtime.getTime() !== modified.getTime()) throw fail('无法保留会话修改时间');
                     const snapshot = this.preferences.captureSessionReferences(session, target);
-                    const record = { requestId: input.requestId, id, revision: inspected.revision, source: reference(session), target,
+                    const record = { requestId: input.requestId, id, revision: inspected.revision, onlyEmpty: input.onlyEmpty === true, source: reference(session), target,
                         status: 'prepared', createdAt: new Date().toISOString(), backup, staged,
                         originalSha256: inspected.revision, outputSha256: hash(transformed.bytes),
                         tailLength: inspected.parsed.tail.length, tailSha256: transformed.tailSha256, preferences: snapshot };
@@ -311,7 +314,7 @@ class PiSessionMoves {
                         throw error;
                     }
                     for (const cwd of [sourceCwd, targetCwd]) { this.store.sessionListCache.delete(cwd); this.store.sessionLists.delete(cwd); }
-                    return { session: { ...session, ...target }, requestId: input.requestId, moved: true };
+                    return { session: { ...session, ...target, standalone: this.store.isStandaloneProject(target.cwd) }, requestId: input.requestId, moved: true };
                 });
             });
             this.reserved = null;
@@ -332,7 +335,10 @@ function mountSessionMoves(router, dependencies) {
         catch (error) { res.status(error.status || 400).json({ error: error.message, code: error.code }); }
     };
     router.get('/sessions/:id/resolve', endpoint(req => service.resolve(req.query.cwd, req.params.id)));
-    router.get('/sessions/:id/move', endpoint(req => service.preview(req.query.cwd, req.params.id, req.query.targetCwd)));
+    router.get('/sessions/:id/move', endpoint(req => {
+        if (req.query.onlyEmpty !== undefined && req.query.onlyEmpty !== 'true') throw fail('空白会话检查参数无效');
+        return service.preview(req.query.cwd, req.params.id, req.query.targetCwd, req.query.onlyEmpty === 'true');
+    }));
     router.post('/sessions/:id/move', endpoint(req => service.move(req.body?.cwd, req.params.id, req.body)));
     return service;
 }

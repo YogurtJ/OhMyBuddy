@@ -11433,5 +11433,15 @@
         ['当前电脑没有可用的系统文件夹选择器', 'No system folder dialog is available on this computer'],
         ['系统选择器只供本机访问使用，请在下方浏览服务器文件夹', 'The system dialog is available for local access. Browse server folders below.']
     );
+    rows.push(
+        ['展开{0}', 'Expand {0}'],
+        ['折叠{0}', 'Collapse {0}'],
+        ['再显示 {0} 个任务', 'Show {0} more tasks'],
+        ['已显示 {0} / {1}', '{0} of {1} shown'],
+        ['选择项目，当前：{0}', 'Choose project, current: {0}'],
+        ['使用此项目', 'Use this project'],
+        ['会话已开始，不能再从输入框更换项目', 'This conversation has started. Its project can no longer be changed from the composer.'],
+        ['{0}。请先核对项目与会话列表，原请求不会自动重试。', '{0}. Check the project and conversation lists first. The original request will not be retried automatically.']
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

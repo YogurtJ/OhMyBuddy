@@ -19,6 +19,10 @@ Use **Open folder** next to Projects to work on an existing folder. Local access
 
 Extension assistants started from a Buddy and drafts for that Buddy use its project folder. New drafts without a bound profile appear under Tasks.
 
+Tasks and Projects use quiet icon actions, revealed on hover or keyboard focus on desktop and always available on touch screens. Click a section heading or its chevron to collapse the whole section; the browser remembers this choice. Search temporarily expands matching sections. Tasks start with 10 rows and add at most 10 per click, including archived tasks and search results; the current task may remain visible outside the batch.
+
+Before the first message in an ordinary new conversation, use the project selector in the composer's existing bottom row to choose its working folder. Changing the project keeps the same session ID, unsent draft, attachments and saved model choices. Work files stay in their original folder. The selector disappears once the conversation starts, and the server checks the complete native history and revision to reject a concurrent first message. Existing conversations retain the explicit Move to project action.
+
 ## Workspace navigation
 
 - **Buddy** opens your personal assistants: one ongoing main chat per Buddy, topics, a notebook and memory you can review. See [Buddies](BUDDY.md).
