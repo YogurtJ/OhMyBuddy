@@ -78,3 +78,9 @@ pivane-deliverables/
 
 # Browser downloads and screenshots are task data.
 browser-output/
+
+# Local installation identity, shared executables and Finder metadata.
+/OHMYBUDDY_INSTALLATION.json
+/PIVANE_INSTALLATION.json
+/runtime/
+.DS_Store

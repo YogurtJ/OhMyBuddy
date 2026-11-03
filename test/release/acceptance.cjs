@@ -10,12 +10,13 @@ const { spawn, spawnSync, fork } = require('node:child_process');
 const args = {};
 for (let i = 2; i < process.argv.length; i += 2) {
     const key = process.argv[i];
-    assert.ok(['--archive', '--sha256', '--previous-archive', '--previous-sha256', '--browser', '--playwright', '--video', '--output'].includes(key), 'unknown acceptance option');
+    assert.ok(['--archive', '--sha256', '--previous-archive', '--previous-sha256', '--browser', '--playwright', '--video', '--output', '--browser-suite'].includes(key), 'unknown acceptance option');
     assert.ok(process.argv[i + 1] && !args[key], 'option needs one value');
     args[key] = process.argv[i + 1];
 }
 for (const key of ['--archive', '--sha256', '--browser', '--playwright', '--output']) assert.ok(args[key], `${key} required`);
 assert.equal(Boolean(args['--previous-archive']), Boolean(args['--previous-sha256']));
+assert.ok(args['--browser-suite'] === undefined || ['full', 'none'].includes(args['--browser-suite']), 'browser suite must be full or none');
 assert.equal(process.versions.node.split('.')[0], '22', 'release baseline requires an independent Node 22');
 const output = path.resolve(args['--output']);
 assert.ok(!fs.existsSync(output), 'acceptance output directory must be new');
@@ -167,6 +168,7 @@ async function cleanup() {
         await run(npm, ['run', 'check'], 'syntax');
         await run(npm, ['run', 'check:docs'], 'documentation');
         await run(npm, ['audit', '--omit=dev', '--json'], 'audit');
+        if (args['--browser-suite'] === 'full') await run(npm, ['run', 'test:browser'], 'browser-tests');
         await run(npm, ['run', 'pack:release'], 'platform-packaging');
         port = await new Promise((resolve, reject) => { const socket = net.createServer(); socket.once('error', reject); socket.listen(0, '127.0.0.1', () => { const value = socket.address().port; socket.close(error => error ? reject(error) : resolve(value)); }); });
         assert.notEqual(port, 3001);
