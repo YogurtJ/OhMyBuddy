@@ -34,7 +34,11 @@ test('release environment keeps native and external lifecycle data inside its ma
     const keys = ['PI_CODING_AGENT_DIR', 'PI_MEDIA_CONFIG_DIR', 'PI_MEDIA_DATA_DIR', 'PI_RELEASE_PROJECT_DIR', 'OHMYBUDDY_HOME', 'OHMYBUDDY_WORKSPACES_DIR'];
     const env = Object.fromEntries(keys.map((key, index) => { const directory = path.join(root, 'isolated-' + index); fs.mkdirSync(directory); return [key, directory]; }));
     env.PI_WEB_DEFERRED_FILE = path.join(env.PI_CODING_AGENT_DIR, 'deferred.json');
+    env.PI_RELEASE_RUN_ID = process.env.PI_RELEASE_RUN_ID;
+    delete process.env.PI_RELEASE_RUN_ID;
     assert.doesNotThrow(() => rehearsalEnvironment(root, env));
+    process.env.PI_RELEASE_RUN_ID = env.PI_RELEASE_RUN_ID;
+    assert.throws(() => rehearsalEnvironment(root, { ...env, PI_RELEASE_RUN_ID: undefined }), /explicit release run identity/);
     for (const key of keys) {
         assert.throws(() => rehearsalEnvironment(root, { ...env, [key]: undefined }), /explicit isolated/);
         assert.throws(() => rehearsalEnvironment(root, { ...env, [key]: fs.realpathSync.native(os.tmpdir()) }), /escapes release fixture/);

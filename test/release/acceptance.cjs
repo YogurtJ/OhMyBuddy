@@ -44,7 +44,7 @@ function extract(archive, expected, destination) {
     assert.match(expected, /^[a-f0-9]{64}$/);
     assert.equal(digest(fs.readFileSync(archive)), expected, 'archive SHA256 mismatch');
     fs.mkdirSync(destination);
-    const tar = process.platform === 'darwin' ? '/usr/bin/tar' : 'tar';
+    const tar = process.platform === 'win32' ? path.join(process.env.SystemRoot, 'System32', 'tar.exe') : process.platform === 'darwin' ? '/usr/bin/tar' : 'tar';
     const unpack = spawnSync(tar, ['-xzf', path.resolve(archive), '-C', destination, '--strip-components=1'], { env, encoding: 'utf8' });
     assert.equal(unpack.status, 0, unpack.stderr);
     const data = JSON.parse(fs.readFileSync(path.join(destination, 'TRIAL_MANIFEST.json'), 'utf8'));
