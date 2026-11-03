@@ -20,9 +20,24 @@
 
 ## 1.11.1：已正式发布
 
-2026-10-30 已[正式发布](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.11.1)。源码 `0808965f3d9b986bfd03118cf67b227c4a8f0f24`，源码归档 SHA256 `813e2e088dc450271b1abd5a2864f3e0efc9467f667823ff83288740a1296833`，Pi 1.4.0。四个历史原生目标的调度器专项、安装／SDK／HTTP／正常停机及升级／原路径恢复结果，见该版[验收说明](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.11.1/ohmybuddy-1.11.1.validation.md)与[验收 JSON](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.11.1/ohmybuddy-1.11.1.validation.json)。Windows 原首次失败及 native TEMP 定向补验保留，不能写为首次全绿。
+2026-10-30 已[正式发布](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.11.1)并确认为 Latest，九份源码发行附件匿名 HTTP 200 回下载的大小与 SHA256 一致。冻结源码 `0808965f3d9b986bfd03118cf67b227c4a8f0f24`，源码归档 SHA256 `813e2e088dc450271b1abd5a2864f3e0efc9467f667823ff83288740a1296833`（9,888,479 字节、1,981 个清单文件）。[验收 JSON](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.11.1/ohmybuddy-1.11.1.validation.json)、[验收说明](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.11.1/ohmybuddy-1.11.1.validation.md)与[版本说明](releases/1.11.1.md)记录执行、复用、失败与范围；主分支补写发布结果，标签与归档保持冻结。
 
-该版生产依赖图保持不变，未重跑全量；完整平台安装包与源码发行分别记录，不能把旧预览包当作对应正式源码的完整包。历史 Linux ARM64 结果仍仅适用于当时归档。
+四个目标均使用独立 Node 22.23.4 对准确归档锁定安装，完成 SDK／RPC、相关 Node、263 项 HTTP 资源与正常停机、对应操作系统的原生文件身份检查。清单文件测试前后逐字节一致。
+
+| 原生目标 | 11 个相关 Node 文件／75 项唯一场景 | 正式 1.11.0 调度库升级与原路径字节恢复 |
+|---|---|---|
+| Linux ARM64 | 首轮 75/75，无跳过 | 通过 |
+| Linux x64 | 首轮 75/75，无跳过 | 通过 |
+| macOS Apple Silicon | 首轮 75/75，无跳过 | 通过 |
+| Windows11 x64，实际 Medium RID8192、非管理员 | 原 74/75；深 TEMP 导致一项 ENAMETOOLONG，原生 TEMP 下仅该文件补验 1/1，源文件和断言不变 | 通过；探针初次被 Git whoami 遮蔽，在建库前退出，固定 System32 命令后完成 |
+
+旧调度库专项保留任务、主页、未知元数据与预算，回收残留的存活 PID owner；中断执行仍为 uncertain、不重放。恢复原始数据库字节后用旧 Store 重新打开。Windows 原失败与定向完成分别记录，不重写为首轮全绿。
+
+Chromium 对头像／话题整理完成中英文、1440／393 两种宽度的八张快照，核对全部英文状态、pageerror 与页面宽度。既有工作台／应用更新及相关伙伴／类别浏览器结果按相同代码复用。语法 846 文件、公开文档 89 份及主生产／Mermaid 构建图审计（均退出 0、零漏洞）通过；没有重跑全量 Node 或全量浏览器。
+
+Pi 1.4.0 和生产锁定依赖图不变；22 项安装／应用解包／备份恢复／RPC／会话图片及原生契约与正式 1.11.0 字节相同，未受影响的完整会话／图片／媒体升级和原路径恢复按该正式附件链复用。源码 launcher 保持原环境分支，新增 PATH 分支只作用于自带运行环境的完整包。不能把复用写成本包再次执行完整基线。
+
+本次 GitHub 发布为源码发行。完整安装包仍按独立预览渠道、准确源码与构建回执记录，既有 1.11.1-rc.2 未重建为本次最终源码。真实用户迁移／重启、付费模型媒体、真实微信、实体手机、Safari／Firefox、其他架构和网络文件系统不在本次声明范围。
 
 ## 1.11.0：已正式发布
 
