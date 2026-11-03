@@ -59,7 +59,7 @@ test('reviewed host, primary lock and isolated memory recipe bind the same offic
     const pkg = require('../package.json'), lock = require('../package-lock.json');
     const recipe = require('../scripts/profile-memory-install.cjs').manifest;
     const memoryLock = require('../server/profile-memory/upstream-lock.json');
-    assert.equal(pkg.pivaneCompatibility.piVersion, REVIEWED_PI_VERSION);
+    assert.equal(require('../server/ohmybuddy-compat').packageMetadata(pkg, 'Compatibility').piVersion, REVIEWED_PI_VERSION);
     for (const name of require('../server/pi-update-installer').PI_PACKAGES) {
         assert.equal(lock.packages['node_modules/' + name].version, REVIEWED_PI_VERSION, name);
         assert.equal(memoryLock.packages['node_modules/' + name].version, REVIEWED_PI_VERSION, name);

@@ -1,4 +1,4 @@
-// Pi 1.4.0 / pi-subagents 0.82.1 child-session injection seam. Upstream owns
+// Reviewed Pi SDK / pi-subagents 0.82.1 child-session injection seam. Upstream owns
 // launch, storage, ownership, cancellation, notifications and disposal; this
 // adapter supplies the resource selection and authorized native tool factories.
 import './pi-subagent-native-loader.mjs';

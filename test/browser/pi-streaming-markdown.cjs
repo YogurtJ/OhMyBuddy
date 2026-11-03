@@ -38,6 +38,7 @@ const cwd = '/srv/render-fixture', session = { id: 'render', cwd, name: 'Render 
             const parity = await page.evaluate(() => {
                 const sequences = [
                     ['[late][ref]\n\nStable\n\n', '[ref]: https://example.invalid/target\n'],
+                    ['\uFEFF\uFEFFHeading\n\n', 'tail'],
                     ['Heading\n', '===\n'], ['A | B\n', '--- | ---\n1 | 2\n'],
                     ['```js\nconst a = 1', ';\n```\n\nTail'],
                     ['<div>hello\n', '\nworld</div>\n\nTail'],
@@ -51,24 +52,55 @@ const cwd = '/srv/render-fixture', session = { id: 'render', cwd, name: 'Render 
                 ];
                 const failures = [];
                 for (const parts of sequences) {
-                    const root = document.createElement('div'); let source = '';
+                    const root = document.createElement('div'), fast = document.createElement('div'); let source = '';
                     for (const part of parts) {
                         source += part; const html = PiFileViewer.markdown(source);
                         PiFileViewer.updateMarkdown(root, html);
+                        PiFileViewer.renderStreamingMarkdown(fast, source);
                         const expected = document.createElement('div'); expected.innerHTML = html;
-                        if (root.innerHTML !== expected.innerHTML) failures.push(source);
+                        if (root.innerHTML !== expected.innerHTML || fast.innerHTML !== expected.innerHTML) failures.push(source);
                     }
                 }
                 // A cache limit is a replacement fallback, never a truncation.
-                const root = document.createElement('div');
+                const root = document.createElement('div'), fast = document.createElement('div');
                 for (const source of ['p\n\n'.repeat(2200), 'p\n\n'.repeat(2200) + 'END', 'short']) {
-                    const html = PiFileViewer.markdown(source); PiFileViewer.updateMarkdown(root, html);
+                    const html = PiFileViewer.markdown(source); PiFileViewer.updateMarkdown(root, html); PiFileViewer.renderStreamingMarkdown(fast, source);
                     const expected = document.createElement('div'); expected.innerHTML = html;
-                    if (root.innerHTML !== expected.innerHTML) failures.push('cache limit');
+                    if (root.innerHTML !== expected.innerHTML || fast.innerHTML !== expected.innerHTML) failures.push('cache limit');
                 }
+                const changedBase = document.createElement('div'), source = '[file](src/a.js)';
+                for (const base of ['C:/one/', 'D:/two/']) {
+                    PiFileViewer.renderStreamingMarkdown(changedBase, source, { base });
+                    if (changedBase.innerHTML !== PiFileViewer.markdown(source, base)) failures.push('base change');
+                }
+                const purifier = window.DOMPurify;
+                try {
+                    window.DOMPurify = null;
+                    PiFileViewer.renderStreamingMarkdown(changedBase, '<img src=x>\nPlain');
+                    if (changedBase.querySelector('img') || changedBase.textContent !== '<img src=x>Plain') failures.push('plain fallback');
+                } finally { window.DOMPurify = purifier; }
                 return failures;
             });
             assert.deepEqual(parity, [], `${width}: complete render parity`);
+            const work = await page.evaluate(() => {
+                const root = document.createElement('div');
+                const original = DOMPurify.sanitize; let calls = 0, characters = 0;
+                DOMPurify.sanitize = function(...args) { calls++; characters += String(args[0]).length; return original.apply(this, args); };
+                const prefix = '# Stable code\n\n```js\n' + 'const stable = 1;\n'.repeat(1000) + '```\n\n';
+                try {
+                    PiFileViewer.renderStreamingMarkdown(root, prefix + 'Tail');
+                    const code = root.querySelector('pre'), initial = calls, initialCharacters = characters;
+                    for (let i = 0; i < 20; i++) PiFileViewer.renderStreamingMarkdown(root, prefix + 'Tail ' + i);
+                    const changed = calls - initial, changedCharacters = characters - initialCharacters;
+                    PiFileViewer.renderStreamingMarkdown(root, prefix + 'Tail 19');
+                    const duplicate = calls - initial - changed;
+                    const expected = document.createElement('div'); expected.innerHTML = PiFileViewer.markdown(prefix + 'Tail 19');
+                    return { changed, changedCharacters, duplicate, retained: code === root.querySelector('pre'), parity: root.innerHTML === expected.innerHTML };
+                } finally { DOMPurify.sanitize = original; }
+            });
+            assert.ok(work.changed <= 20, `${width}: stable prefix must not be sanitized again: ${JSON.stringify(work)}`);
+            assert.ok(work.changedCharacters < 2000, `${width}: unchanged 1000-line code must not be sanitized again: ${JSON.stringify(work)}`);
+            assert.equal(work.duplicate, 0); assert.equal(work.retained, true); assert.equal(work.parity, true);
             const prefix = '# Stable\n\n```js\nconst stable = 1;\n```\n\n[local](src/a.js)\n\n<details><summary>Details</summary>Body</details>\n\n$x^2$\n\n![pixel](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO6pNn8AAAAASUVORK5CYII=)\n\n';
             const send = event => socket.send(JSON.stringify(event));
             const delta = text => send({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: text } });

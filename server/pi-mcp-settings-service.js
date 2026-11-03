@@ -15,6 +15,7 @@ const fail = (code, status = 400) => Object.assign(new Error(code), { code, stat
 const controlKeys = new Set(['type', 'enabled', 'exposure', 'timeout', 'toolExposure', 'description']);
 const privateKeys = new Set(['command', 'args', 'cwd', 'url', 'env', 'headers', 'oauth']);
 const oauthKeys = new Set(['clientId', 'clientSecret', 'callbackUrl', 'scope', 'clientName', 'authServerMetadataUrl']);
+const oauthControlKeys = new Set(['callbackPort', 'clientRegistration']);
 let native;
 async function nativeApi() {
     if (!native) {
@@ -78,7 +79,7 @@ function editable(config) {
         else if (['env', 'headers', 'oauth', 'auth'].includes(key) && record(value)) {
             safe[key] = {};
             for (const [field, item] of Object.entries(value)) {
-                if (key === 'oauth' && field === 'callbackPort' || key === 'auth' && field === 'provider') safe[key][field] = item;
+                if (key === 'oauth' && oauthControlKeys.has(field) || key === 'auth' && field === 'provider') safe[key][field] = item;
                 else { safe[key][field] = null; secretFields[`${key}.${field}`] = { present: true }; }
             }
         } else { safe[key] = null; secretFields[key] = { present: true }; }
@@ -110,7 +111,7 @@ function applyConfig(previous, edits) {
                 if (!record(result[key])) result[key] = {};
                 for (const [field, operation] of Object.entries(value)) {
                     if (['__proto__', 'constructor', 'prototype'].includes(field)) throw fail('MCP_INVALID_EDIT');
-                    if (key === 'oauth' && field === 'callbackPort') { if (operation === null) delete result[key][field]; else result[key][field] = operation; }
+                    if (key === 'oauth' && oauthControlKeys.has(field)) { if (operation === null) delete result[key][field]; else result[key][field] = operation; }
                     else { if (key === 'oauth' && !oauthKeys.has(field)) throw fail('MCP_UNKNOWN_FIELD'); secretEdit(result[key], field, operation); }
                 }
             } else secretEdit(result, key, value);

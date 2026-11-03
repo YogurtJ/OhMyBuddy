@@ -233,6 +233,8 @@
             ] });
             return {
                 parse: text => parser.parse(text),
+                lexer: text => parser.lexer(text),
+                parser: tokens => parser.parser(tokens),
                 finish(html) {
                     if (!slots.size) return html;
                     const template = document.createElement('template'); template.innerHTML = html;

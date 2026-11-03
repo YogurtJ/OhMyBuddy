@@ -5,7 +5,7 @@
   "main": "server.js",
   "private": true,
   "ohmybuddyCompatibility": {
-    "piVersion": "1.4.0",
+    "piVersion": "1.5.0",
     "mcp": "native"
   },
   "scripts": {
@@ -23,13 +23,14 @@
   "overrides": {
     "undici": "8.12.3",
     "brace-expansion": "5.0.12",
-    "@earendil-works/pi-tui": "1.4.0",
+    "@earendil-works/pi-tui": "1.5.0",
     "@earendil-works/pi-ai": "$@earendil-works/pi-ai",
     "@earendil-works/pi-coding-agent": "$@earendil-works/pi-coding-agent",
-    "@earendil-works/pi-agent-core": "1.4.0",
-    "@earendil-works/pi-telemetry": "1.4.0",
-    "@earendil-works/pi-codemode": "1.4.0",
-    "@earendil-works/pi-mcp": "1.4.0"
+    "@earendil-works/pi-agent-core": "1.5.0",
+    "@earendil-works/pi-telemetry": "1.5.0",
+    "@earendil-works/pi-codemode": "1.5.0",
+    "@earendil-works/pi-mcp": "1.5.0",
+    "@earendil-works/pi-schema": "1.5.0"
   },
   "keywords": [
     "ai-assistant",
@@ -60,10 +61,10 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@earendil-works/pi-agent-core": "1.4.0",
-    "@earendil-works/pi-ai": "1.4.0",
-    "@earendil-works/pi-coding-agent": "1.4.0",
-    "@earendil-works/pi-tui": "1.4.0",
+    "@earendil-works/pi-agent-core": "1.5.0",
+    "@earendil-works/pi-ai": "1.5.0",
+    "@earendil-works/pi-coding-agent": "1.5.0",
+    "@earendil-works/pi-tui": "1.5.0",
     "@js-temporal/polyfill": "0.5.1",
     "@highlightjs/cdn-assets": "11.11.1",
     "acorn": "8.18.0",

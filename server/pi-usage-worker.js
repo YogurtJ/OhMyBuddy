@@ -10,6 +10,7 @@ const LIMITS = { files: 2000, bytes: 512 * 1024 * 1024, fileBytes: 64 * 1024 * 1
 const fields = ['input', 'output', 'cacheRead', 'cacheWrite'];
 const within = (root, value) => value === root || value.startsWith(root.endsWith(path.sep) ? root : root + path.sep);
 const empty = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0, cost: 0,
+    providerReportedCost: 0, providerReportedRecords: 0,
     records: 0, missingUsage: 0, missingCost: 0, zeroCost: 0 });
 function add(target, record) {
     target.records++;
@@ -17,7 +18,10 @@ function add(target, record) {
     for (const field of fields) target[field] += record.usage[field];
     target.total += fields.reduce((sum, field) => sum + record.usage[field], 0);
     if (record.cost === null) target.missingCost++;
-    else { target.cost += record.cost; if (record.cost === 0) target.zeroCost++; }
+    else {
+        target.cost += record.cost; if (record.cost === 0) target.zeroCost++;
+        if (record.totalFromProvider === true) { target.providerReportedCost += record.cost; target.providerReportedRecords++; }
+    }
 }
 function canonical(value, depth = 0) {
     if (depth > 64) throw new Error('depth');
@@ -53,7 +57,7 @@ function recordFromEntry(entry, dayOf, filter) {
         costMultiplier: typeof rawSpeed.costMultiplier === 'number' && Number.isFinite(rawSpeed.costMultiplier) && rawSpeed.costMultiplier >= 0.5 && rawSpeed.costMultiplier <= 100 ? rawSpeed.costMultiplier : null,
         costBasis: ['reported-tier', 'requested-tier-estimate'].includes(rawSpeed.costBasis) ? rawSpeed.costBasis : null
     } : null;
-    return { key, timestamp, day, usage, cost, ...(speed ? { speed } : {}), provider: assistant ? safeName(entry.message.provider) : '工具与摘要',
+    return { key, timestamp, day, usage, cost, totalFromProvider: cost !== null && raw?.cost?.totalFromProvider === true, ...(speed ? { speed } : {}), provider: assistant ? safeName(entry.message.provider) : '工具与摘要',
         model: assistant ? safeName(entry.message.responseModel || entry.message.model) : '工具与摘要（未归属模型）' };
 }
 

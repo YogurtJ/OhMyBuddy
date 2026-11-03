@@ -256,6 +256,15 @@
 .native-update-summary { color: var(--text-muted); font-size: .74rem; line-height: 1.55; overflow-wrap: anywhere; }
 .native-update-summary[data-kind="update"] { color: var(--amber); font-weight: 600; }
 #native-installed .settings-panel-header > .settings-header-actions { display: flex; gap: 8px; }
+.native-changelog-dialog { position: fixed; inset: 0; margin: auto; box-sizing: border-box; width: min(760px, calc(100vw - 24px)); max-width: calc(100vw - 24px); max-height: calc(100dvh - 32px); padding: 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface-1); color: var(--text-main); overflow: auto; }
+.native-changelog-dialog::backdrop { background: var(--overlay, #0006); }
+.native-changelog-dialog > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.native-changelog-dialog h2 { margin: 0; font-size: 1.1rem; }
+.native-changelog-dialog > header button { flex: 0 0 auto; min-width: 44px; min-height: 44px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 20px; color: var(--text-main); background: var(--surface-2); cursor: pointer; }
+.native-changelog-version { color: var(--text-muted); overflow-wrap: anywhere; font-size: .85rem; }
+.native-changelog-body { min-width: 0; overflow-wrap: anywhere; }
+.native-changelog-body :is(pre, table) { max-width: 100%; overflow: auto; }
+.native-changelog-body pre { white-space: pre-wrap; word-break: break-word; }
 @media (max-width: 680px) {
     #native-installed .native-item-update { min-height: 40px; }
     #native-installed .settings-panel-header > .settings-header-actions button { min-height: 44px; }

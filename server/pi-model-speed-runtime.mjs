@@ -4,7 +4,9 @@ export function finalizeSpeedUsage(message, model, capability, requested, actual
     if (!capability.levels.length) return message;
     const multiplier = speed.tierMultiplier(actual ?? speed.requestTier(requested, capability), capability);
     const usage = structuredClone(message.usage);
-    if (multiplier !== undefined) {
+    // A provider-reported bill already includes its service tier. Keep both
+    // its total and provenance instead of replacing or multiplying it again.
+    if (multiplier !== undefined && usage.cost.totalFromProvider !== true) {
         calculateCost(model, usage);
         for (const field of ['input', 'output', 'cacheRead', 'cacheWrite', 'total']) usage.cost[field] *= multiplier;
     }

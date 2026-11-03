@@ -25,7 +25,7 @@ async function officialPrices() {
     return catalog;
 }
 function estimateCost(row, catalog) {
-    if (!row.usage || (row.cost !== null && row.cost > 0)) return { cost: row.cost, pricing: null };
+    if (!row.usage || (row.cost !== null && (row.cost > 0 || row.totalFromProvider === true))) return { cost: row.cost, pricing: null };
     if (row.speed && (typeof row.speed.costMultiplier !== 'number' || !Number.isFinite(row.speed.costMultiplier) || row.speed.costMultiplier < 0.5 || row.speed.costMultiplier > 100)) return { cost: row.cost, pricing: null };
     const price = catalog.get(row.model);
     if (!price || row.usage.cacheWrite1h === null || !(price.rates.input > 0 || price.rates.output > 0)) return { cost: row.cost, pricing: null };

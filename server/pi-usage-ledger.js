@@ -17,8 +17,11 @@ function valuesFor(row) {
     value.recordedCost = row.originalCost || 0;
     if (row.cost === null) value.missingCost = 1;
     else { value.cost = row.cost; value.zeroCost = Number(row.cost === 0); }
+    if (row.totalFromProvider === true && row.cost !== null && !row.pricing) {
+        value.providerReportedCost = row.cost; value.providerReportedRecords = 1;
+    }
     value.estimatedRecords = Number(Boolean(row.pricing));
-    value.unpricedRecords = Number(value.total > 0 && !row.pricing && (row.cost === null || row.cost === 0));
+    value.unpricedRecords = Number(value.total > 0 && !value.providerReportedRecords && !row.pricing && (row.cost === null || row.cost === 0));
     return value;
 }
 function addValues(target, source) { for (const key of metrics) target[key] += source[key]; }
@@ -50,10 +53,19 @@ class UsageLedger {
                     provider TEXT NOT NULL, model TEXT NOT NULL, ${metrics.map(key => `${key} REAL NOT NULL`).join(',')},
                     PRIMARY KEY(zone,day,owner,provider,model));`);
             const version = this.db.prepare("SELECT value FROM meta WHERE key='schema'").get();
-            if (version && version.value !== '1') throw new Error('Unsupported usage ledger version');
-            this.db.prepare("INSERT OR IGNORE INTO meta VALUES ('schema','1')").run();
+            if (version && !['1', '2'].includes(version.value)) throw new Error('Unsupported usage ledger version');
+            const columns = new Set(this.db.prepare('PRAGMA table_info(daily)').all().map(row => row.name));
+            const sourceColumns = ['providerReportedCost', 'providerReportedRecords'];
+            if (version?.value === '2' && sourceColumns.some(name => !columns.has(name))) throw new Error('Invalid usage ledger schema');
+            if (version?.value !== '2') this.transaction(() => {
+                // Additive v1 -> v2 migration. Old facts have no provider-billing
+                // evidence; retain every fact and total with the estimate default.
+                for (const name of sourceColumns) if (!columns.has(name))
+                    this.db.exec(`ALTER TABLE daily ADD COLUMN ${name} REAL NOT NULL DEFAULT 0`);
+                this.db.prepare("INSERT OR REPLACE INTO meta VALUES ('schema','2')").run();
+            });
             this.insertFact = this.db.prepare('INSERT OR IGNORE INTO facts VALUES (?,?,?,?,?,?)');
-            this.upsertDay = this.db.prepare(`INSERT INTO daily VALUES (${Array(5 + metrics.length).fill('?').join(',')})
+            this.upsertDay = this.db.prepare(`INSERT INTO daily (zone,day,owner,provider,model,${metrics.join(',')}) VALUES (${Array(5 + metrics.length).fill('?').join(',')})
                 ON CONFLICT(zone,day,owner,provider,model) DO UPDATE SET ${metrics.map(key => `${key}=${key}+excluded.${key}`).join(',')}`);
             this.zones = new Map(this.db.prepare('SELECT zone FROM zones').all().map(row => [row.zone, dayFormatter(row.zone)]));
         } catch (error) {
@@ -93,7 +105,7 @@ class UsageLedger {
                 // Explicit allowlist: never copy text, tool arguments or the inherited context
                 // into the usage ledger even if a future caller sends extra fields.
                 const row = { key, timestamp: record.timestamp, usage: record.usage, provider: record.provider,
-                    model: record.model, originalCost: record.cost, cost: correction.cost, pricing: correction.pricing };
+                    model: record.model, totalFromProvider: record.totalFromProvider === true, originalCost: record.cost, cost: correction.cost, pricing: correction.pricing };
                 if (!this.insertFact.run(row.key, row.timestamp, owner, row.provider, row.model, JSON.stringify(row)).changes) continue;
                 for (const [zone, formatter] of this.zones) this.saveDay(zone, formatter, owner, row);
                 inserted++;
@@ -233,6 +245,7 @@ async function runLedger(input) {
             for (const row of records) {
                 if (!row || !/^[a-f0-9]{64}$/.test(row.key) || !Number.isSafeInteger(row.timestamp) || row.timestamp < 0
                     || typeof row.provider !== 'string' || row.provider.length > 500 || typeof row.model !== 'string' || row.model.length > 500
+                    || row.totalFromProvider !== undefined && typeof row.totalFromProvider !== 'boolean'
                     || !(row.cost === null || Number.isFinite(row.cost) && row.cost >= 0 && row.cost <= 1e9)
                     || row.usage !== null && (!row.usage || !['input', 'output', 'cacheRead', 'cacheWrite'].every(
                         field => Number.isSafeInteger(row.usage[field]) && row.usage[field] >= 0 && row.usage[field] <= 1e9)

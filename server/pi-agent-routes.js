@@ -450,6 +450,7 @@ function createPiAgentGateway(options = {}) {
     router.put('/settings/native/resources', nativeRoute(req => resourceService.toggle(req.body), true));
     router.post('/settings/native/packages', nativeRoute(req => resourceService.packageAction(req.body), true));
     router.post('/settings/native/packages/updates', nativeRoute(req => resourceService.checkUpdates(req.body)));
+    router.post('/settings/native/packages/changelog', nativeRoute(req => resourceService.packageChangelog(req.body)));
     router.get('/settings/native/skill', nativeRoute(req => resourceService.readSkill(req.query)));
     router.put('/settings/native/skill', nativeRoute(req => resourceService.saveSkill(req.body), true));
     router.get('/settings/models/advanced', nativeRoute(req => settingsService.getModelAdvanced(req.query)));

@@ -2,6 +2,7 @@ import { resizeImage } from '@earendil-works/pi-coding-agent';
 import { createHash } from 'node:crypto';
 import images from './pi-image-context.js';
 import sessionImages from './pi-session-images.js';
+import { markManagedRuntimeStream } from './pi-runtime-stream.mjs';
 
 // Public SDK seams cover every model request, including continuation after tools
 // and a physical model selected by a virtual router. No context-hook exception
@@ -58,7 +59,7 @@ export function installImageCompatibility(session, { emit, agentDir } = {}) {
         return result.messages;
     };
     const stream = session.agent.streamFunction;
-    session.agent.streamFunction = async (model, context, options) => {
+    const imageStream = async (model, context, options) => {
         options?.signal?.throwIfAborted();
         if (awaitingNewImages) assertInput(model, [true]);
         const messages = await project(context.messages, model, true);
@@ -68,6 +69,8 @@ export function installImageCompatibility(session, { emit, agentDir } = {}) {
         awaitingNewImages = false;
         return stream(model, { ...context, messages }, options);
     };
+    markManagedRuntimeStream(session, imageStream);
+    session.agent.streamFunction = imageStream;
     const prompt = session.prompt.bind(session);
     session.prompt = async (text, options) => {
         // Extension commands own their dispatch. Queued inputs are checked again

@@ -14,7 +14,7 @@ const { withComparison } = require('./helpers/profile-knowledge-call');
 test('isolated pinned Pi upstream components enforce profile index, recall, skill and lifecycle', {
     skip: !bundle || !jitiPath ? 'Set PIVANE_TEST_HERMES_BUNDLE and PIVANE_TEST_PI_JITI for isolated integration' : false,
 }, async t => {
-    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-hermes-integration-'));
+    const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-hermes-integration-')));
     const closers = [];
     t.after(async () => { await Promise.allSettled(closers.map(close => close())); fs.rmSync(base, { recursive: true, force: true }); });
     const agent = path.join(base, 'agent');

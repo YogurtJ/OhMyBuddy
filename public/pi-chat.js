@@ -515,7 +515,7 @@ document.addEventListener('DOMContentLoaded', () => {
             busy: state.streaming || state.compacting || state.compactRequested, waiting: state.pendingUi.size > 0 }),
         prepare: options => requestRpc('prepare_side_chat', options, 65000),
         modelOptions: () => requestRpc('get_side_model_options', {}, 45000),
-        renderMarkdown, finalReplyIndices, copyText: copyTextToClipboard, toast,
+        renderMarkdown, renderStreamingMarkdown, finalReplyIndices, copyText: copyTextToClipboard, toast,
         focusMain: () => {
             elements.inspector.classList.remove('open');
             if (state.pendingUi.size) openPendingRequest();
@@ -805,11 +805,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }[char]));
     }
 
+    function markdownBase() {
+        return /^[a-z]:[\\/]/i.test(state.cwd || '') ? state.cwd.replace(/\\/g, '/') + '/' : '';
+    }
     function renderMarkdown(text) {
         const source = String(text || '');
         if (!window.marked || !window.DOMPurify) return `<p>${escapeHtml(source).replace(/\n/g, '<br>')}</p>`;
-        const base = /^[a-z]:[\\/]/i.test(state.cwd || '') ? state.cwd.replace(/\\/g, '/') + '/' : '';
-        return window.PiFileViewer.markdown(source, base);
+        return window.PiFileViewer.markdown(source, markdownBase());
+    }
+    function renderStreamingMarkdown(root, text, decorate) {
+        window.PiFileViewer.renderStreamingMarkdown(root, text, { base: markdownBase(), decorate });
     }
 
     function apiHeaders(extra = {}) {
@@ -3946,7 +3951,7 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const [block, type] of live.pending) {
             if (type === 'text') {
                 block.dataset.raw = block._piLiveText;
-                window.PiFileViewer.updateMarkdown(block, renderMarkdown(block._piLiveText), fragment => decorateCodeBlocks(fragment, true));
+                renderStreamingMarkdown(block, block._piLiveText, fragment => decorateCodeBlocks(fragment, true));
             } else {
                 block.querySelector(type === 'thinking' ? '.pi-thinking-content' : '.pi-tool-args').textContent = block._piLiveText;
             }

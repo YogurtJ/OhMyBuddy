@@ -337,6 +337,7 @@
         // scope changes re-read the native snapshot and keep the same revision guarantees.
         async function loadInstalled(n, cwd, scope = $('native-installed-scope')?.value || 'global', filter = installedFilter) {
             const request = ++resourceRequest;
+            closeChangelog();
             installedFilter = installedFilterValues.includes(filter) ? filter : 'all';
             for (const control of installedPanel.querySelectorAll('button')) control.disabled = true;
             let snapshot, metadata;
@@ -440,10 +441,12 @@
                 const verb = { update: translateUi("更新"), remove: translateUi("移除"), install: translateUi("安装") }[action] || action;
                 if (!confirm(translateUi("{0} {1}（{2}）？包操作可能执行代码；失败后请核对配置，不自动重试。", verb, source, scope === 'global' ? translateUi("全局") : translateUi("项目")))) return;
                 await act(control, async () => {
-                    await send('/api/pi/settings/native/packages', 'POST', { cwd, scope, source, action, expectedRevision: snapshot.revision, confirmed: true });
+                    const result = await send('/api/pi/settings/native/packages', 'POST', { cwd, scope, source, action, expectedRevision: snapshot.revision, confirmed: true });
                     if (!valid(n, cwd) || $('native-installed-scope')?.value !== scope) return;
                     const refreshed = await refreshAfterAction(scope);
-                    status('native-resource-status', refreshed ? translateUi("操作完成；空闲时重新加载资源。") : translateUi("已保存，但列表读取失败。请刷新核对，不要重复提交。"));
+                    status('native-resource-status', refreshed ? action === 'update' && result.previousVersion && result.version
+                        ? translateUi("已更新 {0} → {1}；可从包菜单查看更新说明，空闲时重新加载资源。", result.previousVersion, result.version)
+                        : translateUi("操作完成；空闲时重新加载资源。") : translateUi("已保存，但列表读取失败。请刷新核对，不要重复提交。"));
                 }, 'native-resource-status');
             }
             async function changeResource(resource, state, control) {
@@ -485,6 +488,8 @@
                     if (pkg.installed && !update) menu.push({ label: translateUi("更新"), icon: 'fa-arrows-rotate', disabled, action: () => packageAction(null, 'update', pkg.source) });
                     menu.push({ label: translateUi("移除"), icon: 'fa-trash', danger: true, disabled, action: () => packageAction(null, 'remove', pkg.source) });
                 }
+                if (pkg.installed && snapshot.packageChangelogs && !disabled) menu.push({ label: translateUi("更新说明"), icon: 'fa-file-lines',
+                    action: () => showChangelog({ cwd, scope: pkg.scope === 'user' ? 'global' : 'project', source: pkg.source, expectedRevision: snapshot.revision, expectedVersion: pkg.version ?? null }, active) });
                 const badges = [[pkg.managedBy === 'pivane' ? translateUi("OhMyBuddy 内置") : resourceScopeLabel(pkg.scope), 'scope', pkg.managedBy === 'pivane' ? translateUi("随 OhMyBuddy 更新") : '']];
                 if (pkg.version) badges.push(['v' + pkg.version, 'version']);
                 badges.push([pkg.installed ? translateUi("已安装") : translateUi("尚未安装"), pkg.installed ? 'on' : 'off']);
@@ -588,7 +593,7 @@
         }
 
         async function open(tab, options = {}) {
-            closeHelp();
+            closeHelp(); closeChangelog();
             const n = ++epoch, selected = currentCwd();
             let cwd = contextCwd();
             try {
@@ -606,6 +611,37 @@
             } catch (e) { if (valid(n, cwd)) { if (tab === 'native') panel.textContent = e.message; else if (tab === 'installed') {
                 installedPanel.replaceChildren(assistantEntry(cwd, 'global'), node('p', e.message), button(translateUi('重试读取'), '', () => open(tab, options)));
             } } }
+        }
+        let changelogDialog = null, changelogSequence = 0;
+        function closeChangelog() { changelogSequence++; if (changelogDialog?.open) changelogDialog.close(); }
+        async function showChangelog(input, active) {
+            closeChangelog(); const request = ++changelogSequence;
+            if (!changelogDialog) {
+                changelogDialog = node('dialog', undefined, { id: 'pi-package-changelog-dialog', class: 'native-changelog-dialog', 'aria-labelledby': 'pi-package-changelog-title' });
+                const header = node('header');
+                const close = button('×', '', () => closeChangelog()); close.setAttribute('aria-label', translateUi("关闭"));
+                header.append(node('h2', translateUi("更新说明"), { id: 'pi-package-changelog-title' }), close);
+                changelogDialog.append(header, node('p', '', { class: 'native-changelog-version' }), node('div', '', { class: 'native-changelog-body pi-markdown' }));
+                changelogDialog.addEventListener('cancel', event => { event.preventDefault(); closeChangelog(); });
+                changelogDialog.addEventListener('close', () => { if (!changelogDialog.open) changelogDialog.querySelector('.native-changelog-body').replaceChildren(); });
+                document.body.append(changelogDialog);
+            }
+            const version = changelogDialog.querySelector('.native-changelog-version'), body = changelogDialog.querySelector('.native-changelog-body');
+            version.textContent = `${packageName(input.source)}${input.expectedVersion ? ' · v' + input.expectedVersion : ''}`;
+            body.textContent = translateUi("正在读取已安装包的更新说明…"); changelogDialog.showModal();
+            try {
+                const result = await apiFetch('/api/pi/settings/native/packages/changelog', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) });
+                if (request !== changelogSequence || !active() || !changelogDialog.open) return;
+                version.textContent += result.path ? ` · ${result.path}` : '';
+                if (result.status !== 'ready') { body.textContent = result.status === 'disabled' ? translateUi("包作者关闭了更新说明。") : translateUi("此安装包没有提供更新说明。"); return; }
+                if (window.PiFileViewer && window.marked && window.DOMPurify) {
+                    body.innerHTML = window.PiFileViewer.markdown(result.content, '', true);
+                    for (const link of body.querySelectorAll('a')) {
+                        if (/^https?:\/\//i.test(link.getAttribute('href') || '')) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
+                        else link.removeAttribute('href');
+                    }
+                } else body.replaceChildren(node('pre', result.content));
+            } catch { if (request === changelogSequence && active() && changelogDialog.open) body.textContent = translateUi("无法读取更新说明，请刷新列表后重试。"); }
         }
         let installDialog = null, installPending = false;
         function ensureInstallDialog() {
@@ -682,7 +718,7 @@
             if (!dialog.open) dialog.showModal();
             $('pi-package-install-source').focus();
         });
-        return { open, focusSetting(key) { focusKey = key; }, close() { closeHelp(); installDialog?.open && installDialog.close(); epoch++; focusKey = null; } };
+        return { open, focusSetting(key) { focusKey = key; }, close() { closeHelp(); closeChangelog(); installDialog?.open && installDialog.close(); epoch++; focusKey = null; } };
     }
     window.PiNativeSettings = { create };
 })();

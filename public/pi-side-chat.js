@@ -675,7 +675,9 @@
             this.frame = requestAnimationFrame(() => {
                 this.frame = null;
                 if (!this.live || !this.liveNode?.isConnected) return;
-                window.PiFileViewer.updateMarkdown(this.liveNode.querySelector('.pi-markdown'), this.host.renderMarkdown(textOf(this.live)));
+                const root = this.liveNode.querySelector('.pi-markdown'), text = textOf(this.live);
+                if (this.host.renderStreamingMarkdown) this.host.renderStreamingMarkdown(root, text);
+                else window.PiFileViewer.updateMarkdown(root, this.host.renderMarkdown(text));
                 this.scroll.update();
             });
         }

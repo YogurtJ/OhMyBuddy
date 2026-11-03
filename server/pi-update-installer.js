@@ -3,7 +3,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { privateDir, readSafe, copySafe, atomicJson, hash } = require('./pi-maintenance-files');
 const { outputRedactor, outputLines } = require('./pi-update-output');
-const PI_PACKAGES = ['pi-coding-agent', 'pi-ai', 'pi-agent-core', 'pi-tui', 'pi-codemode', 'pi-mcp', 'pi-telemetry'].map(name => '@earendil-works/' + name);
+const PI_PACKAGES = ['pi-coding-agent', 'pi-ai', 'pi-agent-core', 'pi-tui', 'pi-codemode', 'pi-mcp', 'pi-telemetry', 'pi-schema'].map(name => '@earendil-works/' + name);
 // Retired packages are accepted only when declared by an older archive.
 const LEGACY_PI_PACKAGES = ['chord', 'pi-protocol', 'pi-server'].map(name => '@earendil-works/' + name);
 const exactVersion = value => typeof value === 'string' && /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(value) && value.length < 40;

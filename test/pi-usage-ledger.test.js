@@ -21,6 +21,50 @@ function fixture(t) {
         filter: { from: '2026-09-01', to: '2026-09-30', timeZone: 'Asia/Shanghai' } };
     return { base, root, project, file, header, message, input };
 }
+test('provider bills, including reported zero, remain distinct from catalog estimates after restart and deletion', async t => {
+    const f = fixture(t), billed = f.message('billed'), free = f.message('reported-zero');
+    billed.message.usage.cost = { total: .25, totalFromProvider: true };
+    free.message.usage.cost = { total: 0, totalFromProvider: true };
+    fs.appendFileSync(f.file, [billed, free].map(row => JSON.stringify(row)).join('\n') + '\n');
+    const before = fs.readFileSync(f.file);
+    const result = await runLedger(f.input);
+    assert.equal(result.total.records, 3); assert.equal(result.total.providerReportedRecords, 2);
+    assert.equal(result.total.providerReportedCost, .25); assert.equal(result.total.estimatedRecords, 1);
+    assert.equal(result.total.unpricedRecords, 0); assert.equal(result.total.zeroCost, 1);
+    assert.ok(Math.abs(result.total.cost - .2562) < 1e-12);
+    assert.deepEqual(fs.readFileSync(f.file), before);
+    const ledger = new UsageLedger(f.input.ledgerPath);
+    try {
+        const facts = ledger.db.prepare('SELECT data FROM facts').all().map(row => JSON.parse(row.data));
+        assert.equal(facts.filter(row => row.totalFromProvider).length, 2);
+        assert.equal(facts.find(row => row.totalFromProvider && row.cost === 0).pricing, null);
+    } finally { ledger.close(); }
+    fs.unlinkSync(f.file);
+    assert.deepEqual((await runLedger(f.input)).total, result.total);
+    const utc = await runLedger({ ...f.input, filter: { ...f.input.filter, timeZone: 'UTC' } });
+    assert.equal(utc.total.providerReportedCost, .25); assert.equal(utc.total.providerReportedRecords, 2);
+});
+
+test('v1 ledger migration adds billing columns transactionally without changing facts or earlier totals', async t => {
+    const f = fixture(t), first = await runLedger(f.input);
+    const old = new UsageLedger(f.input.ledgerPath); let facts;
+    try {
+        facts = old.db.prepare('SELECT * FROM facts').all();
+        old.db.exec("ALTER TABLE daily DROP COLUMN providerReportedCost; ALTER TABLE daily DROP COLUMN providerReportedRecords; UPDATE meta SET value='1' WHERE key='schema';");
+    } finally { old.close(); }
+    const migrated = new UsageLedger(f.input.ledgerPath);
+    try {
+        assert.equal(migrated.db.prepare("SELECT value FROM meta WHERE key='schema'").get().value, '2');
+        assert.deepEqual(migrated.db.prepare('SELECT * FROM facts').all(), facts);
+        assert.deepEqual(migrated.report(f.input.filter, f.input.roots, {}).total, first.total);
+    } finally { migrated.close(); }
+    const next = f.message('next'); next.message.usage.cost = { total: .5, totalFromProvider: true };
+    fs.appendFileSync(f.file, JSON.stringify(next) + '\n');
+    const result = await runLedger(f.input);
+    assert.equal(result.total.records, 2); assert.equal(result.total.providerReportedCost, .5);
+    assert.equal(result.total.providerReportedRecords, 1); assert.ok(Math.abs(result.total.cost - .5062) < 1e-12);
+});
+
 test('durable daily/weekly/monthly totals survive deletion, restart, new timezone and copied imports', async t => {
     const f = fixture(t), before = fs.readFileSync(f.file);
     const first = await runLedger(f.input);
@@ -54,7 +98,7 @@ test('side-chat batches persist only new calls, deduplicate retries and exclude 
     const sessionId = '7416bd66-1e34-4b51-b0a2-779097a20b90';
     const sideRow = { key: 'a'.repeat(64), timestamp: Date.parse('2026-09-20T23:30:00Z'),
         usage: { input: 100, output: 10, cacheRead: 20, cacheWrite: 0 }, cost: 0,
-        provider: 'fixture', model: 'side-model', content: 'SECRET_BODY_MUST_NOT_PERSIST' };
+        provider: 'fixture', model: 'side-model', totalFromProvider: true, content: 'SECRET_BODY_MUST_NOT_PERSIST' };
     const batch = { cwd: f.project, sessionId, records: [sideRow] };
     const before = await runLedger(f.input);
     assert.equal((await runLedger({ ...f.input, filter: null, sideBatch: batch })).inserted, 1);
@@ -62,6 +106,7 @@ test('side-chat batches persist only new calls, deduplicate retries and exclude 
     const after = await runLedger(f.input);
     assert.equal(after.total.records, before.total.records + 1);
     assert.equal(after.total.total, before.total.total + 130);
+    assert.equal(after.total.providerReportedRecords, 1); assert.equal(after.total.providerReportedCost, 0);
     assert.equal(after.sessions.find(row => row.name === '侧聊').records, 1);
     assert.equal(after.daily.find(row => row.date === '2026-09-21').records, 2);
     const ledger = new UsageLedger(f.input.ledgerPath);

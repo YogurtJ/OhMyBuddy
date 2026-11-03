@@ -7,7 +7,7 @@ const { execFileSync } = require('node:child_process');
 const { createRequire } = require('node:module');
 const { createHash } = require('node:crypto');
 const { REVIEWED_PI_VERSION: piVersion } = require('../server/pi-reviewed-host');
-const LOCK_SHA256 = '235b0e77dc56de914f99fe68e9b8da0f9afa450b7b968f5af004467db539708c';
+const LOCK_SHA256 = '97bbb7ecd487517d2a438ad18173132831a79a3712c7ba192f6d58bf8cae6fde';
 
 const manifest = {
     name: 'pivane-profile-memory-isolated', version: '1.0.0', private: true,
@@ -19,7 +19,7 @@ const manifest = {
     },
     overrides: { '@earendil-works/pi-tui': piVersion, '@earendil-works/pi-agent-core': piVersion,
         '@earendil-works/pi-codemode': piVersion, '@earendil-works/pi-mcp': piVersion,
-        '@earendil-works/pi-telemetry': piVersion, undici: '8.12.3', 'brace-expansion': '5.0.12' },
+        '@earendil-works/pi-telemetry': piVersion, '@earendil-works/pi-schema': piVersion, undici: '8.12.3', 'brace-expansion': '5.0.12' },
 };
 function install(prefix) {
     if (!prefix || !path.isAbsolute(prefix) || !fs.existsSync(path.join(prefix, 'package', 'profile-memory-bundle.mjs')))
