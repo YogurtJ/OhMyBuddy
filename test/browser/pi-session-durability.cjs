@@ -102,9 +102,9 @@ async function run(browser, base, width, locale) {
     const storage = page.locator('dialog.pi-document-storage');
     await storage.locator(`[data-document-id="${orphan.id}"]`).waitFor();
     assert.ok(writes.at(-1).body.draftIds.includes(documentRef.id), 'another saved composer draft remains protected');
-    assert.equal(await storage.locator(`[data-document-id="${documentRef.id}"] button`).isDisabled(), true);
-    await storage.locator(`[data-document-id="${orphan.id}"] button`).click();
-    await storage.getByRole('status').filter({ hasText: label('请先退出', 'Exit all open') }).waitFor();
+    assert.equal(await storage.locator(`[data-document-id="${documentRef.id}"] .pi-storage-clean`).count(), 0, 'protected draft has no cleanup action');
+    await storage.locator(`[data-document-id="${orphan.id}"] .pi-storage-clean`).click();
+    await storage.getByRole('status').filter({ hasText: label('退出运行实例', 'Exit runtime') }).waitFor();
     await storage.getByRole('button', { name: label('关闭', 'Close'), exact: true }).click();
     const exitRuntime = async () => {
         await page.locator('#pi-current-thread-menu').click();
@@ -120,7 +120,7 @@ async function run(browser, base, width, locale) {
     await page.locator('#workspace-settings-toggle').click(); await page.locator('[data-settings-tab="usage"]').click();
     await page.locator('#settings-document-storage').click(); await storage.locator(`[data-document-id="${orphan.id}"]`).waitFor();
     const preview = async () => {
-        await storage.locator(`[data-document-id="${orphan.id}"] button`).click();
+        await storage.locator(`[data-document-id="${orphan.id}"] .pi-storage-clean`).click();
         const confirm = storage.getByRole('button', { name: label('永久删除原件', 'Permanently delete original'), exact: true });
         assert.equal(await confirm.isDisabled(), true); await storage.locator('input[type="checkbox"]').check(); await confirm.click();
     };
@@ -148,5 +148,8 @@ async function run(browser, base, width, locale) {
     const server = http.createServer(app); server.listen(0, '127.0.0.1'); await once(server, 'listening');
     const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox', '--host-resolver-rules=MAP pivane-durability.test 127.0.0.1', '--no-proxy-server'] });
     try { for (const [width, locale] of [[1440, 'zh-CN'], [393, 'zh-CN'], [320, 'en'], [1440, 'en']]) await run(browser, `http://127.0.0.1:${server.address().port}`, width, locale); }
-    finally { await browser.close(); server.closeAllConnections(); await new Promise(r => server.close(r)); }
+    finally {
+        await browser.close();
+        await new Promise(resolve => { server.close(resolve); server.closeAllConnections(); });
+    }
 })().catch(error => { console.error(error); process.exitCode = 1; });

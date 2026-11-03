@@ -112,9 +112,11 @@ async function run(browser, base, width) {
         assert.equal(deferredReads, legacy + 1, 'old server without summary revision keeps refreshing');
 
         await page.evaluate(() => {
-            const original = window.PiFileViewer.markdown;
             window.fixtureMarkdownCalls = 0;
-            window.PiFileViewer.markdown = function(...args) { window.fixtureMarkdownCalls++; return original.apply(this, args); };
+            for (const name of ['markdown', 'renderStreamingMarkdown']) {
+                const original = window.PiFileViewer[name];
+                window.PiFileViewer[name] = function(...args) { window.fixtureMarkdownCalls++; return original.apply(this, args); };
+            }
         });
         const streamed = await page.evaluate(() => {
             fixtureEvent({ type: 'agent_start' });
@@ -126,7 +128,7 @@ async function run(browser, base, width) {
         });
         assert.equal(streamed.calls, 0, 'delta burst is buffered before the next animation frame');
         await page.waitForFunction(raw => document.querySelector('.streaming .pi-markdown')?.dataset.raw === raw, streamed.raw);
-        assert.equal(await page.evaluate(() => fixtureMarkdownCalls), 1, 'one Markdown parse for one frame');
+        assert.equal(await page.evaluate(() => fixtureMarkdownCalls), 1, 'one Markdown render for one frame');
         await page.evaluate(() => {
             for (const delta of ['思考', '保留✓']) fixtureEvent({ type: 'message_update', assistantMessageEvent: { type: 'thinking_delta', contentIndex: 1, delta } });
             fixtureEvent({ type: 'message_update', assistantMessageEvent: { type: 'toolcall_start', contentIndex: 2, id: 'call', toolName: 'read' } });
@@ -174,7 +176,7 @@ async function run(browser, base, width) {
         assert.ok((await page.locator('#pi-transcript-content').textContent()).includes('Answer second'));
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
         assert.deepEqual(errors, []);
-        console.log(JSON.stringify({ width, status: 'passed', deferredReads, burstDeltas: 300, burstMarkdownParses: 1 }));
+        console.log(JSON.stringify({ width, status: 'passed', deferredReads, burstDeltas: 300, burstMarkdownRenders: 1 }));
         if (process.env.PI_PERFORMANCE_EVIDENCE) {
             fs.mkdirSync(process.env.PI_PERFORMANCE_EVIDENCE, { recursive: true });
             await page.screenshot({ path: path.join(process.env.PI_PERFORMANCE_EVIDENCE, `performance-${width}.png`) });

@@ -347,8 +347,12 @@ async function run(browser, base, width, locale, theme) {
     await entry(ids.memory2).waitFor(); await main.locator('.pi-id-toolbar [data-value=procedure]').click();
     await page.waitForFunction(() => document.querySelectorAll('#knowledge .pi-id-entry').length === 1);
     assert.equal(reads.at(-1).category, 'procedure'); assert.equal(await main.locator('.pi-knowledge-target-row .pi-id-seg-count').count(), 0);
-    const search = main.locator('input[type=search]'); await search.fill('weekly'); await page.waitForTimeout(350);
-    assert.equal(reads.at(-1).query, 'weekly'); await search.fill(''); await page.waitForTimeout(350);
+    const search = main.locator('input[type=search]');
+    const searched = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/knowledge') && new URL(response.url()).searchParams.get('query') === 'weekly');
+    await search.fill('weekly'); await searched;
+    assert.equal(reads.at(-1).query, 'weekly');
+    const cleared = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/knowledge') && !new URL(response.url()).searchParams.get('query'));
+    await search.fill(''); await cleared;
     await main.locator('.pi-id-toolbar [data-value=all]').click(); state.filters = true; state.counts = true;
     await page.evaluate(() => manager.reveal('0000000000000000000000000000000000000000000000000000000000000008', 'memory'));
     await entry(ids.remote).locator('.pi-id-entry-body').waitFor(); assert.equal(await main.locator('.pi-knowledge-target-row [data-value=user]').getAttribute('aria-pressed'), 'true');

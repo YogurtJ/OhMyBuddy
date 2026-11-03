@@ -25,6 +25,7 @@ async function run(browser, viewport, theme, fullContext = true, retention = ful
     };
     const mainStats = { contextUsage: { tokens: 2000, percent: 6.25, contextWindow: 32000 }, cost: 0.1, totalMessages: 3 };
     page.on('pageerror', error => errors.push(error.message));
+    await page.route(/https:\/\/(fonts\.googleapis\.com|fonts\.gstatic\.com)\//, route => route.abort());
     page.on('dialog', dialog => acceptDialogs ? dialog.accept() : dialog.dismiss());
     await page.addInitScript(({ cwd, theme }) => {
         localStorage.setItem('pi.web.cwd', cwd); localStorage.setItem(`pi.web.session:${cwd}`, 'main'); localStorage.setItem('pi.workspace.theme', theme);
@@ -190,10 +191,13 @@ async function run(browser, viewport, theme, fullContext = true, retention = ful
             const overflow = ['.pi-transcript-shell', '#pi-transcript', '#pi-transcript-content', '.pi-composer-wrap'].filter(selector => {
                 const node = document.querySelector(selector); return node.scrollWidth > node.clientWidth + 1;
             });
-            return { mainWidth: main.width, mainRight: main.right, sideLeft: side.left, overflow };
+            return { mainWidth: main.width, mainRight: main.right, sideLeft: side.left, overflow, viewport: innerWidth,
+                workbenchWidth: document.querySelector('.pi-workbench').clientWidth,
+                navWidth: document.querySelector('#workspace-sidebar').getBoundingClientRect().width,
+                sessionsWidth: document.querySelector('#pi-session-pane').getBoundingClientRect().width };
         });
         assert.ok(bounds.mainWidth >= 359, 'resizing reserves a readable main conversation');
-        assert.equal(await page.locator('.pi-workbench').evaluate(node => node.classList.contains('pi-inspector-overlay')), false, 'desktop side chat fits beside the conversation');
+        assert.equal(await page.locator('.pi-workbench').evaluate(node => node.classList.contains('pi-inspector-overlay')), false, 'desktop side chat fits beside the conversation: ' + JSON.stringify(bounds));
         assert.ok(bounds.mainRight <= bounds.sideLeft + 1, 'side chat does not cover the main conversation');
         assert.equal(await page.locator('.pi-transcript-shell').evaluate(node => node.inert), false, 'both desktop conversations stay interactive');
         assert.deepEqual(bounds.overflow, [], 'narrow main transcript and composer must not overflow');

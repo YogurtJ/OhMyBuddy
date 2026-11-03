@@ -188,8 +188,7 @@ async function run(browser, viewport) {
     await page.waitForFunction(() => document.querySelector('.pi-session-item.active'));
     await drawer();
     assert.equal(await emptyGroup.count(), 0, 'removed project remains absent after reload');
-    if (viewport.width <= 680) { await page.locator('#pi-mobile-summary').click(); }
-    else await page.locator('#pi-project-button').click();
+    await require('./pi-mobile-view-helper.cjs').openProjectDialog(page, { recent: true });
     const pickerRow = page.locator(`#pi-project-list [data-cwd="${emptyCwd}"]`);
     assert.equal(await pickerRow.count(), 0, 'picker hides removed projects by default');
     await page.locator('#pi-show-hidden-projects').check();

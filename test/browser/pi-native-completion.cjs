@@ -95,4 +95,4 @@ async function run(browser, viewport) {
  assert.deepEqual(errors,[]);assert.equal(requests.filter(r=>r.method&&r.method!=='GET').length,0);
  await context.close(); console.log(`PASS ${viewport.width}: live snapshot/event fence, tool recovery, draft acknowledgement failure, body search/preview, config/restart, no model requests/errors/overflow`);
 }
-(async()=>{const browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox']});try{for(const viewport of [{width:1440,height:1000},{width:393,height:852},{width:320,height:740}])await run(browser,viewport);}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
+(async()=>{const browser=await chromium.launch({executablePath:process.env.CHROMIUM_PATH||'/usr/bin/chromium',headless:true,args:['--no-sandbox']});try{for(const viewport of [{width:1440,height:1000},{width:393,height:852},{width:320,height:740}])await run(browser,viewport);}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -25,7 +25,8 @@ async function run(browser, viewport, theme) {
         { role: 'toolResult', toolCallId: 'call', toolName: 'read', content: 'Tool result', timestamp: 1400 },
         { role: 'assistant', content: markdown, timestamp: 2000, stopReason: 'stop' }];
     const model = { id: 'chat', provider: 'fixture', name: 'Chat', input: ['text','image'], contextWindow: 128000 };
-    page.on('pageerror', error => errors.push(error.message)); page.on('dialog', dialog => dialog.accept());
+    page.on('pageerror', error => errors.push(error.message));
+    await page.route(/https:\/\/(fonts\.googleapis\.com|fonts\.gstatic\.com)\//, route => route.abort()); page.on('dialog', dialog => dialog.accept());
     await page.addInitScript(({ cwd, theme }) => {
         localStorage.setItem('pi.web.cwd', cwd); localStorage.setItem('pi.web.session:' + cwd, 'one'); localStorage.setItem('pi.workspace.theme', theme);
         sessionStorage.setItem('pi.web.token', 'fixture-token');
@@ -79,7 +80,16 @@ async function run(browser, viewport, theme) {
         while (executeCount < count && Date.now() < deadline) await page.waitForTimeout(20);
         assert.equal(executeCount, count);
     };
-    const waitText = text => page.waitForFunction(text => document.getElementById('pi-reply-tts-bar-state').textContent.includes(text), text);
+    const waitText = async text => {
+        try { await page.waitForFunction(text => document.getElementById('pi-reply-tts-bar-state').textContent.includes(text), text); }
+        catch (error) {
+            console.error(JSON.stringify({ viewport, theme, wanted: text, executeCount, reviewCount, audio: await page.evaluate(() => {
+                const audio = document.getElementById('pi-reply-tts-audio'); return { state: document.getElementById('pi-reply-tts-bar-state').textContent,
+                    playCalls: window.playCalls, paused: audio.paused, ended: audio.ended, error: audio.error?.message };
+            }) }));
+            throw error;
+        }
+    };
     const openSettings = async () => { await page.evaluate(() => document.getElementById('settings-reply-tts').click()); await page.waitForFunction(() => !document.getElementById('pi-reply-tts-save').disabled); };
     const field = key => page.locator(`#pi-reply-tts-fields [data-param="${key}"]`);
     const layout = async () => {

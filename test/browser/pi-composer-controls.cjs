@@ -34,6 +34,7 @@ async function run(browser, viewport, legacy = false) {
     const snapshot = id => ({ session: sessions.find(s => s.id === id), state: states.get(id), controls: legacy ? undefined : views.get(id),
         messages: { messages: history.get(id) }, stats: { totalMessages: 3 }, models: { models: [model] }, thinkingLevels: { levels: ['off'] }, commands: { commands: [] } });
     page.on('pageerror', error => errors.push(error.message));
+    await page.route(/https:\/\/(fonts\.googleapis\.com|fonts\.gstatic\.com)\//, route => route.abort());
     await page.addInitScript(({ cwd }) => { localStorage.setItem('pi.web.cwd', cwd); localStorage.setItem(`pi.web.session:${cwd}`, 'a'); }, { cwd });
     await page.route('**/api/**', route => {
         const req = route.request(), endpoint = new URL(req.url()).pathname;
