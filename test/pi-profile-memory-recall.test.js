@@ -21,7 +21,7 @@ function setup(t) {
     const profile = { id, enabled: true, memory: { enabled: true, memoryCharLimit: 16000, userCharLimit: 8000 }, skills: { learnedEnabled: true } };
     const service = new ProfileKnowledgeService({ profiles: { getProfile: async key => key === id ? profile : null, reserve: work => work() },
         getAgentDir: async () => agent, bundlePath: bundle });
-    const root = path.join(agent, 'pivane-profiles', 'data', id);
+    const root = path.join(require('../server/ohmybuddy-compat').dataFile(agent, 'pivane-profiles'), 'data', id);
     let serial = 0;
     const mutate = async (operation, fields = {}) => service.mutate(id, { requestId: `recall-${++serial}`,
         expectedRevision: (await service.snapshot(id)).revision, operation, kind: 'memory', ...fields });

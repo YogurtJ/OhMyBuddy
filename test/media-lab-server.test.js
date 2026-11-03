@@ -10,14 +10,15 @@ const { buildFlux2Workflow } = require('../server/flux2-workflow');
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=', 'base64');
 
 test('isolated server preserves private adapter defaults, executes mock GPU/Flux/TTS through tickets, and separates media roots', { timeout: 30000 }, async t => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-lab-server-'));
+    const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pi-lab-server-')));
     const source = path.join(__dirname, '..'), appDir = path.join(root, 'app'), configDir = path.join(root, 'profile'), dataDir = path.join(root, 'data');
     fs.mkdirSync(appDir); fs.mkdirSync(configDir); fs.mkdirSync(dataDir);
-    for (const name of ['package.json', 'server.js', 'server', 'config', 'native']) fs.cpSync(path.join(source, name), path.join(appDir, name), { recursive: true });
+    for (const file of require('../scripts/source-files.cjs').distributionFiles(source)) {
+        const destination = path.join(appDir, file); fs.mkdirSync(path.dirname(destination), { recursive: true });
+        fs.copyFileSync(path.join(source, file), destination);
+    }
     fs.symlinkSync(path.join(source, 'node_modules'), path.join(appDir, 'node_modules'));
     fs.mkdirSync(path.join(appDir, 'public/images'), { recursive: true });
-    // The file service shares its pure path policy with the browser; include this code dependency in the isolated app.
-    for (const name of ['pi-file-policy.js', 'pi-document-references.js']) fs.copyFileSync(path.join(source, 'public', name), path.join(appDir, 'public', name));
     fs.writeFileSync(path.join(appDir, 'public/images', 'must-not-leak.png'), png);
     fs.writeFileSync(path.join(appDir, 'public', 'old.html.bak-test'), 'must not be served');
     const gpu = path.join(root, 'fixture-gpu.cjs');
@@ -80,6 +81,7 @@ require('./server.js');
 `);
     const child = spawn(process.execPath, ['fixture-server.cjs'], { cwd: appDir, env: {
         PATH: process.env.PATH, HOME: process.env.HOME, HOST: '127.0.0.1', PORT: '0', PI_CODING_AGENT_DIR: path.join(root, 'agent'), PI_PROJECT_ROOTS: root,
+        OHMYBUDDY_HOME: path.join(root, 'private'), OHMYBUDDY_WORKSPACES_DIR: path.join(root, 'workspaces'),
         PI_MEDIA_CONFIG_DIR: configDir, PI_MEDIA_DATA_DIR: dataDir, PI_WEB_DEFERRED_FILE: path.join(root, 'queue.json'), PI_OFFLINE: '1',
         MINIMAX_API_KEY: 'fixture-not-a-secret', FLUX2_COMFY_BASE_URL: `http://127.0.0.1:${comfy.address().port}`
     }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });

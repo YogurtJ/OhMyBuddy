@@ -24,7 +24,7 @@ test('favorite saves original bytes as an independent library file and retry is 
  assert.deepEqual(await service.management.batch(input), result);
  await assert.rejects(service.management.batch({ ...input, favorite: false }), { code: 'ARTIFACT_CONFLICT' });
  assert.equal((await service.preview(saved.key)).content, '\ufeff# Independent report\n');
- const location = await service.management.location(saved.key); assert.ok(location.storagePath.startsWith(path.join(agent, 'pivane-artifacts'))); assert.equal(location.sourcePath, path.join(cwd, 'report.md'));
+ const location = await service.management.location(saved.key); assert.ok(location.storagePath.startsWith(path.join(agent, 'ohmybuddy-artifacts'))); assert.equal(location.sourcePath, path.join(cwd, 'report.md'));
  if (process.platform !== 'win32') assert.equal(fs.statSync(location.storagePath).mode & 0o777, 0o600);
 });
 test('delete native session and original delivery objects: saved bytes survive restart; origin is navigation only', async () => {

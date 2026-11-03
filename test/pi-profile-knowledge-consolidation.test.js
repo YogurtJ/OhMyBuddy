@@ -19,7 +19,7 @@ function setup(t, limits = {}) {
         skills: { learnedEnabled: true } };
     const service = new ProfileKnowledgeService({ profiles: { getProfile: async key => key === id ? profile : null, reserve: work => work() },
         getAgentDir: async () => agent, bundlePath: bundle });
-    const root = path.join(agent, 'pivane-profiles', 'data', id);
+    const root = path.join(require('../server/ohmybuddy-compat').dataFile(agent, 'pivane-profiles'), 'data', id);
     let serial = 0;
     const mutate = async (operation, fields = {}) => service.mutate(id, { requestId: `consolidate-${++serial}`,
         expectedRevision: (await service.snapshot(id)).revision, operation, kind: 'memory', ...fields });
@@ -28,7 +28,7 @@ function setup(t, limits = {}) {
         expectedRevision: (await service.snapshot(id)).revision, operation: 'consolidate', kind: 'memory', target: 'memory',
         items: sources.map(item => ({ itemId: item.id, itemRevision: item.revision })),
         content: 'Merged procedure', category: 'procedure', ...fields });
-    const ledger = () => JSON.parse(fs.readFileSync(path.join(root, '.pivane-knowledge.json'), 'utf8'));
+    const ledger = () => JSON.parse(fs.readFileSync(require('../server/ohmybuddy-compat').knowledgeFile(root, '.json'), 'utf8'));
     return { service, agent, root, mutate, create, consolidateInput, ledger };
 }
 
@@ -227,7 +227,7 @@ test('a consolidation that fails after publication is pending and the same reque
     assert.equal(safeFile(path.join(root, 'MEMORY.md')).text, 'Index sources merged.');
     // The ledger was not advanced, but the pending marker holds the batch receipt.
     assert.equal(ledger().sequence, sequence);
-    const pending = JSON.parse(fs.readFileSync(path.join(root, '.pivane-knowledge.pending'), 'utf8'));
+    const pending = JSON.parse(fs.readFileSync(require('../server/ohmybuddy-compat').knowledgeFile(root, '.pending'), 'utf8'));
     assert.deepEqual(pending.receipt.consolidated, [first.id, second.id]);
     await assert.rejects(service.mutate(id, { ...input, requestId: 'other-request' }), /needs repair/);
     const fixed = new Database(path.join(root, 'sessions.db'));
@@ -262,14 +262,14 @@ test('a consolidation whose before-copies are given up for the history budget is
         history: [{ receiptId: 'filler-receipt', before: { content: 'x'.repeat(Math.floor(7.3 * 1024 * 1024)) } }] };
     data.receipts.push({ id: 'filler-receipt', requestId: 'filler-request', operation: 'delete', kind: 'skill', itemId: fillerId,
         status: 'saved', at: new Date().toISOString(), undoable: true });
-    fs.writeFileSync(path.join(root, '.pivane-knowledge.json'), JSON.stringify(data));
+    fs.writeFileSync(require('../server/ohmybuddy-compat').knowledgeFile(root, '.json'), JSON.stringify(data));
     await mutate('create', { category: 'fact', content: 'Trigger the budget.' });
     const after = ledger();
     const row = after.receipts.find(receipt => receipt.id === saved.receipt.id);
     assert.equal(row.undoable, false);
     for (const itemId of [saved.item.id, first.id, second.id])
         assert.equal(after.records[itemId].history.some(entry => entry.receiptId === saved.receipt.id), false);
-    assert.ok(fs.statSync(path.join(root, '.pivane-knowledge.json')).size < 7 * 1024 * 1024);
+    assert.ok(fs.statSync(require('../server/ohmybuddy-compat').knowledgeFile(root, '.json')).size < 7 * 1024 * 1024);
     assert.equal((await service.snapshot(id)).receipts.find(receipt => receipt.id === saved.receipt.id).undoable, false);
     await assert.rejects(mutate('undo', { receiptId: saved.receipt.id }), /not undoable/);
     assert.equal(safeFile(path.join(root, 'MEMORY.md')).text, 'Budget sources merged.\n\u00a7\nTrigger the budget.');

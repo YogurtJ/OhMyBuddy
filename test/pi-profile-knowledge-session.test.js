@@ -26,7 +26,7 @@ function setup(t, limits = {}) {
         hook?.();
         return key === id ? profile : null;
     } }, getAgentDir: async () => agent, bundlePath: bundle });
-    const root = path.join(agent, 'pivane-profiles', 'data', id);
+    const root = path.join(require('../server/ohmybuddy-compat').dataFile(agent, 'pivane-profiles'), 'data', id);
     let serial = 0;
     const input = async (operation, fields = {}) => ({ requestId: `session-${++serial}`,
         expectedRevision: (await service.snapshot(id)).revision, operation, kind: 'memory', ...fields });
@@ -69,7 +69,7 @@ test('web project memory edits are verified through the session and can be undon
     assert.equal(db.prepare('SELECT project FROM memories WHERE content = ?').get('Use the project Makefile.').project, own.cwd);
     db.close();
     // Session-verified web writes use client request IDs, which keep the validity window.
-    const ledger = JSON.parse(fs.readFileSync(path.join(root, '.pivane-knowledge.json'), 'utf8'));
+    const ledger = JSON.parse(fs.readFileSync(require('../server/ohmybuddy-compat').knowledgeFile(root, '.json'), 'utf8'));
     assert.equal(ledger.requests[created.receipt.requestId].s, false);
     assert.equal((await service.snapshot(id, { sessionId: own.sessionId })).receipts[0].id, created.receipt.id);
     const updated = await service.mutate(id, await input('update', { scope: 'project', sessionId: own.sessionId,

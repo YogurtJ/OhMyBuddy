@@ -187,7 +187,7 @@ async function run(browser, viewport, theme) {
     await context.close();
 }
 (async () => {
-    const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', headless: true });
+    const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true });
     try {
         for (const [viewport, theme] of [[{ width: 1440, height: 1000 }, 'light'], [{ width: 393, height: 852 }, 'mint'], [{ width: 320, height: 740 }, 'dark']]) await run(browser, viewport, theme);
     } finally { await browser.close(); }

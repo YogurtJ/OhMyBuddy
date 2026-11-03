@@ -182,7 +182,7 @@ async function run(browser, width, legacy = false) {
     await context.close(); console.log(`Shell browser ${width} passed`);
 }
 (async () => {
-    const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
+    const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
     try { for (const width of [1440, 393, 320]) await run(browser, width); await run(browser, 393, true); }
     finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

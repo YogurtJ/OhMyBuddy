@@ -31,7 +31,7 @@ async function fixture(t, { delay, autoLearn = true } = {}) {
         select: async () => profileId,
         describe: async () => ({ id: profileId }),
         context: async (manager, currentCwd) => ({ version: 1, profileId, sessionId: manager.getSessionId(), cwd: currentCwd,
-            sessionPath: manager.getSessionFile(), profileRoot: path.join(agentDir, 'pivane-profiles', 'data', profileId),
+            sessionPath: manager.getSessionFile(), profileRoot: path.join(require('../server/ohmybuddy-compat').dataFile(agentDir, 'pivane-profiles'), 'data', profileId),
             sessionsRoot: path.join(agentDir, 'sessions'), memory: { enabled: true, autoLearn: true,
                 memoryCharLimit: 16000, userCharLimit: 8000 }, skills: { learnedEnabled: false } })
     };
