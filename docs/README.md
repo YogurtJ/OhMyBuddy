@@ -13,7 +13,7 @@
 
 本目录随源码更新，可能包含尚未公开发布的功能；源码版本看 [package.json](../package.json)，实际能力看运行实例。正式公开版本、下载、校验和准确验收摘要以 [GitHub Releases](https://github.com/YogurtJ/OhMyBuddy/releases) 为准。公开发布不自动切换已有实例；升级前按[安装与恢复](INSTALL_RECOVERY.md)保存草稿、停机备份并保留数据路径。完整变化见 [CHANGELOG](../CHANGELOG.md)。
 
-[1.12.0 发布候选说明](releases/1.12.0.md)涵盖 Pi 1.5、官方 Playwright MCP、任务与项目导航、存储布局、定时任务及流式渲染改进。候选尚未公开发布，三平台验证进展与准确包摘要以发行回执为准。
+[1.12.0 发布候选说明](releases/1.12.0.md)涵盖 Pi 1.5、官方 Playwright MCP、任务与项目导航、存储布局、定时任务及流式渲染改进。候选已完成本轮三平台验收，尚未公开发布；准确包、原失败、补验及复用摘要以发行回执与[平台验证范围](RELEASE_INSTALL_VALIDATION.md)为准。
 
 当前正式版为 [OhMyBuddy 1.11.1](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.11.1)（2026-10-30 已发布，Latest）。[1.11.1 版本说明](releases/1.11.1.md)涵盖调度器异常退出后的恢复、伙伴头像与话题整理、旧分类退役和完整包安装支持。九份源码发行附件匿名回下载的大小和 SHA256 均与上传原件一致；准确归档、四个原生目标的定向验证、Windows 单项补验及未变范围复用见[平台验证范围](RELEASE_INSTALL_VALIDATION.md)。完整安装包采用独立预览渠道和构建身份，已有 1.11.1-rc.2 不因源码发布自动包含本次调度器修复。
 
