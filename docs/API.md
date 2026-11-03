@@ -563,11 +563,13 @@ macOS 使用 AppleScript 系统选窗，Windows 使用交互用户会话的系�
 
 | Method | Path | 请求／响应 |
 |---|---|---|
-| GET | `/sessions/:id/move?cwd=...&targetCwd=...` | 只读预览，返回 `{source:{cwd,id,name},targetCwd,revision,canMove,blockers}`。revision 是来源完整字节的 SHA256，不启动 worker。 |
-| POST | `/sessions/:id/move` | `{cwd,targetCwd,expectedRevision,requestId}`，拒绝未知字段；requestId 为 16–80 位字母／数字／连字符，expectedRevision 为预览的 64 位小写 SHA256。成功 200 `{session,requestId,moved:true}`。 |
+| GET | `/sessions/:id/move?cwd=...&targetCwd=...&onlyEmpty=true` | 只读预览，返回 `{source:{cwd,id,name},targetCwd,revision,canMove,blockers}`。revision 是来源完整字节的 SHA256，不启动 worker。`onlyEmpty` 可省略，提供时只接受 `true`。 |
+| POST | `/sessions/:id/move` | `{cwd,targetCwd,expectedRevision,requestId,onlyEmpty?:boolean}`，拒绝未知字段；requestId 为 16–80 位字母／数字／连字符，expectedRevision 为预览的 64 位小写 SHA256。成功 200 `{session,requestId,moved:true}`，session.standalone 由目标规范目录重新派生。 |
 | GET | `/sessions/:id/resolve?cwd=...` | 返回 `{session,moved,sourceCwd?}`。先找该项目的当前原生 ID，缺失时才使用同 ID 的已提交移动链；校验目标原生历史前缀、路径与访问范围。 |
 
 待移动会话最多 64 MiB，完整 v3、同身份和同文件系统，完整树／时间／ID 保留。其他历史会话的关联检查分块投影元数据，最多 10000 文件／1 GiB 原始扫描／256 MiB 投影元数据，单条所需元数据 1 MiB、嵌套 256 层；不把待移动文件上限套到其他历史，超限／变化分别返回 `SESSION_MOVE_SCAN_BUDGET`／`SESSION_MOVE_SCAN_CHANGED`，无效 JSON 返回 `SESSION_MOVE_SCAN_INVALID`。来源与目标文件路径在首次 await 前进入 Supervisor 移动互斥；来源只在空闲独占区停止，后台子 Agent、相关业务引用及目录预算未核实均拒绝。移动期间来源和目标的会话写入／重连被阻止；任务线程创建、线程间消息派发与定时派发临时暂停。用量服务在整个发布／归属变更期间串行保留入账槽，旧事实与日报归属在 SQLite FULL 事务中转移，缓存游标失效。完整支持范围见[会话工作流](SESSION_WORKFLOWS.md#移动线程到其他项目)。
+
+`GET /status.composerProjectChoice=true` 标记输入区开始对话前的项目选择。该流程在预览和提交都传 `onlyEmpty:true`，服务端在完整原生树中拒绝任何 `message` 记录，且提交时重新检查；空白当前分支不能绕过其他分支已经开始的会话。该条件纳入 requestId 参数一致性核对，缺省为 false，不改变普通显式移动；修订变化／已有消息均拒绝，不重试。前端只对无特殊绑定的普通空白会话展示入口，保留同一ID与本地草稿／附件，工作文件不自动搬移。
 
 成功请求持久去重，同一 requestId 换参数拒绝；进入发布阶段后的失败、回滚和未知结果不重跑。未完成日志使两边的会话访问返回 409 `SESSION_MOVE_RECOVERY`，不会在启动时自动迁移或恢复。普通冲突 409 `SESSION_MOVE_CONFLICT`，运行冲突使用 `SESSION_BUSY`，路径／原生读取等错误 400；响应均 no-store。旧地址解析不开放 ID 全局搜索，来源仍须在允许根内，目标必须存在且可访问。
 
