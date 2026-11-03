@@ -23,8 +23,8 @@ test('whole-document edits reconcile only their exact native Markdown facts', { 
     const createProfile = async name => profiles.save({ expectedRevision: (await profiles.state()).revision,
         profile: { name, description: '', soul: '', enabled: true, memory: { enabled: true, autoLearn: false } } });
     const first = (await createProfile('One')).profile, second = (await createProfile('Two')).profile;
-    const firstRoot = path.join(agent, 'pivane-profiles', 'data', first.id);
-    const secondRoot = path.join(agent, 'pivane-profiles', 'data', second.id);
+    const firstRoot = path.join(require('../server/ohmybuddy-compat').dataFile(agent, 'pivane-profiles'), 'data', first.id);
+    const secondRoot = path.join(require('../server/ohmybuddy-compat').dataFile(agent, 'pivane-profiles'), 'data', second.id);
     const projectRoot = path.join(firstRoot, 'projects', 'a'.repeat(64));
     for (const dir of [firstRoot, secondRoot, projectRoot]) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     const config = dir => ({ memoryDir: dir, memoryMode: 'legacy-inject', memoryCharLimit: 16000, userCharLimit: 8000,
@@ -111,7 +111,7 @@ test('post-publication index failure reports partial save and permits determinis
     t.after(() => profiles.dispose());
     const saved = await profiles.save({ expectedRevision: (await profiles.state()).revision,
         profile: { name: 'Fixture', description: '', soul: '', enabled: true, memory: { enabled: true, autoLearn: false } } });
-    const rootDir = path.join(agent, 'pivane-profiles', 'data', saved.profile.id);
+    const rootDir = path.join(require('../server/ohmybuddy-compat').dataFile(agent, 'pivane-profiles'), 'data', saved.profile.id);
     const routes = new Map(), router = { get: (_name, fn) => routes.set('GET', fn), put: (_name, fn) => routes.set('PUT', fn) };
     mountProfileDocumentRoutes(router, { profiles, getAgentDir: async () => agent, bundlePath: bundle });
     const call = async (method, body) => { const res = { code: 200, set() { return this; }, status(code) { this.code = code; return this; },
@@ -174,7 +174,7 @@ test('USER initialized without memory or a mirror is indexed after enable, inclu
     const create = async (name, enabled) => (await profiles.save({ expectedRevision: (await profiles.state()).revision,
         profile: { name, description: '', soul: '', enabled: true, memory: { enabled, autoLearn: false } } })).profile;
     const dormant = await create('Dormant', false);
-    const root = path.join(agent, 'pivane-profiles', 'data', dormant.id);
+    const root = path.join(require('../server/ohmybuddy-compat').dataFile(agent, 'pivane-profiles'), 'data', dormant.id);
     const handlers = new Map(), router = { get: (_name, fn) => handlers.set('GET', fn), put: (_name, fn) => handlers.set('PUT', fn) };
     mountProfileDocumentRoutes(router, { profiles, getAgentDir: async () => agent, bundlePath: bundle });
     const request = async (method, id, body) => {
@@ -206,7 +206,7 @@ test('USER initialized without memory or a mirror is indexed after enable, inclu
     assert.equal(upstream.searchMemories(db, 'IndependentSqliteOnly', { target: 'user' }).length, 1);
 
     const legacy = await create('Legacy', true);
-    const legacyRoot = path.join(agent, 'pivane-profiles', 'data', legacy.id);
+    const legacyRoot = path.join(require('../server/ohmybuddy-compat').dataFile(agent, 'pivane-profiles'), 'data', legacy.id);
     fs.mkdirSync(legacyRoot, { recursive: true, mode: 0o700 });
     fs.writeFileSync(path.join(legacyRoot, 'USER.md'), 'LegacyWithoutAdapter', { mode: 0o600 });
     assert.equal((await read(legacy.id)).indexSynced, false, 'pre-existing native Markdown without a DB is not indexed');
@@ -217,7 +217,7 @@ test('USER initialized without memory or a mirror is indexed after enable, inclu
     legacyDb.close();
 
     const empty = await create('Empty DB', true);
-    const emptyRoot = path.join(agent, 'pivane-profiles', 'data', empty.id);
+    const emptyRoot = path.join(require('../server/ohmybuddy-compat').dataFile(agent, 'pivane-profiles'), 'data', empty.id);
     fs.mkdirSync(emptyRoot, { recursive: true, mode: 0o700 });
     fs.writeFileSync(path.join(emptyRoot, 'USER.md'), 'BeforeEmptyIndex', { mode: 0o600 });
     const emptyDb = new upstream.DatabaseManager(emptyRoot);
@@ -239,7 +239,7 @@ test('interrupted pending plan restores missing retained facts without changing 
     t.after(() => profiles.dispose());
     const profile = (await profiles.save({ expectedRevision: (await profiles.state()).revision,
         profile: { name: 'Interrupted', description: '', soul: '', enabled: true, memory: { enabled: true, autoLearn: false } } })).profile;
-    const root = path.join(agent, 'pivane-profiles', 'data', profile.id);
+    const root = path.join(require('../server/ohmybuddy-compat').dataFile(agent, 'pivane-profiles'), 'data', profile.id);
     const handlers = new Map(), router = { get: (_name, fn) => handlers.set('GET', fn), put: (_name, fn) => handlers.set('PUT', fn) };
     mountProfileDocumentRoutes(router, { profiles, getAgentDir: async () => agent, bundlePath: bundle });
     const request = async (method, body) => {
@@ -288,7 +288,7 @@ test('unpublished pending plan clears only for a verified old document', { skip:
     t.after(() => profiles.dispose());
     const profile = (await profiles.save({ expectedRevision: (await profiles.state()).revision,
         profile: { name: 'Interrupted', description: '', soul: '', enabled: true, memory: { enabled: true, autoLearn: false } } })).profile;
-    const root = path.join(agent, 'pivane-profiles', 'data', profile.id), file = path.join(root, 'USER.md');
+    const root = path.join(require('../server/ohmybuddy-compat').dataFile(agent, 'pivane-profiles'), 'data', profile.id), file = path.join(root, 'USER.md');
     const handlers = new Map(), router = { get: (_name, fn) => handlers.set('GET', fn), put: (_name, fn) => handlers.set('PUT', fn) };
     mountProfileDocumentRoutes(router, { profiles, getAgentDir: async () => agent, bundlePath: bundle });
     const request = async (method, body) => {

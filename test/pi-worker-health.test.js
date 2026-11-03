@@ -221,7 +221,7 @@ test('a scheduled run reopens a stale idle Bot worker through the guarded restar
         profiles: { getProfile: async () => profile },
         target: async () => ({ cwd: target.cwd, id: target.sessionId, path: target.sessionPath, agentProfile: { id: profile.id } }),
         db: { saveRun: run => saved.push(run), run: () => ({ status: 'cancelled' }) } });
-    const run = { id: 'run-1', job: { misfire: { policy: 'skip' }, target: {} }, scheduledAt: Date.now() };
+    const run = { id: 'run-1', job: { name: 'Guarded worker restart fixture', misfire: { policy: 'skip' }, target: {} }, scheduledAt: Date.now() };
 
     const first = await supervisor.getWorker(target);
     first.loadedBot = { profileId: profile.id };
@@ -229,7 +229,8 @@ test('a scheduled run reopens a stale idle Bot worker through the guarded restar
     // Without the guarded path nothing is replaced underneath the open page.
     const refused = [];
     await cron(null, refused).dispatch(run);
-    assert.match(refused[0].reason, /Reopen the idle target thread/);
+    assert.equal(refused[0].reason, 'admission-error');
+    assert.match(refused[0].feedback.detail, /Reopen the idle target thread/);
     assert.equal(supervisor.workers.get(target.sessionPath), first);
 
     const saved = [], reloads = [];

@@ -22,11 +22,11 @@ function fixture() {
     fs.mkdirSync(path.join(sessionsRoot, 'project'), { recursive: true });
     fs.mkdirSync(cwd);
     const profileId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-    const root = path.join(agent, 'pivane-profiles', 'data', profileId);
+    const root = path.join(require('../server/ohmybuddy-compat').dataFile(agent, 'pivane-profiles'), 'data', profileId);
     // The extension resolves the profile through the real private registry; the
     // synthetic identity must exist there for knowledge tools to bind to it.
-    fs.mkdirSync(path.join(agent, 'pivane-profiles'), { recursive: true, mode: 0o700 });
-    fs.writeFileSync(path.join(agent, 'pivane-profiles', 'profiles.json'), JSON.stringify({ version: 1, defaults: {},
+    fs.mkdirSync(require('../server/ohmybuddy-compat').dataFile(agent, 'pivane-profiles'), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(path.join(require('../server/ohmybuddy-compat').dataFile(agent, 'pivane-profiles'), 'profiles.json'), JSON.stringify({ version: 1, defaults: {},
         profiles: [{ id: profileId, name: 'Synthetic', description: '', soul: '', enabled: true,
             memory: { enabled: true, autoLearn: false }, skills: { learnedEnabled: true } }] }));
     const create = (id, text) => {

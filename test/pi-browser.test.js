@@ -24,7 +24,7 @@ test('official MCP config keeps profiles per native conversation, uses stdio and
     const first = JSON.parse(service.environment({ sessionId: id, cwd: root }).OHMYBUDDY_BROWSER_MCP_CONFIG);
     const other = JSON.parse(service.environment({ sessionId: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb', cwd: root }).OHMYBUDDY_BROWSER_MCP_CONFIG);
     assert.equal(first.config.command, process.execPath); assert.equal(first.config.exposure, 'codemode');
-    assert(first.config.args[0].endsWith('browser/launch.js')); assert(first.config.args.includes('--headless'));
+    assert(first.config.args[0].endsWith(path.join('browser', 'launch.js'))); assert(first.config.args.includes('--headless'));
     assert(first.config.args.includes('--ignore-roots')); assert(!first.config.args.includes('--no-sandbox'));
     const profile = first.config.args[first.config.args.indexOf('--user-data-dir') + 1];
     assert(profile.endsWith(id)); assert(!other.config.args.includes(profile));

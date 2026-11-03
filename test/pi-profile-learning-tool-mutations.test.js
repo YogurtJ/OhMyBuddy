@@ -397,8 +397,8 @@ function storedMemories(t) {
         ? { id, enabled: true, memory: { enabled: true, memoryCharLimit: 65536, userCharLimit: 32768 }, skills: { learnedEnabled: true } } : null,
     reserve: work => work() };
     const service = new ProfileKnowledgeService({ profiles, getAgentDir: async () => agent, bundlePath: bundle });
-    const root = path.join(agent, 'pivane-profiles', 'data', profileId);
-    const foreignRoot = path.join(agent, 'pivane-profiles', 'data', foreignId);
+    const root = path.join(require('../server/ohmybuddy-compat').dataFile(agent, 'pivane-profiles'), 'data', profileId);
+    const foreignRoot = path.join(require('../server/ohmybuddy-compat').dataFile(agent, 'pivane-profiles'), 'data', foreignId);
     const cwd = fs.mkdtempSync(path.join(agent, 'project-'));
     const native = { cwd, sessionId: 'memory-session', entryId: 'memory-entry', sessionPath: path.join(agent, 'sessions', 'memory.jsonl') };
     fs.mkdirSync(path.dirname(native.sessionPath), { recursive: true });
@@ -423,7 +423,7 @@ function storedMemories(t) {
         try { return db.prepare('SELECT id, project, target, content FROM memories ORDER BY id').all(); }
         finally { db.close(); }
     };
-    const ledgerBytes = () => fs.readFileSync(path.join(root, '.pivane-knowledge.json'));
+    const ledgerBytes = () => fs.readFileSync(require('../server/ohmybuddy-compat').knowledgeFile(root, '.json'));
     return { service, root, foreignRoot, foreignId, native, run, create, Database, databaseRows, ledgerBytes };
 }
 

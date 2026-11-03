@@ -12,15 +12,16 @@ function fixture(t) {
     return root;
 }
 test('fresh data defaults use OhMyBuddy; a prior namespace is retained without copying and conflicts fail closed', t => {
-    const root = fixture(t);
+    const root = fixture(t), home = fixture(t);
+    const env = { OHMYBUDDY_HOME: home, OHMYBUDDY_WORKSPACES_DIR: path.join(home, 'workspaces'), PI_CODING_AGENT_DIR: path.join(home, 'agent') };
     assert.equal(compat.dataFile(root, 'pivane-workspace.json'), path.join(root, 'ohmybuddy-workspace.json'));
-    assert.equal(compat.runtimeDirectory(root), path.join(root, '.ohmybuddy-runtime'));
+    assert.equal(compat.runtimeDirectory(root, env), path.join(home, 'state', 'installations', require('../server/ohmybuddy-storage').installationId(root), 'runtime'));
     fs.mkdirSync(path.join(root, '.pivane-runtime'));
     fs.writeFileSync(path.join(root, '.pivane-runtime/state.json'), 'original');
-    assert.equal(compat.runtimeDirectory(root), path.join(root, '.pivane-runtime'));
+    assert.equal(compat.runtimeDirectory(root, env), path.join(root, '.pivane-runtime'));
     assert.equal(fs.existsSync(path.join(root, '.ohmybuddy-runtime')), false);
     fs.mkdirSync(path.join(root, '.ohmybuddy-runtime'));
-    assert.throws(() => compat.runtimeDirectory(root), /Conflicting/);
+    assert.throws(() => compat.runtimeDirectory(root, env), /Conflicting/);
     assert.equal(fs.readFileSync(path.join(root, '.pivane-runtime/state.json'), 'utf8'), 'original');
 });
 test('private profile roots retain existing data and reject concurrent new/old locations through the real safe-file boundary', t => {

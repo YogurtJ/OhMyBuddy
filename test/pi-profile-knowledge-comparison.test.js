@@ -148,7 +148,7 @@ test('parallel cross-target creates publish at most one entry and a renamed iden
     await f.mutate({operation:'create',kind:'skill',name:'app-one',description:'Use only for app one',content:mechanics});
     await f.mutate({operation:'create',kind:'skill',name:'app-two',description:'Use only for app two',content:mechanics});
     // Legacy profile-owned files without journal records are compared by verified bytes too.
-    const legacyDir=path.join(f.agent,'pivane-profiles','data',profileId,'skills','legacy-workflow');
+    const legacyDir=path.join(require('../server/ohmybuddy-compat').dataFile(f.agent,'pivane-profiles'),'data',profileId,'skills','legacy-workflow');
     fs.mkdirSync(legacyDir,{recursive:true,mode:0o700});
     const legacyBody=body.replace('bounded study-data archive','legacy study-data source');
     fs.writeFileSync(path.join(legacyDir,'SKILL.md'),'---\nname: legacy-workflow\ndescription: Legacy checks\n---\n'+legacyBody,{mode:0o600});

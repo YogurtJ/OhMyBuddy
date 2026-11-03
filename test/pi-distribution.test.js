@@ -75,7 +75,11 @@ test('platform unpack verifies every file before writing, preserves executable t
     assert.throws(() => unpackBundle(archive(), { version: '1.11.0-rc.2', platform: 'darwin', arch: 'x64' }, directory(t)));
     assert.equal(validBundle({ bundle: { platform: 'darwin', arch: 'arm64', bytes: 42 } }, 'darwin', 'arm64'), true);
     assert.equal(validBundle({ bundle: { platform: 'darwin', arch: 'arm64', bytes: 42 } }, 'linux', 'arm64'), false);
-    assert.equal(runtimeNode(root, { runtimeNodeSha256: hash(Buffer.from('synthetic-node')) }), path.join(root, 'runtime/bin/node'));
+});
+test('private runtime verification uses the host layout and requires the exact node hash', t => {
+    const root = directory(t), node = require('../server/pi-bundle-layout').nodePath(root);
+    fs.mkdirSync(path.dirname(node), { recursive: true }); fs.writeFileSync(node, 'synthetic-node', { mode: 0o700 });
+    assert.equal(runtimeNode(root, { runtimeNodeSha256: hash(Buffer.from('synthetic-node')) }), node);
     assert.throws(() => runtimeNode(root, { runtimeNodeSha256: '0'.repeat(64) }), /changed/);
 });
 test('platform download rejects a redirect outside the pinned distribution origin before sending a second request', async () => {

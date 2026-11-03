@@ -260,7 +260,7 @@ async function run(browser, viewport, theme) {
     console.log(`Message actions ${viewport.width}x${viewport.height}: passed`);
 }
 (async () => {
-    const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
+    const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
     try {
         for (const [viewport, theme] of [[{ width: 1440, height: 1000 }, 'daylight'], [{ width: 393, height: 852 }, 'mint'], [{ width: 412, height: 915 }, 'dark'], [{ width: 320, height: 740 }, 'daylight']]) await run(browser, viewport, theme);
     } finally { await browser.close(); }

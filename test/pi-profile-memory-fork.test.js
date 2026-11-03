@@ -32,7 +32,7 @@ test('A native fork inherits its own marker while copied parent markers cannot b
     const fork = await store.forkSession(original, { entries: manager.getEntries(), leafId: manager.getLeafId() }, assistantId, 'at');
     const child = SessionManager.open(fork.session.path);
     const ctx = { version: 1, profileId, sessionId: child.getSessionId(), cwd,
-        profileRoot: path.join(agentDir, 'pivane-profiles', 'data', profileId), sessionsRoot: path.join(agentDir, 'sessions'),
+        profileRoot: path.join(require('../server/ohmybuddy-compat').dataFile(agentDir, 'pivane-profiles'), 'data', profileId), sessionsRoot: path.join(agentDir, 'sessions'),
         memory: { enabled: true, autoLearn: false, memoryCharLimit: 16000, userCharLimit: 8000 }, skills: { learnedEnabled: true } };
     const parsed = scope.parseContext(JSON.stringify(ctx));
     assert.ok(parsed);

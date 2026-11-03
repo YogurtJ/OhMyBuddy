@@ -157,7 +157,10 @@ test('Unrelated threads message each other, wake a closed recipient, reply, and 
         assert.equal(calls.length, before, 'a delivered note does not start a turn');
         await deadline(async () => (await api('/agent-messages/status', { messageId: note.data.messageId }, token)).data.status === 'delivered');
     } finally {
-        await gateway.dispose(); access.dispose(); await new Promise(resolve => server.close(resolve)); await new Promise(resolve => provider.close(resolve));
-        fs.rmSync(root, { recursive: true, force: true });
+        const children = [...gateway.supervisor.workers.values()].map(worker => worker.client.child).filter(Boolean);
+        await gateway.dispose();
+        await Promise.all(children.filter(child => child.exitCode === null && child.signalCode === null).map(child => once(child, 'exit')));
+        access.dispose(); await new Promise(resolve => server.close(resolve)); await new Promise(resolve => provider.close(resolve));
+        fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
     }
 });

@@ -188,7 +188,7 @@ async function run(browser, viewport, SessionManager) {
     await context.close();
 }
 (async () => {
-    const { SessionManager } = await import('@earendil-works/pi-coding-agent'); const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', args: ['--no-sandbox'], headless: true });
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent'); const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', args: ['--no-sandbox'], headless: true });
     try { for (const viewport of [{ width: 1440, height: 1000 }, { width: 393, height: 852 }, { width: 320, height: 740 }]) await run(browser, viewport, SessionManager); }
     finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

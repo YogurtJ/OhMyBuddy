@@ -117,7 +117,7 @@ async function run(browser, base, width, locale) {
 (async () => {
     const app = require('express')(); app.use(require('express').static(path.resolve(__dirname, '../../public'))); app.use('/vendor', require('express').static(path.resolve(__dirname, '../../node_modules')));
     const server = http.createServer(app); server.listen(0, '127.0.0.1'); await once(server, 'listening');
-    const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
+    const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
     try { for (const [width, locale] of [[1440, 'zh-CN'], [393, 'zh-CN'], [320, 'en']]) await run(browser, process.env.PI_TOOL_LABELS_TEST_URL || `http://127.0.0.1:${server.address().port}`, width, locale); }
     finally { await browser.close(); await new Promise(r => server.close(r)); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

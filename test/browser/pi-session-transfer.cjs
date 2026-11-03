@@ -172,7 +172,7 @@ async function run(browser, viewport) {
     assert.deepEqual(errors, []); await context.close(); console.log(`transfer ${viewport.width}: passed`);
 }
 (async () => {
-    const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
+    const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
     try {
         for (const viewport of [{ width: 1440, height: 1000 }, { width: 393, height: 852 }, { width: 320, height: 740 }]) await run(browser, viewport);
         if (fs.existsSync('/tmp/pi-transfer-native-fixture.html')) {

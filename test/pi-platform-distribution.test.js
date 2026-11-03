@@ -13,8 +13,11 @@ function payload(root, platform, arch) {
     const files = { 'package.json': JSON.stringify(pkg), 'package-lock.json': JSON.stringify({ version: pkg.version, packages: { '': { version: pkg.version } } }), 'node_modules/@earendil-works/pi-coding-agent/package.json': '{"version":"1.4.0"}', 'server/pi-update-probe.js': 'probe', 'config/distribution.json': '{}', [platform === 'win32' ? 'runtime/node.exe' : 'runtime/bin/node']: 'node', ['bin/rg' + (platform === 'win32' ? '.exe' : '')]: 'rg', ['bin/fd' + (platform === 'win32' ? '.exe' : '')]: 'fd' };
     if (platform === 'win32') Object.assign(files, { 'runtime/git/bin/bash.exe': 'bash', 'runtime/git/cmd/git.exe': 'git', 'runtime/OhMyBuddyHost.exe': 'host' });
     files['nested/' + 'a'.repeat(95) + '/' + 'b'.repeat(65) + '/short.txt'] = 'deep ustar prefix split';
-    for (const [name, value] of Object.entries(files)) { const file = path.join(root, name); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, value, { mode: /^(runtime\/bin\/node|bin\/)/.test(name) ? 0o755 : 0o644 }); }
-    const manifest = { version: 1, product: 'OhMyBuddy', appVersion: pkg.version, piVersion: '1.4.0', platform, arch, nodeVersion: '22.23.4', files: collect(root, platform) };
+    const executables = new Set([platform === 'win32' ? 'runtime/node.exe' : 'runtime/bin/node', 'bin/rg' + (platform === 'win32' ? '.exe' : ''), 'bin/fd' + (platform === 'win32' ? '.exe' : ''), ...(platform === 'win32' ? ['runtime/git/bin/bash.exe', 'runtime/git/cmd/git.exe', 'runtime/OhMyBuddyHost.exe'] : [])]);
+    for (const [name, value] of Object.entries(files)) { const file = path.join(root, name); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, value, { mode: executables.has(name) ? 0o755 : 0o644 }); }
+    // Cross-target synthetic executables carry portable modes even on NTFS,
+    // where chmod cannot express a POSIX executable bit for the Linux fixture.
+    const manifest = { version: 1, product: 'OhMyBuddy', appVersion: pkg.version, piVersion: '1.4.0', platform, arch, nodeVersion: '22.23.4', files: collect(root, platform).map(file => executables.has(file.path) ? { ...file, mode: 0o755 } : file) };
     atomicJson(path.join(root, 'OHMYBUDDY_BUNDLE.json'), manifest); return manifest;
 }
 test('cross-platform ustar writer preserves deep paths and Windows executable modes, and detects source changes', async t => {
