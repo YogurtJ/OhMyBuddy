@@ -21,6 +21,8 @@ node scripts/install-bundled-capabilities.cjs
 - 档案记忆默认使用当前应用目录的 `server/profile-memory/upstream-bundle.mjs`。仍需在相应助手身份启用记忆或学习技能；后台学习模型和开关沿用原规则。无身份和临时会话不会因此获得记忆工具。
 - Packages 中的内置子 Agent 显示 OhMyBuddy 与版本，不提供独立更新或移除。内置包的安装、更新、移除 API 请求返回管理说明。升级整个 OhMyBuddy 才会切换组件版本。
 
+浏览器助手复用根 lockfile 锁定的官方 `@playwright/mcp`，通过 `pi.registerMcpServer` 接入 Pi 原生 MCP，不新增页面执行器或 MCP 协议代理。控制库随应用交付，浏览器程序按需准备；各持久对话使用独立资料。启用、登录和运行方式见[浏览器助手](BROWSER.md)。
+
 ## 旧安装兼容
 
 原有 npm、Git 和可识别的本地同名包声明及文件保留，CLI 继续使用自己的安装。OhMyBuddy 在加载前将子 Agent 来源映射到内置版本，并保留资源过滤和全局／受信项目优先级；旧上游记忆默认扩展不加载。子 Agent 的后台与前台子会话也使用这套资源选择规则。父会话和子任务都不会因为两个来源同时存在而重复执行旧包工厂。

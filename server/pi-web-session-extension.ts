@@ -7,6 +7,7 @@ import { registerTaskProgress } from './pi-task-progress-extension.ts';
 import { registerDeliverables } from './pi-deliverables-extension.ts';
 import { registerUserQuestion } from './pi-user-question-extension.ts';
 import { registerDocuments } from './pi-document-extension.ts';
+import { registerBrowser } from './pi-browser-extension.ts';
 import { registerMediaChat } from './pi-media-chat-extension.ts';
 import { registerToolProvenance } from './pi-tool-provenance.js';
 import { receiveTaskReturn } from './pi-task-returns.js';
@@ -55,6 +56,7 @@ export default async function (pi: ExtensionAPI) {
     registerDeliverables(pi);
     registerUserQuestion(pi);
     registerDocuments(pi);
+    registerBrowser(pi);
     registerMediaChat(pi);
     registerSubagentHost(pi);
     registerAgentProfile(pi, getAgentDir);

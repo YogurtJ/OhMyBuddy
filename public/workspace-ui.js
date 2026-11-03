@@ -118,7 +118,7 @@
         if (hostLabel) { hostLabel.textContent = window.location.host; hostLabel.title = window.location.host; }
         const routeTabs = new Set(['chat', 'assistant', 'bot', 'cron', 'artifacts', 'media', 'profiles', 'extensions', 'settings']);
         const settingsTabs = new Set(['providers', 'media', 'models', 'system-prompts', 'native', 'access', 'usage', 'updates']);
-        const extensionTabs = new Set(['extensions', 'installed', 'mcp', 'channels']);
+        const extensionTabs = new Set(['extensions', 'installed', 'mcp', 'channels', 'browser']);
         const moreTabs = new Set(['cron', 'artifacts', 'media', 'profiles', 'extensions']);
         const inMore = tab => moreTabs.has(tab);
         const moreItems = () => [...(moreMenu?.querySelectorAll('[data-more-tab]') || [])].filter(item => item.getClientRects().length);

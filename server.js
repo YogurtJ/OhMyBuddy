@@ -982,7 +982,7 @@ const httpServer = app.listen(PORT, network.host, () => {
     if (maintenance.managed) {
         const base = process.env.PI_MANAGED_BASE || __dirname;
         const agent = path.resolve((process.env.PI_CODING_AGENT_DIR || path.join(os.homedir(), '.pi/agent')).replace(/^~(?=$|[\\/])/, os.homedir()));
-        const backupInputs = [agent, piAgentGateway.deferred.filePath, mediaProfile.directory, storage.configFile(base), storage.layout().config, path.dirname(workspaceAccess.filePath),
+        const backupInputs = [agent, piAgentGateway.deferred.filePath, piAgentGateway.browser.root, mediaProfile.directory, storage.configFile(base), storage.layout().config, path.dirname(workspaceAccess.filePath),
             ...['generation_history.json', 'video_history.json', 'tts_history.json', 'media_chat_requests.json', 'media_references', 'prompts.json', 'public/images', 'public/videos', 'public/audio'].map(p => path.join(mediaDataRoot, p)),
             ...(process.env.PI_CODING_AGENT_SESSION_DIR ? [path.resolve(process.env.PI_CODING_AGENT_SESSION_DIR)] : [])].filter(Boolean).map(p => path.resolve(p));
         process.send({ type: 'maintenance-ready', nonce: maintenance.nonce, backupInputs, port: address.port });

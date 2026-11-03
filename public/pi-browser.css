@@ -1,0 +1,14 @@
+.browser-panel { min-width: 0; }
+.browser-panel > p { color: var(--text-secondary); line-height: 1.6; }
+.browser-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 14px 0; min-width: 0; }
+.browser-choice { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; }
+.browser-choice input { width: 18px; height: 18px; }
+.browser-controls button { min-height: 40px; max-width: 100%; white-space: normal; }
+.browser-note { font-size: 13px; }
+.browser-feedback, .browser-summary { overflow-wrap: anywhere; }
+.browser-summary { font-weight: 600; }
+@media (max-width: 600px) {
+    .browser-controls { gap: 8px; }
+    .browser-controls button { flex: 1 1 130px; }
+    .browser-choice { flex: 1 1 100%; }
+}

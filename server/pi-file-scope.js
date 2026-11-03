@@ -10,7 +10,7 @@ async function fileScope(store, input) {
     let cwd;
     try { cwd = store.resolveProject(input); } catch { throw fail('项目目录不可访问', 403, 'FILE_PROJECT'); }
     const { getAgentDir } = await getSdk();
-    const privateRoots = await Promise.all([getAgentDir(), process.env.PI_MEDIA_CONFIG_DIR, ...['CONFIG', 'STATE', 'DATA', 'CACHE'].map(kind => process.env[`OHMYBUDDY_${kind}_DIR`])].filter(Boolean).map(async root => {
+    const privateRoots = await Promise.all([getAgentDir(), path.join(require('./ohmybuddy-storage').layout().data, 'browser'), process.env.PI_MEDIA_CONFIG_DIR, ...['CONFIG', 'STATE', 'DATA', 'CACHE'].map(kind => process.env[`OHMYBUDDY_${kind}_DIR`])].filter(Boolean).map(async root => {
         try { return await fs.realpath(root); } catch { return path.resolve(root); }
     }));
     const check = (file, lexical = false) => {

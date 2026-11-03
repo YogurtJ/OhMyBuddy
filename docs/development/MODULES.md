@@ -104,6 +104,7 @@
 
 | 任务 | 实现入口 | 契约与验证入口 |
 |---|---|---|
+| 官方 Playwright MCP、组件准备与会话资料 | [设置与生命周期](../../server/browser/service.js)、[component](../../server/browser/component.js)、[stdio 入口](../../server/browser/launch.js)、[routes](../../server/browser/routes.js)、[原生 MCP 注册](../../server/pi-browser-extension.ts)、[panel](../../public/pi-browser.js) | [浏览器助手](../BROWSER.md)、[API](../API.md#browser-assistant)，pi-browser/runtime、browser/pi-browser；页面执行与连接交给上游，各会话独立资料，清理完成前保持维护阻塞 |
 | 嵌套工具与原生文件归属 | [nested display](../../public/pi-nested-tools.js)、[turn edits](../../public/pi-turn-edits.js)、[live recovery](../../server/pi-live-state.js) | [文件查看](../FILE_VIEWER.md)、pi-nested-tools/live-state 与 browser/pi-nested-tools |
 | 回复请求平均速度与显示偏好 | [边界计时](../../server/pi-request-stats-extension.mjs)、[显示](../../public/pi-request-stats.js) | [用户指南](../USER_GUIDE.md#对话与工具)、[API](../API.md)、pi-request-stats、pi-compaction-rpc 与 browser/pi-request-stats |
 | 桌面页面导航与助手身份管理（旧助手对话链接由 pi-chat.js 转走） | [workspace UI](../../public/workspace-ui.js)、[左侧导航栏样式](../../public/pi-sidebar.css)（展开／窄栏／手机底栏与线性图标的唯一样式处，图标精灵在 [index.html](../../public/index.html)）、[profile UI](../../public/pi-agent-profiles.js)、[identity design system](../../public/pi-identity-ui.js)、[SOUL templates](../../public/pi-identity-templates.js)、[extensions shell](../../public/pi-extensions.js)、[installed resources](../../public/pi-native-settings.js)、[settings](../../public/settings.js) | [用户指南](../USER_GUIDE.md#工作区导航)、pi-workbench（导航折叠、焦点与手机底栏）、pi-assistant-retired、pi-profile-workspace 浏览器用例 |

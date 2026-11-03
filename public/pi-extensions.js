@@ -32,6 +32,12 @@
             description: ['搜索网页、提取页面内容，把网络资料带入任务。', 'Search the web and extract page content for your tasks.'],
             requirement: ['需要网络；搜索与抓取方式的配置由助手按当前版本核对。', 'Requires network access; the assistant checks search and extraction setup for the current version.'],
             example: ['查找这个技术问题的最新资料，并附上来源链接。', 'Find current information about this technical question and include source links.'] },
+        { id: 'ohmybuddy-browser', type: 'package', name: 'OhMyBuddy Browser', author: 'OhMyBuddy', kind: ['内置能力 · 浏览器', 'Built-in · Browser'], icon: 'fa-window-maximize',
+            url: 'https://github.com/microsoft/playwright-mcp',
+            title: ['操作网页与填写表单', 'Use websites and fill forms'],
+            description: ['使用官方 Playwright MCP 操作网页、填写表单和上传下载，每个对话保留独立登录资料。', 'Use official Playwright MCP for websites, forms and file transfers, with a persistent profile per conversation.'],
+            requirement: ['复用部署端 Chrome/Edge，或按需下载浏览器；自动接入 Pi 原生 MCP。', 'Uses Chrome/Edge on the host, or downloads a browser on demand; connects through native Pi MCP.'],
+            example: ['打开这个网页，帮我填写表单，提交后检查结果。', 'Open this website, fill the form and check the result after submitting.'] },
         { id: 'pi-computer-use', type: 'package', name: 'pi-computer-use', author: 'injaneity', kind: ['扩展包 · 桌面', 'Package · Desktop'], icon: 'fa-desktop',
             url: 'https://github.com/injaneity/pi-computer-use', source: 'npm:@injaneity/pi-computer-use',
             title: ['操作桌面应用', 'Use desktop applications'],
@@ -56,7 +62,7 @@
         const el = node('button', label, { type: 'button', ...attrs });
         el.addEventListener('click', action); return el;
     };
-    let mcpPanel, channelsPanel;
+    let mcpPanel, channelsPanel, browserPanel;
     let enabled = false, host, generation = 0, view = '', inventory = null, inventoryState = 'unknown', channelsInfo = null, piVersion = '', renderCards = () => {}, resetDiscovery = () => {}, subnav = null;
     const repositories = { 'ppt-master': 'hugohe3/ppt-master', 'pi-web-access': 'nicobailon/pi-web-access', 'pi-computer-use': 'injaneity/pi-computer-use', 'pi-subagents': 'nicobailon/pi-subagents', 'pi-hermes-memory': 'chandra447/pi-hermes-memory' };
     function identity(source) {
@@ -84,6 +90,7 @@
     }
     function installation(entry) {
         if (entry.id === 'pivane-weixin') return weixinState();
+        if (entry.id === 'ohmybuddy-browser') return { state: 'installed', label: text('OhMyBuddy 内置 · 按需启用', 'Built-in · enable on demand') };
         if (inventoryState !== 'ready') return { state: inventoryState, label: inventoryState === 'loading' ? text('正在核对…', 'Checking…') : text('状态待核对', 'Status unknown') };
         if (entry.id === 'pi-native-mcp') {
             const builtin = inventory.resources?.find(item => item.path === 'builtin:mcp');
@@ -187,7 +194,8 @@
         extensions: ['发现', 'Discover'],
         installed: ['已安装', 'Installed'],
         mcp: ['MCP', 'MCP'],
-        channels: ['消息渠道', 'Messaging']
+        channels: ['消息渠道', 'Messaging'],
+        browser: ['浏览器', 'Browser']
     };
     function mountSubnav() {
         const dialog = document.getElementById('workspace-settings-dialog');
@@ -217,6 +225,11 @@
     window.PiExtensions = {
         connect(value) {
             host = value;
+            browserPanel?.close(); browserPanel?.root.remove();
+            if (window.PiBrowser) {
+                browserPanel = window.PiBrowser.create(value);
+                document.querySelector('.workspace-settings-content')?.append(browserPanel.root);
+            }
             channelsPanel?.close(); channelsPanel?.root.remove();
             if (window.PiChannels) {
                 channelsPanel = window.PiChannels.create(value);
@@ -251,6 +264,10 @@
                     if (active) item.setAttribute('aria-current', 'page'); else item.removeAttribute('aria-current');
                 });
             }
+            if (view === 'browser') {
+                document.querySelectorAll('[data-settings-panel]').forEach(panel => panel.classList.remove('active'));
+                browserPanel?.open();
+            } else browserPanel?.close();
             if (view === 'channels') {
                 document.querySelectorAll('[data-settings-panel]').forEach(panel => panel.classList.remove('active'));
                 channelsPanel?.open();
@@ -337,7 +354,9 @@
             const update = node('span', text('有可用更新', 'Update available'), { class: 'extensions-update', title: text('可在“已安装”页更新', 'Update it on the Installed tab') });
             state.append(badge, version, update);
             const actions = node('div', null, { class: 'extensions-card-actions' });
-            const configure = entry.id === 'pivane-weixin'
+            const configure = entry.id === 'ohmybuddy-browser'
+                ? button(text('管理浏览器', 'Manage browser'), () => window.dispatchEvent(new CustomEvent('workspace:open-settings', { detail: { tab: 'browser' } })), { class: 'settings-secondary-button extensions-card-cta' })
+                : entry.id === 'pivane-weixin'
                 ? button(text('安装与连接', 'Install & connect'), () => window.dispatchEvent(new CustomEvent('workspace:open-settings', { detail: { tab: 'channels' } })), { class: 'settings-secondary-button extensions-card-cta' })
                 : button(text('了解与配置', 'Learn & set up'), () => assistant(entry), { 'data-extension-configure': '', class: 'settings-secondary-button extensions-card-cta' });
             const sourceLink = node('a', text('来源', 'Source'), { href: entry.url, target: '_blank', rel: 'noopener noreferrer', class: 'extensions-source-link', title: text('查看来源', 'View source'), 'aria-label': `${text('查看来源', 'View source')} · ${entry.name}` });
@@ -350,7 +369,7 @@
                 version.textContent = result.version || ''; version.hidden = !result.version; version.title = result.note || '';
                 update.hidden = !result.update;
                 if (entry.id === 'pivane-weixin') configure.textContent = result.action;
-                else configure.disabled = !enabled;
+                else if (entry.id !== 'ohmybuddy-browser') configure.disabled = !enabled;
             };
             cards.set(entry.id, { card, paint });
         }
@@ -378,7 +397,7 @@
         const unavailable = node('p', text('当前服务未提供扩展助手。可查看来源，或在已安装页面管理资源。', 'The extension assistant is unavailable on this server. View the sources or manage resources in the installed tabs.'), { id: 'extensions-assistant-unavailable', role: 'status' });
         featured.append(intro, controlsRow, filters, feedback, unavailable, grid, empty);
         panel.append(featured);
-        const invalidate = () => { channelsPanel?.close(); generation++; view = ''; inventory = null; inventoryState = 'unknown'; channelsInfo = null; renderCards(); };
+        const invalidate = () => { browserPanel?.close(); channelsPanel?.close(); generation++; view = ''; inventory = null; inventoryState = 'unknown'; channelsInfo = null; renderCards(); };
         window.addEventListener('workspace:settings-closed', invalidate);
         window.addEventListener('workspace:access-locked', invalidate);
         window.addEventListener('storage', event => { if (event.key === 'pi.web.cwd' || event.key === null) void refreshInventory(); });

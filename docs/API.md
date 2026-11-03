@@ -139,6 +139,22 @@
 
 `manualUnread=true` 标记已启用持久线程的手动未读接口；`projectIdentity=true` 标记项目路径 resolve 和 recent 别名归一化契约。需新后端启用，旧后端前端隐藏未读操作并保留原路径行为。
 
+<a id="browser-assistant"></a>
+
+### 浏览器助手（browserAssistant）
+
+`GET /api/pi/status.browserAssistant=true` 表示受管 Playwright MCP 入口可用，不代表已启用、浏览器已就绪或当前 worker 已注册。管理接口复用工作台身份、Origin/CSRF 和维护准入，响应 no-store。
+
+- `GET /api/pi/browser` 返回 `{enabled,headless,revision,component:{version,playwrightVersion,available,source,installing,error},running,sessions,busy,host:"deployment",persistentLogin:true,engine:"playwright-mcp",server:"ohmybuddy_browser"}`。version 为 MCP 版本；sessions 为已调用浏览器且未确认关闭的受管任务数。状态保守保留不确定调用，不暴露资料路径、Cookie 或调试地址。
+- `PUT /api/pi/browser` 接受 `{revision,enabled:boolean,headless:boolean}`，修订冲突409，未知设置保留。存在相关活动任务、未结束的原生调用或正在启动的 worker 时返回忙碌。保存后回收已加载旧配置的空闲 worker；其他既有 worker 在空闲重开后生效。
+- `POST /api/pi/browser/install {}` 显式运行锁定版本的官方 Chromium 安装器，写入外部缓存。断线不释放实际安装任务，不自动重试或提权。
+- `POST /api/pi/browser/close {}` 回收使用过浏览器的空闲 worker，由 Pi 关闭 MCP 与浏览器；保留原生会话和登录资料。相关任务未结束时返回409。
+- 错误使用安全的 `BROWSER_*` 代码，包括 `BROWSER_BUSY/BROWSER_REVISION/BROWSER_SETTINGS/BROWSER_SETTINGS_INVALID/BROWSER_INSTALL_FAILED/BROWSER_UNAVAILABLE`，不返回输入值或网页异常正文。
+
+自研 `omb_browser`、`/browser/tool` 和 `/browser/control` 已撤回。扩展使用公共 `pi.registerMcpServer` 注册官方 stdio 服务器；工具以 `mcp__ohmybuddy_browser__browser_*` 命名，schema、执行、codemode、状态与重连由 Pi 和官方 MCP 提供，worker 内部导航凭据不能调用浏览器管理接口。对话资料按原生会话 ID 隔离，默认输出在项目 `browser-output/<会话ID>/`。
+
+`GET /activity` 保留 `browserBusy/browserRunning`：前者表示组件／设置管理操作，后者保守表示存在尚未确认关闭的浏览器任务。原生工具沿现有 worker 生命周期投影执行；停止后的 MCP 注销和连接清理完成前，仍按原生调用保持忙碌。浏览器运行时阻止维护，关闭后才能备份私密资料。使用和边界见[浏览器助手](BROWSER.md)。
+
 ### 消息渠道（messageChannels）
 
 `GET /api/pi/status.messageChannels=true` 表示消息渠道接口可用，不表示微信组件已安装或账号已连接。以下接口沿用工作台身份、Origin/CSRF、维护准入与 no-store；worker 内部凭据不能管理渠道。

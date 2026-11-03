@@ -56,6 +56,7 @@
 | 供应商认证、聊天模型、Thinking | [供应商与模型](PROVIDER_SETTINGS.md) |
 | Pi 原生设置、资源、Packages/Skills、系统提示词 | [Pi 原生设置](NATIVE_SETTINGS.md) |
 | 按用途配置标题与媒体规划模型 | [辅助模型](AUXILIARY_MODELS.md) |
+| 内置浏览器、网页填表、独立登录与手动接管 | [浏览器助手](BROWSER.md) |
 | Pi 原生 MCP、Codemode 和旧适配器迁移 | [原生 MCP](MCP.md) |
 | 内置子 Agent、记忆组件与旧安装兼容 | [内置能力包](BUNDLED_CAPABILITIES.md) |
 | 助手身份与档案记忆 | [助手档案](AGENT_PROFILES.md) · [记忆契约导航](PROFILE_MEMORY.md#read-by-task) |
