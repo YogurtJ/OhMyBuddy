@@ -1,0 +1,70 @@
+'use strict';
+const test = require('node:test'), assert = require('node:assert/strict');
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
+const { EventEmitter } = require('node:events');
+const { BrowserService, SERVER_NAME } = require('../server/browser/service');
+const roots = [];
+const fixture = () => {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'omb-mcp-browser-'))); roots.push(root);
+    const supervisor = { workers: new Map(), starting: new Map(), stopSession: async file => {
+        const worker = supervisor.workers.get(file); if (!worker) return;
+        worker.disposed = true; worker.emit('disposed'); supervisor.workers.delete(file);
+    } };
+    const component = { cache: path.join(root, 'cache'), status: () => ({ available: true, version: '0.0.84' }), executable: () => process.execPath, install: async () => {} };
+    const service = new BrowserService({ root: path.join(root, 'browser'), supervisor, component });
+    return { root, supervisor, service, component };
+};
+const configure = (service, enabled = true) => service.configure({ revision: service.status().revision, enabled, headless: true });
+const id = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa';
+test.after(() => roots.forEach(root => fs.rmSync(root, { recursive: true, force: true })));
+test('official MCP config keeps profiles per native conversation, uses stdio and respects disabled state', async () => {
+    const { root, service } = fixture();
+    assert.equal(service.environment({ sessionId: id, cwd: root }).OHMYBUDDY_BROWSER_MCP_CONFIG, undefined);
+    await configure(service);
+    const first = JSON.parse(service.environment({ sessionId: id, cwd: root }).OHMYBUDDY_BROWSER_MCP_CONFIG);
+    const other = JSON.parse(service.environment({ sessionId: 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb', cwd: root }).OHMYBUDDY_BROWSER_MCP_CONFIG);
+    assert.equal(first.config.command, process.execPath); assert.equal(first.config.exposure, 'codemode');
+    assert(first.config.args[0].endsWith('browser/launch.js')); assert(first.config.args.includes('--headless'));
+    assert(first.config.args.includes('--ignore-roots')); assert(!first.config.args.includes('--no-sandbox'));
+    const profile = first.config.args[first.config.args.indexOf('--user-data-dir') + 1];
+    assert(profile.endsWith(id)); assert(!other.config.args.includes(profile));
+    assert.deepEqual(first, JSON.parse(service.environment({ sessionId: id, cwd: root }).OHMYBUDDY_BROWSER_MCP_CONFIG));
+    if (process.platform !== 'win32') assert.equal(fs.statSync(profile).mode & 0o777, 0o700);
+    assert.throws(() => service.environment({ sessionId: '../escape', cwd: root }), /BROWSER_SESSION_REQUIRED/);
+});
+test('revision and unknown fields survive; busy workers prevent a settings write and starting workers prevent retirement', async () => {
+    const { root, service, supervisor } = fixture();
+    fs.mkdirSync(service.root); fs.writeFileSync(service.file, JSON.stringify({ futureSetting: 42 }));
+    await configure(service);
+    assert.equal(service.read().futureSetting, 42);
+    await assert.rejects(service.configure({ revision: 'stale', enabled: false, headless: true }), /BROWSER_REVISION/);
+    const w = new EventEmitter(); w.client = { env: { OHMYBUDDY_BROWSER_MCP_CONFIG: '{}' } }; w.isIdle = () => false; w.retainsBackgroundWork = () => false;
+    supervisor.workers.set(root, w);
+    await assert.rejects(configure(service, false), /BROWSER_BUSY/); assert.equal(service.read().enabled, true);
+    supervisor.workers.clear(); supervisor.starting.set(root, Promise.resolve());
+    await assert.rejects(configure(service, false), /BROWSER_BUSY/); assert.equal(service.read().enabled, true);
+});
+test('native tool lifecycle conservatively blocks maintenance until worker retirement', async () => {
+    const { service, supervisor } = fixture(); await configure(service);
+    const w = new EventEmitter(); w.client = new EventEmitter(); w.client.env = { OHMYBUDDY_BROWSER_MCP_CONFIG: '{}' };
+    w.sessionPath = '/synthetic/session'; w.isIdle = () => true; w.retainsBackgroundWork = () => false;
+    supervisor.workers.set(w.sessionPath, w); service.track(w);
+    w.client.emit('event', { type: 'tool_execution_start', toolName: `mcp__${SERVER_NAME}__browser_navigate`, toolCallId: 'open' });
+    assert.equal(service.running, true);
+    w.client.emit('event', { type: 'tool_execution_end', toolCallId: 'open', isError: true });
+    assert.equal(service.running, true, 'an uncertain navigation must keep the browser as a maintenance blocker');
+    w.client.emit('event', { type: 'tool_execution_start', toolName: `mcp__${SERVER_NAME}__browser_close`, toolCallId: 'close-page' });
+    w.client.emit('event', { type: 'tool_execution_end', toolCallId: 'close-page', isError: false });
+    assert.equal(service.running, true, 'closing a page is not proof that the persistent browser exited');
+    await service.close(); assert.equal(service.running, false); assert.equal(w.disposed, true);
+});
+test('component preparation keeps its reservation through disconnect-like callers and rejects simultaneous writes', async () => {
+    const { service, component } = fixture();
+    let finish; component.install = () => new Promise(resolve => { finish = resolve; });
+    const installing = service.install();
+    assert.equal(service.busy, true);
+    assert.throws(() => service.install(), /BROWSER_BUSY/);
+    assert.throws(() => service.environment({ sessionId: id, cwd: service.root }), /BROWSER_BUSY/);
+    await Promise.resolve(); finish(); await installing;
+    assert.equal(service.busy, false);
+});

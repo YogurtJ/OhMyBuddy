@@ -26,6 +26,7 @@ test('source discovery includes nested modules and tests without following user 
         'public/pivane-session-moves/record.js', 'server/pivane-uploads/original.js',
         'public/OhMyBuddy/Tasks/task/result.js', 'server/OhMyBuddy/Tasks/task/result.js', 'public/OhMyBuddy Workspaces/tasks/private.js',
         'test/OhMyBuddy/Tasks/task/private.test.js',
+        'server/browser-output/site.js', 'public/browser-output/site.html', 'test/browser-output/site.test.js',
         'test/session/runtime.test.js', 'test/browser/page.cjs', 'test/helpers/fixture.cjs']) put(root, file);
     assert.deepEqual(sourceFiles(root, 'server'), ['server/session/bridge.ts', 'server/session/runtime.js']);
     assert.deepEqual(sourceFiles(root, 'public'), ['public/bot-avatars/bean.svg', 'public/chat/transport.js', 'public/chat/view.css']);
@@ -54,7 +55,7 @@ test('release inventory requires the reviewed memory build even when installatio
 test('release inventory includes its own discovery and checking tools and excludes maintenance and user data', () => {
     const files = distributionFiles(path.resolve(__dirname, '..'));
     for (const file of ['scripts/source-files.cjs', 'scripts/check-syntax.cjs', 'scripts/run-tests.cjs',
-        'server/pi-update-installer.js', 'test/source-files.test.js', 'pi-packages/media-workbench/skills/media-workbench/SKILL.md',
+        'server/pi-update-installer.js', 'server/browser/launch.js', 'test/source-files.test.js', 'pi-packages/media-workbench/skills/media-workbench/SKILL.md',
         'scripts/build-mermaid.cjs', 'scripts/mermaid-build/package.json', 'scripts/mermaid-build/package-lock.json',
         'public/vendor/mermaid-11.17.2-dompurify-3.4.17.min.js',
         'public/pi-avatar-presets.js', 'public/bot-avatars/pebble.svg', 'public/bot-avatars/bean.svg', 'public/bot-avatars/tile.svg']) assert.ok(files.includes(file), file);

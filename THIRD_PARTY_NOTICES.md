@@ -26,6 +26,7 @@ OhMyBuddy自身的代码使用[ISC许可证](LICENSE)。第三方软件、字体
 | https-proxy-agent | 7.0.6 | MIT |
 | marked | 18.0.11 | MIT |
 | node-fetch | 2.7.0 | MIT |
+| @playwright/mcp | 0.0.84 | Apache-2.0 |
 | web-push | 3.6.7 | MPL-2.0 |
 | ws | 8.21.3 | MIT |
 
@@ -44,6 +45,10 @@ OhMyBuddy自身的代码使用[ISC许可证](LICENSE)。第三方软件、字体
 微信连接使用 [Tencent/openclaw-weixin](https://github.com/Tencent/openclaw-weixin) 官方 npm 包 `@tencent-weixin/openclaw-weixin` 2.4.10（Tencent，MIT），以及 `qrcode-terminal` 0.12.0 包（Apache-2.0）中的 QRCode for JavaScript（Copyright 2009 Kazuhiko Arase，MIT）。这些包不随默认 OhMyBuddy 归档分发；用户确认安装后才下载精确归档并核对 SHA256。
 
 私有组件回执保留上游选定文件原始字节、两个包的 LICENSE、二维码作者的版权与 MIT 条款，以及 OhMyBuddy 的适配说明。OhMyBuddy 仅替换模块装配中的账户、日志和网络边界，不执行上游 OpenClaw 插件入口或修改上游源文件；当前审查版本与安装方式见[消息渠道](docs/MESSAGE_CHANNELS.md)。
+
+## 按需下载的浏览器
+
+内置浏览器助手使用根 lockfile 锁定的官方 Playwright MCP 及其 Playwright 依赖（Microsoft，Apache-2.0）。Chromium 不随默认源码或完整包下载；用户在扩展中心操作后才由该版本的官方安装器下载。缓存保留上游浏览器文件及声明；复用已安装 Chrome/Edge 时，浏览器自身许可继续适用。OhMyBuddy 不修改上游实现或重新授权浏览器。
 
 ## 平台与外部服务
 

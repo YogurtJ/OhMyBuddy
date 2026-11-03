@@ -54,7 +54,7 @@ class ManagedLauncher {
         return { supported: true, updateSupported: ['22', '24'].includes(process.versions.node.split('.')[0]) && !this.env.PI_WEB_CLI && !this.env.PI_PACKAGE_DIR,
             appUpdateSupported: ['22', '24'].includes(process.versions.node.split('.')[0]) && !this.env.PI_WEB_CLI && !this.env.PI_PACKAGE_DIR,
             activeRelease: this.state.active, previousRelease: this.state.previous, busy: Boolean(this.operation || this.cleaning || this.starting), job: this.state.job,
-            storage: this.directory, backupScope: 'agent-sessions-media-config-history', nodeVersion: process.versions.node,
+            storage: this.directory, backupScope: 'agent-sessions-media-browser-config-history', nodeVersion: process.versions.node,
             retention: { releases: this.retention.releases, backups: this.retention.backups, last: this.lastRetention } };
     }
     // Cleanup owns admission until actual completion. Failure is reported in its

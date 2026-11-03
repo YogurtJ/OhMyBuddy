@@ -26,6 +26,7 @@ Windows 的 APPDATA/LOCALAPPDATA 缺失时使用当前用户 `AppData/Roaming`�
 - **OMB 配置**：`instances/<安装路径身份>.env`、按 Pi 身份区分的 `identities/<身份路径身份>/ohmybuddy-{access,network,workspace,notifications}.json`、媒体配置 `media-lab/`。正常更新和重装保留原字节与未知字段。实例配置路径按规范安装路径派生，在 macOS／Windows 上大小写变化不会制造另一套配置。
 - **OMB 运行状态**：`installations/<安装路径身份>/runtime/` 内的版本指针、受管候选、服务入口、维护记录和备份。它与工作文件分开；控制容器内的状态文件、版本仓和备份是不同生命周期的子项，用户数据不写进可替换的版本目录。受管版本仅在 `runtime/releases/<ID>/` 中替换，清理也只处理有完整证明的版本／维护备份。
 - **OMB 持久数据**：媒体原件、生成文件、媒体历史和提示词等位于 `DATA_DIR/media/`。历史和用户文件不是可清空的缓存。
+- **浏览器资料**：`DATA_DIR/browser/settings.json` 保存设置，`DATA_DIR/browser/profiles/<原生会话ID>/` 保存各对话的独立持久资料；正常关闭或停用保留，维护备份包含此目录，备份前须先关闭浏览器。`CACHE_DIR/browser/` 放可重新下载的程序；截图和下载进入项目的 `browser-output/<原生会话ID>/`。详见[浏览器助手](BROWSER.md)。
 - **Pi 原生兼容域**：模型、认证、原生设置、信任、资源及 `sessions/` 继续由 Pi 拥有。原生会话绑定的 OMB 档案、窗口索引、队列、预约、用量、附件、外置图片、移动证明和交付等现存存储继续随身份管理；它们是持久数据，不因存放于身份目录就变成可重建缓存。详见[已有 Pi 接入](PI_CLI.md)。
 - **工作文件**：`WORKSPACES_DIR/bots/bot-<完整 Bot ID>/` 保存新伙伴文件，`WORKSPACES_DIR/tasks/<随机 UUID>/` 保存新独立会话文件。伙伴改名不移动目录；刷新、关页、重启、普通更新及重装保留文件。删除聊天不递归删除工作目录。已有真实项目仍使用用户选择的原目录。
 

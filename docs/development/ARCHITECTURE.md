@@ -102,6 +102,12 @@ Pi Provider 身份与工作台身份独立，认证通过公开 ModelRuntime API
 
 组件责任、按需加载、流式渲染、DOM 复用、缓存预算和资源释放见[浏览器实现](RUNTIME.md#浏览器)。
 
+## 受管网页浏览器
+
+`browser/service` 只拥有设置、组件准备、会话资料分配和维护状态。`pi-browser-extension` 使用公共 `pi.registerMcpServer` 注册锁定的官方 Playwright MCP stdio 服务器；Pi 原生 MCP 负责连接、授权、工具发现、codemode 和关闭，官方服务器负责页面与文件操作。`browser/launch` 过滤应用／模型凭据环境后直接运行上游 CLI，不代理 MCP 协议。每个原生会话 ID 分配独立 profile，避免并行 worker 争用默认资料；不共享或复制日常 Chrome 登录资料。
+
+嵌套原生工具事件保守记录已使用浏览器的 worker，不确定调用继续阻止维护；实际回收 worker 后才清除；官方 browser_close 只证明页面关闭。停止 Agent 时通过公共 API 注销受管服务器；原生调用清理完成前保留生命周期，不能用 agent_settled 代替完成。登录资料在外部 DATA_DIR/browser，程序缓存位于 CACHE_DIR/browser，下载／截图在项目 browser-output；维护备份保留私密资料，普通文件预览／交付拒绝私密目录。管理 UI 提供设置与组件状态，人工登录使用部署端窗口。接口见[浏览器助手](../BROWSER.md)。
+
 ## 成果中心
 
 成果中心由预算受限的只读来源发现和独立成果库组成。保存取得完整原字节后建立独立 ID，会话删除不删除已保存成果。来源 key 与候选缓存不是授权；写入/删除由持久请求、当前修订和文件证明保护，失败不自动重放。

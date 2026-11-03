@@ -75,3 +75,6 @@ pivane-profiles/
 pivane-bots/
 pivane-session-images/
 pivane-deliverables/
+
+# Browser downloads and screenshots are task data.
+browser-output/
