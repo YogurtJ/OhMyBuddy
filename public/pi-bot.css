@@ -35,7 +35,9 @@
 /* The row under the composer only holds the three items hidden above; with nothing else in it, it
    takes no room and the composer sits near the bottom edge (attachment problems show above the
    composer, send problems as notices). Its own rule: browsers without :has() keep the row. */
-#chat-tab.pi-bot-mode .pi-composer-meta:not(:has(> :not(#pi-composer-identity, #pi-composer-status, #pi-attachment-limit))) { display: none; }
+/* Ignore hidden additions (such as the unstarted-project picker) when deciding
+   whether this Bot row has any visible content. */
+#chat-tab.pi-bot-mode .pi-composer-meta:not(:has(> :not([hidden], #pi-composer-identity, #pi-composer-status, #pi-attachment-limit))) { display: none; }
 /* The right panel appears in Bot mode only as the file preview (delivery cards, file links);
    pi-chat.js closes it when anything else would open there. */
 #chat-tab.pi-bot-mode .pi-inspector.show-changes .inspector-heading { justify-content: flex-end; }
