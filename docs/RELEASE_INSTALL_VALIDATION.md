@@ -6,6 +6,12 @@
 
 后续完整包制作与发布前验收聚焦 macOS ARM64（Apple Silicon）、Windows x64 和 glibc Linux x64；暂停为新版本制作、验收和承诺更新 Linux ARM64 完整包。下方各版本的 ARM64 结果保留其历史适用范围，不自动转为后续版本的支持证明；源码兼容与实际分发范围分别记录。具体流程见[发布准备](development/RELEASING.md#后续发布平台)。
 
+## 1.12.1：候选验证中
+
+[1.12.1 说明](releases/1.12.1.md)。本版在 1.12.0（`6aa6895b304ca4bdd189a9a9e1b9f8a7305fe971`）基础上合入自定义服务商一步接入与模型探测、模型选择弹窗宽度与分类标签换行修正、伙伴话题编辑与整理界面重构、工作台用户消息气泡主题色对比度优化及中文“服务商”术语统一。Pi 1.5.0、生产依赖锁定图、原生组件、会话 JSONL 与 v2 费用账本结构保持不变。
+
+按[验证范围与证据复用](development/RELEASING.md#验证范围与证据复用)，三平台（macOS ARM64、Windows x64、glibc Linux x64）执行受影响的 Node 单元/集成测试、受影响的 Chromium 桌面与手机视口回归、准确 1.12.1 归档与完整平台包构建探针，以及从正式 1.12.0 完整包到 1.12.1 的单次签名更新、停机备份与原路径恢复验证；未受影响的模块与历史 1.11.1→1.12.0 生命周期基线按相同实现与依赖图复用。最终冻结归档、SHA256 与逐项结果以正式 Release 附件为准。
+
 ## 1.12.0：已正式发布
 
 2026-11-04 已[正式发布](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.12.0)并设为 Latest，八份源码发行附件匿名 HTTP 完整回下载的大小与 SHA256 一致。正式冻结源码 `6aa6895b304ca4bdd189a9a9e1b9f8a7305fe971`，源码归档 SHA256 `18d11b67c41476c28c036e17fd247126aca9626422bf3d4351f71ba323951349`（10,183,458 字节、2,021 个清单文件）。[正式验收 JSON](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.12.0/ohmybuddy-1.12.0.validation.json)、[验收说明](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.12.0/ohmybuddy-1.12.0.validation.md)与[校验和](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.12.0/SHA256SUMS-1.12.0.txt)绑定准确包、原失败与复用；标签和归档不随主分支补记改变。
