@@ -197,7 +197,7 @@ async function run(browser, viewport, locale) {
 (async () => {
     const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true });
     try {
-        for (const viewport of [{ width: 393, height: 852 }, { width: 1440, height: 1000 }]) await run(browser, viewport, 'zh-CN');
+        for (const viewport of [{ width: 320, height: 740 }, { width: 393, height: 852 }, { width: 1440, height: 1000 }]) await run(browser, viewport, 'zh-CN');
         await run(browser, { width: 1440, height: 1000 }, 'en');
     } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
