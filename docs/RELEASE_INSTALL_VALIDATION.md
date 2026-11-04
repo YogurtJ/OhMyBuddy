@@ -6,11 +6,13 @@
 
 后续完整包制作与发布前验收聚焦 macOS ARM64（Apple Silicon）、Windows x64 和 glibc Linux x64；暂停为新版本制作、验收和承诺更新 Linux ARM64 完整包。下方各版本的 ARM64 结果保留其历史适用范围，不自动转为后续版本的支持证明；源码兼容与实际分发范围分别记录。具体流程见[发布准备](development/RELEASING.md#后续发布平台)。
 
-## 1.12.1：候选验证中
+## 1.12.1：已正式发布
 
-[1.12.1 说明](releases/1.12.1.md)。本版在 1.12.0（`6aa6895b304ca4bdd189a9a9e1b9f8a7305fe971`）基础上合入自定义服务商一步接入与模型探测、模型选择弹窗宽度与分类标签换行修正、伙伴话题编辑与整理界面重构、工作台用户消息气泡主题色对比度优化及中文“服务商”术语统一。Pi 1.5.0、生产依赖锁定图、原生组件、会话 JSONL 与 v2 费用账本结构保持不变。
+2026-11-04 已[正式发布](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.12.1)并设为 Latest，八份发行附件匿名完整回下载摘要一致。冻结源码 `f035b44919f36fcf5d1621d67706d1a6513f74ef`，源码归档 SHA256 `3077f533378233c6b0909cb312037aa83ddbdc8b7e5485a3fbd327416fc21854`（2,028 个清单文件）。[验收 JSON](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.12.1/ohmybuddy-1.12.1.validation.json)、[验收说明](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.12.1/ohmybuddy-1.12.1.validation.md)及[校验和](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.12.1/SHA256SUMS-1.12.1.txt)记录准确包、原失败和复用；发布后补记不改冻结标签与归档。
 
-按[验证范围与证据复用](development/RELEASING.md#验证范围与证据复用)，三平台（macOS ARM64、Windows x64、glibc Linux x64）执行受影响的 Node 单元/集成测试、受影响的 Chromium 桌面与手机视口回归、准确 1.12.1 归档与完整平台包构建探针，以及从正式 1.12.0 完整包到 1.12.1 的单次签名更新、停机备份与原路径恢复验证；未受影响的模块与历史 1.11.1→1.12.0 生命周期基线按相同实现与依赖图复用。最终冻结归档、SHA256 与逐项结果以正式 Release 附件为准。
+macOS ARM64 和 Linux x64 各执行 13 个定向 Node 文件共 120 项通过；Windows Medium 原批次 120 项通过、1 个临时目录清理钩子 EBUSY，修正重试后对应文件在独立验证副本补验 3/3，重叠项不相加。三平台各 11 个相关 Chromium 脚本通过，服务商设置另补 320px；语法 887、公开文档 93、生产依赖审计 0 漏洞。未重跑全量 Node 或浏览器，未受影响范围复用 1.12.0 基线。
+
+三平台准确原生包完成清单及 SDK/RPC/原生组件探针；Mac/Linux 新装、HTTP、正常停机和配置重接入通过，Windows 实际 Medium 非管理员令牌下 EXE 为 prepare-only，不注册永久服务。三端各从正式 1.12.0 经私有回环 HTTPS 和实际发行公钥单次更新到 1.12.1，会话／媒体、停机备份和原路径恢复通过，页面错误 0；Linux/Windows 另核对外置图片。Mac DMG 未公证，Windows EXE 未系统代码签名。公开安装器在 HTTPS443 完整回下载摘要一致；stable／preview 在 443 和 8443 的签名、版本、来源及 no-store 核验通过，下载页在 1440／393／320px 无页面错误或横向溢出。真实付费供应商/OAuth、微信、实体手机、Safari/Firefox 和其他架构不由合成验收代替。
 
 ## 1.12.0：已正式发布
 
