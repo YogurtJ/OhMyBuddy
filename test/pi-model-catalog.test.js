@@ -2,7 +2,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const {once}=require('node:events');const {WebSocket}=require('ws');
 const root=fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(),'pi-model-onboarding-')));
 process.env.PI_CODING_AGENT_DIR=path.join(root,'agent');process.env.PI_PROJECT_ROOTS=root;process.env.PI_WEB_DEFERRED_FILE=path.join(root,'deferred.json');process.env.PI_OFFLINE='1';delete process.env.PI_WEB_APPROVE_PROJECTS;
-test.after(()=>fs.rmSync(root,{recursive:true,force:true}));
+test.after(()=>fs.rmSync(root,{recursive:true,force:true,maxRetries:10,retryDelay:100}));
 const wait=async f=>{const end=Date.now()+15000;while(!f()){if(Date.now()>end)throw Error('fixture timeout');await new Promise(r=>setTimeout(r,20))}};
 test('an already-open empty runtime discovers later credentials in place without sending or selecting a model', {timeout:60000}, async t=>{
  const {createPiAgentGateway}=require('../server/pi-agent-routes');const {PiSettingsService}=require('../server/pi-settings-service');let calls=0;
