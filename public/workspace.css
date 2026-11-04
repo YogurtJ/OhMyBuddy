@@ -2845,7 +2845,12 @@ body.is-resizing * {
     color: var(--green);
 }
 
-.pi-message.user .pi-message-body,
+/* Same theme-tinted user bubble as the Bot chat, so own turns stand out in every theme. */
+.pi-message.user .pi-message-body {
+    border-color: color-mix(in srgb, var(--primary, var(--green)) 14%, var(--line));
+    background: color-mix(in srgb, var(--primary, var(--green)) 12%, var(--surface-transcript, var(--surface-1)));
+}
+
 .pi-thinking-block,
 .pi-tool-row,
 .pi-bash-message,
