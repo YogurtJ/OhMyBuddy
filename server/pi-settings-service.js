@@ -8,6 +8,9 @@ const { PiProviderLoginService, literal } = require('./pi-provider-login-service
 const { createHash, randomUUID } = require('node:crypto');
 const aiPromise = import('@earendil-works/pi-ai');
 const modelSpeed = require('./pi-model-speed');
+const discovery = require('./pi-model-discovery');
+const MAX_BATCH_MODELS = 200;
+const CATALOG_TTL_MS = 10 * 60 * 1000;
 const THINKING_MAP_KEYS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 // These editor fields are user choices. Native modelOverrides apply after both
 // models.json definitions and extension registrations, including on reload.
@@ -69,6 +72,52 @@ function numberInRange(value, fallback, min, max) {
         throw new Error(`Numeric value must be an integer between ${min} and ${max}`);
     }
     return number;
+}
+
+function providerName(value, required) {
+    const name = String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
+    if (required && !name) throw new Error('请填写服务商名称');
+    if (name.length > 200) throw new Error('服务商名称不能超过 200 个字符');
+    return name;
+}
+
+function modelInputs(value) {
+    if (!Array.isArray(value) || !value.length) throw new Error('请至少添加一个模型');
+    if (value.length > MAX_BATCH_MODELS) throw new Error('一次最多添加 200 个模型');
+    const seen = new Set();
+    return value.map(item => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('模型条目无效');
+        const id = cleanModelId(item.id);
+        if (seen.has(id)) throw new Error('模型 ID 重复');
+        seen.add(id);
+        return { ...item, id };
+    });
+}
+
+// Basic editor fields; other existing definition fields, prices and unknown data are kept.
+function customModelEntry(current, input, official) {
+    const id = cleanModelId(input.id);
+    return {
+        ...current,
+        id,
+        name: String(input.name || id).trim().slice(0, 200) || id,
+        reasoning: Boolean(input.reasoning),
+        input: input.imageInput ? ['text', 'image'] : ['text'],
+        contextWindow: numberInRange(input.contextWindow, 128000, 1024, 4000000),
+        maxTokens: numberInRange(input.maxTokens, 16384, 1, 1000000),
+        cost: current.cost || official?.rates || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+    };
+}
+
+// User edits are mirrored into modelOverrides so extension registrations cannot replace them.
+function storeCustomModel(provider, model) {
+    const models = Array.isArray(provider.models) ? provider.models : [];
+    const index = models.findIndex(item => item.id === model.id);
+    if (index >= 0) models[index] = model; else models.push(model);
+    provider.models = models;
+    const override = { ...(provider.modelOverrides?.[model.id] || {}) };
+    for (const field of CUSTOM_MODEL_OVERRIDE_FIELDS) override[field] = model[field];
+    provider.modelOverrides = { ...(provider.modelOverrides || {}), [model.id]: override };
 }
 
 function modelSummary(model, availableSet) {
@@ -162,6 +211,7 @@ class PiSettingsService {
             return id;
         } });
         this.mutating = false;
+        this.fetch = options.fetch || require('./workspace-network-transport').networkFetch;
         this.workspacePreferencesService = options.workspacePreferencesService || new WorkspacePreferencesService(options.workspacePreferencesOptions);
     }
 
@@ -247,6 +297,11 @@ class PiSettingsService {
     }
 
     async saveApiKey(providerIdInput, apiKeyInput) {
+        return this.storeApiKey(providerIdInput, apiKeyInput);
+    }
+
+    // Unlocked body shared by saveApiKey and provider setup, which already hold the settings lock.
+    async storeApiKey(providerIdInput, apiKeyInput) {
         const providerId = cleanId(providerIdInput, 'Provider ID');
         const apiKey = String(apiKeyInput || '').trim();
         if (!apiKey || apiKey.length > 32768) throw new Error('API key is required');
@@ -437,6 +492,7 @@ class PiSettingsService {
         const data = this.readModelsFile(modelsPath);
         return Object.entries(data.providers).map(([id, config]) => ({
             id,
+            name: typeof config.name === 'string' ? config.name : '',
             baseUrl: (() => { try { const url = new URL(config.baseUrl); url.username = ''; url.password = ''; url.search = ''; url.hash = ''; return url.href.replace(/\/$/, ''); } catch { return ''; } })(),
             api: config.api || '',
             authHeader: Boolean(config.authHeader),
@@ -482,6 +538,10 @@ class PiSettingsService {
             authHeader: Boolean(input.authHeader),
             models: Array.isArray(current.models) ? current.models : []
         };
+        if (input.name !== undefined) {
+            const name = providerName(input.name, false);
+            if (name) data.providers[id].name = name; else delete data.providers[id].name;
+        }
         await this.writeModelsFile(data);
         return { ok: true, providerId: id, requiresRuntimeRestart: true };
     }
@@ -502,6 +562,98 @@ class PiSettingsService {
         return { ok: true, providerId, requiresRuntimeRestart: true };
     }
 
+    // Read-only built-in catalog used for discovery metadata and reserved provider IDs.
+    async builtinCatalog() {
+        if (!this.catalogPromise || Date.now() - this.catalogAt > CATALOG_TTL_MS) {
+            this.catalogAt = Date.now();
+            this.catalogPromise = (async () => {
+                const { ModelRuntime } = await getSdk();
+                const runtime = await ModelRuntime.create({ modelsPath: null, allowModelNetwork: false, signal: AbortSignal.timeout(30000) });
+                return { catalog: discovery.buildCatalog(runtime.getAllModels()), providerIds: new Set(runtime.getProviders().map(provider => provider.id)) };
+            })().catch(error => { this.catalogPromise = null; throw error; });
+        }
+        return this.catalogPromise;
+    }
+
+    // One GET to the service's model list. Drafts send their typed key only to their own
+    // URL; saved providers resolve the key server-side, and no key is returned or stored.
+    async discoverCustomModels(input = {}) {
+        let api, baseUrl, apiKey = '', authHeader = false, headers = {}, existing = new Set(), providerId = null;
+        if (input.providerId !== undefined) {
+            providerId = cleanId(input.providerId, 'Provider ID');
+            const { modelsPath } = await this.paths();
+            const config = this.readModelsFile(modelsPath).providers[providerId];
+            if (!config || typeof config !== 'object' || !config.baseUrl) throw new Error('Custom provider not found');
+            api = config.api; baseUrl = cleanUrl(config.baseUrl, true); authHeader = Boolean(config.authHeader);
+            const models = Array.isArray(config.models) ? config.models : [];
+            existing = new Set(models.map(model => model?.id));
+            const runtime = await this.createModelRuntime();
+            const target = models.length ? runtime.getModel(providerId, models[0].id) : null;
+            let auth;
+            try { auth = await runtime.getAuth(target || providerId, { signal: AbortSignal.timeout(10000) }); }
+            catch { throw new Error('无法读取此服务商已保存的 API Key，请重新配置 Key'); }
+            apiKey = typeof auth?.auth?.apiKey === 'string' ? auth.auth.apiKey : '';
+            headers = Object.fromEntries(Object.entries(auth?.auth?.headers || {}).filter(([, value]) => typeof value === 'string'));
+        } else {
+            api = String(input.api || '').trim();
+            baseUrl = cleanUrl(input.baseUrl, true);
+            apiKey = typeof input.apiKey === 'string' ? input.apiKey.trim() : '';
+            if (apiKey.length > 32768) throw new Error('API Key 过长');
+            authHeader = Boolean(input.authHeader);
+        }
+        if (!CUSTOM_APIS.has(api)) throw new Error('Unsupported custom provider API');
+        const { catalog } = await this.builtinCatalog();
+        const result = await discovery.discoverModels({ api, baseUrl, apiKey, authHeader, headers, fetch: this.fetch, catalog });
+        if (result.ok) result.models = result.models.map(model => existing.has(model.id) ? { ...model, added: true } : model);
+        return { ...result, providerId, keyUsed: Boolean(apiKey) };
+    }
+
+    // Create the provider, its first models and the key in one request. models.json is
+    // written first; a failed key save is reported and never presented as full success.
+    async createCustomProvider(input = {}) {
+        const api = String(input.api || '').trim();
+        if (!CUSTOM_APIS.has(api)) throw new Error('Unsupported custom provider API');
+        const baseUrl = cleanUrl(input.baseUrl, true);
+        const name = providerName(input.name, true);
+        const apiKey = typeof input.apiKey === 'string' ? input.apiKey.trim() : '';
+        if (apiKey.length > 32768) throw new Error('API Key 过长');
+        const inputs = modelInputs(input.models);
+        const { providerIds } = await this.builtinCatalog();
+        const official = await require('./pi-usage-pricing').officialPrices();
+        const { modelsPath } = await this.paths();
+        const data = this.readModelsFile(modelsPath);
+        const taken = id => providerIds.has(id) || Object.hasOwn(data.providers, id) || discovery.RESERVED_IDS.has(id);
+        let id;
+        if (input.id !== undefined && String(input.id).trim()) {
+            id = cleanId(input.id, 'Provider ID');
+            if (taken(id)) throw Object.assign(new Error('服务商 ID 已被使用，请换一个'), { statusCode: 409 });
+        } else id = discovery.providerIdFor(name, baseUrl, taken);
+        const provider = { name, baseUrl, api, authHeader: Boolean(input.authHeader), models: [] };
+        for (const item of inputs) storeCustomModel(provider, customModelEntry({}, item, official.get(item.id)));
+        data.providers[id] = provider;
+        await this.writeModelsFile(data);
+        const result = { ok: true, providerId: id, modelCount: provider.models.length, credential: 'none', requiresRuntimeRestart: true };
+        if (apiKey) {
+            try { await this.storeApiKey(id, apiKey); result.credential = 'saved'; }
+            catch (error) { result.credential = 'failed'; result.credentialError = String(error?.message || error).split(apiKey).join('***').slice(0, 300); }
+        }
+        return result;
+    }
+
+    async addCustomModels(providerIdInput, input = {}) {
+        const providerId = cleanId(providerIdInput, 'Provider ID');
+        const inputs = modelInputs(input.models);
+        const official = await require('./pi-usage-pricing').officialPrices();
+        const { modelsPath } = await this.paths();
+        const data = this.readModelsFile(modelsPath);
+        const provider = data.providers[providerId];
+        if (!provider || typeof provider !== 'object') throw new Error('Custom provider not found');
+        const models = Array.isArray(provider.models) ? provider.models : [];
+        for (const item of inputs) storeCustomModel(provider, customModelEntry(models.find(model => model.id === item.id) || {}, item, official.get(item.id)));
+        await this.writeModelsFile(data);
+        return { ok: true, providerId, modelCount: inputs.length, requiresRuntimeRestart: true };
+    }
+
     async upsertCustomModel(providerIdInput, input) {
         const providerId = cleanId(providerIdInput, 'Provider ID');
         const id = cleanModelId(input.id);
@@ -513,16 +665,7 @@ class PiSettingsService {
         const index = models.findIndex(model => model.id === id);
         const current = index >= 0 ? models[index] : {};
         const official = (await require('./pi-usage-pricing').officialPrices()).get(id);
-        const model = {
-            ...current,
-            id,
-            name: String(input.name || id).trim().slice(0, 200) || id,
-            reasoning: Boolean(input.reasoning),
-            input: input.imageInput ? ['text', 'image'] : ['text'],
-            contextWindow: numberInRange(input.contextWindow, 128000, 1024, 4000000),
-            maxTokens: numberInRange(input.maxTokens, 16384, 1, 1000000),
-            cost: current.cost || official?.rates || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
-        };
+        const model = customModelEntry(current, { ...input, id }, official);
         if (Object.hasOwn(input, 'thinkingLevelMap')) {
             const map = thinkingMap(input.thinkingLevelMap);
             if (map === undefined) delete model.thinkingLevelMap;
@@ -537,12 +680,7 @@ class PiSettingsService {
         } else if (Object.hasOwn(input, 'api')) {
             delete model.api;
         }
-        if (index >= 0) models[index] = model;
-        else models.push(model);
-        provider.models = models;
-        const override = { ...(provider.modelOverrides?.[id] || {}) };
-        for (const field of CUSTOM_MODEL_OVERRIDE_FIELDS) override[field] = model[field];
-        provider.modelOverrides = { ...(provider.modelOverrides || {}), [id]: override };
+        storeCustomModel(provider, model);
         await this.writeModelsFile(data);
         return { ok: true, providerId, modelId: id, requiresRuntimeRestart: true };
     }
@@ -835,7 +973,7 @@ class PiSettingsService {
 }
 
 // Serialize settings mutations in this service; do not let a pending login race logout or model edits.
-for (const method of ['saveApiKey', 'logout', 'refreshModels', 'upsertCustomProvider', 'deleteCustomProvider', 'upsertCustomModel', 'deleteCustomModel', 'setModelPreferences', 'saveModelThinking', 'saveModelSpeed', 'saveModelAdvanced', 'packageAction', 'createSkill', 'deleteSkill', 'setSkillCommands']) {
+for (const method of ['saveApiKey', 'logout', 'refreshModels', 'upsertCustomProvider', 'createCustomProvider', 'addCustomModels', 'deleteCustomProvider', 'upsertCustomModel', 'deleteCustomModel', 'setModelPreferences', 'saveModelThinking', 'saveModelSpeed', 'saveModelAdvanced', 'packageAction', 'createSkill', 'deleteSkill', 'setSkillCommands']) {
     const operation = PiSettingsService.prototype[method];
     PiSettingsService.prototype[method] = async function (...args) {
         this.loginService.assertIdle();

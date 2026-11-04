@@ -59,7 +59,7 @@ class PiAuxiliaryModelsService {
                 || Object.keys(raw).some(key => !['provider', 'modelId', ...(purpose.enabledLabel ? ['enabled'] : [])].includes(key))) throw new Error('辅助模型用途或参数无效');
             const patch = validateTitleSettings(raw);
             if (purpose.storage === 'memoryModels' && (!Object.hasOwn(patch, 'provider') || !Object.hasOwn(patch, 'modelId')))
-                throw new Error('记忆辅助模型需要同时指定供应商和模型');
+                throw new Error('记忆辅助模型需要同时指定服务商和模型');
             if (purpose.storage === 'memoryModels') (changes.memoryModels ||= {})[id] = patch;
             else changes[purpose.storage] = patch;
             if (patch.provider) references.push({ provider: patch.provider, modelId: patch.modelId });

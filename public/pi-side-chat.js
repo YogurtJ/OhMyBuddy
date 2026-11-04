@@ -166,7 +166,7 @@
             $('pi-side-thinking-select').value = state.thinkingLevel || 'off';
             const speed = state.speed, levels = speed?.levels || [];
             this.speedSelect.hidden = levels.length === 0;
-            const labels = { auto: translateUi('跟随供应商'), standard: translateUi('标准 Standard'), fast: 'Fast', ultrafast: 'Ultrafast' };
+            const labels = { auto: translateUi('跟随服务商'), standard: translateUi('标准 Standard'), fast: 'Fast', ultrafast: 'Ultrafast' };
             this.speedSelect.replaceChildren(...levels.map(level => new Option(`${translateUi('速度')} · ${labels[level]}${speed.modes[level] ? ` · ${translateUi('费用 {0}×', speed.modes[level].costMultiplier)}` : ''}`, level)));
             this.speedSelect.value = speed?.level || 'auto';
         }

@@ -107,7 +107,7 @@
 
 `nativeSettings`、`nativeResources`、`projectTrust`、`modelAdvanced` 标记原生配置增强。设置 `/settings/native`、`/settings/native/trust`、`/settings/native/resources`、`/settings/native/packages`、`/settings/native/skill` 和 `/settings/models/advanced` 的方法、修订、范围和限额见 [NATIVE_SETTINGS.md](NATIVE_SETTINGS.md)。`GET /settings/native/resources` 另返回 `featuredSkills: [{id:'ppt-master',scope:'user'|'project',enabled:boolean}]`（可能为空），另有 `featuredSkillNeedsReview:boolean` 指示候选技能声明无法核实；featuredSkills、packages 和技能资源可带展示用 `version`，packages 带 `updateMode`，显式检查更新后带 `updates`，检查接口 `POST /settings/native/packages/updates` 见 NATIVE_SETTINGS；资源快照的 `packageChangelogs:true` 启用 `POST /settings/native/packages/changelog {cwd,scope,source,expectedRevision,expectedVersion}`，只读已安装包的版本绑定日志，返回 status（ready/missing/disabled）、content、version 及有效时的包内 path/内容 revision，128 KiB 上限、两项并发；冲突409、超限413、并发429，完整读取与安全预览契约见 [原生设置](NATIVE_SETTINGS.md)。成功更新包的响应可带 previousVersion/version；只代表原生目录已发现且声明了匹配来源的本地技能，不证明依赖或运行会话已加载。主连接新增 `get_native_resources` 返回当前 worker 的实际 trust/资源来源，不返回系统提示正文或工具 schema；最多3000项/512KiB，不扩展裸 RPC 白名单。`/activity.nativeSettingsBusy` 供空闲部署检查。受管扩展原生换会话或直接导航被取消，网页入口保持。
 
-`systemPrompts=true` 标记系统提示词管理：GET `/settings/system-prompts?cwd` 返回 global/project × append/base 原生文件正文、推导来源、整体 revision 和 64 KiB 单文件预算；PUT 接受 `{cwd,scope,kind,content,expectedRevision}`，content=null 恢复默认/继承，成功返回 `{ok:true,requiresReload:true}`。修订覆盖四文件内容/身份和原生配置/trust，冲突409不覆盖，保存不重载或中断 worker。主连接 `get_system_prompt` 通过当前 worker 私有资源管道读取正文、基础/追加输入、上下文文件、Skills、实际工具、时间与运行身份，1 MiB 超限整体失败；`configured` 为当前文件与实际信任推导来源，`matchesSavedFiles` 仅比较基础/追加与信任，无法核对为 null，不表示最终供应商请求一致。原 `get_native_resources` 继续不返回正文；读取不调用模型、不写历史、不广播私有结果。完整失败、草稿与生效语义见 [NATIVE_SETTINGS.md](NATIVE_SETTINGS.md#系统提示词查看与编辑)。
+`systemPrompts=true` 标记系统提示词管理：GET `/settings/system-prompts?cwd` 返回 global/project × append/base 原生文件正文、推导来源、整体 revision 和 64 KiB 单文件预算；PUT 接受 `{cwd,scope,kind,content,expectedRevision}`，content=null 恢复默认/继承，成功返回 `{ok:true,requiresReload:true}`。修订覆盖四文件内容/身份和原生配置/trust，冲突409不覆盖，保存不重载或中断 worker。主连接 `get_system_prompt` 通过当前 worker 私有资源管道读取正文、基础/追加输入、上下文文件、Skills、实际工具、时间与运行身份，1 MiB 超限整体失败；`configured` 为当前文件与实际信任推导来源，`matchesSavedFiles` 仅比较基础/追加与信任，无法核对为 null，不表示最终服务商请求一致。原 `get_native_resources` 继续不返回正文；读取不调用模型、不写历史、不广播私有结果。完整失败、草稿与生效语义见 [NATIVE_SETTINGS.md](NATIVE_SETTINGS.md#系统提示词查看与编辑)。
 
 `sessionTransfer=true` 标记原生会话导出和 Pi JSONL 新线程导入接口已启用，完整范围见 [SESSION_TRANSFER.md](SESSION_TRANSFER.md)。`POST /sessions/:id/export` 接受 `{cwd,format:'html'|'jsonl'}` 并返回 attachment/no-store 文件；不接受客户端源/输出路径。HTML 含会话树历史及原生系统提示/工具定义，JSONL 只含当前分支，空闲互斥、源和输出各64MiB上限。`POST /sessions/import` 接受 `{cwd,content,requestId}`，v2/v3 JSONL限16MiB/单条8MiB/50000条/64层，原生迁移后创建新ID线程，201返回`{session}`，不启动/切换当前worker。运行数由 `/activity.sessionTransfers` 返回，供部署空闲检查。重复成功请求只在本进程30分钟内复用结果，不是持久幂等；不确定提交不自动重放。
 
@@ -169,7 +169,7 @@
 
 `GET /api/pi/cron` 新增 `channelNotifications:{pending,failed,lastError}`；任务的 `weixinNotification:'inherit'|'on'|'off'` 默认为跟随线程；旧任务的默认 false 跟随，原 true 保持推送，显式关闭使用 off。旧客户端提交的布尔 `notifyWeixin` 仍转换为 on/off。`lastError` 仅为 `channel-admission-pending`、`channel-capture-failed` 或 null。运行记录的 `channelNotify.status` 为 `pending`、`accepted` 或 `skipped`；accepted 仅表示渠道持久入队，实际微信送达以渠道 jobs 为准。
 
-`blocksFollowing=true` 仅表示尚未确认的任务执行会暂停后续普通输入；发送失败、部分送达及已开始发送的 `uncertain` 不阻塞后续消息。`retryCount` 统计已确定未发送项的自动重试；`deliveryError` 仅保存内部原因标识，不包含供应商正文。`nextAttemptAt` 是原生回复读取／完成核对的最早重试时间。未建立回复上下文的线程／定时结果保持 `ready`，收到上下文后继续。`deliveryIssues` 还区分 `media-upload-failed`、`send-unconfirmed`、`wechat-rejected`、`wechat-rate-limited`、`connection-unavailable`。状态、队列预算、组件来源与存储见[消息渠道](MESSAGE_CHANNELS.md)。原生私有命令标记 `channels-v1` 不加入公开 RPC 命令白名单；`pivane-channel-message` 是唯一聊天正文，`pivane-channel-turn` 记录运行状态和回复条目 ID。`pi-native-input` 仅在原生祖先链、会话 ID、运行开始记录、渠道／消息 metadata、正文偏移及图片数匹配时，把该 custom message 只读投影为 user 并去掉投递说明；不改 JSONL，也不把其他 custom／定时／子任务消息归为用户。浏览器只按真实回执显示送达，不以模型输出结束推断微信收到。`pivane-thread-turn` 保存普通受管轮次起止、来源及最终回复 ID；`jobs.kind='thread'` 仅持久化原生轮次引用与固定接收绑定，恢复时重读当前原生分支。微信原发起者和定时任务分别沿用既有渠道／调度回执，避免重复投递。网页 `stop_and_recover` 对独占中的微信轮次直接中止，保留其原生结算互斥。
+`blocksFollowing=true` 仅表示尚未确认的任务执行会暂停后续普通输入；发送失败、部分送达及已开始发送的 `uncertain` 不阻塞后续消息。`retryCount` 统计已确定未发送项的自动重试；`deliveryError` 仅保存内部原因标识，不包含服务商正文。`nextAttemptAt` 是原生回复读取／完成核对的最早重试时间。未建立回复上下文的线程／定时结果保持 `ready`，收到上下文后继续。`deliveryIssues` 还区分 `media-upload-failed`、`send-unconfirmed`、`wechat-rejected`、`wechat-rate-limited`、`connection-unavailable`。状态、队列预算、组件来源与存储见[消息渠道](MESSAGE_CHANNELS.md)。原生私有命令标记 `channels-v1` 不加入公开 RPC 命令白名单；`pivane-channel-message` 是唯一聊天正文，`pivane-channel-turn` 记录运行状态和回复条目 ID。`pi-native-input` 仅在原生祖先链、会话 ID、运行开始记录、渠道／消息 metadata、正文偏移及图片数匹配时，把该 custom message 只读投影为 user 并去掉投递说明；不改 JSONL，也不把其他 custom／定时／子任务消息归为用户。浏览器只按真实回执显示送达，不以模型输出结束推断微信收到。`pivane-thread-turn` 保存普通受管轮次起止、来源及最终回复 ID；`jobs.kind='thread'` 仅持久化原生轮次引用与固定接收绑定，恢复时重读当前原生分支。微信原发起者和定时任务分别沿用既有渠道／调度回执，避免重复投递。网页 `stop_and_recover` 对独占中的微信轮次直接中止，保留其原生结算互斥。
 
 ### 办公文档附件（documentUploads）
 
@@ -262,7 +262,7 @@
 - 原生 memory replace/remove 按完整 old_text 唯一匹配：512 字符列表预览必须补读详情并核对身份、revision、scope/project、target 和可写完整状态，不能把预览前缀当删除／替换授权。详情候选最多12条，超过时409且不写入；保留整体 revision 和 itemRevision CAS。
 - 知识写入（`create`、`update`、`consolidate`，以及档案文档保存新增的条目）若含疑似密钥或提示词注入内容，返回 400 `{code:'content-blocked', details:{rule, kind}}`，`kind` 为 `secret` 或 `injection`，错误信息不回显原文。
 - `cancel` 对 queued/waiting-config 作业在同一journal更新中移出jobs并纳入最多64条recentRuns；已知旧终态和重启恢复uncertain同样归档，不继续占64个live jobs槽。requestId、预算、usage及未知费用事实保留，历史按原时间稳定合并，同时间保留已有历史优先；uncertain采用原开始／创建时间，缺失结束时间保持未知，恢复发现时间不提升旧来源。裁剪详细历史仍沿用dayCarry且不重复计费。全局2个／每档案1个active槽在异步预检前同步预占，直到实际运行及最终落盘结束才释放，预检也计入busy和dispose等待。
-- `GET/PUT /profiles/:id/learning`：GET 返回 `{version:1,status,revision,settings,health,legacy,proposals,drafts,jobs,recentRuns,capabilities}`，revision 为整数；PUT `{expectedRevision,changes}` 只保存开关、额度和触发词，不启动作业；`maxRunsPerDay` 范围 1..500、默认 20，`maxTokensPerDay` 范围 6000..5000000、默认 200000，与 `capabilities.limits` 一致；`settings.triggerPhrases` 为 `{correction,preference,temporary,ignore}`，每组最多 50 个、每个不超过 80 字符的普通短语，限制见 `capabilities.limits.triggerPhrases`。学习写入被内容检查拒绝时，作业记为 `skipped`，`error:'content-blocked'`。`health` 为 `{state:'off'|'unavailable'|'needs-model'|'memory-full'|'quota-exhausted'|'failing'|'ok',missingModels,lastFailure,today:{runs,maxRuns,reservedTokens,maxTokens,exhaustedBy,resetsAt,usedTokens}}`，按此顺序取第一个成立的状态。`exhaustedBy` 为 `runs|tokens|null`（次数已满优先，否则剩余预留量不足一次 6000 Token 则为 tokens）；`resetsAt` 为下一个 UTC 午夜 ISO 时间，`usedTokens` 合计今天计入额度的运行中供应商报告的 totalTokens，无报告为 null。紧凑当日汇总保留 64 条详细历史之外的额度／实际用量，跨 UTC 日归零；预占和退款规则不变。`proposals` 为最多 3 个整理方案 `{id,target,createdAt,model,source?:{sessionId,entryId},groups:[{items:[{itemId,itemRevision,preview,category}],content,category}]}`；普通后台学习也可在原单次模型调用中提出同目标合并方案，保留原条目，source 指向经核实的原生用户消息；`drafts` 为 `{pending,capped?}` 待审草稿技能数。`legacy` 在身份原始配置 `memory.autoLearn=true` 且尚未迁移或忽略时为 `{autoLearn:true,reviewModel,reviewModelAvailable,purposes}`，否则为 null。作业 `error:'memory-full'`（status skipped）表示写满未保存。
+- `GET/PUT /profiles/:id/learning`：GET 返回 `{version:1,status,revision,settings,health,legacy,proposals,drafts,jobs,recentRuns,capabilities}`，revision 为整数；PUT `{expectedRevision,changes}` 只保存开关、额度和触发词，不启动作业；`maxRunsPerDay` 范围 1..500、默认 20，`maxTokensPerDay` 范围 6000..5000000、默认 200000，与 `capabilities.limits` 一致；`settings.triggerPhrases` 为 `{correction,preference,temporary,ignore}`，每组最多 50 个、每个不超过 80 字符的普通短语，限制见 `capabilities.limits.triggerPhrases`。学习写入被内容检查拒绝时，作业记为 `skipped`，`error:'content-blocked'`。`health` 为 `{state:'off'|'unavailable'|'needs-model'|'memory-full'|'quota-exhausted'|'failing'|'ok',missingModels,lastFailure,today:{runs,maxRuns,reservedTokens,maxTokens,exhaustedBy,resetsAt,usedTokens}}`，按此顺序取第一个成立的状态。`exhaustedBy` 为 `runs|tokens|null`（次数已满优先，否则剩余预留量不足一次 6000 Token 则为 tokens）；`resetsAt` 为下一个 UTC 午夜 ISO 时间，`usedTokens` 合计今天计入额度的运行中服务商报告的 totalTokens，无报告为 null。紧凑当日汇总保留 64 条详细历史之外的额度／实际用量，跨 UTC 日归零；预占和退款规则不变。`proposals` 为最多 3 个整理方案 `{id,target,createdAt,model,source?:{sessionId,entryId},groups:[{items:[{itemId,itemRevision,preview,category}],content,category}]}`；普通后台学习也可在原单次模型调用中提出同目标合并方案，保留原条目，source 指向经核实的原生用户消息；`drafts` 为 `{pending,capped?}` 待审草稿技能数。`legacy` 在身份原始配置 `memory.autoLearn=true` 且尚未迁移或忽略时为 `{autoLearn:true,reviewModel,reviewModelAvailable,purposes}`，否则为 null。作业 `error:'memory-full'`（status skipped）表示写满未保存。
 - `POST /profiles/:id/learning/actions`：`{requestId,action,...}`，action 为 `review-now`、`cancel`（`jobId`）、`enable`（可选 `review`/`extraction` 布尔，只改开关不改模型）、`adopt-legacy`（可选 `model:{provider,modelId}`，只给未配置的学习用途补模型并开启纠错与复盘；模型不可用为 409 `legacy-model-unavailable`）、`dismiss-legacy`、`propose-consolidation`（`target`，只生成方案，不写知识，预留 `settings.consolidationInputChars`+6000 token）、`dismiss-proposal`（`proposalId`，可选 `groupIndex` 为当前数组位置）。按 `capabilities.actions` 调用，返回最新快照；同一 requestId 幂等，结果不确定时不自动重放。升级本身不开启任何学习。
 
 `GET /activity` 另含 `learningBusy`、`learningRuns`；维护空闲判断包含后台学习。辅助模型用途新增 `memory-correction`、`memory-review`、`memory-extraction`，未配置时等待配置，不回退主模型。字段语义、写入日志容量、限额与验证状态见[记忆适配](PROFILE_MEMORY.md)和[辅助模型](AUXILIARY_MODELS.md)。
@@ -532,7 +532,7 @@ Body: `{ "cwd": "/workspace/demo" }`。先经过 token/Origin/realpath 根检查
 
 `GET /status.nativeDirectoryPicker` 和 `GET /directories/picker` 返回 `{available,platform,host}`。`POST /directories/picker` 接受 `{path?:string}`，在运行服务的电脑打开系统选窗，返回 `{cancelled:true}` 或 `{cancelled:false,cwd}`；返回路径重新通过普通项目范围验证，不创建会话。认证、Origin 和维护门禁保持生效；实际 socket、Host 与 Origin 均须为 loopback，远程浏览器使用 `/directories`。
 
-macOS 使用 AppleScript 系统选窗，Windows 使用交互用户会话的系统文件夹选择器，Linux 桌面需有 Zenity/KDialog。无可用桌面选窗返回503；同时仅允许一个选择（409），10分钟超时，断开请求取消本次进程。取消／超时后仍等实际进程退出再释放占用；`GET /activity.directoryPickerBusy` 与维护空闲检查同步，正常停机取消并等待该进程。子进程仅继承 GUI／系统所需环境，不传供应商与工作台凭据。
+macOS 使用 AppleScript 系统选窗，Windows 使用交互用户会话的系统文件夹选择器，Linux 桌面需有 Zenity/KDialog。无可用桌面选窗返回503；同时仅允许一个选择（409），10分钟超时，断开请求取消本次进程。取消／超时后仍等实际进程退出再释放占用；`GET /activity.directoryPickerBusy` 与维护空闲检查同步，正常停机取消并等待该进程。子进程仅继承 GUI／系统所需环境，不传服务商与工作台凭据。
 
 ### `GET /sessions?cwd=<absolute-path>`
 
@@ -623,7 +623,7 @@ PUT `/settings/auxiliary-models` 接受 `{expectedRevision,changes}`，changes �
 
 `/status.sessionTitles=true` 标记自动标题与建议接口；`sessionTitleModels=true` 标记独立标题模型选择。GET `/settings/session-titles` 与模型设置快照的 `preferences.sessionTitles` 返回 `{enabled,provider,modelId,revision}`，默认 `true,"","",0`。PUT 支持 `enabled` 和／或成对的 `provider,modelId`，双空字符串恢复跟随线程，可带 `expectedRevision` 防止并发覆盖；过期返回 409。旧客户端只更新 enabled 时保留模型引用；服务在异步核对专用模型/认证后再次检查版本。保存不执行生成。开启后 POST `/sessions` 新建的未命名持久线程可在首轮有效问答完成后自动命名；已有历史不自动迁移。
 
-POST `/sessions/:id/title` 接受 `{cwd}`，使用请求开始时冻结的标题模型选择生成建议；未指定专用模型时跟随当前线程，指定模型失效不回退。返回 `{name,nameRevision,contextRevision,model,usage}`，其中 model 为实际使用的 `{provider,id,name}`，usage 仅含非负安全整数或 null 的 input/output/cacheRead/cacheWrite/totalTokens，无有效数据时为 null。此临时请求不修改名称或主上下文。PUT 同路径接受 `{cwd,name,nameRevision,contextRevision}`，显式保存；名称或分支版本变化返回 409。生成失败 400，不回显供应商原文。两接口复用身份/Origin、项目规范路径与原生 session ID 查找，仅通过 Supervisor 的唯一 worker 获取上下文/写原生名称。
+POST `/sessions/:id/title` 接受 `{cwd}`，使用请求开始时冻结的标题模型选择生成建议；未指定专用模型时跟随当前线程，指定模型失效不回退。返回 `{name,nameRevision,contextRevision,model,usage}`，其中 model 为实际使用的 `{provider,id,name}`，usage 仅含非负安全整数或 null 的 input/output/cacheRead/cacheWrite/totalTokens，无有效数据时为 null。此临时请求不修改名称或主上下文。PUT 同路径接受 `{cwd,name,nameRevision,contextRevision}`，显式保存；名称或分支版本变化返回 409。生成失败 400，不回显服务商原文。两接口复用身份/Origin、项目规范路径与原生 session ID 查找，仅通过 Supervisor 的唯一 worker 获取上下文/写原生名称。
 
 `/activity` 另返回 `titleGenerations`（全服务未结束请求数）、`titleRevision`（进程代次与变更计数），`runtimes[].titleGenerating` 表示标题请求。标题生成不表示主任务 busy，但部署与回收必须考虑此活动。成功保存广播 `gateway_session_named {cwd,sessionId,name}`；其他页面据全局修订刷新线程列表。摘录、预算、延迟/失败、手动保护与持久化详见[会话工作流](SESSION_WORKFLOWS.md#自动标题与重新生成)。
 
@@ -973,11 +973,11 @@ Shell仅空闲单项执行，期间消息/压缩/导航/重载及预约投递互
 - `{action:"set",model:{provider,modelId},favorite:boolean}`：仅修改一个模型，按服务器处理顺序生效；不同模型的并发操作相互保留，重加已有收藏保持顺序。
 - `{action:"import",migrationId,models:[{provider,modelId}]}`：将旧浏览器收藏一次性合并。migrationId 为 16–80 位字母、数字或连字符；相同回执不重复写入。持久取消标记阻止迟到旧浏览器恢复已取消的模型，用户明确加星仍可重新添加。
 
-模型标识保持原值，供应商最长 300、模型 ID 最长 500 字符，拒绝控制字符和未知字段；收藏、取消标记分别最多 5000 项，导入最多 5000 项、迁移回执最多 1024 个。格式或容量超限返回 400，整次失败不改偏好。写入在同步读改写区使用既有私密原子保存，保留未知及其他偏好字段。revision 递增供前端拒绝迟到快照；POST 返回与 GET 相同的已保存快照，不返回内部迁移标记。不限制模型必须当前可用，暂不可用的收藏保留至目录恢复。最近使用仍为浏览器本地显示偏好。
+模型标识保持原值，服务商最长 300、模型 ID 最长 500 字符，拒绝控制字符和未知字段；收藏、取消标记分别最多 5000 项，导入最多 5000 项、迁移回执最多 1024 个。格式或容量超限返回 400，整次失败不改偏好。写入在同步读改写区使用既有私密原子保存，保留未知及其他偏好字段。revision 递增供前端拒绝迟到快照；POST 返回与 GET 相同的已保存快照，不返回内部迁移标记。不限制模型必须当前可用，暂不可用的收藏保留至目录恢复。最近使用仍为浏览器本地显示偏好。
 
 ### 持久会话用量
 
-`/api/pi/status.usageStats=true` 启用 `GET /api/pi/settings/usage?from=YYYY-MM-DD&to=YYYY-MM-DD&timeZone=Asia%2FShanghai`。日期包含两端，最多366天，时区缺省UTC；非法或未知参数400、其他筛选扫描中429、线程失败503，复用Origin/Bearer与no-store。返回 total/daily/weekly/monthly/providers/models/projects/sessions、generatedAt、coverage及partial，不含聊天正文。`usageLedger=true` 标记持久账本能力，响应带 `ledger:true`、`scope:'persistent-sessions-and-side-chats'`；各汇总增加 recordedCost/estimatedRecords/unpricedRecords，以及 providerReportedCost/providerReportedRecords（供应商实报金额／笔数，含零费用）；原生 cost.totalFromProvider 缺省或 false 按估算，实报零值不补算，cost 减去实报金额为估算部分。v1 账本事务追加来源列，保留旧事实与总额；coverage 增加 cachedFiles/syncedAt/appendedFiles/parsedBytes/verifiedBytes/cachedVerifiedBytes，区分已核实完整内容的文件、追加解析、前缀校验及缓存字节校验开销；所有读取共用原有预算，受限批次按持久扫描位置继续推进。新建 BTW 侧聊在内存原生边界之后的新用量单独入账，不继承主历史；此前已结束的侧聊及普通临时会话不补录。后台每 5 分钟同步，打开统计及删除前另行触发。事务保存精简用量事实与日汇总，删除会话前须确认入账。去重、官方目录价补算、周期与时区、15秒缓存及读取预算见 [USAGE.md](USAGE.md)。不创建RPC worker、不读客户端指定路径。
+`/api/pi/status.usageStats=true` 启用 `GET /api/pi/settings/usage?from=YYYY-MM-DD&to=YYYY-MM-DD&timeZone=Asia%2FShanghai`。日期包含两端，最多366天，时区缺省UTC；非法或未知参数400、其他筛选扫描中429、线程失败503，复用Origin/Bearer与no-store。返回 total/daily/weekly/monthly/providers/models/projects/sessions、generatedAt、coverage及partial，不含聊天正文。`usageLedger=true` 标记持久账本能力，响应带 `ledger:true`、`scope:'persistent-sessions-and-side-chats'`；各汇总增加 recordedCost/estimatedRecords/unpricedRecords，以及 providerReportedCost/providerReportedRecords（服务商实报金额／笔数，含零费用）；原生 cost.totalFromProvider 缺省或 false 按估算，实报零值不补算，cost 减去实报金额为估算部分。v1 账本事务追加来源列，保留旧事实与总额；coverage 增加 cachedFiles/syncedAt/appendedFiles/parsedBytes/verifiedBytes/cachedVerifiedBytes，区分已核实完整内容的文件、追加解析、前缀校验及缓存字节校验开销；所有读取共用原有预算，受限批次按持久扫描位置继续推进。新建 BTW 侧聊在内存原生边界之后的新用量单独入账，不继承主历史；此前已结束的侧聊及普通临时会话不补录。后台每 5 分钟同步，打开统计及删除前另行触发。事务保存精简用量事实与日汇总，删除会话前须确认入账。去重、官方目录价补算、周期与时区、15秒缓存及读取预算见 [USAGE.md](USAGE.md)。不创建RPC worker、不读客户端指定路径。
 
 ### Provider 和模型
 
@@ -1048,25 +1048,34 @@ Key 只作为 request body 进入服务端，现有值永不回显。此单字�
 
 | Method | Path | 用途 |
 |---|---|---|
-| POST | `/custom-providers` | 新增/更新自定义 Provider |
-| DELETE | `/custom-providers/:providerId` | 删除 Provider 及其模型配置 |
+| POST | `/custom-providers` | 新增/更新自定义服务商（可选 `name`） |
+| POST | `/custom-providers/setup` | 一次创建服务商、首批模型与 API Key |
+| POST | `/custom-providers/discover-models` | 用尚未保存的地址/Key 只读获取模型列表 |
+| POST | `/custom-providers/:providerId/discover-models` | 用已保存配置和 Key 只读获取模型列表 |
+| POST | `/custom-providers/:providerId/models/batch` | 向已有服务商批量添加模型 |
+| DELETE | `/custom-providers/:providerId` | 删除服务商及其模型配置 |
 | POST | `/custom-providers/:providerId/models` | 新增/更新模型 |
 | DELETE | `/custom-providers/:providerId/models/:modelId` | 删除模型 |
 
-Provider body：
+服务商 body：
 
 ```json
 {
   "id": "my-provider",
+  "name": "我的中转站",
   "baseUrl": "https://api.example.com/v1",
   "api": "openai-completions",
   "authHeader": true
 }
 ```
 
+`setup` body 为 `{name, baseUrl, api, apiKey?, authHeader?, id?, models:[{id,name?,contextWindow,maxTokens,imageInput,reasoning}]}`，models 必须有 1–200 项且 ID 不重复。`id` 省略时按名称（无拉丁字母时用域名）生成，避开 Pi 内置服务商与已有 ID；显式 ID 冲突返回 409。先原子写入 models.json，再通过原生 `ModelRuntime.login` 保存 Key；响应 `{ok, providerId, modelCount, credential:"saved"|"none"|"failed", credentialError?}`。`failed` 表示配置已保存但 Key 未保存，错误中的 Key 原文已替换为 `***`，不自动重试。`models/batch` body 为 `{models:[...]}`，同样 1–200 项，只添加或替换所列模型，保留其他模型、价格与未知字段。
+
+`discover-models` 只发送 GET，不保存任何配置。草稿形式 body 为 `{api, baseUrl, apiKey?, authHeader?}`，Key 仅发送到该地址；已保存形式不需要 body，Key 由服务端经原生 `getAuth` 解析，不返回浏览器。OpenAI 兼容协议请求 `<baseUrl>/models`；Anthropic 请求 `<baseUrl>/v1/models` 并使用 `x-api-key`；Gemini 请求 `<baseUrl>/models` 并使用 `x-goog-api-key`，Key 不放进 URL。不跟随重定向，单页 8 MiB、单次 15 秒、总计 40 秒，最多 5 页、3000 个模型。成功返回 `{ok:true, endpoint, truncated, models, providerId, keyUsed}`，每项含 `id`、`name`、`kind`（chat/image/video/tts/asr/embedding/rerank/moderation/realtime）和 `kindSource`（service/catalog/name/default）；chat 另含 `contextWindow`、`maxTokens`、`imageInput`、`reasoning` 与 `metadata`（service/catalog/default），已保存服务商中已有的模型带 `added:true`。类型与元数据先看服务返回字段，再按 Pi 内置目录精确匹配 ID（或最后一段），最后按模型名判断，可能不准确。失败返回 HTTP 200 与 `{ok:false, reason, httpStatus, detail, endpoint}`，reason 为 auth/not_found/redirect/timeout/network/too_large/invalid/http，detail 中的 Key 和请求头值已替换为 `***`。
+
 支持的 models.json API：`openai-completions`、`openai-responses`、`anthropic-messages`、`google-generative-ai`。
 
-模型 body 支持 `id`、`name`、`reasoning`、`imageInput`、`contextWindow`、`maxTokens`、可选 `api` 和 `thinkingLevelMap`。基本编辑字段 `name`、`reasoning`、转换后的 `input`、`contextWindow`、`maxTokens` 同时写入该模型的基础 `models` 定义与 `modelOverrides`，以 Pi 原生用户覆盖优先级在扩展定义之后生效；其余字段不复制到覆盖层。`customProviders.models` 读取这五项已有覆盖，避免编辑器显示基础旧值。删除模型同时清除这五项覆盖，保留该模型及其他模型的剩余覆盖。旧配置不自动迁移，重新保存建立覆盖。响应沿用 `requiresRuntimeRestart:true`；已选择模型通过空闲 reload 或重新打开运行实例加载。Model ID 最多 500 字符，允许 `/`、`:`、`@` 等供应商标识但拒绝空白/控制字符；作为模型标识，不是路径。Provider base URL 只允许 HTTP(S)，拒绝 userinfo/query/fragment。写入保留未知字段，建立 0600 backup 后原子替换。配置读取时绑定同一已验证原字节与完整文件身份；七个整文件保存入口在目录／价格／认证等待、备份、替换及 Windows 重试期间沿用该基线。外部修改、替换或存在状态变化返回409，保留外部文件，不能在写入入口重新定义基线。删除内置 Provider 的本地覆盖仅删配置，保留其原生凭据。
+模型 body 支持 `id`、`name`、`reasoning`、`imageInput`、`contextWindow`、`maxTokens`、可选 `api` 和 `thinkingLevelMap`。基本编辑字段 `name`、`reasoning`、转换后的 `input`、`contextWindow`、`maxTokens` 同时写入该模型的基础 `models` 定义与 `modelOverrides`，以 Pi 原生用户覆盖优先级在扩展定义之后生效；其余字段不复制到覆盖层。`customProviders.models` 读取这五项已有覆盖，避免编辑器显示基础旧值。删除模型同时清除这五项覆盖，保留该模型及其他模型的剩余覆盖。旧配置不自动迁移，重新保存建立覆盖。响应沿用 `requiresRuntimeRestart:true`；已选择模型通过空闲 reload 或重新打开运行实例加载。Model ID 最多 500 字符，允许 `/`、`:`、`@` 等服务商标识但拒绝空白/控制字符；作为模型标识，不是路径。Provider base URL 只允许 HTTP(S)，拒绝 userinfo/query/fragment。写入保留未知字段，建立 0600 backup 后原子替换。配置读取时绑定同一已验证原字节与完整文件身份；七个整文件保存入口在目录／价格／认证等待、备份、替换及 Windows 重试期间沿用该基线。外部修改、替换或存在状态变化返回409，保留外部文件，不能在写入入口重新定义基线。删除内置服务商的本地覆盖仅删配置，保留其原生凭据。
 
 ### Packages 和 Skills
 

@@ -239,7 +239,7 @@ class AgentWorker extends EventEmitter {
             }
             if (changingModel && error.code === 'RPC_TIMEOUT') this.modelChangeUncertain = true;
             if (prompting && /^No API key found for the selected model\./.test(error.message)) {
-                throw Object.assign(new Error('当前会话没有可用的模型认证。请在“供应商与模型”中登录，再为本会话选择已接入的模型'), { code: 'MODEL_AUTH_REQUIRED' });
+                throw Object.assign(new Error('当前会话没有可用的模型认证。请在“服务商与模型”中登录，再为本会话选择已接入的模型'), { code: 'MODEL_AUTH_REQUIRED' });
             }
             throw error;
         } finally {

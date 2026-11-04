@@ -156,7 +156,7 @@
             }
             const help = node('details', '', 'sa-help'); help.append(node('summary', '配置说明与插件信息'));
             const body = node('div');
-            body.append(node('p', '自动选择表示不覆盖本层配置，沿用插件的默认规则；角色定义、供应商设置或单次任务可能优先。'),
+            body.append(node('p', '自动选择表示不覆盖本层配置，沿用插件的默认规则；角色定义、服务商设置或单次任务可能优先。'),
                 node('p', '安装和保存不会自动启动任务。当前任务不受影响，空闲后重开运行实例以应用配置。'),
                 node('p', '角色列表包含随附角色与已有覆盖。中文名称仅用于显示，实际角色标识保持不变。'),
                 node('p', t('适配版本：{0}；已安装：{1}', data.plugin.version, data.plugin.installedVersions.join(', ') || '—')));
@@ -204,8 +204,8 @@
             const heading = node('header'), title = node('h3', '选择模型'); title.id = 'sa-picker-title';
             const close = button('', 'sa-picker-close', () => this.closePicker()); close.append(icon('xmark')); close.setAttribute('aria-label', t('关闭')); heading.append(title, close);
             const filters = node('div', '', 'sa-picker-filters');
-            const search = node('input'); search.type = 'search'; search.placeholder = t('搜索模型名称、ID 或供应商'); search.setAttribute('aria-label', t('搜索模型')); search.autocomplete = 'off';
-            const provider = node('select'); provider.setAttribute('aria-label', t('筛选供应商')); provider.append(new Option(t('全部供应商'), ''));
+            const search = node('input'); search.type = 'search'; search.placeholder = t('搜索模型名称、ID 或服务商'); search.setAttribute('aria-label', t('搜索模型')); search.autocomplete = 'off';
+            const provider = node('select'); provider.setAttribute('aria-label', t('筛选服务商')); provider.append(new Option(t('全部服务商'), ''));
             for (const id of [...new Set(this.models.map(model => model.provider))].sort()) provider.append(new Option(this.providers.get(id) || id, id));
             filters.append(search, provider);
             const automatic = node('div', '', 'sa-picker-automatic');
@@ -230,7 +230,7 @@
                     const copy = node('span', '', 'sa-picker-item-copy'); copy.append(literal('strong', model.name || model.id), literal('small', value));
                     item.append(copy, icon(value === current ? 'check' : 'plus')); results.append(item);
                 }
-                if (!matching.length) results.append(node('p', '没有匹配的模型，试试其他关键词或供应商。', 'sa-picker-empty'));
+                if (!matching.length) results.append(node('p', '没有匹配的模型，试试其他关键词或服务商。', 'sa-picker-empty'));
                 if (matching.length > limit) results.append(button('显示更多模型', 'sa-picker-more', () => { limit += 40; render(false); results.querySelectorAll('.sa-picker-item')[limit - 40]?.focus(); }));
             };
             search.oninput = () => render(); provider.onchange = () => render();

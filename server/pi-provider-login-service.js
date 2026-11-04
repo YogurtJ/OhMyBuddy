@@ -22,7 +22,7 @@ class PiProviderLoginService {
         this.closed = false;
     }
     get busy() { return Boolean(this.flow && !this.flow.finished); }
-    assertIdle() { if (this.busy) throw fail('请先完成或取消当前供应商登录', 409); }
+    assertIdle() { if (this.busy) throw fail('请先完成或取消当前服务商登录', 409); }
     async start(providerId, method) {
         this.assertIdle();
         if (this.closed) throw fail('登录服务已关闭', 503);
@@ -57,12 +57,12 @@ class PiProviderLoginService {
         } catch (error) {
             if (error.name === 'CredentialSynchronizationError') {
                 flow.status = 'committed';
-                flow.message = '凭据已保存，但模型状态同步失败。请刷新供应商状态，不要重复登录。';
+                flow.message = '凭据已保存，但模型状态同步失败。请刷新服务商状态，不要重复登录。';
             } else if (flow.controller.signal.aborted) {
                 flow.status = flow.cancelReason === 'expired' ? 'expired' : 'cancelled';
             } else {
                 flow.status = 'error';
-                flow.message = 'Pi 登录未完成。请检查授权页面及供应商配置；核对凭据状态后可重新发起。';
+                flow.message = 'Pi 登录未完成。请检查授权页面及服务商配置；核对凭据状态后可重新发起。';
             }
         } finally {
             clearTimeout(flow.timer);

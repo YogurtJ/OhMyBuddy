@@ -61,7 +61,7 @@ function fixture(query) {
             }
             assert.ok(calls[0].includes('timeZone='));
             const panel = page.locator('#settings-usage-panel');
-            assert.match(await panel.textContent(), /供应商实报 \$0\.400（2 条）；其余 \$0\.834/);
+            assert.match(await panel.textContent(), /服务商实报 \$0\.400（2 条）；其余 \$0\.834/);
             assert.ok((await panel.textContent()).includes('46,000')); assert.equal(await panel.locator('img').count(), 0);
             for (const theme of ['daylight', 'mint', 'night']) {
                 await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);

@@ -96,7 +96,7 @@
             });
             copyButton.prepend(icon('copy'));
             const searchRow = node('div', undefined, { class: 'system-prompt-search' }); searchRow.append(search, copyButton);
-            full.append(searchRow, found, text); body.append(sources, full, node('p', translateUi("此处为 Pi 当前提示快照。扩展可逐轮修改提示，供应商请求改写不包含在此视图中。")));
+            full.append(searchRow, found, text); body.append(sources, full, node('p', translateUi("此处为 Pi 当前提示快照。扩展可逐轮修改提示，服务商请求改写不包含在此视图中。")));
         }
         async function read(apply) {
             if (reading || !context().connected || apply && context().busy) return;

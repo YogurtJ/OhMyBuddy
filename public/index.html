@@ -273,7 +273,7 @@
                             <div class="pi-model-guidance-actions">
                                 <button id="pi-model-refresh" type="button" title="重新读取当前会话的模型目录" disabled data-i18n-title="s1357"><!--i18n:s1358-->刷新模型目录</button>
                                 <button id="pi-model-choose" type="button"><!--i18n:s1359-->选择模型</button>
-                                <button id="pi-model-setup" type="button"><!--i18n:s1360-->供应商与模型设置</button>
+                                <button id="pi-model-setup" type="button"><!--i18n:s1360-->服务商与模型设置</button>
                             </div>
                         </div>
                         <div id="pi-reply-tts-bar" class="pi-reply-tts-bar" hidden>
@@ -660,7 +660,7 @@
             </header>
             <div class="workspace-settings-body">
                 <nav class="workspace-settings-nav" aria-label="设置分类" data-i18n-aria-label="s1507">
-                    <button type="button" class="active" data-settings-tab="providers"><i class="fa-solid fa-key"></i><span><!--i18n:s1508-->供应商与模型</span></button>
+                    <button type="button" class="active" data-settings-tab="providers"><i class="fa-solid fa-key"></i><span><!--i18n:s1508-->服务商与模型</span></button>
                     <button type="button" data-settings-tab="media"><i class="fa-solid fa-photo-film"></i><span>模型与能力</span></button>
                     <button type="button" data-settings-tab="models"><i class="fa-solid fa-sliders"></i><span><!--i18n:s1509-->使用偏好</span></button>
                     <button type="button" id="system-prompts-nav" data-settings-tab="system-prompts" hidden><i class="fa-solid fa-file-lines"></i><span data-system-prompts-label></span></button>
@@ -677,13 +677,13 @@
                     <section class="workspace-settings-panel active" data-settings-panel="providers">
                         <div class="settings-panel-header">
                             <i class="fa-solid fa-key" aria-hidden="true"></i>
-                            <div><h3><!--i18n:s1508-->供应商与模型</h3><p><!--i18n:s1512-->展开供应商，连接 Pi 内置服务或自定义服务，并管理其模型。测试会发送少量付费请求。</p></div>
-                            <div class="settings-header-actions" id="settings-provider-header-actions"><button id="settings-add-provider" class="settings-primary-button" type="button"><i class="fa-solid fa-plus"></i><!--i18n:s1513--> 自定义 Provider</button></div>
+                            <div><h3><!--i18n:s1508-->服务商与模型</h3><p><!--i18n-->展开服务商，登录 Pi 内置服务商，或添加中转站等自定义服务商，并管理其模型。测试会发送少量付费请求。</p></div>
+                            <div class="settings-header-actions" id="settings-provider-header-actions"><button id="settings-add-provider" class="settings-primary-button" type="button"><i class="fa-solid fa-plus"></i><!--i18n--> 添加自定义服务商</button></div>
                         </div>
                         <div class="settings-toolbar">
-                            <label class="settings-search"><i class="fa-solid fa-magnifying-glass"></i><input id="settings-provider-search" type="search" placeholder="搜索 Provider" data-i18n-placeholder="s1514"></label>
+                            <label class="settings-search"><i class="fa-solid fa-magnifying-glass"></i><input id="settings-provider-search" type="search" placeholder="搜索服务商" data-i18n-placeholder></label>
                             <label class="settings-check"><input id="settings-provider-configured" type="checkbox"><span><!--i18n:s1515-->仅已配置</span></label>
-                            <button id="settings-refresh-providers" class="icon-btn subtle" type="button" title="刷新 Provider" data-i18n-title="s1516"><i class="fa-solid fa-rotate"></i></button>
+                            <button id="settings-refresh-providers" class="icon-btn subtle" type="button" title="刷新服务商" data-i18n-title><i class="fa-solid fa-rotate"></i></button>
                         </div>
                         <div id="settings-provider-list" class="settings-list" hidden></div>
                         <div id="settings-unified-catalog"></div>
@@ -721,7 +721,7 @@
                     <section class="workspace-settings-panel" data-settings-panel="models">
                         <div class="settings-panel-header">
                             <i class="fa-solid fa-sliders" aria-hidden="true"></i>
-                            <div><h3><!--i18n:s1509-->使用偏好</h3><p><!--i18n:s1522-->配置模块 Agent、回复朗读和系统通知；聊天默认模型和思考等级在供应商的模型列表中设置。</p></div>
+                            <div><h3><!--i18n:s1509-->使用偏好</h3><p><!--i18n:s1522-->配置模块 Agent、回复朗读和系统通知；聊天默认模型和思考等级在服务商的模型列表中设置。</p></div>
                             <div class="settings-header-actions">
                                 <button id="settings-add-model" class="settings-secondary-button" type="button"><i class="fa-solid fa-plus"></i><!--i18n:s1523--> 自定义模型</button>
                                 <button id="settings-refresh-models" class="settings-secondary-button settings-header-refresh" type="button"><i class="fa-solid fa-rotate" aria-hidden="true"></i><!--i18n:s1524--> 刷新目录</button>
@@ -781,15 +781,15 @@
                                 <div><h4><!--i18n:s1525-->模块 Agent</h4><p id="settings-media-agent-description" class="settings-feature-description"><!--i18n:s1526-->为多媒体实验室的“生成方案”选择 AI 模型，将你的文字需求整理成图像、视频或语音的生成参数。保存后，下一次生成方案时生效。</p><p id="settings-media-agent-current"><!--i18n:s1527-->读取当前模型</p></div>
                             </div>
                             <div class="settings-feature-controls">
-                                <label><span>Provider</span><select id="settings-media-agent-provider" class="settings-select"></select></label>
+                                <label><span><!--i18n-->服务商</span><select id="settings-media-agent-provider" class="settings-select"></select></label>
                                 <label><span><!--i18n:s1145-->模型</span><select id="settings-media-agent-model" class="settings-select"></select></label>
                                 <button id="settings-media-agent-test" class="settings-secondary-button" type="button"><i class="fa-solid fa-vial"></i><!--i18n:s1273--> 测试</button>
                                 <button class="settings-primary-button" type="submit"><i class="fa-solid fa-floppy-disk"></i><!--i18n:s680--> 保存</button>
                             </div>
                         </form>
                         <div class="settings-toolbar">
-                            <label class="settings-search"><i class="fa-solid fa-magnifying-glass"></i><input id="settings-model-search" type="search" placeholder="搜索模型或 Provider" data-i18n-placeholder="s1528"></label>
-                            <select id="settings-model-provider" class="settings-select"><option value=""><!--i18n:s1281-->全部 Provider</option></select>
+                            <label class="settings-search"><i class="fa-solid fa-magnifying-glass"></i><input id="settings-model-search" type="search" placeholder="搜索模型或服务商" data-i18n-placeholder></label>
+                            <select id="settings-model-provider" class="settings-select"><option value=""><!--i18n-->全部服务商</option></select>
                             <label class="settings-check"><input id="settings-model-available" type="checkbox"><span><!--i18n:s1529-->仅可用</span></label>
                         </div>
                         <div class="settings-feature-card">

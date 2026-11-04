@@ -55,7 +55,7 @@ OhMyBuddy 原名 Pivane。上一正式版 [1.11.0 版本说明](releases/1.11.0.
 
 | 任务 | 文档 |
 |---|---|
-| 供应商认证、聊天模型、Thinking | [供应商与模型](PROVIDER_SETTINGS.md) |
+| 服务商认证、聊天模型、Thinking | [服务商与模型](PROVIDER_SETTINGS.md) |
 | Pi 原生设置、资源、Packages/Skills、系统提示词 | [Pi 原生设置](NATIVE_SETTINGS.md) |
 | 按用途配置标题与媒体规划模型 | [辅助模型](AUXILIARY_MODELS.md) |
 | 内置浏览器、网页填表、独立登录与手动接管 | [浏览器助手](BROWSER.md) |
