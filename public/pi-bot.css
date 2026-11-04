@@ -508,25 +508,14 @@
 }
 @media (prefers-reduced-motion: reduce) { .pi-bot-topic-badge .pi-bot-status-dot { animation: none !important; } .pi-bot-archived > summary::before { transition: none; } }
 
-/* ---- topic sheet ---------------------------------------------------------------------- */
-.pi-bot-topic-sheet .pi-bot-sheet-body { display: grid; align-content: start; gap: 14px; padding-top: 14px; }
-.pi-bot-topic-intro { margin: 0; }
-.pi-bot-topic-identity { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: end; }
-.pi-bot-sheet .pi-bot-topic-identity input.pi-bot-sheet-emoji[type="text"] { width: 100%; }
-.pi-bot-topic-sheet-mark { font-size: 1.3rem; line-height: 1; }
-.pi-bot-topic-sheet-mark[hidden] { display: none; }
-.pi-bot-topic-sheet .pi-bot-sheet-section { padding-bottom: 0; }
+/* ---- topic sheet: see pi-bot-topics.css ------------------------------------------------ */
 .pi-bot-sheet-link:disabled { opacity: .55; cursor: default; }
 .pi-bot-sheet-link.is-danger, .pi-bot-sheet-link.is-danger > i:first-child { color: var(--danger); }
-.pi-bot-topic-archive > i:first-child { color: var(--text-muted); }
 
 /* ---- the exact command or file an "always allow" grant names, on the approval card ------ */
 .pi-bot-approval-rule code {
     display: block; max-height: 6.5em; overflow: auto; padding: 4px 7px; border-radius: 7px; background: var(--surface-2); color: var(--text-main);
     font: .8rem/1.5 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); white-space: pre-wrap; overflow-wrap: anywhere;
-}
-@media (max-width: 600px) {
-    .pi-bot-topic-identity { grid-template-columns: 92px minmax(0, 1fr); }
 }
 
 /* ---- approval card: "always allow" ------------------------------------------------------ */

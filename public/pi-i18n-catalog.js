@@ -11619,5 +11619,28 @@
         ["还没有可用的聊天模型。添加服务商并登录或填写 API Key，完成后会自动更新这里的模型列表。", "No chat models are available yet. Add a provider and sign in or enter an API key. The model list updates when you finish."],
         ["服务商实报 {0}（{1} 条）；其余 {2} 为目录价或档位估算。", "Provider-reported: {0} ({1} records); the remaining {2} is estimated from catalog prices or service tiers."]
     );
+    rows.push(
+        ['粘贴其他表情', 'Paste another emoji'],
+        ['自定义图标', 'Custom icon'],
+        ['给话题起个名字', 'Name this topic'],
+        ['{0} 在这里只聊这件事，记事本单独记。', '{0} sticks to this subject here and keeps a separate notebook.'],
+        ['比如：讨论需求、实现思路和待解决的问题', 'For example: requirements, approach and open questions'],
+        ['伙伴据此把握聊天重点，可以随时修改。', 'Your Buddy uses this to stay on track. You can change it anytime.'],
+        ['话题指令', 'Topic instructions'],
+        ['可选', 'Optional'],
+        ['这个话题里一直遵守的做法，比如回答格式、资料来源。', 'Standing rules for this topic, such as answer format or sources.'],
+        ['整个话题连同更早的聊天和记事本会进入回收站，可以恢复。', 'The whole topic, its earlier chats and notebook go to the trash and can be restored.'],
+        ['归档会收起话题并保留记录；移到回收站可在整理话题里恢复。', 'Archiving tucks the topic away and keeps its history. Trashed topics can be restored from Organize topics.'],
+        ['更换图标（当前 {0}）', 'Change icon (now {0})'],
+        ['添加图标', 'Add icon'],
+        ['归档后话题从列表收起，记录都保留，可以在“已归档”里恢复。', 'Archiving hides the topic from the list and keeps its history. Restore it from Archived.']
+    );
+    rows.push(
+        ["分组只用来整理话题列表，不改变聊天方式。", "Groups only organize the topic list. They don't change how chats work."],
+        ["勾选话题后，在这里选择要移到的分组。", "Select topics, then choose a group for them here."],
+        ["回收站里的话题可以恢复；彻底删除后无法找回。", "Topics in the trash can be restored. Permanent deletion cannot be undone."],
+        ["移到回收站的话题会出现在这里。", "Topics you move to the trash appear here."],
+        ["{0} 段聊天", "{0} chat sessions", "{0} chat session"]
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();
