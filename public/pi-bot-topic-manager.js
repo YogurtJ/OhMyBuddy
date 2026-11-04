@@ -73,19 +73,25 @@
         paint(); return root;
     }
     let active = null;
+    const liveTopics = bot => bot.windows.filter(item => item.kind === 'topic' && !item.trashedAt);
+    const tile = (topic, extra = '') => { const mark = el('span', `pi-bot-topic-tile${extra}`); if (topic?.emoji) mark.textContent = topic.emoji; else mark.append(icon('fa-hashtag')); return mark; };
+    function blank(mark, title, text) {
+        const node = el('div', 'pi-bot-topic-blank'); node.append(mark ? icon(mark) : el('span', 'pi-spinner'), el('strong', null, title));
+        if (text) node.append(el('p', null, text)); return node;
+    }
     function open(options, initial = 'move') {
         if (active?.busy) return; active?.sheet.close();
         const sheet = el('dialog', 'pi-bot-sheet pi-bot-topic-manager'); sheet.setAttribute('aria-labelledby', 'pi-bot-topic-manager-title');
         const wrap = el('div', 'pi-bot-sheet-form'), head = el('header', 'pi-bot-sheet-head'), heading = el('div', 'pi-bot-topic-heading');
         const title = el('h2', null, t('整理话题')); title.id = 'pi-bot-topic-manager-title'; heading.append(title, el('p', null, options.bot.name));
-        const close = btn('×', 'pi-bot-sheet-close'); close.setAttribute('aria-label', t('关闭')); head.append(heading, close);
+        const close = btn('', 'pi-bot-sheet-close'); close.append(icon('fa-xmark')); close.setAttribute('aria-label', t('关闭')); close.title = t('关闭'); head.append(heading, close);
         const tabs = el('nav', 'pi-bot-topic-tabs'); tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', t('话题整理方式'));
         const content = el('div', 'pi-bot-sheet-body'); content.id = 'pi-bot-topic-panel'; content.setAttribute('role', 'tabpanel');
         const footer = el('footer', 'pi-bot-sheet-foot'), actionArea = el('div', 'pi-bot-topic-footer-actions'), status = el('p', 'pi-bot-sheet-status'); status.setAttribute('role', 'status');
         footer.append(actionArea, status); wrap.append(head, tabs, content, footer); sheet.append(wrap); document.body.append(sheet);
         let bot = options.bot, view = initial, selected = new Set(), searchText = '', source = bot.windows.some(item => item.kind === 'topic' && !item.trashedAt && !item.groupId) ? '' : '*';
         let destinationId = '@', moveName = '', newName = '', editing = null, armed = null, trashData = null, trashLoading = false, trashError = null, trashSerial = 0;
-        const drafts = new Map(), state = { sheet, busy: false }; active = state;
+        const drafts = new Map(), counts = {}, state = { sheet, busy: false }; active = state;
         const alive = () => sheet.open && active === state && options.current();
         const say = (text, error = false) => { status.textContent = text; status.dataset.tone = error ? 'error' : ''; };
         const latest = async () => { const fresh = await options.latest(); if (alive() && fresh) bot = fresh; };
@@ -109,10 +115,10 @@
         function leave() { if (!state.busy) sheet.close(); }
         close.addEventListener('click', leave); sheet.addEventListener('cancel', event => { event.preventDefault(); leave(); });
         sheet.addEventListener('close', () => { trashSerial++; sheet.remove(); if (active === state) active = null; });
-        function changeView(key) { view = key; armed = null; paint(); say(''); }
-        for (const [key, text, mark] of [['move', t('移动话题'), 'fa-arrow-right-arrow-left'], ['groups', t('管理分组'), 'fa-folder-tree'], ['trash', t('回收站'), 'fa-trash-can']]) {
+        function changeView(key) { if (view === key) return; view = key; armed = null; paint(); say(''); }
+        for (const [key, text, mark] of [['move', t('移动话题'), 'fa-arrow-right-arrow-left'], ['groups', t('管理分组'), 'fa-folder'], ['trash', t('回收站'), 'fa-trash-can']]) {
             const tab = btn('', 'pi-bot-topic-tab'); tab.dataset.topicTab = key; tab.id = `pi-bot-topic-tab-${key}`; tab.setAttribute('role', 'tab'); tab.setAttribute('aria-controls', content.id);
-            tab.append(icon(mark), el('span', null, text)); tab.addEventListener('click', () => changeView(key));
+            counts[key] = el('small'); tab.append(icon(mark), el('span', null, text), counts[key]); tab.addEventListener('click', () => changeView(key));
             tab.addEventListener('keydown', event => {
                 const keys = ['move', 'groups', 'trash'], index = keys.indexOf(view);
                 const next = event.key === 'ArrowRight' ? (index + 1) % 3 : event.key === 'ArrowLeft' ? (index + 2) % 3 : event.key === 'Home' ? 0 : event.key === 'End' ? 2 : null;
@@ -122,92 +128,108 @@
         function paint() {
             content.replaceChildren(); actionArea.replaceChildren(); sheet.dataset.topicView = view; content.dataset.topicView = view; content.setAttribute('aria-labelledby', `pi-bot-topic-tab-${view}`);
             tabs.querySelectorAll('button').forEach(tab => { const chosen = tab.dataset.topicTab === view; tab.setAttribute('aria-selected', String(chosen)); tab.tabIndex = chosen ? 0 : -1; });
+            const trashTotal = trashData ? trashData.windows.length : bot.trashCount ?? 0;
+            for (const [key, value] of [['move', 0], ['groups', 0], ['trash', trashTotal]]) { counts[key].textContent = value ? String(value) : ''; counts[key].hidden = !value; }
             if (view === 'groups') paintGroups(); else if (view === 'trash') paintTrash(); else paintMove();
             if (state.busy) lock(true);
         }
         function paintGroups() {
-            const intro = el('div', 'pi-bot-topic-intro'); intro.append(el('h3', null, t('你的分组')), el('p', null, t('直接改名、调整顺序或删除，话题和聊天记录都会保留。'))); content.append(intro);
+            content.append(el('p', 'pi-bot-topic-view-hint', t('分组只用来整理话题列表，不改变聊天方式。')));
             const createRow = el('div', 'pi-bot-topic-group-create'), name = el('input'); name.type = 'text'; name.maxLength = 60; name.placeholder = t('新分组名称'); name.setAttribute('aria-label', t('新分组名称')); name.value = newName; name.dataset.topicGroupName = 'true';
-            const create = btn(t('新建分组'), 'pi-bot-primary'); create.dataset.unavailable = String(!newName.trim()); create.disabled = !newName.trim();
+            const create = btn('', 'pi-bot-primary'); create.append(icon('fa-plus'), el('span', null, t('新建分组'))); create.dataset.unavailable = String(!newName.trim()); create.disabled = !newName.trim();
             name.addEventListener('input', () => { newName = name.value; create.disabled = !newName.trim(); create.dataset.unavailable = String(create.disabled); });
             const run = () => { if (newName.trim()) void mutate('/topic-groups', 'POST', { name: newName.trim() }, () => { newName = ''; }); };
             create.addEventListener('click', run); name.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); run(); } }); createRow.append(name, create); content.append(createRow);
+            if (!bot.groups?.length) { content.append(blank('fa-folder-plus', t('还没有分组'), t('先起个名字，再把相关话题放在一起。'))); return; }
             const cards = el('div', 'pi-bot-topic-group-cards'); content.append(cards);
-            if (!bot.groups?.length) { const empty = el('div', 'pi-bot-topic-blank'); empty.append(icon('fa-folder-plus'), el('strong', null, t('还没有分组')), el('p', null, t('先起个名字，再把相关话题放在一起。'))); cards.append(empty); }
-            for (const [position, group] of (bot.groups || []).entries()) {
+            for (const [position, group] of bot.groups.entries()) {
                 const card = el('section', 'pi-bot-topic-group-card'); card.dataset.groupId = group.id;
-                const row = el('div', 'pi-bot-topic-group-card-head'), copy = el('div', 'pi-bot-topic-group-copy');
-                copy.append(el('strong', null, group.name), el('small', null, t('{0} 个话题', bot.windows.filter(topic => topic.kind === 'topic' && topic.groupId === group.id && !topic.trashedAt).length)));
-                row.append(icon('fa-folder'), copy);
-                const actions = el('div', 'pi-bot-topic-group-tools');
-                const rename = btn(t('改名'), 'pi-bot-topic-text-button'); rename.setAttribute('aria-label', t('改名分组“{0}”', group.name));
-                rename.addEventListener('click', () => { editing = group.id; armed = null; if (!drafts.has(group.id)) drafts.set(group.id, group.name); paint(); content.querySelector('[data-group-rename]')?.focus(); }); actions.append(rename);
-                for (const [text, mark, disabled, before] of [[t('上移'), 'fa-arrow-up', position === 0, bot.groups[position - 1]?.id], [t('下移'), 'fa-arrow-down', position === bot.groups.length - 1, bot.groups[position + 2]?.id || null]]) {
-                    const order = btn('', 'pi-bot-topic-icon-button'); order.append(icon(mark)); order.title = t('{0}分组“{1}”', text, group.name); order.setAttribute('aria-label', order.title); order.disabled = disabled; order.dataset.unavailable = String(disabled);
-                    order.addEventListener('click', () => { void mutate(`/topic-groups/${group.id}`, 'PATCH', { beforeGroupId: before }); }); actions.append(order);
-                }
-                const remove = btn('', 'pi-bot-topic-icon-button is-danger'); remove.append(icon('fa-trash-can')); remove.title = t('删除分组“{0}”', group.name); remove.setAttribute('aria-label', remove.title);
-                remove.addEventListener('click', () => { armed = group.id; editing = null; paint(); cardFor(group.id)?.querySelector('[data-confirm-group-delete]')?.focus(); }); actions.append(remove); row.append(actions); card.append(row);
+                const row = el('div', 'pi-bot-topic-group-card-head'), mark = el('span', 'pi-bot-topic-tile is-group'); mark.append(icon('fa-folder'));
+                const total = bot.windows.filter(topic => topic.kind === 'topic' && topic.groupId === group.id && !topic.trashedAt).length;
                 if (editing === group.id) {
-                    const editor = el('div', 'pi-bot-topic-group-inline'), input = el('input'); input.type = 'text'; input.maxLength = 60; input.value = drafts.get(group.id) ?? group.name; input.dataset.groupRename = group.id; input.setAttribute('aria-label', t('分组名称'));
-                    const save = btn(t('保存名称'), 'pi-bot-primary'), cancel = btn(t('取消'));
+                    card.classList.add('is-editing');
+                    const input = el('input'); input.type = 'text'; input.maxLength = 60; input.value = drafts.get(group.id) ?? group.name; input.dataset.groupRename = group.id; input.setAttribute('aria-label', t('分组名称'));
+                    const save = btn(t('保存'), 'pi-bot-primary'), cancel = btn(t('取消')); save.setAttribute('aria-label', t('保存名称'));
                     const validity = () => { save.disabled = !input.value.trim() || input.value.trim() === group.name; save.dataset.unavailable = String(save.disabled); }; validity();
-                    const run = () => { if (!save.disabled) void mutate(`/topic-groups/${group.id}`, 'PATCH', { name: input.value.trim() }, () => { drafts.delete(group.id); editing = null; }); };
-                    input.addEventListener('input', () => { drafts.set(group.id, input.value); validity(); }); input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); run(); } else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); drafts.delete(group.id); editing = null; paint(); } });
-                    save.addEventListener('click', run); cancel.addEventListener('click', () => { drafts.delete(group.id); editing = null; paint(); }); editor.append(field(t('分组名称'), input), save, cancel); card.append(editor);
+                    const done = () => { drafts.delete(group.id); editing = null; };
+                    const submit = () => { if (!save.disabled) void mutate(`/topic-groups/${group.id}`, 'PATCH', { name: input.value.trim() }, done); };
+                    input.addEventListener('input', () => { drafts.set(group.id, input.value); validity(); });
+                    input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); submit(); } else if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); done(); paint(); } });
+                    save.addEventListener('click', submit); cancel.addEventListener('click', () => { done(); paint(); });
+                    row.append(mark, input, save, cancel); card.append(row); cards.append(card); continue;
                 }
+                const copy = el('div', 'pi-bot-topic-group-copy'); copy.append(el('strong', null, group.name), el('small', null, t('{0} 个话题', total)));
+                const actions = el('div', 'pi-bot-topic-group-tools');
+                const tool = (mark, label, disabled, run, extra = '') => {
+                    const node = btn('', `pi-bot-topic-icon-button${extra}`); node.append(icon(mark)); node.title = label; node.setAttribute('aria-label', label);
+                    node.disabled = disabled; node.dataset.unavailable = String(disabled); node.addEventListener('click', run); actions.append(node); return node;
+                };
+                tool('fa-pen', t('改名分组“{0}”', group.name), false, () => { editing = group.id; armed = null; if (!drafts.has(group.id)) drafts.set(group.id, group.name); paint(); const input = cardFor(group.id)?.querySelector('[data-group-rename]'); input?.focus(); input?.select(); });
+                tool('fa-arrow-up', t('{0}分组“{1}”', t('上移'), group.name), position === 0, () => { void mutate(`/topic-groups/${group.id}`, 'PATCH', { beforeGroupId: bot.groups[position - 1]?.id }); });
+                tool('fa-arrow-down', t('{0}分组“{1}”', t('下移'), group.name), position === bot.groups.length - 1, () => { void mutate(`/topic-groups/${group.id}`, 'PATCH', { beforeGroupId: bot.groups[position + 2]?.id || null }); });
+                tool('fa-trash-can', t('删除分组“{0}”', group.name), false, () => { armed = group.id; editing = null; paint(); cardFor(group.id)?.querySelector('[data-confirm-group-delete]')?.focus(); }, ' is-danger');
+                row.append(mark, copy, actions); card.append(row);
                 if (armed === group.id) {
-                    const confirm = el('div', 'pi-bot-topic-group-inline'); confirm.append(el('p', 'pi-bot-sheet-note', t('删除“{0}”分组？其中的话题会回到未分组，聊天不会删除。', group.name)));
+                    card.classList.add('is-armed');
+                    const confirm = el('div', 'pi-bot-topic-group-inline'); confirm.append(el('p', null, t('删除“{0}”分组？其中的话题会回到未分组，聊天不会删除。', group.name)));
                     const yes = btn(t('确认删除分组'), 'pi-bot-chip is-danger'), no = btn(t('取消')); yes.dataset.confirmGroupDelete = 'true';
-                    yes.addEventListener('click', () => { void mutate(`/topic-groups/${group.id}`, 'DELETE', {}, () => { armed = null; drafts.delete(group.id); }); }); no.addEventListener('click', () => { armed = null; paint(); }); confirm.append(yes, no); card.append(confirm);
+                    yes.addEventListener('click', () => { void mutate(`/topic-groups/${group.id}`, 'DELETE', {}, () => { armed = null; drafts.delete(group.id); }); }); no.addEventListener('click', () => { armed = null; paint(); });
+                    const buttons = el('div', 'pi-bot-topic-actions'); buttons.append(no, yes); confirm.append(buttons); card.append(confirm);
                 }
                 cards.append(card);
             }
         }
         function cardFor(id) { return [...content.querySelectorAll('[data-group-id]')].find(node => node.dataset.groupId === id); }
         function paintMove() {
-            const topics = bot.windows.filter(item => item.kind === 'topic' && !item.trashedAt), available = new Set(topics.map(item => item.id)); selected = new Set([...selected].filter(id => available.has(id)));
+            const topics = liveTopics(bot), available = new Set(topics.map(item => item.id)); selected = new Set([...selected].filter(id => available.has(id)));
             if (source !== '*' && source !== '' && !bot.groups?.some(group => group.id === source)) source = '*';
-            const intro = el('div', 'pi-bot-topic-intro'); intro.append(el('h3', null, t('选择要移动的话题')), el('p', null, t('先选择话题，再在底部选择目标分组。'))); content.append(intro);
-            const toolbar = el('div', 'pi-bot-topic-organizer-tools'), search = searchBox(searchText, value => { searchText = value; paintRows(); }); toolbar.append(search.wrap);
-            const scopes = el('div', 'pi-bot-topic-scopes');
-            for (const [id, text, count] of [['*', t('全部话题'), topics.length], ['', t('未分组'), topics.filter(topic => !topic.groupId).length]]) {
-                const scope = btn('', 'pi-bot-topic-scope'); scope.append(el('span', null, text), el('small', null, String(count))); scope.setAttribute('aria-pressed', String(source === id)); scope.dataset.topicSource = id;
-                scope.addEventListener('click', () => { source = id; selected.clear(); paint(); }); scopes.append(scope);
+            const toolbar = el('div', 'pi-bot-topic-organizer-tools'), search = searchBox(searchText, value => { searchText = value; paintRows(); });
+            const scopes = el('div', 'pi-bot-topic-scopes'); scopes.setAttribute('role', 'group'); scopes.setAttribute('aria-label', t('查看分组'));
+            const inGroup = id => topics.filter(topic => (topic.groupId || '') === id).length;
+            for (const [id, text, total, mark] of [['*', t('全部'), topics.length, ''], ['', t('未分组'), inGroup(''), 'fa-inbox'], ...(bot.groups || []).map(group => [group.id, group.name, inGroup(group.id), 'fa-folder'])]) {
+                const scope = btn('', 'pi-bot-topic-scope'); if (mark) scope.append(icon(mark)); scope.append(el('span', null, text), el('small', null, String(total)));
+                scope.setAttribute('aria-pressed', String(source === id)); scope.dataset.topicSource = id; scope.title = text;
+                scope.addEventListener('click', () => {
+                    if (source === id) return; const left = scopes.scrollLeft; source = id; selected.clear(); paint();
+                    const again = content.querySelector('.pi-bot-topic-scopes'); if (again) again.scrollLeft = left; again?.querySelector('[aria-pressed="true"]')?.focus({ preventScroll: true });
+                }); scopes.append(scope);
             }
-            if (bot.groups?.length) {
-                const filter = el('select'); filter.append(new Option(t('查看分组'), '*'), ...bot.groups.map(group => new Option(group.name, group.id))); filter.value = bot.groups.some(group => group.id === source) ? source : '*'; filter.setAttribute('aria-label', t('查看分组')); filter.dataset.topicSourceGroup = 'true';
-                filter.addEventListener('change', () => { source = filter.value; selected.clear(); paint(); }); scopes.append(filter);
-            }
-            toolbar.append(scopes); content.append(toolbar);
-            const selection = el('div', 'pi-bot-topic-selection'), all = btn(t('选择当前结果'), 'pi-bot-topic-text-button'), matchesLabel = el('span'); selection.append(matchesLabel, all); content.append(selection);
-            const rows = el('div', 'pi-bot-topic-checklist'); content.append(rows);
-            const bulk = el('div', 'pi-bot-topic-bulk'), summary = el('div', 'pi-bot-topic-bulk-summary'), count = el('strong'), clear = btn(t('清除选择'), 'pi-bot-topic-text-button'); clear.addEventListener('click', () => { selected.clear(); paintRows(); }); summary.append(count, clear);
+            toolbar.append(search.wrap, scopes); content.append(toolbar);
+            const selection = el('div', 'pi-bot-topic-selection'), all = btn(t('选择当前结果'), 'pi-bot-topic-text-button'), matchesLabel = el('span'); selection.append(matchesLabel, all);
+            const rows = el('div', 'pi-bot-topic-checklist'); content.append(selection, rows);
+            const hint = el('p', 'pi-bot-topic-bulk-hint', t('勾选话题后，在这里选择要移到的分组。'));
+            const bulk = el('div', 'pi-bot-topic-bulk'), summary = el('div', 'pi-bot-topic-bulk-summary'), counter = el('strong'), clear = btn(t('清除选择'), 'pi-bot-topic-text-button'); clear.addEventListener('click', () => { selected.clear(); paintRows(); }); summary.append(counter, clear);
             const destination = groupSelect(bot, destinationId); destination.prepend(new Option(t('选择目标分组'), '@')); destination.append(new Option(t('新建分组…'), '+')); destination.value = destinationId; destination.setAttribute('aria-label', t('移动到分组')); destination.dataset.topicDestination = 'true';
             const name = el('input'); name.type = 'text'; name.maxLength = 60; name.placeholder = t('新分组名称'); name.setAttribute('aria-label', t('新分组名称')); name.value = moveName; name.hidden = destinationId !== '+';
-            const move = btn(t('移动'), 'pi-bot-primary'), target = el('div', 'pi-bot-topic-bulk-target'); target.append(destination, move); bulk.append(summary, target, name); actionArea.append(bulk);
+            const move = btn('', 'pi-bot-primary'); move.append(icon('fa-arrow-right'), el('span', null, t('移动')));
+            const target = el('div', 'pi-bot-topic-bulk-target'); target.append(destination, name, move); bulk.append(summary, target); actionArea.append(hint, bulk);
             const matches = () => topics.filter(topic => (source === '*' || (topic.groupId || '') === source) && `${topic.title} ${topic.focus || ''}`.toLocaleLowerCase().includes(searchText.trim().toLocaleLowerCase()));
             function updateCount() {
-                count.textContent = selected.size ? t('已选择 {0} 个话题', selected.size) : t('请选择话题'); clear.hidden = !selected.size;
+                hint.hidden = Boolean(selected.size) || !topics.length; bulk.hidden = !selected.size;
+                counter.textContent = t('已选择 {0} 个话题', selected.size);
                 const noop = destinationId !== '+' && [...selected].every(id => (topics.find(topic => topic.id === id)?.groupId || '') === destinationId);
                 move.disabled = !selected.size || destinationId === '@' || destinationId === '+' && !moveName.trim() || noop; move.dataset.unavailable = String(move.disabled);
                 const visible = matches(); all.textContent = visible.length && visible.every(topic => selected.has(topic.id)) ? t('取消选择当前结果') : t('选择当前结果'); all.disabled = !visible.length; all.dataset.unavailable = String(all.disabled);
+                all.hidden = !visible.length;
             }
             function paintRows() {
                 rows.replaceChildren(); const found = matches(); matchesLabel.textContent = t('{0} 个话题', found.length);
                 for (const group of [...(bot.groups || []), { id: '', name: t('未分组') }]) {
                     const items = found.filter(topic => (topic.groupId || '') === group.id); if (!items.length) continue;
-                    const section = el('section', 'pi-bot-topic-check-group'), head = el('div', 'pi-bot-topic-check-group-head'); head.append(icon(group.id ? 'fa-folder' : 'fa-inbox'), el('strong', null, group.name), el('small', null, String(items.length))); section.append(head);
+                    const section = el('section', 'pi-bot-topic-check-group');
+                    if (source === '*') { const head = el('div', 'pi-bot-topic-check-group-head'); head.append(icon(group.id ? 'fa-folder' : 'fa-inbox'), el('strong', null, group.name), el('small', null, String(items.length))); section.append(head); }
+                    const list = el('div', 'pi-bot-topic-check-items');
                     for (const topic of items) {
                         const label = el('label', 'pi-bot-topic-check-row'); label.dataset.topicGroupId = group.id; const check = el('input'); check.type = 'checkbox'; check.value = topic.id; check.checked = selected.has(topic.id);
                         check.addEventListener('change', () => { if (check.checked) selected.add(topic.id); else selected.delete(topic.id); label.classList.toggle('is-selected', check.checked); updateCount(); }); label.classList.toggle('is-selected', check.checked);
-                        const mark = el('span', 'pi-bot-topic-check-mark'); if (topic.emoji) mark.textContent = topic.emoji; else mark.append(icon('fa-hashtag'));
-                        const text = el('span', 'pi-bot-topic-check-copy'), badges = el('span', 'pi-bot-topic-check-badges'); badges.append(el('small', group.id ? 'pi-bot-topic-origin' : 'pi-bot-topic-origin is-ungrouped', group.name));
-                        if (topic.archivedAt) badges.append(el('small', null, t('已归档'))); text.append(el('span', null, topic.title), badges); label.append(check, mark, text); section.append(label);
+                        const copy = el('span', 'pi-bot-topic-check-copy'); copy.append(el('span', 'pi-bot-topic-check-title', topic.title));
+                        if (topic.archivedAt) copy.append(el('small', 'pi-bot-topic-check-badge', t('已归档')));
+                        label.append(check, tile(topic), copy); list.append(label);
                     }
-                    rows.append(section);
+                    section.append(list); rows.append(section);
                 }
-                if (!found.length) rows.append(el('p', 'pi-bot-topic-empty', t('没有匹配的话题'))); updateCount();
+                if (!found.length) rows.append(blank(searchText.trim() ? 'fa-magnifying-glass' : 'fa-inbox', t('没有匹配的话题')));
+                updateCount();
             }
             all.addEventListener('click', () => { const visible = matches(), remove = visible.every(topic => selected.has(topic.id)); visible.forEach(topic => remove ? selected.delete(topic.id) : selected.add(topic.id)); paintRows(); });
             destination.addEventListener('change', () => { destinationId = destination.value; name.hidden = destinationId !== '+'; updateCount(); if (!name.hidden) name.focus(); }); name.addEventListener('input', () => { moveName = name.value; updateCount(); });
@@ -225,29 +247,37 @@
             finally { if (serial === trashSerial) trashLoading = false; }
         }
         function paintTrash() {
-            content.append(el('p', 'pi-bot-sheet-note', t('这里是应用内回收站，可以恢复话题。彻底删除才会移除全部聊天文件，无法恢复。')));
+            content.append(el('p', 'pi-bot-topic-view-hint', t('回收站里的话题可以恢复；彻底删除后无法找回。')));
             if (!trashData) {
-                if (trashError) { content.append(el('p', 'pi-bot-sheet-note', t('回收站暂时无法读取，请重试。'))); const retry = btn(t('重试')); retry.addEventListener('click', () => { void loadTrash(); paint(); }); content.append(retry); }
-                else { content.append(el('p', 'pi-bot-topic-empty', t('正在读取…'))); if (!trashLoading && sheet.open) void loadTrash(); }
+                if (trashError) { const box = blank('fa-triangle-exclamation', t('回收站暂时无法读取，请重试。')), retry = btn(t('重试')); retry.addEventListener('click', () => { void loadTrash(); paint(); }); box.append(retry); content.append(box); }
+                else { content.append(blank('', t('正在读取…'))); if (!trashLoading && sheet.open) void loadTrash(); }
                 return;
             }
             const topics = trashData.windows;
-            if (!topics.length) { const empty = el('div', 'pi-bot-topic-blank'); empty.append(icon('fa-trash-can'), el('strong', null, t('回收站是空的'))); content.append(empty); }
+            if (!topics.length) { content.append(blank('fa-trash-can', t('回收站是空的'), t('移到回收站的话题会出现在这里。'))); return; }
+            const list = el('div', 'pi-bot-topic-trash-list'); content.append(list);
             for (const topic of topics) {
                 const row = el('section', 'pi-bot-topic-trash-row'); row.dataset.windowId = topic.id;
-                row.append(el('strong', null, `${topic.emoji || '#'} ${topic.title}`), el('span', 'pi-bot-topic-origin', groupName(trashData, topic.groupId)), el('p', 'pi-bot-sheet-hint', topic.deleting ? t('删除尚未完成，不能恢复；请继续完成删除。') : t('保留 {0} 段聊天及话题记事本。', topic.generations)));
-                const actions = el('div', 'pi-bot-topic-actions'), restore = btn(t('恢复')); restore.disabled = Boolean(topic.deleting); restore.dataset.unavailable = String(Boolean(topic.deleting)); restore.addEventListener('click', () => { void mutate(`/windows/${topic.id}/restore`, 'POST', {}); });
-                const remove = btn(topic.deleting ? t('继续彻底删除') : t('彻底删除')); remove.classList.add('is-danger'); remove.addEventListener('click', () => confirmDelete(topic, row)); actions.append(restore, remove); row.append(actions); content.append(row);
+                const info = el('div', 'pi-bot-topic-trash-head'), copy = el('div', 'pi-bot-topic-trash-copy');
+                const meta = topic.deleting ? t('删除尚未完成，不能恢复；请继续完成删除。')
+                    : [groupName(trashData, topic.groupId), Number.isFinite(topic.generations) ? t('{0} 段聊天', topic.generations) : ''].filter(Boolean).join(' · ');
+                copy.append(el('strong', null, topic.title), el('small', topic.deleting ? 'is-danger' : null, meta)); info.append(tile(topic), copy);
+                const actions = el('div', 'pi-bot-topic-actions'), restore = btn(''); restore.append(icon('fa-rotate-left'), el('span', null, t('恢复')));
+                restore.disabled = Boolean(topic.deleting); restore.dataset.unavailable = String(Boolean(topic.deleting)); restore.hidden = Boolean(topic.deleting);
+                restore.addEventListener('click', () => { void mutate(`/windows/${topic.id}/restore`, 'POST', {}); });
+                const remove = btn('', 'pi-bot-topic-text-button is-danger'); remove.append(el('span', null, topic.deleting ? t('继续彻底删除') : t('彻底删除'))); remove.addEventListener('click', () => confirmDelete(topic, row));
+                actions.append(remove, restore); row.append(info, actions); list.append(row);
             }
         }
         function confirmDelete(topic, row) {
-            if (row.querySelector('[data-delete-confirm]')) return;
+            if (row.querySelector('[data-delete-confirm]')) { row.querySelector('[data-delete-confirm] input')?.focus(); return; }
             const section = el('div', 'pi-bot-topic-delete-confirm'); section.dataset.deleteConfirm = 'true';
             const name = el('input'); name.type = 'text'; name.placeholder = topic.title; name.setAttribute('aria-label', t('输入话题名称确认删除'));
             const confirm = btn(t('确认彻底删除'), 'pi-bot-primary is-danger'); confirm.disabled = true; confirm.dataset.unavailable = 'true'; const cancel = btn(t('取消'));
             name.addEventListener('input', () => { confirm.disabled = name.value !== topic.title; confirm.dataset.unavailable = String(confirm.disabled); });
             confirm.addEventListener('click', () => { void mutate(`/windows/${topic.id}`, 'DELETE', { confirmed: true }); }); cancel.addEventListener('click', () => section.remove());
-            section.append(el('p', 'pi-bot-sheet-note', t('将永久删除整个话题、全部更早的聊天和记事本，无法恢复。伙伴记忆、技能和单独保存的文件或媒体仍在各自入口管理。')), field(t('输入话题名称确认删除'), name), confirm, cancel); row.append(section); name.focus();
+            const buttons = el('div', 'pi-bot-topic-actions'); buttons.append(cancel, confirm);
+            section.append(el('p', null, t('将永久删除整个话题、全部更早的聊天和记事本，无法恢复。伙伴记忆、技能和单独保存的文件或媒体仍在各自入口管理。')), field(t('输入话题名称确认删除'), name), buttons); row.append(section); name.focus();
         }
         paint(); sheet.showModal(); if (view === 'trash') void loadTrash(); return sheet;
     }

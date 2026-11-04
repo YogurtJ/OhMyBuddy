@@ -108,7 +108,8 @@ const G1 = '88888888-8888-4888-8888-888888888888', G2 = '99999999-9999-4999-8999
                 assert.equal(moved, 2); assert.equal(windows.find(topic => topic.id === T1).groupId, G1); await checkLayout();
                 assert.equal(await manager.locator(`input[value="${T1}"]`).count(), 0, 'the default ungrouped filter excludes already grouped topics');
                 await manager.locator('[data-topic-source="*"]').click();
-                assert.equal(await manager.locator(`.pi-bot-topic-check-row:has(input[value="${T1}"]) .pi-bot-topic-origin`).textContent(), 'Study plan');
+                assert.equal(await manager.locator(`.pi-bot-topic-check-group:has(input[value="${T1}"]) .pi-bot-topic-check-group-head strong`).textContent(), 'Study plan');
+                assert.equal(await manager.locator('.pi-bot-topic-bulk').isHidden(), true, 'the move bar appears only with a selection');
                 assert.equal(await manager.locator('.pi-bot-topic-check-group').count(), 2, 'all topics remain visibly separated by current group');
                 const footerBox = await manager.locator('.pi-bot-sheet-foot').boundingBox(); assert.ok(footerBox.y + footerBox.height <= page.viewportSize().height + 1);
                 await shot('bulk'); await closeSheet(manager);
@@ -122,7 +123,8 @@ const G1 = '88888888-8888-4888-8888-888888888888', G2 = '99999999-9999-4999-8999
                 world.socket.send(JSON.stringify({ type: 'agent_start' })); world.socket.send(JSON.stringify({ type: 'agent_end', messages: [] })); world.socket.send(JSON.stringify({ type: 'agent_settled' }));
                 await page.waitForFunction(() => !document.querySelector('[data-before-repaint]'), null, { timeout: 9000 });
                 assert.deepEqual(await search.evaluate(node => ({ focused: document.activeElement === node, start: node.selectionStart, end: node.selectionEnd })), { focused: true, start: 1, end: 4 }, 'topic activity preserves search focus and selection');
-                await edit(); await editor.locator('.pi-bot-topic-emoji-picker > summary').click();
+                await edit(); assert.equal(await editor.locator('[data-topic-icon]').getAttribute('aria-label'), await translate('添加图标'), 'an empty icon slot, no placeholder emoji');
+                await editor.locator('[data-topic-icon]').click();
                 await editor.getByRole('button', { name: await translate('使用图标 {0}').then(text => text.replace('{0}', '❓')), exact: true }).click();
                 assert.equal(await editor.locator('[data-topic-field="emoji"]').inputValue(), '❓'); await checkLayout(); await shot('emoji');
                 await editor.locator('.pi-bot-sheet-save').click(); await editor.waitFor({ state: 'detached' });

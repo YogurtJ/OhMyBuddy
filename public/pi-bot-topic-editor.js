@@ -95,7 +95,9 @@
         rulesSummary.append(rulesTitle, rulesPreview, icon('fa-chevron-down'));
         const rulesFoot = el('span', 'pi-bot-topic-field-head'); rulesFoot.append(el('span', 'pi-bot-topic-rules-help', translateUi("这个话题里一直遵守的做法，比如回答格式、资料来源。")), rulesCount);
         rules.append(rulesSummary, instructions, rulesFoot);
-        rules.addEventListener('toggle', () => { if (rules.open) { fitTextarea(instructions); instructions.focus(); } });
+        let unfolding = false;
+        rulesSummary.addEventListener('click', () => { unfolding = !rules.open; });
+        rules.addEventListener('toggle', () => { if (rules.open) { fitTextarea(instructions); if (unfolding) instructions.focus(); } unfolding = false; });
 
         const fill = values => {
             name.value = values.title; focus.value = values.focus; instructions.value = values.instructions; emoji.value = values.emoji; group.value = values.groupId;

@@ -16,21 +16,24 @@
 }
 .pi-bot-identity {
     grid-column: 2; justify-self: center; display: grid; justify-items: center; gap: 0; min-width: 0;
-    width: max-content; max-width: min(320px,100%); padding: 0; border: 0; background: transparent;
+    width: max-content; max-width: min(560px,100%); padding: 0; border: 0; background: transparent;
     color: var(--text-main); cursor: pointer; font: inherit; pointer-events: none;
 }
 .pi-bot-identity > .pi-bot-face.is-xl { width: 72px; height: 72px; border-radius: 28%; pointer-events: auto; }
 .pi-bot-identity .pi-bot-who {
-    display: flex; align-items: center; gap: 7px; max-width: 100%; min-height: 34px; margin-top: -3px; padding: 5px 12px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; max-width: 100%; min-height: 34px; margin-top: -3px; padding: 5px 12px;
     border-radius: 999px; background: color-mix(in srgb,var(--surface-transcript) 94%,transparent);
     box-shadow: 0 2px 12px color-mix(in srgb,var(--text-main) 10%,transparent);
     -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); pointer-events: auto;
 }
-.pi-bot-identity .pi-bot-who strong { min-width: 0; font-size: .9rem; font-weight: 600; }
-.pi-bot-identity .pi-bot-status { flex: 0 1 auto; min-width: 0; max-width: 150px; font-size: .72rem; }
-.pi-bot-identity .pi-bot-status.is-quiet { flex: none; width: 7px; gap: 0; font-size: 0; }
-.pi-bot-identity .pi-bot-who-topic { flex: 0 1 auto; min-width: 0; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: .8rem; }
-.pi-bot-identity .pi-bot-who-topic::before { content: "·"; margin-right: 6px; }
+/* Line 1: the name with its status (ordinary work is only the coloured dot). Line 2, in a topic: its title. */
+.pi-bot-identity .pi-bot-who-line { display: flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; }
+.pi-bot-identity .pi-bot-who strong { flex: 0 1 auto; min-width: 0; font-size: .9rem; font-weight: 600; line-height: 1.35; }
+.pi-bot-identity .pi-bot-who.has-topic { padding: 4px 14px 5px; border-radius: 17px; }
+.pi-bot-identity .pi-bot-status { flex: 0 1 auto; min-width: 0; max-width: 12em; font-size: .72rem; }
+.pi-bot-identity .pi-bot-status.is-quiet { flex: none; width: 8px; gap: 0; font-size: 0; }
+.pi-bot-identity .pi-bot-status.is-quiet .pi-bot-status-dot { width: 8px; height: 8px; }
+.pi-bot-identity .pi-bot-who-topic { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: .76rem; line-height: 1.35; }
 .pi-bot-identity:focus-visible { outline: 2px solid var(--primary,var(--green)); outline-offset: 4px; border-radius: 18px; }
 .pi-bot-attention {
     grid-column: 2; grid-row: 2; justify-self: center; pointer-events: auto; max-width: 100%; min-height: 44px;
@@ -62,6 +65,8 @@ html[data-avatar-motion="off"] .pi-bot-attention { animation: none; }
    It scrolls away with the messages, never taking a fixed header row. */
 #chat-tab.pi-bot-mode .pi-transcript-content { padding-top: 18px; }
 #chat-tab.pi-bot-mode .pi-transcript { padding-top: 104px; scroll-padding-top: 122px; }
+#chat-tab.pi-bot-mode:has(.pi-bot-who.has-topic) .pi-transcript { padding-top: 118px; scroll-padding-top: 136px; }
+#chat-tab.pi-bot-mode:has(.pi-bot-who.has-topic):has(.pi-bot-attention:not([hidden])) .pi-transcript { padding-top: 172px; scroll-padding-top: 190px; }
 #chat-tab.pi-bot-mode .pi-message:is(.user,.assistant) { margin-top: 0; margin-bottom: 18px; max-width: 800px; }
 #chat-tab.pi-bot-mode .pi-message.assistant > header { display: none !important; }
 #chat-tab.pi-bot-mode .pi-message.user > header { position: relative; justify-content: flex-end; min-height: 0; margin: 0 0 5px; }
@@ -105,6 +110,7 @@ html[data-avatar-motion="off"] .pi-bot-attention { animation: none; }
     #chat-tab.pi-bot-mode .pi-transcript-viewport::after { height: 52px; }
     .pi-bot-identity > .pi-bot-face.is-xl { width: 64px; height: 64px; }
     #chat-tab.pi-bot-mode .pi-transcript { padding-top: 94px; scroll-padding-top: 112px; }
+    #chat-tab.pi-bot-mode:has(.pi-bot-who.has-topic) .pi-transcript { padding-top: 108px; scroll-padding-top: 126px; }
     #chat-tab.pi-bot-mode .pi-bot-menu { width: 44px; height: 44px; }
     #chat-tab.pi-bot-mode .pi-message.assistant > .pi-message-body { padding: 12px 15px; max-width: 96%; }
     #chat-tab.pi-bot-mode .pi-message.user .pi-message-body { max-width: 84%; padding: 11px 15px; }
