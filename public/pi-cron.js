@@ -514,7 +514,7 @@
             const tokens = quota(grid, '每日 Token 预算', data.limits.maxTokensPerDay, { min: 1000, max: 1000000000000 });
             const money = quota(grid, '每日估算美元预算', data.limits.maxCostPerDay, { min: 0.01, max: 10000, step: 'any' });
             card.append(button('使用推荐设置', 'fa-wand-magic-sparkles', () => { concurrency.value = 2; runs.value = tokens.value = money.value = ''; dirty = true; }));
-            form.append(node('p', 'cron-muted', t('累计 Token 包含重复输入与缓存。费用限额按模型价格估算，不能保证供应商扣款绝不超额。')));
+            form.append(node('p', 'cron-muted', t('累计 Token 包含重复输入与缓存。费用限额按模型价格估算，不能保证服务商扣款绝不超额。')));
             const footer = node('div', 'cron-form-footer'), save = button('保存设置', 'fa-check', () => {}, 'primary'); save.type = 'submit';
             footer.append(button('取消', null, async () => { if (!await leave()) return; draft = null; dirty = false; await load(); }), save); form.append(footer);
             form.oninput = () => { dirty = true; }; form.onsubmit = async event => { event.preventDefault(); try {

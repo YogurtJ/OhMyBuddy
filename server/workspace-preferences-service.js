@@ -37,9 +37,9 @@ function validateTitleSettings(input) {
         patch.enabled = input.enabled;
     }
     if (Object.hasOwn(input, 'provider') || Object.hasOwn(input, 'modelId')) {
-        if (typeof input.provider !== 'string' || typeof input.modelId !== 'string') throw new Error('标题模型需要同时指定供应商和模型');
+        if (typeof input.provider !== 'string' || typeof input.modelId !== 'string') throw new Error('标题模型需要同时指定服务商和模型');
         patch.provider = input.provider.trim(); patch.modelId = input.modelId.trim();
-        if (Boolean(patch.provider) !== Boolean(patch.modelId)) throw new Error('标题模型需要同时指定供应商和模型');
+        if (Boolean(patch.provider) !== Boolean(patch.modelId)) throw new Error('标题模型需要同时指定服务商和模型');
         if (patch.provider) {
             cleanReferencePart(patch.provider, 'Provider ID'); cleanReferencePart(patch.modelId, 'Model ID');
         }

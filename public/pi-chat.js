@@ -2894,20 +2894,20 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.modelRefresh.hidden = state.botMode || !state.modelAuthError && !state.modelRefreshError;
         elements.modelChoose.hidden = state.botMode || !state.models.length;
         elements.modelSetup.classList.toggle('is-primary', !state.models.length || state.modelAuthError);
-        elements.modelSetup.textContent = translateUi(state.models.length ? '供应商与模型设置' : '配置供应商与模型');
+        elements.modelSetup.textContent = translateUi(state.models.length ? '服务商与模型设置' : '配置服务商与模型');
         elements.modelChoose.classList.toggle('is-primary', Boolean(state.models.length && !state.modelAuthError));
         $('pi-model-guidance-title').textContent = translateUi(state.modelAuthError ? '重新连接模型' : state.models.length ? '选择聊天模型' : '连接你的第一个模型');
         if (state.botMode && !state.modelRefreshOp) {
             const name = botUi?.identity()?.name || translateUi('伙伴');
-            elements.modelGuidanceText.textContent = state.modelAuthError ? translateUi("{0} 用的模型现在登录失效了。请在“供应商与模型”里重新登录。", name)
+            elements.modelGuidanceText.textContent = state.modelAuthError ? translateUi("{0} 用的模型现在登录失效了。请在“服务商与模型”里重新登录。", name)
                 : state.models.length ? translateUi("{0} 选的模型现在用不了。可以在 {0} 的设置里换一个。", name)
                     : translateUi("还没有可用的聊天模型。{0} 要接入一个模型才能回复你。", name);
             return;
         }
         elements.modelGuidanceText.textContent = state.modelRefreshOp ? (state.modelRefreshOp.kind === 'selection' ? translateUi("正在切换本会话的模型…") : translateUi("正在更新当前会话的可用模型…")) : state.modelRefreshError
-            || (state.modelAuthError ? translateUi("当前模型的认证不可用。请重新登录供应商，或选择其他已接入模型。")
+            || (state.modelAuthError ? translateUi("当前模型的认证不可用。请重新登录服务商，或选择其他已接入模型。")
                 : state.models.length ? translateUi("请选择本会话使用的模型。选择后即可发送，输入框中的草稿会保留。")
-                    : translateUi("还没有可用的聊天模型。添加供应商并登录或填写 API Key，完成后会自动更新这里的模型列表。"));
+                    : translateUi("还没有可用的聊天模型。添加服务商并登录或填写 API Key，完成后会自动更新这里的模型列表。"));
     }
 
     async function refreshSessionModels() {
@@ -2923,7 +2923,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await requestRpc(state.modelCatalogSupported ? 'refresh_models' : 'get_available_models', {}, 20000);
             if (operation.generation !== state.socketGeneration || state.modelRefreshOp !== operation) return;
             state.models = data.models || []; state.modelAuthError = false;
-            if (!state.modelCatalogSupported && !state.models.length) state.modelRefreshError = translateUi("尚无可用模型。请先完成供应商设置；旧后端需在空闲时退出并重开线程后读取新配置。");
+            if (!state.modelCatalogSupported && !state.models.length) state.modelRefreshError = translateUi("尚无可用模型。请先完成服务商设置；旧后端需在空闲时退出并重开线程后读取新配置。");
             renderModels();
         } catch (error) {
             if (operation.generation === state.socketGeneration && state.modelRefreshOp === operation) state.modelRefreshError = error.message;
@@ -4650,7 +4650,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (selectedCommand?.source !== 'extension' && !usableSessionModel()) {
             syncModelGuidance();
             (state.models.length ? elements.modelChoose : elements.modelSetup).focus();
-            return toast(state.models.length ? translateUi("请先选择已接入的模型；草稿已保留") : translateUi("请先在供应商与模型设置中完成接入；草稿已保留"), 'info');
+            return toast(state.models.length ? translateUi("请先选择已接入的模型；草稿已保留") : translateUi("请先在服务商与模型设置中完成接入；草稿已保留"), 'info');
         }
         if (state.compacting || state.compactRequested) return toast(translateUi("上下文正在压缩，请等待完成"), 'info');
 

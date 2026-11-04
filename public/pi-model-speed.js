@@ -1,6 +1,6 @@
 (() => {
     const t = (text, ...values) => globalThis.PiI18n?.t?.(text, ...values) ?? text.replace(/\{(\d+)\}/g, (_, n) => values[n] ?? '');
-    const labels = () => ({ auto: t('跟随供应商'), standard: t('标准 Standard'), fast: 'Fast', ultrafast: 'Ultrafast' });
+    const labels = () => ({ auto: t('跟随服务商'), standard: t('标准 Standard'), fast: 'Fast', ultrafast: 'Ultrafast' });
     class PiModelSpeed {
         constructor(options) {
             this.options = options; this.value = null; this.epoch = 0; this.pending = false; this.blocked = true;

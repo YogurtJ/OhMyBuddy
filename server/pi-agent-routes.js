@@ -1118,7 +1118,7 @@ function createPiAgentGateway(options = {}) {
                         return;
                     }
                     settingsService.loginService.assertIdle();
-                    if (settingsService.mutating || nativeService.busy) throw new Error('供应商或配置正在处理，请完成后再刷新模型');
+                    if (settingsService.mutating || nativeService.busy) throw new Error('服务商或配置正在处理，请完成后再刷新模型');
                     settingsService.mutating = true;
                     try {
                         const data = await worker.modelCatalog.refresh();

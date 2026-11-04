@@ -222,7 +222,7 @@ async function run(browser, base, { width, locale, theme, behaviors }) {
     state.recentRuns = [...visualRuns, { ...visualRuns[0], id: 'refunded-run', quotaRefund: true, usage: { totalTokens: 98765 } }];
     state.health.today.usedTokens = null;
     await refresh();
-    const noReport = await page.evaluate(() => PiI18n.t('供应商报告的实际用量：暂无报告'));
+    const noReport = await page.evaluate(() => PiI18n.t('服务商报告的实际用量：暂无报告'));
     assert.ok((await sourceText('.pi-learning-usage')).includes(noReport), 'explicit null does not fall back to run usage');
     delete state.health.today.usedTokens;
     state.recentRuns = state.recentRuns.filter(run => run.quotaRefund);

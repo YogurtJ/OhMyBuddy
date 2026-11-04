@@ -4,11 +4,11 @@
 
 设置 → **模型与能力**管理随 OhMyBuddy 交付的子 Agent。统一安装与旧 CLI 声明兼容见[内置能力包](BUNDLED_CAPABILITIES.md)。
 
-直接管理全局/项目 settings.json 的 `subagents.defaultModel/defaultThinking` 和 `subagents.agentOverrides.<name>.model/thinking`，只修改提交字段，null 删除本层覆盖，保留工具、提示词、供应商覆盖和未知字段。模型及思考选项来自可用模型目录。本层保存值不是最终运行映射，角色定义、供应商覆盖和单次运行参数仍参与插件优先级。
+直接管理全局/项目 settings.json 的 `subagents.defaultModel/defaultThinking` 和 `subagents.agentOverrides.<name>.model/thinking`，只修改提交字段，null 删除本层覆盖，保留工具、提示词、服务商覆盖和未知字段。模型及思考选项来自可用模型目录。本层保存值不是最终运行映射，角色定义、服务商覆盖和单次运行参数仍参与插件优先级。
 
 角色列表是已安装包的随附原生角色与已配置覆盖，可按名称添加自定义角色覆盖；这不创建角色定义，也不完整列举其他包、扫描目录或运行时注册的角色。外部 CLI 角色和完整运行映射应通过插件核对。
 
-角色卡片保留原生角色 ID，翻译只影响显示。模型支持搜索和供应商筛选；选择进入范围草稿，保存才提交，“自动”删除覆盖。不可用的已保存选择仍保留；保存成功但回读失败时提示待核对，不报告已验证。
+角色卡片保留原生角色 ID，翻译只影响显示。模型支持搜索和服务商筛选；选择进入范围草稿，保存才提交，“自动”删除覆盖。不可用的已保存选择仍保留；保存成功但回读失败时提示待核对，不报告已验证。
 
 | 方法 | 路径 | 内容 |
 |---|---|---|
@@ -87,7 +87,7 @@ GET 快照含 `cwd/revision/maxBytes/trust/files/selected`；`files` 为 global/
 
 设置页顶部 **查看当前对话** 与会话详情中直接可见的 **查看系统提示词** 打开同一个阅读窗口，默认展示完整正文、搜索与复制；“组成与来源”提供实际信任、基础/追加文本、加载时的上下文文件正文与 Skills/工具清单，读取时间始终显示。“修改我的要求”及基础/追加编辑入口跳到对应范围设置；合成正文只读，不整体写回。资源清单原接口继续只返回元数据，正文仅在显式 `get_system_prompt` 时通过当前唯一 worker 的私有资源管道获取，单份快照最多 1 MiB，超限整体失败而非截断。查看不调用模型、不写 JSONL、不另开 worker；迟到/未知私有结果不会广播，切线程/断线清空快照。
 
-正文来自公开 `ctx.getSystemPrompt()`，基础组成来自 `ctx.getSystemPromptOptions()`。原生接口没有在该快照中给出 SYSTEM/APPEND 文件的确定来源，因此路径明确标为按当前文件与实际信任推导；内容比较不能识别相同文本的 CLI/扩展来源。`matchesSavedFiles` 仅比较基础与追加文本及配置推导信任，无法读取时为 null，不声称所有上下文文件、工具或最终请求都一致。扩展可逐轮改变提示，`before_provider_request` 的供应商 payload 改写不包含在视图中。
+正文来自公开 `ctx.getSystemPrompt()`，基础组成来自 `ctx.getSystemPromptOptions()`。原生接口没有在该快照中给出 SYSTEM/APPEND 文件的确定来源，因此路径明确标为按当前文件与实际信任推导；内容比较不能识别相同文本的 CLI/扩展来源。`matchesSavedFiles` 仅比较基础与追加文本及配置推导信任，无法读取时为 null，不声称所有上下文文件、工具或最终请求都一致。扩展可逐轮改变提示，`before_provider_request` 的服务商 payload 改写不包含在视图中。
 
 | 方法 | 路径/命令 | 内容 |
 |---|---|---|
@@ -204,7 +204,7 @@ Skills 页复用上述 GET/PUT 资源接口，不新增禁用配置或改写 SKI
 - samplingParams：仅 temperature/top_p/top_k/min_p/presence_penalty/frequency_penalty/repetition_penalty/seed 的有界数字，不允许 messages/tools 等请求覆盖。仅原生支持的 OpenAI compatible APIs 开放；以模型实际 api 判断。
 - cost：input/output/cacheRead/cacheWrite 的每百万 token 美元费率，0–100000 的有限数。部分更新保留其他费率与既有 tiers；cost=null 明确恢复原生价格。阶梯价格本轮只保留和显示，未实现编辑。
 
-价格更新不追溯改写会话历史费用。零费率可能代表未配置，不代表免费。自定义 Provider 的高级 JSON 不是任意协议自动兼容保证；凭据继续走 ModelRuntime.login/logout。
+价格更新不追溯改写会话历史费用。零费率可能代表未配置，不代表免费。自定义服务商的高级 JSON 不是任意协议自动兼容保证；凭据继续走 ModelRuntime.login/logout。
 
 ## API
 

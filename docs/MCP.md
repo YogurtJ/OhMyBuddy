@@ -40,7 +40,7 @@
 - 现有 command、args、cwd、URL、env、headers 及 OAuth 字符串均不回显；只显示字段存在与否。默认保留，替换和移除必须明确选择；环境变量／命令引用原样保存，不在编辑器求值。未知字段保留且不开放随意编辑。不要把“已存在”提示或空占位作为新凭据提交。
 - `description` 是普通文本，编辑上限 4096 个 JavaScript 字符，null 移除。OAuth 的 `clientName` 与 `authServerMetadataUrl` 同样只显示存在状态，使用明确的保留／替换／移除；URL、回调端口与回调 URL 一致性由原生校验。
 - OAuth 的 `clientRegistration` 为非秘密的注册方式，可在网页选择默认（自动）、`auto`、`dcr` 或 `cimd`；默认优先使用服务器支持的客户端元数据文档，否则动态注册。授权页提示客户端无效时可尝试 DCR。CIMD 需要服务器支持，不能与 clientId/clientName 同时配置，回调必须满足原生 localhost／127.0.0.1 与 `/callback` 限制。现有登录不会因保存注册方式自动退出或重新授权，需明确通过所选 worker 操作。
-- `auth.provider` 是非秘密的供应商标识，仅允许全局 HTTP 服务器，地址必须是 HTTPS 或原生允许的 loopback。它复用 Pi 供应商登录，优先于 OAuth；供应商返回 token 时会覆盖配置的 Authorization header。新增或改变 provider 时若仍有该 header，编辑器拒绝保存，须明确移除 header 后再改。既有原生支持的组合可做无关编辑，不自动删除 OAuth 或凭据。API 的 `auth:null` 明确移除整个认证块。
+- `auth.provider` 是非秘密的服务商标识，仅允许全局 HTTP 服务器，地址必须是 HTTPS 或原生允许的 loopback。它复用 Pi 服务商登录，优先于 OAuth；服务商返回 token 时会覆盖配置的 Authorization header。新增或改变 provider 时若仍有该 header，编辑器拒绝保存，须明确移除 header 后再改。既有原生支持的组合可做无关编辑，不自动删除 OAuth 或凭据。API 的 `auth:null` 明确移除整个认证块。
 - 保存需确认与当前 revision；修订覆盖两范围 MCP、设置与信任。冲突、失败或结果不确定时不自动重试，先明确刷新核对；成功保存也不自动重载现有线程。文件写入私有、原子，拒绝符号链接、非普通文件与损坏 JSON。
 - 先打开一个持久线程，才能明确读取该唯一 worker 的原生状态，或确认重连、OAuth 登录／退出。页面不另建 MCP 客户端；原生连接、授权、取消和清理由 Pi 官方扩展拥有。状态无法核实时显示未知，不能用工具曾注册过推断连接健康。
 - OAuth 登录期间，回到聊天打开原生授权链接；浏览器无法访问部署机回调时，在原生待确认输入框粘贴重定向 URL。凭据保存在 Pi 的原生存储，不新增网页凭据副本。断开网页不等于取消，也不允许重放未确认的操作；需要取消时使用原生对话的取消入口。
@@ -94,7 +94,7 @@ node scripts/migrate-native-mcp.cjs --agent-dir /absolute/agent-dir \
 Pi 1.2.0 的 `tools.read()` 在图片文件上返回可传给 `image()` 的图片块；`image()` 同时以私有权限保存随机临时文件，后续可通过明确路径复用。临时文件不是永久成果，系统清理后可能失效。分类接口可接受支持图片输入的模型与 `images` 上下文，模型可用性及凭据取自原生目录；OpenAI Decisions 分类器需要 API Key，不自动把 ChatGPT 订阅转成该授权。多个 text 输出有分隔标记，console 输出集中展示，脚本内置对象冻结防止原型破坏。
 
 
-支持官方虚拟模型与分类模型 SDK，是否提供 Auto 路由由用户加载的扩展决定；OhMyBuddy 不自动改用其他模型。OpenAI 新 ChatGPT 登录沿用原生安装 deviceId 和认证接口，旧 Codex 身份不自动转换。Pi 1.0 Codemode 增加 `models.generateImages()`；OhMyBuddy 主线程与子任务的官方 Codemode 工厂在模型注册表边界拒绝该直接生成入口，并提示使用已有媒体规划、确认与一次性执行票据。模型目录与分类接口保留原生行为。聊天供应商凭据不会因此成为媒体执行授权。
+支持官方虚拟模型与分类模型 SDK，是否提供 Auto 路由由用户加载的扩展决定；OhMyBuddy 不自动改用其他模型。OpenAI 新 ChatGPT 登录沿用原生安装 deviceId 和认证接口，旧 Codex 身份不自动转换。Pi 1.0 Codemode 增加 `models.generateImages()`；OhMyBuddy 主线程与子任务的官方 Codemode 工厂在模型注册表边界拒绝该直接生成入口，并提示使用已有媒体规划、确认与一次性执行票据。模型目录与分类接口保留原生行为。聊天服务商凭据不会因此成为媒体执行授权。
 
 自定义模型 `samplingParamsByThinkingLevel` 继续按官方文档手工配置，无关网页编辑保留该字段；OAuth 注册方式已接入上述 MCP 编辑器。工具参数由原生 pi-schema 校验，包括将数字字符串转换成数字、单值包装为数组和省略可选 null；校验失败使用原生错误信息，所有直接与嵌套调用继续经过权限钩子。
 

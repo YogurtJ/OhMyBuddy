@@ -27,7 +27,7 @@ Z-Image、Flux 和 MiniMax 视频不再自动注入实验室目录，即使旧�
 
 旧的显式 base64/URL、通用异步视频和自定义 JSON 模板继续可选。**通用异步视频是需要按文档调整的结构示例，不是所有视频服务都支持的标准协议。** 对特殊参数或其他协议，展开 Agent 文档接入；草稿和保存均不生成媒体。多步骤上传、复杂签名或流式协议仍需专门适配；单次 multipart 文件提交已支持。
 
-URL 输出仍检查准确的下载来源；需要的 CDN 在高级连接设置中登记，不能用通配符或自动信任响应域名。模板不代表已验证具体账户、模型权限或付费生成。当前新增协议通过合成 HTTP 响应和隔离服务回归，真实供应商生成由使用者确认后验证。
+URL 输出仍检查准确的下载来源；需要的 CDN 在高级连接设置中登记，不能用通配符或自动信任响应域名。模板不代表已验证具体账户、模型权限或付费生成。当前新增协议通过合成 HTTP 响应和隔离服务回归，真实服务商生成由使用者确认后验证。
 
 协议参考：[OpenAI Images](https://platform.openai.com/docs/api-reference/images/create)、[Gemini 图像生成](https://ai.google.dev/gemini-api/docs/image-generation)、[火山方舟 API](https://www.volcengine.com/docs/82379/)、下方 Qwen 官方文档。提供常用协议结构，不承诺每个模型的全部参数。
 

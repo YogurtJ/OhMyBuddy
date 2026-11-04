@@ -40,7 +40,7 @@ OhMyBuddy 是一个自托管的网页应用，把 Pi Coding Agent 变成随时�
 - **在微信里派活。** 装上可选的微信连接组件并扫码后，在微信里发一句话或一张图片，家里电脑上的伙伴或 Agent 就会读文件、跑工具，做完把文件发回微信。
 - **一个伙伴，所有屏幕。** 会话保存在你的服务器上，电脑、手机和微信接着同一段对话。可以添加到手机主屏幕，回复完成时收到通知。
 - **真能干活。** 伙伴和 Agent 可以读写文件、执行命令、上网、使用 MCP 工具、启动子 Agent、运行定时任务。伙伴提供“放手”“稳妥”“每次都问”三种做事方式。
-- **模型、Key 和机器都由你掌控。** Pi 支持的供应商都可以使用，包括 Anthropic、OpenAI、Google Gemini、GitHub Copilot、OpenRouter、DeepSeek、通义千问、Kimi、MiniMax、xAI 和 Mistral；可以用 API Key 或 OAuth 登录，也可以接入自己的 OpenAI 兼容服务。凭据和历史都保存在你自己的机器上。
+- **模型、Key 和机器都由你掌控。** Pi 支持的服务商都可以使用，包括 Anthropic、OpenAI、Google Gemini、GitHub Copilot、OpenRouter、DeepSeek、通义千问、Kimi、MiniMax、xAI 和 Mistral；可以用 API Key 或 OAuth 登录，也可以接入自己的 OpenAI 兼容服务。凭据和历史都保存在你自己的机器上。
 - **跟着 Pi 生态一起长。** Pi 的 Packages、Skills、提示词模板和 MCP 服务器都可以在浏览器里安装，也可以让内置的扩展助手帮你查找和配置。
 - **内置图像、视频和语音。** 接入自己的图像、视频和语音服务，说出想法就能得到可编辑的生成参数；也可以语音输入消息，或让回复朗读出来。
 
@@ -136,13 +136,13 @@ OhMyBuddy 是一个自托管的网页应用，把 Pi Coding Agent 变成随时�
 
 - 布局会适应电脑、平板和手机屏幕，OhMyBuddy 也可以添加到手机主屏幕。
 - 提供页面通知和提示音，并可选开启 Web Push 后台提醒。
-- 用量统计按日期、供应商、模型、项目和会话汇总 token 和估算费用。
+- 用量统计按日期、服务商、模型、项目和会话汇总 token 和估算费用。
 - 提供浅色和深色主题，可以调整字号，界面可选英文或简体中文。
 - 用访问 Token 保护你的实例。OhMyBuddy 作为后台服务运行，并提供桌面入口。它会检查新版本，并生成升级提示词，你可以交给部署机器上的 Agent 执行。
 
 ## 快速开始
 
-当前锁定依赖要求使用 **Node.js 22.x（22.19.0 或更新的 22.x，含 npm）**、`bash` 和 [ripgrep](https://github.com/BurntSushi/ripgrep)（Windows 上可以通过 Git for Windows 获得 Bash），以及一个模型供应商的账户。不需要全局安装 Pi，不需要构建前端，也不需要 GPU。
+当前锁定依赖要求使用 **Node.js 22.x（22.19.0 或更新的 22.x，含 npm）**、`bash` 和 [ripgrep](https://github.com/BurntSushi/ripgrep)（Windows 上可以通过 Git for Windows 获得 Bash），以及一个模型服务商的账户。不需要全局安装 Pi，不需要构建前端，也不需要 GPU。
 
 ```bash
 # 1. 从 Releases 下载 ohmybuddy-<version>.tar.gz 及其 .sha256 文件，然后校验压缩包
@@ -156,7 +156,7 @@ node scripts/install.cjs
 npm start
 ```
 
-打开 <http://127.0.0.1:11408>，检查 **设置 → 供应商与模型**，然后打开 **伙伴** 认识你的第一个伙伴，或在 **工作台** 里选一个项目文件夹。
+打开 <http://127.0.0.1:11408>，检查 **设置 → 服务商与模型**，然后打开 **伙伴** 认识你的第一个伙伴，或在 **工作台** 里选一个项目文件夹。
 
 日常使用时，请按[安装指南](docs/INSTALL_RECOVERY.md)（另有 [macOS](docs/MACOS.md) 和 [Windows](docs/WINDOWS.md) 版本）把数据放在应用目录之外，然后运行 `node scripts/install-service.cjs`。这样 OhMyBuddy 会在后台运行，并在你登录时自动启动；在 macOS 和 Windows 上还会添加桌面入口。
 
@@ -186,7 +186,7 @@ flowchart LR
     S <-->|RPC| W["Pi Agent worker<br/>每个打开的线程一个"]
     W --> D[("Pi 会话与配置<br/>原生 JSONL")]
     W --> P["你的项目文件夹"]
-    W --> L["模型供应商"]
+    W --> L["模型服务商"]
     S --> M["你的媒体服务"]
 ```
 
@@ -212,7 +212,7 @@ flowchart LR
 
 **它能替代 Pi CLI 吗？** 不能，它是 Pi CLI 的搭档。两者共用同一个 Pi 身份，你可以根据场景选择使用哪一个。
 
-**需要 GPU 吗？** 不需要。模型运行在你的供应商那里，或运行在你自己配置的服务上。
+**需要 GPU 吗？** 不需要。模型运行在你的服务商那里，或运行在你自己配置的服务上。
 
 **怎么升级？** **设置 → 版本与更新**会提示新版本；配置了签名分发源的完整平台包可在这里确认更新，由独立启动器备份并切换。源码和旧安装继续提供独立 Agent 提示词。安装方式与备份边界见[版本与更新](docs/UPDATES.md)和[安装与恢复](docs/INSTALL_RECOVERY.md)。
 

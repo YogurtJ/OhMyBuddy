@@ -55,7 +55,7 @@ async function run(browser, base, width, language) {
         else if (url.pathname === '/api/pi/projects') data = { roots: ['/fixture'], projects: [{ cwd, name: '项目', sessionCount: 1 }] };
         else if (url.pathname === '/api/pi/sessions') data = { sessions: [session] };
         else if (url.pathname === '/api/pi/activity') data = { runtimes: [], replyNotices: [], pinnedProjects: [], hiddenProjects: [] };
-        else if (url.pathname === '/api/pi/settings/models') data = { models: [model], providers: [{ id: 'fixture', name: '供应商', configured: true, authMethods: {} }], customProviders: [], preferences: { mediaAgent: { provider: 'fixture', modelId: model.id } } };
+        else if (url.pathname === '/api/pi/settings/models') data = { models: [model], providers: [{ id: 'fixture', name: '服务商', configured: true, authMethods: {} }], customProviders: [], preferences: { mediaAgent: { provider: 'fixture', modelId: model.id } } };
         else if (url.pathname === '/api/pi/settings/usage') data = usage(url.searchParams);
         else if (url.pathname === '/api/pi/settings/native') data = { cwd, revision: 'fixture', trust: { effective: true }, schema: Object.fromEntries(['compaction.enabled', 'compaction.reserveTokens'].map(key => [key, nativeSettingsSchema[key]])), settings: { 'compaction.enabled': { value: true, global: true }, 'compaction.reserveTokens': { value: 2048, global: 2048 } }, environment: {} };
         else if (url.pathname.endsWith('/history')) data = [];
@@ -155,7 +155,7 @@ async function run(browser, base, width, language) {
     await overflow(['.workspace-settings-panel.active', '#settings-usage-filters', '.pi-usage-cards', '.pi-usage-cards > div']);
     await page.locator('[data-settings-tab="providers"]').click();
     await page.locator('#settings-add-provider').click();
-    assert.equal(await page.locator('#workspace-settings-editor-title').textContent(), english ? 'Add custom Provider' : '新增自定义 Provider');
+    assert.equal(await page.locator('#workspace-settings-editor-title').textContent(), english ? 'Add custom provider' : '添加自定义服务商');
     await overflow(['.settings-editor-dialog', '#workspace-settings-editor-body', '#settings-provider-form']);
     await page.locator('#workspace-settings-editor-close').click();
     await page.locator('[data-settings-tab="native"]').click();

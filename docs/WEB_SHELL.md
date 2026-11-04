@@ -47,6 +47,6 @@ Shell状态参与activity.busy、空闲回收、工作流互斥和空闲部署�
 
 “引导消息投递”“后续消息投递”各自支持逐条（one-at-a-time）/全部（all）。输入框既有“引导/后续”决定这条消息何时送达；详情选项决定每次取几条。初始值来自实际get_state，不替用户重置默认。
 
-`set_steering_mode` / `set_follow_up_mode` 接受`{mode,runtimeId,revision}`，与webQueueModes快照匹配后调用原生setter，并重读当前状态，返回/广播`gateway_queue_modes`的`modes`。同一运行实例变更预占操作，旧页面修订拒绝；设置保存与原生配置/供应商登录互斥。正常Agent生成期间允许修改队列策略；Shell、压缩、停止或其他冲突操作期间拒绝。
+`set_steering_mode` / `set_follow_up_mode` 接受`{mode,runtimeId,revision}`，与webQueueModes快照匹配后调用原生setter，并重读当前状态，返回/广播`gateway_queue_modes`的`modes`。同一运行实例变更预占操作，旧页面修订拒绝；设置保存与原生配置/服务商登录互斥。正常Agent生成期间允许修改队列策略；Shell、压缩、停止或其他冲突操作期间拒绝。
 
 原生setter立即修改当前agent，并交给SettingsManager保存全局默认，不写工作台偏好或会话历史。项目设置覆盖仍遵循Pi规则，其他已启动worker不自动改值；详情文案必须说明此范围。冲突、失败或等待超时后重读核对，不能自动重复写入。保存成功后的全局落盘由原生SettingsManager负责，不把RPC响应当成独立的持久事务回执。

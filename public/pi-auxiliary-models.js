@@ -76,9 +76,9 @@
             const main = node('div', undefined, 'aux-model-main'), copy = node('div', undefined, 'aux-model-copy');
             const label = node('strong', t(purpose.label)), description = node('p', t(purpose.description)), badge = node('small');
             copy.append(label, description, badge);
-            const providerLabel = node('label', t('供应商'), 'aux-model-field'), modelLabel = node('label', t('模型'), 'aux-model-field');
+            const providerLabel = node('label', t('服务商'), 'aux-model-field'), modelLabel = node('label', t('模型'), 'aux-model-field');
             const provider = node('select'), model = node('select');
-            provider.setAttribute('aria-label', t('{0} · 供应商', t(purpose.label))); model.setAttribute('aria-label', t('{0} · 模型', t(purpose.label)));
+            provider.setAttribute('aria-label', t('{0} · 服务商', t(purpose.label))); model.setAttribute('aria-label', t('{0} · 模型', t(purpose.label)));
             providerLabel.append(provider); modelLabel.append(model);
             const gear = node('button', undefined, 'aux-model-options'); gear.type = 'button';
             gear.setAttribute('aria-label', t('配置{0}', t(purpose.label))); gear.title = t('配置{0}', t(purpose.label));

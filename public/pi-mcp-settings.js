@@ -243,10 +243,10 @@
                 adder.append(label(t('新增字段：', 'New field: ') + kind, newKey), writeButton(t('添加字段', 'Add field'), () => { const k = newKey.value.trim(); if (!k || ['__proto__', 'constructor', 'prototype'].includes(k) || keys.has(k)) return; keys.add(k); privateField(rows, `${kind}.${k}`, false); newKey.value = ''; controls(); }, { glyph: 'fa-plus' }));
                 box.append(adder);
             }
-            const providerAuth = group(t('供应商认证', 'Provider authentication'), t('仅适用于全局 HTTP 配置（HTTPS 或本机回环）。使用 /login 的供应商凭据；优先于 OAuth，有令牌时替换 Authorization 请求头。更改供应商前请明确移除该请求头；不会自动删除 OAuth 设置。', 'Global HTTP only (HTTPS or loopback). Uses /login provider credentials; takes precedence over OAuth and replaces the Authorization header when a token is available. Explicitly remove that header before changing provider; OAuth settings are retained.'));
+            const providerAuth = group(t('服务商认证', 'Provider authentication'), t('仅适用于全局 HTTP 配置（HTTPS 或本机回环）。使用 /login 的服务商凭据；优先于 OAuth，有令牌时替换 Authorization 请求头。更改服务商前请明确移除该请求头；不会自动删除 OAuth 设置。', 'Global HTTP only (HTTPS or loopback). Uses /login provider credentials; takes precedence over OAuth and replaces the Authorization header when a token is available. Explicitly remove that header before changing provider; OAuth settings are retained.'));
             const provider = el('input', null, { 'aria-label': 'auth.provider', autocomplete: 'off' }); provider.value = server?.config?.auth?.provider || '';
             if (snapshot.scope === 'global') provider.dataset.mcpWrite = ''; else provider.disabled = true;
-            providerAuth.append(fieldLabel(t('供应商 ID', 'Provider ID'), 'auth.provider', provider));
+            providerAuth.append(fieldLabel(t('服务商 ID', 'Provider ID'), 'auth.provider', provider));
             const previousProvider = provider.value;
             readers.push(config => { if (provider.value !== previousProvider) config.auth = { provider: provider.value || null }; });
             const oauth = group('OAuth', t('元数据地址必须为 HTTPS 或本机回环 HTTP；仅填写可信的授权服务器文档地址。', 'Metadata URL must use HTTPS or loopback HTTP; use only an authorization server document you trust.'));

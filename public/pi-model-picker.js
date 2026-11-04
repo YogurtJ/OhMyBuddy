@@ -73,7 +73,7 @@
             header.append(title, close);
             this.search = node('input', 'pi-model-search');
             this.search.type = 'search';
-            this.search.placeholder = t('搜索模型或供应商…');
+            this.search.placeholder = t('搜索模型或服务商…');
             this.search.setAttribute('aria-label', this.search.placeholder);
             this.search.autocomplete = 'off';
             this.search.spellcheck = false;
@@ -305,7 +305,7 @@
                     groups.get(model.provider).push(model);
                 }
                 for (const [provider, models] of groups) addGroup(provider, models);
-                this.status.textContent = matches.length ? t('显示 {0} / {1} 个模型', Math.min(this.limit, matches.length), matches.length) : t('没有匹配的模型，请尝试其他名称或供应商。');
+                this.status.textContent = matches.length ? t('显示 {0} / {1} 个模型', Math.min(this.limit, matches.length), matches.length) : t('没有匹配的模型，请尝试其他名称或服务商。');
                 if (matches.length > this.limit) {
                     const more = node('button', 'pi-model-more', t('显示更多模型'));
                     more.type = 'button';

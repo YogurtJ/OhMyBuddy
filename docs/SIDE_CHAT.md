@@ -167,4 +167,4 @@
 
 ## 验证与部署
 
-Node 与浏览器入口见[模块导航](development/MODULES.md)，按[开发流程](development/WORKFLOW.md)使用独立身份、真实 SDK/RPC 和本地合成服务。保留中的侧 worker 参与实例空闲检查；需要重启时先结束侧聊或关闭页面。平台和真实供应商结果分别记录。
+Node 与浏览器入口见[模块导航](development/MODULES.md)，按[开发流程](development/WORKFLOW.md)使用独立身份、真实 SDK/RPC 和本地合成服务。保留中的侧 worker 参与实例空闲检查；需要重启时先结束侧聊或关闭页面。平台和真实服务商结果分别记录。

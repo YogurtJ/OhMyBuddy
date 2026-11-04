@@ -37,6 +37,10 @@ function mountSettingsRoutes(router, { settingsService, nativeService, auxiliary
     route('patch', '/settings/media-agent', req => settingsService.setMediaAgentModel(req.body), { serviceStatus: false });
     route('post', '/settings/models/test', req => settingsService.testModel(req.body), { errorStatus: 502, serviceStatus: false });
     route('post', '/settings/custom-providers', req => settingsService.upsertCustomProvider(req.body));
+    route('post', '/settings/custom-providers/setup', req => settingsService.createCustomProvider(req.body));
+    route('post', '/settings/custom-providers/discover-models', req => settingsService.discoverCustomModels({ ...req.body, providerId: undefined }), { errorStatus: 400 });
+    route('post', '/settings/custom-providers/:providerId/discover-models', req => settingsService.discoverCustomModels({ providerId: req.params.providerId }));
+    route('post', '/settings/custom-providers/:providerId/models/batch', req => settingsService.addCustomModels(req.params.providerId, req.body));
     route('delete', '/settings/custom-providers/:providerId', req => settingsService.deleteCustomProvider(req.params.providerId));
     route('post', '/settings/custom-providers/:providerId/models', req => settingsService.upsertCustomModel(req.params.providerId, req.body));
     route('delete', '/settings/custom-providers/:providerId/models/:modelId', req => settingsService.deleteCustomModel(req.params.providerId, req.params.modelId));

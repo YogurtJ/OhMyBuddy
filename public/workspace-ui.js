@@ -137,7 +137,7 @@
         document.querySelectorAll('[data-artifacts-label]').forEach(label => { label.textContent = featureText('成果中心', 'Artifacts'); });
         function settingsLoadingPage(params) {
             const tab = settingsTabs.has(params.get('tab')) ? params.get('tab') : 'providers';
-            const names = { providers: ['供应商与模型', 'Providers and models'], media: ['模型与能力', 'Models & capabilities'], models: ['使用偏好', 'Preferences'], 'system-prompts': ['系统提示词', 'System prompts'], native: ['Pi 配置', 'Pi configuration'], access: ['访问控制', 'Access control'], usage: ['用量统计', 'Usage'], updates: ['版本与更新', 'Versions and updates'] };
+            const names = { providers: ['服务商与模型', 'Providers and models'], media: ['模型与能力', 'Models & capabilities'], models: ['使用偏好', 'Preferences'], 'system-prompts': ['系统提示词', 'System prompts'], native: ['Pi 配置', 'Pi configuration'], access: ['访问控制', 'Access control'], usage: ['用量统计', 'Usage'], updates: ['版本与更新', 'Versions and updates'] };
             const page = document.createElement('div'); page.className = 'workspace-feature-settings'; page.dataset.loadingTab = tab;
             const header = document.createElement('header'); header.className = 'workspace-settings-header';
             const heading = document.createElement('div');

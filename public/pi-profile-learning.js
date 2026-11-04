@@ -14,7 +14,7 @@
     const fieldInfo = {
         frequency: '“每轮对话后”在每轮对话结束时复盘，最及时，但每轮都会占用一次运行次数。按间隔复盘会把这段时间的对话合并成一次，预算有限或对话频繁时更省。',
         maxRunsPerDay: '纠错识别、对话复盘、候选提取和整理合并每执行一次都算一次运行，手动“立即复盘”也计入。达到上限后当天暂停，到重置时间恢复。',
-        maxTokensPerDay: '每次运行开始前最多预留 6,000 tokens（整理合并另加读取字数），防止意外超支；实际消耗通常更少，以供应商报告为准。剩余额度不足一次预留时，当天暂停。',
+        maxTokensPerDay: '每次运行开始前最多预留 6,000 tokens（整理合并另加读取字数），防止意外超支；实际消耗通常更少，以服务商报告为准。剩余额度不足一次预留时，当天暂停。',
         consolidationInputChars: '整理合并时一次最多读取多少字的记忆交给模型比较。读得越多，越能发现分散的重复内容，但每次预留的 tokens 也越多（读取字数 + 6,000）。',
         correction: '消息包含这些短语时，会被当作纠正并立即交给纠错模型学习，例如“下次记得”。',
         preference: '消息包含这些短语时，会被当作长期偏好并立即学习，例如“我一般习惯”。',
@@ -146,7 +146,7 @@
             if (legacy.reviewModelAvailable === false) {
                 body.append(el('p', { text: t('旧模型不可用，请选择新的辅助模型。') }));
                 const models = (catalog?.models || []).filter(model => model.available && model.input?.includes('text') && !/:batch$/.test(model.id));
-                const provider = el('select', { class: 'pi-id-select', 'aria-label': t('供应商'), disabled: actionDisabled() });
+                const provider = el('select', { class: 'pi-id-select', 'aria-label': t('服务商'), disabled: actionDisabled() });
                 const model = el('select', { class: 'pi-id-select', 'aria-label': t('模型'), disabled: actionDisabled() });
                 for (const id of new Set(models.map(row => row.provider))) provider.append(el('option', { value: id, text: catalog.providers.find(row => row.id === id)?.name || id }));
                 provider.value = models.some(row => row.provider === s.legacyModel?.provider) ? s.legacyModel.provider : provider.options[0]?.value || '';
@@ -156,7 +156,7 @@
                     chosen = provider.value && model.value ? { provider: provider.value, modelId: model.value } : null; s.legacyModel = chosen;
                 };
                 fill(); provider.onchange = () => { fill(); render(); }; model.onchange = () => { chosen = { provider: provider.value, modelId: model.value }; s.legacyModel = chosen; };
-                body.append(el('div', { class: 'pi-learning-fields' }, [field('供应商', provider), field('模型', model)]));
+                body.append(el('div', { class: 'pi-learning-fields' }, [field('服务商', provider), field('模型', model)]));
                 if (!models.length) body.append(el('p', { class: 'pi-id-help', text: t('暂无可用文本模型，请先配置辅助模型。') }));
                 if (!catalog) void loadCatalog();
             }
@@ -177,7 +177,7 @@
             return U.card({ title: t('今日用量'), icon: 'gauge-high', actions: [info.button], className: 'pi-learning-usage' }, [el('div', { class: 'pi-learning-stack' }, [
                 U.meter({ label: t('运行次数'), value: runs, max: maxRuns, level: exhausted === 'runs' ? 'full' : undefined, valueText: `${U.number(runs)} / ${U.number(maxRuns)}${exhausted === 'runs' ? ` · ${t('已达上限')}` : ''}` }),
                 U.meter({ label: t('预留 tokens'), value: tokens, max: maxTokens, level: exhausted === 'tokens' ? 'full' : undefined, valueText: `${U.compact(tokens)} / ${U.compact(maxTokens)}${exhausted === 'tokens' ? ` · ${t('剩余不足一次运行')}` : ''}` }),
-                el('small', { class: 'pi-id-help', text: used === null ? t('供应商报告的实际用量：暂无报告') : t('供应商报告的实际用量：约 {0} tokens（今天）', U.compact(used)) }),
+                el('small', { class: 'pi-id-help', text: used === null ? t('服务商报告的实际用量：暂无报告') : t('服务商报告的实际用量：约 {0} tokens（今天）', U.compact(used)) }),
                 el('small', { class: 'pi-id-help', text: t('每天 {0} 重置', reset.toLocaleTimeString(U.locale(), { hour: '2-digit', minute: '2-digit', hour12: false })) })]), info.panel]);
         }
         function modesCard() {
@@ -246,7 +246,7 @@
                 list.append(el('li', {}, [el('span', { class: 'pi-id-timeline-icon', dataset: { tone } }, [U.icon(job.status === 'completed' ? 'check' : 'clock')]),
                     el('div', { class: 'pi-id-timeline-copy' }, [el('div', { class: 'pi-learning-job-title' }, [el('strong', { text: t(jobLabels[job.reason] || '后台学习') }), U.chip(t(jobLabels[job.status] || '状态未知'), tone)]),
                         el('small', {}, [U.time(job.endedAt || job.startedAt || job.createdAt)]), el('small', { text: [model, Number.isFinite(job.usage?.totalTokens) ? t('{0} tokens', U.number(job.usage.totalTokens)) : t('用量暂无报告'),
-                            job.costStatus === 'reported' && Number.isFinite(job.usage?.reportedCostUsd) ? t('供应商报告费用：${0}', job.usage.reportedCostUsd) : t('费用未知')].join(' · ') }),
+                            job.costStatus === 'reported' && Number.isFinite(job.usage?.reportedCostUsd) ? t('服务商报告费用：${0}', job.usage.reportedCostUsd) : t('费用未知')].join(' · ') }),
                         job.error && el('p', { class: 'pi-id-help', text: t(errorLabels[job.error] || '运行未完成，请查看技术详情。') }), technical]),
                     can('cancel') && job.id && ['queued', 'running', 'pending', 'waiting-config'].includes(job.status) && button('取消作业', () => void action('cancel', { jobId: job.id }), { variant: 'ghost', disabled: actionDisabled() })]));
             }

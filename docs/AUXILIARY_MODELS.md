@@ -1,6 +1,6 @@
 # 辅助模型
 
-“设置 → 使用偏好 → 辅助模型”集中管理已经实现的辅助任务模型。按用途选择供应商和模型，点击“保存更改”后用于后续任务。保存只核对配置和认证，不会生成标题、运行学习、规划媒体、执行媒体或安装资源。
+“设置 → 使用偏好 → 辅助模型”集中管理已经实现的辅助任务模型。按用途选择服务商和模型，点击“保存更改”后用于后续任务。保存只核对配置和认证，不会生成标题、运行学习、规划媒体、执行媒体或安装资源。
 
 ## 当前用途
 
@@ -14,7 +14,7 @@
 
 两类原有用途和三类学习用途可以选择相同模型，也可以分别选择适合各自任务的模型。模型目录来自实际 Pi 配置，只提供已接入且可用的文本模型；被移除或暂不可用的已保存选择仍保留显示，不自动替换为第一项。
 
-重新进入“使用偏好”时会重新读取本地模型目录，保留未保存的选择，并丢弃被较新读取取代的旧响应；不会自动请求供应商远端目录。子 Agent 设置同样读取原生设置目录。会话扩展通过 `registerProvider` 注册或覆盖的模型可能与原生 `models.json` 不同；独立辅助任务不加载会话扩展，因此仅修改扩展中的模型列表不会同步到这里。标准 API 模型应在“供应商与模型”或原生模型配置中维护；已有重复扩展注册时需一并核对，不能把浏览器刷新当作模型导入。
+重新进入“使用偏好”时会重新读取本地模型目录，保留未保存的选择，并丢弃被较新读取取代的旧响应；不会自动请求服务商远端目录。子 Agent 设置同样读取原生设置目录。会话扩展通过 `registerProvider` 注册或覆盖的模型可能与原生 `models.json` 不同；独立辅助任务不加载会话扩展，因此仅修改扩展中的模型列表不会同步到这里。标准 API 模型应在“服务商与模型”或原生模型配置中维护；已有重复扩展注册时需一并核对，不能把浏览器刷新当作模型导入。
 
 媒体规划的“自动”沿用既有规则：`PI_MEDIA_PLANNER_MODEL` 与 Pi 默认模型形成候选，均无匹配时选第一个可用非 batch 模型。方案失败可以尝试其他默认候选，响应报告实际模型及回退情况。标题与媒体都明确指定了模型时，配置失效或请求失败不会偷偷换成其他模型。媒体 API 兼容显式 provider/modelId 覆盖单次请求，该显式选择同样不回退。
 
@@ -51,7 +51,7 @@ Pi 原生会话仍是唯一聊天事实来源。工作台使用所选偏好文�
 }
 ```
 
-提交前与校验后都检查修订；冲突或已有保存操作返回 409，非法参数/不可用模型返回 400。校验通过后仅一次私密原子写入，保留其他偏好。GET 不含认证值；校验失败不回传供应商原始错误。`/activity.nativeSettingsBusy` 包含辅助配置校验，停机等待它结束且禁止迟到保存。
+提交前与校验后都检查修订；冲突或已有保存操作返回 409，非法参数/不可用模型返回 400。校验通过后仅一次私密原子写入，保留其他偏好。GET 不含认证值；校验失败不回传服务商原始错误。`/activity.nativeSettingsBusy` 包含辅助配置校验，停机等待它结束且禁止迟到保存。
 
 ## 开发接入与验证
 
@@ -61,9 +61,9 @@ Pi 原生会话仍是唯一聊天事实来源。工作台使用所选偏好文�
 
 ## 后台学习 REST 与边界
 
-学习开关独立于模型路由，默认关闭。`GET /api/pi/profiles/:id/learning` 返回 `{version:1,status,revision,settings,health,legacy,proposals,drafts,jobs,recentRuns,capabilities}`，revision 是整数。`capabilities` 明示可用动作、专用模型、物理 profile/cwd 范围、输入/输出上限、`limits`、`capacity`（队列、游标、动作剩余额度与被阻断的分支）及价格报告状态。`PUT` 同路径提交 `{expectedRevision,changes}`；开关为 `enabled`、`correctionEnabled`、`reviewEnabled`、`extractionEnabled`，额度为 `maxRunsPerDay` (1..500)、`maxTokensPerDay` (6000..5000000)，可选 `periodicReviewMinutes` (0..10080)。默认 UTC 日额度 20 次、200000 保留 Token；问答作业每次预占 6000，整理合并按 `consolidationInputChars + 6000` 预占（默认18000）。`consolidationInputChars` 默认12000，范围4000–40000字符。额度是预留量准入，不是供应商账单上限。保存不执行作业。
+学习开关独立于模型路由，默认关闭。`GET /api/pi/profiles/:id/learning` 返回 `{version:1,status,revision,settings,health,legacy,proposals,drafts,jobs,recentRuns,capabilities}`，revision 是整数。`capabilities` 明示可用动作、专用模型、物理 profile/cwd 范围、输入/输出上限、`limits`、`capacity`（队列、游标、动作剩余额度与被阻断的分支）及价格报告状态。`PUT` 同路径提交 `{expectedRevision,changes}`；开关为 `enabled`、`correctionEnabled`、`reviewEnabled`、`extractionEnabled`，额度为 `maxRunsPerDay` (1..500)、`maxTokensPerDay` (6000..5000000)，可选 `periodicReviewMinutes` (0..10080)。默认 UTC 日额度 20 次、200000 保留 Token；问答作业每次预占 6000，整理合并按 `consolidationInputChars + 6000` 预占（默认18000）。`consolidationInputChars` 默认12000，范围4000–40000字符。额度是预留量准入，不是服务商账单上限。保存不执行作业。
 
-`health` 是学习健康摘要 `{state,missingModels,lastFailure,today}`。`state` 按以下顺序取第一个成立的值：`off`（学习总开关关闭）、`unavailable`（知识状态不是 ready 或不可写）、`needs-model`（已开启的用途缺少专用模型，`missingModels` 列出用途 ID，如 `memory-correction`）、`memory-full`（知识快照 `usage` 中 MEMORY 或 USER 已达到上限）、`quota-exhausted`（当日 UTC 次数或保留 Token 已达上限，口径与执行准入一致）、`failing`（最近 3 次终态运行都是 `failed`、`uncertain` 或 `conflict`），否则为 `ok`。`lastFailure` 是最近一次既非 `completed` 也非 `skipped` 的运行 `{at,reason,error}`，没有时为 null；`today` 为 `{runs,maxRuns,reservedTokens,maxTokens,exhaustedBy,resetsAt,usedTokens}`。`exhaustedBy` 为 `runs`（次数已满，优先）、`tokens`（剩余预留额度不足下次 6000 Token）或 null；`resetsAt` 是下一个 UTC 午夜的 ISO 时间。`usedTokens` 只合计今天计入额度的运行中供应商报告的 `usage.totalTokens`，没有报告时为 null，明确报告零时为 0；不从输入／输出数推算。64 条详细历史之外的当日运行仍由紧凑汇总计入额度和实际用量，跨 UTC 日重置；已退款运行不计入这些汇总，原记录的用量与费用仍保留。
+`health` 是学习健康摘要 `{state,missingModels,lastFailure,today}`。`state` 按以下顺序取第一个成立的值：`off`（学习总开关关闭）、`unavailable`（知识状态不是 ready 或不可写）、`needs-model`（已开启的用途缺少专用模型，`missingModels` 列出用途 ID，如 `memory-correction`）、`memory-full`（知识快照 `usage` 中 MEMORY 或 USER 已达到上限）、`quota-exhausted`（当日 UTC 次数或保留 Token 已达上限，口径与执行准入一致）、`failing`（最近 3 次终态运行都是 `failed`、`uncertain` 或 `conflict`），否则为 `ok`。`lastFailure` 是最近一次既非 `completed` 也非 `skipped` 的运行 `{at,reason,error}`，没有时为 null；`today` 为 `{runs,maxRuns,reservedTokens,maxTokens,exhaustedBy,resetsAt,usedTokens}`。`exhaustedBy` 为 `runs`（次数已满，优先）、`tokens`（剩余预留额度不足下次 6000 Token）或 null；`resetsAt` 是下一个 UTC 午夜的 ISO 时间。`usedTokens` 只合计今天计入额度的运行中服务商报告的 `usage.totalTokens`，没有报告时为 null，明确报告零时为 0；不从输入／输出数推算。64 条详细历史之外的当日运行仍由紧凑汇总计入额度和实际用量，跨 UTC 日重置；已退款运行不计入这些汇总，原记录的用量与费用仍保留。
 
 `legacy` 仅在该身份的 profiles.json 原始配置里 `memory.autoLearn` 为 true 且尚未迁移或忽略时出现：`{autoLearn:true,reviewModel,reviewModelAvailable,purposes}`。`reviewModel` 取旧 `runtime.json.reviewModel` 的兼容解析，`reviewModelAvailable` 使用与本页保存相同的模型注册表校验，`purposes` 是当前没有专用模型的学习用途；其他情况为 null。升级部署不会自动开启任何学习。
 

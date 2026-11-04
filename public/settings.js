@@ -124,6 +124,20 @@ function start() {
     const systemPrompts = window.PiSystemPrompts.create({ apiFetch, currentCwd });
     const agentProfiles = window.PiAgentProfiles.create({ apiFetch, currentCwd });
     window.PiAgentProfilesUI = agentProfiles;
+    const customSetup = window.PiCustomProviderSetup.create({
+        apiFetch, toast, setBusy, openEditor, closeEditor, customProvider,
+        editorEpoch: () => state.editorEpoch,
+        body: () => elements.editorBody,
+        snapshot: () => state.modelSnapshot,
+        openModelEditor: providerId => openModelEditor(providerId, null),
+        async saved(providerId) {
+            state.modelGroupOpen.set(providerId, true);
+            state.modelSnapshot = null;
+            await loadModels(true);
+            const summary = [...elements.modelList.querySelectorAll('summary[data-provider]')].find(item => item.dataset.provider === providerId);
+            summary?.scrollIntoView({ block: 'nearest' });
+        }
+    });
 
     let settingsViewEpoch = 0;
     let settingsOpen = false;
@@ -205,7 +219,7 @@ function start() {
             return state.modelSnapshot;
         }
         if (state.loadingModels && !force) return state.loadingModels;
-        elements.providerList.innerHTML = `<div class="pi-list-state"><span class="pi-spinner"></span>${translateUi("正在读取 Provider")}</div>`;
+        elements.providerList.innerHTML = `<div class="pi-list-state"><span class="pi-spinner"></span>${translateUi("正在读取服务商")}</div>`;
         elements.modelList.innerHTML = window.PiSkeleton?.html('list', { rows: 5, label: translateUi("正在读取模型目录") }) || `<div class="pi-list-state"><span class="pi-spinner"></span>${translateUi("正在读取模型目录")}</div>`;
         const loading = apiFetch('/api/pi/settings/models')
             .then(snapshot => {
@@ -239,7 +253,7 @@ function start() {
             environment: provider.authLabel || translateUi("环境变量"),
             models_json_key: 'models.json',
             models_json_command: 'models.json command',
-            fallback: translateUi("Provider 配置"),
+            fallback: translateUi("服务商配置"),
             runtime: translateUi("临时 Key")
         };
         return labels[provider.authSource] || provider.authSource || translateUi("未配置");
@@ -262,7 +276,7 @@ function start() {
                 ${methods.apiKeyLogin ? `<button type="button" data-action="key"><i class="fa-solid fa-key"></i> ${translateUi("API Key 配置")}</button>` : ''}
                 ${methods.oauth && state.modelSnapshot.providerLogin ? `<button type="button" data-action="oauth">${escapeHtml(methods.oauthLabel || translateUi("OAuth 登录"))}</button>` : ''}
                 ${provider.storedCredential ? `<button type="button" data-action="logout">${translateUi("移除凭据")}</button>` : ''}
-                ${custom?.api ? `<button type="button" data-action="edit" aria-label="${translateUi("编辑供应商")}">${translateUi("编辑供应商")}</button><button type="button" data-action="add-model">${translateUi("添加模型")}</button><button type="button" class="danger" data-action="delete">${translateUi("删除配置")}</button>` : ''}
+                ${custom?.api ? `<button type="button" data-action="add-model"><i class="fa-solid fa-plus" aria-hidden="true"></i> ${translateUi("添加模型")}</button><button type="button" data-action="edit">${translateUi("编辑服务商")}</button><button type="button" class="danger" data-action="delete">${translateUi("删除配置")}</button>` : ''}
             </div>
         </article>`;
     }
@@ -270,7 +284,7 @@ function start() {
     function populateModelProviderFilter() {
         const previous = elements.modelProvider.value;
         const providers = state.modelSnapshot.providers;
-        elements.modelProvider.innerHTML = `<option value="">${translateUi("全部 Provider")}</option>` + providers.map(provider => `<option value="${escapeHtml(provider.id)}">${escapeHtml(provider.name)}</option>`).join('');
+        elements.modelProvider.innerHTML = `<option value="">${translateUi("全部服务商")}</option>` + providers.map(provider => `<option value="${escapeHtml(provider.id)}">${escapeHtml(provider.name)}</option>`).join('');
         if ([...elements.modelProvider.options].some(option => option.value === previous)) elements.modelProvider.value = previous;
     }
 
@@ -361,14 +375,14 @@ function start() {
             state.modelGroups.get(model.provider).push(model);
         }
         if (!state.modelGroups.size) {
-            elements.modelList.innerHTML = `<div class="settings-empty">${translateUi("没有匹配的供应商或模型；可以关闭“仅可用 / 仅已配置”筛选。")}</div>`;
+            elements.modelList.innerHTML = `<div class="settings-empty">${translateUi("没有匹配的服务商或模型；可以关闭“仅可用 / 仅已配置”筛选。")}</div>`;
             return;
         }
         const providerNames = new Map(state.modelSnapshot.providers.map(provider => [provider.id, provider.name || provider.id]));
         const configured = new Set(eligibleProviders.filter(provider => provider.configured).map(provider => provider.id));
         const providers = [...state.modelGroups.keys()].sort((a, b) => Number(configured.has(b)) - Number(configured.has(a)) || (providerNames.get(a) || a).localeCompare(providerNames.get(b) || b));
         elements.modelList.innerHTML = `
-            <div class="settings-list-caption">${translateUi("{0} 个 Provider · {1} 个模型", providers.length, models.length)}</div>
+            <div class="settings-list-caption">${translateUi("{0} 个服务商 · {1} 个模型", providers.length, models.length)}</div>
             ${providers.map(provider => {
                 const open = state.modelGroupOpen.get(provider) ?? Boolean(query || providerFilter);
                 const name = providerNames.get(provider) || provider;
@@ -413,7 +427,7 @@ function start() {
                         ${editable ? `<button type="button" data-action="edit" aria-label="${translateUi("编辑模型")}"><i class="fa-solid fa-pen"></i></button><button type="button" class="danger" data-action="delete" aria-label="${translateUi("删除模型")}"><i class="fa-solid fa-trash"></i></button>` : ''}
                     </div>
                 </article>`;
-        }).join('') + (!models.length ? `<p class="settings-empty">${translateUi("此供应商暂无匹配模型。完成连接后可点击“刷新目录”。")}</p>` : '') + (pages > 1 ? `
+        }).join('') + (!models.length ? `<p class="settings-empty">${translateUi("此服务商暂无匹配模型。完成连接后可点击“刷新目录”。")}</p>` : '') + (pages > 1 ? `
             <div class="settings-model-pagination" role="group" aria-label="${translateUi("模型分页")}">
                 <button class="settings-secondary-button" type="button" data-model-page="previous" ${page === 0 ? 'disabled' : ''}>${translateUi("上一页")}</button>
                 <span>${translateUi("{0} / {1} 页 · {2} 项", page + 1, pages, models.length)}</span>
@@ -528,7 +542,7 @@ function start() {
         const snapshot = state.modelSnapshot;
         const model = snapshot.models.find(item => item.provider === provider && item.id === modelId);
         const modes = model.speed?.modes || {};
-        const labels = { auto: translateUi('跟随供应商'), standard: translateUi('标准 Standard'), fast: 'Fast', ultrafast: 'Ultrafast' };
+        const labels = { auto: translateUi('跟随服务商'), standard: translateUi('标准 Standard'), fast: 'Fast', ultrafast: 'Ultrafast' };
         openEditor(`${model.name} · ${translateUi('速度')}`, `
             <form id="settings-speed-form" class="settings-form">
                 <p>${translateUi('默认速度用于新会话；已有会话保留其选择。配置保存后，空闲重开运行实例或刷新模型目录生效。')}</p>
@@ -596,9 +610,9 @@ function start() {
                 <button class="settings-primary-button" type="submit">${translateUi("保存默认值")}</button>
             </form>
             <details class="settings-thinking-advanced"><summary>${translateUi("高级：模型支持的等级与参数映射")}</summary>
-                <p>${translateUi("仅按实际服务能力修改。禁用的等级将从 Pi 选择器隐藏；映射值会传给供应商。保存能力后重新打开窗口选择默认值。")}</p>
+                <p>${translateUi("仅按实际服务能力修改。禁用的等级将从 Pi 选择器隐藏；映射值会传给服务商。保存能力后重新打开窗口选择默认值。")}</p>
                 <form id="settings-thinking-map-form" class="settings-form">
-                    ${keys.map(level => `<div class="settings-thinking-map-row" data-level="${escapeHtml(level)}"><label><span>${escapeHtml(level)}</span><select aria-label="${translateUi("{0} 支持方式", escapeHtml(level))}"><option value="inherit">${translateUi("使用 Pi 定义")}</option><option value="disabled">${translateUi("不支持")}</option><option value="mapped">${translateUi("自定义映射")}</option></select></label><label><span>${translateUi("供应商参数值")}</span><input aria-label="${translateUi("{0} 参数值", escapeHtml(level))}" maxlength="100"></label></div>`).join('')}
+                    ${keys.map(level => `<div class="settings-thinking-map-row" data-level="${escapeHtml(level)}"><label><span>${escapeHtml(level)}</span><select aria-label="${translateUi("{0} 支持方式", escapeHtml(level))}"><option value="inherit">${translateUi("使用 Pi 定义")}</option><option value="disabled">${translateUi("不支持")}</option><option value="mapped">${translateUi("自定义映射")}</option></select></label><label><span>${translateUi("服务商参数值")}</span><input aria-label="${translateUi("{0} 参数值", escapeHtml(level))}" maxlength="100"></label></div>`).join('')}
                     <div class="settings-form-actions"><button type="button" id="settings-thinking-reset">${translateUi("恢复 Pi 原始能力")}</button><button class="settings-primary-button" type="submit">${translateUi("保存能力")}</button></div>
                 </form>
             </details><p id="settings-thinking-error" role="alert"></p>`);
@@ -681,32 +695,34 @@ function start() {
     }
 
     async function removeCredential(providerId, button) {
-        if (!confirm(translateUi("移除 Pi credential store 中这个 Provider 的凭据？环境变量或 models.json 中的配置不会被删除。"))) return;
+        if (!confirm(translateUi("移除 Pi credential store 中这个服务商的凭据？环境变量或 models.json 中的配置不会被删除。"))) return;
         setBusy(button, true);
         try {
             const result = await apiFetch(`/api/pi/settings/providers/${encodeURIComponent(providerId)}/credential`, { method: 'DELETE' });
             state.modelSnapshot = null;
             await loadModels(true);
-            toast(result.stillConfigured ? translateUi("已移除存储凭据；Provider 仍由 {0} 配置", result.authSource) : translateUi("凭据已移除"), 'success');
+            toast(result.stillConfigured ? translateUi("已移除存储凭据；服务商仍由 {0} 配置", result.authSource) : translateUi("凭据已移除"), 'success');
         } catch (error) { toast(error.message, 'error'); }
         finally { setBusy(button, false); }
     }
 
+    // Creating a provider uses the one-step setup; this editor changes an existing one.
     function openProviderEditor(provider) {
-        const editing = Boolean(provider);
-        openEditor(editing ? translateUi("编辑 {0}", provider.id) : translateUi("新增自定义 Provider"), `
+        if (!provider) return customSetup.openCreate();
+        openEditor(translateUi("编辑 {0}", provider.name || provider.id), `
             <form id="settings-provider-form" class="settings-form">
                 <div class="settings-form-grid">
-                    <label><span>Provider ID</span><input name="id" value="${escapeHtml(provider?.id || '')}" ${editing ? 'readonly' : ''} required pattern="[A-Za-z0-9._-]+"></label>
-                    <label><span>${translateUi("API 类型")}</span><select name="api"><option value="openai-completions">OpenAI Chat Completions</option><option value="openai-responses">OpenAI Responses</option><option value="anthropic-messages">Anthropic Messages</option><option value="google-generative-ai">Google Generative AI</option></select></label>
-                    <label class="wide"><span>Base URL</span><input name="baseUrl" type="url" value="${escapeHtml(provider?.baseUrl || '')}" placeholder="https://api.example.com/v1" required></label>
-                    <label class="settings-checkbox-field"><input name="authHeader" type="checkbox" ${provider?.authHeader ? 'checked' : ''}><span>${translateUi("自动添加 Authorization: Bearer")}</span></label>
+                    <label class="wide"><span>${translateUi("名称")}</span><input name="name" value="${escapeHtml(provider.name || '')}" maxlength="200" placeholder="${escapeHtml(provider.id)}"></label>
+                    <label><span>${translateUi("服务商 ID")}</span><input name="id" value="${escapeHtml(provider.id)}" readonly></label>
+                    <label><span>${translateUi("接口协议")}</span><select name="api"><option value="openai-completions">OpenAI Chat Completions</option><option value="openai-responses">OpenAI Responses</option><option value="anthropic-messages">Anthropic Messages</option><option value="google-generative-ai">Google Gemini</option></select></label>
+                    <label class="wide"><span>${translateUi("API 地址")}</span><input name="baseUrl" type="url" value="${escapeHtml(provider.baseUrl || '')}" placeholder="https://api.example.com/v1" required></label>
+                    <label class="settings-checkbox-field wide"><input name="authHeader" type="checkbox" ${provider.authHeader ? 'checked' : ''}><span>${translateUi("额外添加 Authorization: Bearer 请求头")}</span></label>
                 </div>
-                <div class="settings-form-actions"><button type="button" data-editor-cancel>${translateUi("取消")}</button><button class="settings-primary-button" type="submit">${translateUi("保存 Provider")}</button></div>
+                <div class="settings-form-actions"><button type="button" data-editor-cancel>${translateUi("取消")}</button><button class="settings-primary-button" type="submit">${translateUi("保存服务商")}</button></div>
             </form>
         `);
         const form = $('settings-provider-form');
-        form.elements.api.value = provider?.api || 'openai-completions';
+        form.elements.api.value = provider.api || 'openai-completions';
         form.addEventListener('submit', async event => {
             event.preventDefault();
             const submit = form.querySelector('[type=submit]');
@@ -718,29 +734,29 @@ function start() {
                     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
                 });
                 closeEditor(); state.modelSnapshot = null; await loadModels(true);
-                toast(translateUi("自定义 Provider 已保存；请设置 API Key 并重新打开 runtime"), 'success', 6500);
+                toast(translateUi("服务商设置已保存；新会话或重新加载后生效。"), 'success', 6500);
             } catch (error) { toast(error.message, 'error'); }
             finally { setBusy(submit, false); }
         });
     }
 
     async function deleteProvider(providerId, button) {
-        if (!confirm(translateUi("删除自定义 Provider “{0}”及其 models.json 模型配置？", providerId))) return;
+        if (!confirm(translateUi("删除自定义服务商“{0}”及其全部模型配置？", providerId))) return;
         setBusy(button, true);
         try {
             await apiFetch(`/api/pi/settings/custom-providers/${encodeURIComponent(providerId)}`, { method: 'DELETE' });
-            state.modelSnapshot = null; await loadModels(true); toast(translateUi("自定义 Provider 已删除"), 'success');
+            state.modelSnapshot = null; await loadModels(true); toast(translateUi("自定义服务商已删除"), 'success');
         } catch (error) { toast(error.message, 'error'); }
         finally { setBusy(button, false); }
     }
 
     function openModelEditor(providerId, model) {
         const customProviders = state.modelSnapshot.customProviders || [];
-        if (!customProviders.length) return toast(translateUi("请先创建自定义 Provider"), 'error');
+        if (!customProviders.length) return toast(translateUi("请先添加自定义服务商"), 'error');
         openEditor(model ? translateUi("编辑 {0}", model.id) : translateUi("新增自定义模型"), `
             <form id="settings-model-form" class="settings-form">
                 <div class="settings-form-grid">
-                    <label><span>Provider</span><select name="providerId">${customProviders.map(provider => `<option value="${escapeHtml(provider.id)}">${escapeHtml(provider.id)}</option>`).join('')}</select></label>
+                    <label><span>${translateUi("服务商")}</span><select name="providerId">${customProviders.map(provider => `<option value="${escapeHtml(provider.id)}">${escapeHtml(provider.name || provider.id)}</option>`).join('')}</select></label>
                     <label><span>Model ID</span><input name="id" value="${escapeHtml(model?.id || '')}" required maxlength="500" ${model ? 'readonly' : ''}></label>
                     <label class="wide"><span>${translateUi("显示名称")}</span><input name="name" value="${escapeHtml(model?.name || '')}" placeholder="${translateUi("默认使用 Model ID")}"></label>
                     <label><span>Context Window</span><input name="contextWindow" type="number" min="1024" max="4000000" value="${model?.contextWindow || 128000}" required></label>
@@ -817,7 +833,7 @@ function start() {
         try {
             const result = await apiFetch('/api/pi/settings/models/refresh', { method: 'POST' });
             state.modelSnapshot = null; await loadModels(true);
-            toast(result.errors.length ? translateUi("目录已刷新，{0} 个 Provider 失败", result.errors.length) : translateUi("模型目录已刷新"), result.errors.length ? 'info' : 'success');
+            toast(result.errors.length ? translateUi("目录已刷新，{0} 个服务商失败", result.errors.length) : translateUi("模型目录已刷新"), result.errors.length ? 'info' : 'success');
         } catch (error) { toast(error.message, 'error'); }
         finally { setBusy(button, false); }
     }
@@ -833,6 +849,7 @@ function start() {
 
     function closeEditor() {
         state.editorEpoch++;
+        document.querySelectorAll('dialog.cps-picker[open]').forEach(picker => picker.close());
         const login = state.login;
         state.login = null;
         if (login) {
@@ -994,7 +1011,7 @@ function start() {
             if (action === 'oauth') openProviderLogin(id, 'oauth');
             if (action === 'logout') removeCredential(id, providerButton);
             if (action === 'edit') openProviderEditor(customProvider(id));
-            if (action === 'add-model') openModelEditor(id, null);
+            if (action === 'add-model') customSetup.openAddModels(id);
             if (action === 'delete') deleteProvider(id, providerButton);
             return;
         }

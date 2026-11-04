@@ -60,7 +60,7 @@ class PiTranscriptionService {
                 const available = await runtime.getAvailable(undefined, { signal: AbortSignal.timeout(20000) });
                 models = transcriptionModels(runtime.getModels(), available);
             } catch {
-                if (!this.providerService) fail('无法读取语音模型，请检查供应商与认证配置', 503);
+                if (!this.providerService) fail('无法读取语音模型，请检查服务商与认证配置', 503);
                 nativeCatalogUnavailable = true;
             }
             if (this.providerService) {
@@ -77,7 +77,7 @@ class PiTranscriptionService {
             return { revision, models, maximumBytes: MAX_AUDIO, maximumSeconds: 120, nativeCatalogUnavailable };
         } catch (error) {
             if (error.statusCode) throw error;
-            fail('无法读取语音模型，请检查供应商与认证配置', 503);
+            fail('无法读取语音模型，请检查服务商与认证配置', 503);
         } finally { this.inspecting--; }
     }
     async configuration() {

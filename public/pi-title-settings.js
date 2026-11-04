@@ -19,7 +19,7 @@
             if (!this.card || !this.controls) return;
             this.provider = node('select'); this.provider.id = 'settings-title-provider';
             this.model = node('select'); this.model.id = 'settings-title-model';
-            const providerLabel = node('label', t('供应商')), modelLabel = node('label', t('标题生成模型'));
+            const providerLabel = node('label', t('服务商')), modelLabel = node('label', t('标题生成模型'));
             providerLabel.append(this.provider); modelLabel.append(this.model);
             this.saveButton = node('button', t('保存'), 'settings-primary-button'); this.saveButton.type = 'button';
             this.currentLabel = node('p'); this.currentLabel.id = 'settings-title-model-current';
