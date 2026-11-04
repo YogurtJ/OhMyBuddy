@@ -104,6 +104,16 @@ async function run(browser, viewport, locale) {
     assert.equal(await picker.locator('.cps-picker-actions .settings-primary-button').isDisabled(), true);
     const tabs = await picker.locator('.cps-tab').allTextContents();
     assert.deepEqual(tabs, english ? ['Chat models 181', 'Image 1', 'Video 1', 'Speech synthesis 1', 'Speech recognition 1', 'Other 1'] : ['对话模型 181', '图像 1', '视频 1', '语音合成 1', '语音识别 1', '其他 1']);
+    const tabMetrics = await picker.evaluate(el => {
+        const bar = el.querySelector('.cps-tabs').getBoundingClientRect();
+        const pills = [...el.querySelectorAll('.cps-tab')].map(tab => {
+            const r = tab.getBoundingClientRect();
+            return { height: r.height, clippedTop: r.top < bar.top - 0.5, clippedBottom: r.bottom > bar.bottom + 0.5 };
+        });
+        return { pickerWidth: el.getBoundingClientRect().width, barHeight: bar.height, pills };
+    });
+    if (!mobile) assert.equal(Math.round(tabMetrics.pickerWidth), 720);
+    assert.ok(tabMetrics.pills.every(pill => pill.height >= 31 && !pill.clippedTop && !pill.clippedBottom), `tab pills must not be clipped: ${JSON.stringify(tabMetrics)}`);
     assert.equal(await picker.locator('.cps-row').count(), 150, 'long lists render in pages');
     await picker.locator('.cps-more').click();
     assert.equal(await picker.locator('.cps-row').count(), 181);
@@ -126,6 +136,8 @@ async function run(browser, viewport, locale) {
     await picker.locator('.cps-tab[data-group="other"]').click();
     assert.equal(await picker.locator('.cps-row:has(code:text-is("text-embedding-3-large")) .settings-badge').textContent(), english ? 'Embedding' : '向量');
     await overflow(['dialog.cps-picker', '.cps-picker-list']);
+    if (viewport.width === 1440 && !english) await page.screenshot({ path: '/tmp/omb-custom-provider-picker-other-1440.png' });
+    await picker.locator('.cps-tab[data-group="chat"]').click();
     if (viewport.width === 1440 && !english) await page.screenshot({ path: '/tmp/omb-custom-provider-picker-1440.png' });
     if (viewport.width === 393) await page.screenshot({ path: '/tmp/omb-custom-provider-picker-393.png' });
     await picker.locator('.cps-picker-actions .settings-primary-button').click();
