@@ -27,11 +27,6 @@
 .pi-bot-topic-trash-link { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 38px; margin-top: 10px; padding: 7px 10px; border: 0; border-radius: 8px; color: var(--text-muted); background: transparent; font: inherit; font-size: .78rem; text-align: left; cursor: pointer; }
 .pi-bot-topic-trash-link:hover { background: var(--pv-nav-hover, var(--surface-2)); }
 .pi-bot-topic-trash-link > small { margin-left: auto; font-size: .75rem; font-variant-numeric: tabular-nums; }
-.pi-bot-topic-emoji-picker { padding: 8px 12px; border: 1px solid var(--line); border-radius: 12px; }
-.pi-bot-topic-emoji-picker > summary { min-height: 28px; color: var(--text-muted); font-size: .88rem; cursor: pointer; }
-.pi-bot-topic-emoji-choices { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 10px 0; }
-.pi-bot-topic-emoji-option { min-width: 0; min-height: 42px; border: 1px solid transparent; border-radius: 10px; background: var(--surface-2); font-size: 1.4rem; cursor: pointer; }
-.pi-bot-topic-emoji-option:hover, .pi-bot-topic-emoji-option[aria-pressed="true"] { border-color: var(--primary, var(--green)); background: var(--surface-3); }
 .pi-bot-topic-manager { width: min(720px, calc(100vw - 40px)); max-width: calc(100vw - 40px); padding: 0; border-radius: 18px; background: var(--surface-2); }
 .pi-bot-topic-manager .pi-bot-sheet-form { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; height: min(740px, calc(100dvh - 64px)); max-height: inherit; }
 .pi-bot-topic-manager[data-topic-view="groups"] .pi-bot-sheet-form, .pi-bot-topic-manager[data-topic-view="trash"] .pi-bot-sheet-form { height: auto; min-height: 340px; }
@@ -139,7 +134,69 @@
     .pi-bot-topic-group-tools > .pi-bot-topic-text-button { margin-right: auto; }
     .pi-bot-topic-scopes { gap: 6px; }
     .pi-bot-topic-manager .pi-bot-topic-scopes > select { flex-basis: 100px; max-width: none; margin-left: 0; }
-    .pi-bot-topic-identity { grid-template-columns: 90px minmax(0, 1fr); gap: 10px; }
 }
 @media (max-width: 360px) { .pi-bot-topic-tab > i { display: none; } .pi-bot-topic-tabs { margin-inline: 12px; } }
 @media (prefers-reduced-motion: reduce) { .pi-bot-topic-group > summary::before { transition: none; } }
+/* ---- topic editor sheet (pi-bot-topic-editor.js) --------------------------------------- */
+.pi-bot-topic-sheet { width: min(560px, calc(100vw - 32px)); }
+.pi-bot-topic-sheet .pi-bot-sheet-head { padding: 16px 14px 14px 20px; }
+.pi-bot-topic-sheet .pi-bot-sheet-body { display: grid; align-content: start; gap: 18px; padding: 18px 20px 20px; }
+.pi-bot-topic-hero { display: grid; grid-template-columns: 60px minmax(0, 1fr); gap: 14px; align-items: center; }
+.pi-bot-topic-icon-slot { position: relative; }
+.pi-bot-topic-face { display: grid; place-items: center; width: 60px; height: 60px; padding: 0; border: 1px solid var(--line); border-radius: 18px; background: var(--surface-1); color: var(--text-muted); cursor: pointer; transition: border-color .12s, background .12s; }
+.pi-bot-topic-face.is-empty { border-style: dashed; border-color: var(--line-strong); background: transparent; font-size: 1.15rem; }
+.pi-bot-topic-face:hover:not(:disabled) { border-color: var(--primary, var(--green)); color: var(--primary, var(--green)); }
+.pi-bot-topic-face-emoji { font-size: 1.9rem; line-height: 1; }
+.pi-bot-topic-emoji-panel { position: absolute; z-index: 3; top: calc(100% + 8px); left: 0; display: grid; gap: 10px; width: min(316px, calc(100vw - 48px)); padding: 12px; border: 1px solid var(--line-strong); border-radius: 14px; background: var(--surface-2); box-shadow: 0 14px 40px rgb(0 0 0 / .18); }
+.pi-bot-topic-emoji-panel[hidden] { display: none; }
+.pi-bot-topic-emoji-title { margin: 0; color: var(--text-muted); font-size: .76rem; }
+.pi-bot-topic-emoji-choices { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+.pi-bot-topic-emoji-option { min-width: 0; min-height: 44px; padding: 0; border: 1px solid transparent; border-radius: 10px; background: transparent; font-size: 1.4rem; cursor: pointer; }
+.pi-bot-topic-emoji-option:hover, .pi-bot-topic-emoji-option[aria-pressed="true"] { border-color: color-mix(in srgb, var(--primary, var(--green)) 45%, var(--line)); background: var(--surface-3); }
+.pi-bot-topic-emoji-custom { display: flex; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.pi-bot-sheet .pi-bot-topic-emoji-custom input.pi-bot-topic-emoji-input[type="text"] { flex: 1; min-width: 0; min-height: 38px; font-size: .88rem; }
+.pi-bot-topic-emoji-custom > .pi-bot-topic-text-button { flex: none; color: var(--text-muted); }
+.pi-bot-topic-hero-copy { display: grid; gap: 6px; min-width: 0; }
+.pi-bot-sheet input.pi-bot-topic-name[type="text"] { min-height: 44px; font-size: 1.05rem; font-weight: 600; }
+.pi-bot-topic-hero-hint { margin: 0; color: var(--text-muted); font-size: .76rem; line-height: 1.45; overflow-wrap: anywhere; }
+.pi-bot-topic-setting { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 4px 4px 4px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-1); }
+.pi-bot-topic-setting-copy { display: inline-flex; align-items: center; gap: 9px; flex: none; font-size: .88rem; }
+.pi-bot-topic-setting-copy > i { color: var(--text-muted); font-size: .85rem; }
+.pi-bot-sheet .pi-bot-topic-setting select { flex: 0 1 auto; width: auto; max-width: 62%; min-height: 40px; border-color: transparent; background: transparent; text-align: right; }
+.pi-bot-topic-field { display: grid; gap: 7px; min-width: 0; }
+.pi-bot-topic-field-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; min-width: 0; }
+.pi-bot-topic-field-head > .pi-bot-sheet-label { color: var(--text-main); font-weight: 600; }
+.pi-bot-topic-count { flex: none; color: var(--text-muted); font-size: .72rem; font-variant-numeric: tabular-nums; opacity: .8; }
+.pi-bot-topic-count[data-over="true"] { color: var(--danger); opacity: 1; }
+.pi-bot-topic-field-hint, .pi-bot-topic-rules-help { color: var(--text-muted); font-size: .76rem; line-height: 1.45; }
+.pi-bot-topic-field:not(:focus-within) > .pi-bot-topic-field-hint { display: none; }
+.pi-bot-topic-rules { min-width: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-1); }
+.pi-bot-topic-rules > summary { display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 6px 14px; cursor: pointer; list-style: none; }
+.pi-bot-topic-rules > summary::-webkit-details-marker { display: none; }
+.pi-bot-topic-rules-title { display: inline-flex; align-items: center; gap: 9px; flex: none; font-size: .88rem; }
+.pi-bot-topic-rules-title > i { color: var(--text-muted); font-size: .85rem; }
+.pi-bot-topic-optional { padding: 1px 6px; border-radius: 6px; background: var(--surface-3); color: var(--text-muted); font-size: .7rem; }
+.pi-bot-topic-rules-preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: .8rem; text-align: right; }
+.pi-bot-topic-rules > summary > i:last-child { flex: none; color: var(--text-muted); font-size: .72rem; transition: transform .15s; }
+.pi-bot-topic-rules[open] > summary > i:last-child { transform: rotate(180deg); }
+.pi-bot-topic-rules > textarea, .pi-bot-topic-rules > .pi-bot-topic-field-head { margin: 0 12px; width: calc(100% - 24px); }
+.pi-bot-topic-rules > .pi-bot-topic-field-head { padding: 8px 2px 12px; }
+.pi-bot-topic-lifecycle { display: grid; gap: 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+.pi-bot-topic-lifecycle-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.pi-bot-topic-lifecycle-button { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--text-main); font: inherit; font-size: .84rem; cursor: pointer; }
+.pi-bot-topic-lifecycle-button > i { color: var(--text-muted); font-size: .82rem; }
+.pi-bot-topic-lifecycle-button:hover:not(:disabled) { background: var(--surface-3); }
+.pi-bot-topic-lifecycle-button.is-danger, .pi-bot-topic-lifecycle-button.is-danger > i { color: var(--danger); }
+.pi-bot-topic-lifecycle-button.is-armed { border-color: currentColor; background: color-mix(in srgb, currentColor 9%, transparent); font-weight: 600; }
+.pi-bot-topic-lifecycle-button:disabled { opacity: .55; cursor: default; }
+.pi-bot-topic-lifecycle-note { margin: 0; color: var(--text-muted); font-size: .74rem; line-height: 1.45; }
+.pi-bot-topic-face:focus-visible, .pi-bot-topic-rules > summary:focus-visible, .pi-bot-topic-lifecycle-button:focus-visible { outline: 2px solid var(--primary, var(--green)); outline-offset: 2px; }
+@media (max-width: 600px) {
+    .pi-bot-topic-sheet { width: 100vw; }
+    .pi-bot-topic-sheet .pi-bot-sheet-body { gap: 16px; padding: 16px 16px 20px; }
+    .pi-bot-topic-hero { grid-template-columns: 56px minmax(0, 1fr); gap: 12px; }
+    .pi-bot-topic-face { width: 56px; height: 56px; }
+    .pi-bot-sheet .pi-bot-topic-emoji-custom input.pi-bot-topic-emoji-input[type="text"], .pi-bot-sheet input.pi-bot-topic-name[type="text"], .pi-bot-sheet .pi-bot-topic-setting select { font-size: 16px; }
+    .pi-bot-topic-rules-preview { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .pi-bot-topic-face, .pi-bot-topic-rules > summary > i:last-child { transition: none; } }

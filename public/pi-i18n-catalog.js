@@ -11455,5 +11455,21 @@
         ['无法读取更新说明，请刷新列表后重试。', 'Could not read release notes. Refresh the list and try again.'],
         ['已更新 {0} → {1}；可从包菜单查看更新说明，空闲时重新加载资源。', 'Updated {0} → {1}. Read release notes from the package menu, then reload resources when idle.']
     );
+    rows.push(
+        ['粘贴其他表情', 'Paste another emoji'],
+        ['自定义图标', 'Custom icon'],
+        ['给话题起个名字', 'Name this topic'],
+        ['{0} 在这里只聊这件事，记事本单独记。', '{0} sticks to this subject here and keeps a separate notebook.'],
+        ['比如：讨论需求、实现思路和待解决的问题', 'For example: requirements, approach and open questions'],
+        ['伙伴据此把握聊天重点，可以随时修改。', 'Your Buddy uses this to stay on track. You can change it anytime.'],
+        ['话题指令', 'Topic instructions'],
+        ['可选', 'Optional'],
+        ['这个话题里一直遵守的做法，比如回答格式、资料来源。', 'Standing rules for this topic, such as answer format or sources.'],
+        ['整个话题连同更早的聊天和记事本会进入回收站，可以恢复。', 'The whole topic, its earlier chats and notebook go to the trash and can be restored.'],
+        ['归档会收起话题并保留记录；移到回收站可在整理话题里恢复。', 'Archiving tucks the topic away and keeps its history. Trashed topics can be restored from Organize topics.'],
+        ['更换图标（当前 {0}）', 'Change icon (now {0})'],
+        ['添加图标', 'Add icon'],
+        ['归档后话题从列表收起，记录都保留，可以在“已归档”里恢复。', 'Archiving hides the topic from the list and keeps its history. Restore it from Archived.']
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();
