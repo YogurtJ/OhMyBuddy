@@ -6,9 +6,19 @@
 
 后续完整包制作与发布前验收聚焦 macOS ARM64（Apple Silicon）、Windows x64 和 glibc Linux x64；暂停为新版本制作、验收和承诺更新 Linux ARM64 完整包。下方各版本的 ARM64 结果保留其历史适用范围，不自动转为后续版本的支持证明；源码兼容与实际分发范围分别记录。具体流程见[发布准备](development/RELEASING.md#后续发布平台)。
 
-## 1.12.0：正式发行准备与候选验证基线
+## 1.12.0：已正式发布
 
-[1.12.0 说明](releases/1.12.0.md)。当前准备正式 **1.12.0 / Pi 1.5.0**；下述 **1.12.0-rc.1** 已完成的三目标验证作为行为基线。正式包只有版本、说明和验证夹具差异，另做准确清单、独立安装／启动与原生载荷核验；最终 SHA256、本次执行及复用关系写入正式 Release 附件。冻结源码 `42ec53e3433864dd35460670e8d26830af936a43`，源码归档 SHA256 `ce2965a8642cbbf28dfd478da0c023c584ce4c94496f6b9106eeea19fa0e474e`，2,021 个清单文件。后续仅合入验证夹具与文档修正，运行代码和冻结归档未改写。
+2026-11-04 已[正式发布](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.12.0)并设为 Latest，八份源码发行附件匿名 HTTP 完整回下载的大小与 SHA256 一致。正式冻结源码 `6aa6895b304ca4bdd189a9a9e1b9f8a7305fe971`，源码归档 SHA256 `18d11b67c41476c28c036e17fd247126aca9626422bf3d4351f71ba323951349`（10,183,458 字节、2,021 个清单文件）。[正式验收 JSON](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.12.0/ohmybuddy-1.12.0.validation.json)、[验收说明](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.12.0/ohmybuddy-1.12.0.validation.md)与[校验和](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.12.0/SHA256SUMS-1.12.0.txt)绑定准确包、原失败与复用；标签和归档不随主分支补记改变。
+
+正式化仅改根版本、已验证夹具和说明，server/public/scripts 字节及依赖图与候选一致。三端源清单核验、Mac 正式源码包独立安装／SDK／RPC／原生组件及266项HTTP资源、三端新原生包清单与私有探针通过；载荷数 Mac22,102、Linux22,106、Windows31,783。Mac／Linux正式包新装、HTTP、正常退出与配置保持重接入通过，Windows真实EXE以实际Medium非提升令牌完成prepare-only安装准备，永久服务注册分列。
+
+三端从准确rc.1完整包，经实际下载服务器的HTTPS及真实发行公钥单次更新到1.12.0，会话／媒体保持、停机备份和原路径恢复通过，pageerror0；Linux／Windows另核对外置图片，恢复文件数分别Mac13、Linux14、Windows14。公开DMG／EXE全量回下载摘要一致，stable／preview在443和8443均通过签名、版本、来源与no-store核验。公开下载页1440／393／320px的三目标链接、实际版本、CSP和宽度通过；旧Pivane频道及历史ARM64资产保持，新ARM64包暂停。Mac DMG未公证，Windows EXE未作系统代码签名。
+
+syntax882、文档92、刷新生产审计0漏洞。此前formal1.11.1源包升级／停机／恢复及下述回归按未变行为复用；未机械重跑全量，原失败不抹去，真实供应商／OAuth、微信、实体手机、Safari／Firefox与其他架构不由合成服务验收代替。
+
+### rc.1 行为基线（按范围复用）
+
+[1.12.0 说明](releases/1.12.0.md)。**1.12.0-rc.1** 已完成三目标验证，其冻结源码 `42ec53e3433864dd35460670e8d26830af936a43`，源码归档 SHA256 `ce2965a8642cbbf28dfd478da0c023c584ce4c94496f6b9106eeea19fa0e474e`，2,021 个清单文件。候选后的验证夹具和文档修正分别记录；运行实现与原候选归档不改写。
 
 | 本轮目标 | Node／Chromium 回归 | 准确源码包安装、正式 1.11.1 升级、正常停机与原路径恢复 |
 |---|---|---|
