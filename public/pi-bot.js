@@ -731,9 +731,10 @@
                 const label = pose === 'failed' ? translateUi("这轮回复未完成") : pose === 'done' ? translateUi("这轮回复结束")
                     : pose === 'thinking' ? translateUi("正在思考") : pose === 'sleeping' ? translateUi("打盹中") : this.projection?.label || STATUS[this.statusKind]();
                 line.dataset.state = pose === 'failed' ? 'error' : this.statusKind;
-                // The name badge needs only a dot while idle; work, queues and interruptions stay explicit.
-                line.classList.toggle('is-quiet', this.statusKind === 'connected' && !this.projection?.queued && !this.projection?.stopping
-                    && ['idle', 'greeting', 'sleeping'].includes(pose) && [STATUS.connected(), translateUi("空闲")].includes(label));
+                // The name badge keeps the Buddy and topic readable: idle and ordinary work show only the coloured
+                // (pulsing) dot, as the turn itself shows its progress. Waiting, a failed reply, stopping and
+                // connection trouble keep words; the label stays in the tooltip and accessible name.
+                line.classList.toggle('is-quiet', ['connected', 'working'].includes(this.statusKind) && !this.projection?.stopping && pose !== 'failed');
                 line.title = label;
                 line.setAttribute('aria-label', label);
                 line.replaceChildren(el('i', 'pi-bot-status-dot'), document.createTextNode(label));
@@ -933,14 +934,17 @@
             menu.append(icon('fa-bars'));
             if (!bot) { this.header.replaceChildren(menu); return; }
             const who = el('div', 'pi-bot-who');
-            const name = el('strong', null, bot.name);
+            const name = el('strong', null, bot.name); name.title = bot.name;
             const current = this.window();
             const line = el('span', 'pi-bot-status'); line.dataset.state = this.statusKind;
             line.append(el('i', 'pi-bot-status-dot'), document.createTextNode(STATUS[this.statusKind]()));
-            who.append(name);
-            // In a topic the badge also names it; the status line itself is repainted with each pose.
-            if (current?.kind === 'topic') who.append(el('span', 'pi-bot-who-topic', current.emoji ? `${current.emoji} ${current.title}` : current.title));
-            who.append(line);
+            // Name and status share the first line; in a topic its title gets a full second line, so neither
+            // crowds the other out. The status line itself is repainted with each pose.
+            const first = el('span', 'pi-bot-who-line'); first.append(name, line); who.append(first);
+            if (current?.kind === 'topic') {
+                const topic = el('span', 'pi-bot-who-topic', current.emoji ? `${current.emoji} ${current.title}` : current.title); topic.title = topic.textContent;
+                who.classList.add('has-topic'); who.append(topic);
+            }
             const notes = button('pi-bot-notes-button pi-bot-more', translateUi('更多功能')); notes.dataset.botAction = 'more';
             notes.append(icon('fa-ellipsis')); notes.hidden = !this.windowId;
             notes.setAttribute('aria-haspopup', 'menu'); notes.setAttribute('aria-expanded', 'false'); notes.setAttribute('aria-controls', 'pi-bot-more-menu');

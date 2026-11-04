@@ -11471,5 +11471,12 @@
         ['添加图标', 'Add icon'],
         ['归档后话题从列表收起，记录都保留，可以在“已归档”里恢复。', 'Archiving hides the topic from the list and keeps its history. Restore it from Archived.']
     );
+    rows.push(
+        ["分组只用来整理话题列表，不改变聊天方式。", "Groups only organize the topic list. They don't change how chats work."],
+        ["勾选话题后，在这里选择要移到的分组。", "Select topics, then choose a group for them here."],
+        ["回收站里的话题可以恢复；彻底删除后无法找回。", "Topics in the trash can be restored. Permanent deletion cannot be undone."],
+        ["移到回收站的话题会出现在这里。", "Topics you move to the trash appear here."],
+        ["{0} 段聊天", "{0} chat sessions", "{0} chat session"]
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

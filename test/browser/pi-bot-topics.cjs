@@ -157,6 +157,7 @@ const REV = letter => letter.repeat(64);
                 await sheet.waitFor();
                 assert.equal(await sheet.locator('h2').textContent(), '编辑话题');
                 await sheet.locator('[data-topic-field="focus"]').fill('a\nb');
+                await sheet.locator('[data-topic-rules] > summary').click();
                 await sheet.locator('[data-topic-field="instructions"]').fill('每次先列出单词\n再出题');
                 // Closing with an unsaved edit warns once.
                 await page.keyboard.press('Escape');
@@ -196,9 +197,12 @@ const REV = letter => letter.repeat(64);
                 await page.locator(`.pi-bot-topic-edit[data-window-id="${T3}"]`).click();
                 await sheet.waitFor();
                 const area = sheet.locator('[data-topic-field="instructions"]');
-                const instructionField = sheet.locator('.pi-bot-sheet-field:has([data-topic-field="instructions"])');
-                assert.equal(await instructionField.locator('.pi-bot-sheet-label').textContent(), '话题指令（可不填）');
-                assert.match(await instructionField.locator('.pi-bot-sheet-hint').textContent(), /回答格式、资料来源。最多 8 KB（约 2700 个汉字）/);
+                const rules = sheet.locator('[data-topic-rules]');
+                assert.equal(await rules.evaluate(node => node.open), false, 'optional instructions start folded');
+                assert.equal(await rules.locator('.pi-bot-topic-rules-title > span').textContent(), '话题指令');
+                await rules.locator('summary').click();
+                assert.match(await rules.locator('.pi-bot-topic-rules-help').textContent(), /回答格式、资料来源/);
+                assert.equal(await rules.locator('.pi-bot-topic-count').textContent(), '0/8 KB');
                 const metrics = () => area.evaluate(node => {
                     const style = getComputedStyle(node), box = node.getBoundingClientRect();
                     return { height: box.height, left: box.left, right: box.right, client: node.clientHeight, scroll: node.scrollHeight,
