@@ -54,7 +54,8 @@
     const validUser = id => id.length > 0 && id.length <= 256 && !/[\x00-\x1f]/.test(id);
     const labels = () => ({ queued: t('等待线程空闲', 'Waiting for thread'), dispatching: t('正在投递', 'Submitting'), running: t('运行中', 'Running'), ready: t('回复待发送', 'Reply pending'), sending: t('正在发送回复', 'Sending reply'), delivered: t('已送达', 'Delivered'), partial: t('部分送达', 'Partially delivered'), uncertain: t('需要核对', 'Needs review'), reviewed: t('已核对', 'Reviewed'), ignored: t('未进入线程', 'Not submitted'), failed: t('失败', 'Failed'), cancelled: t('已取消', 'Cancelled') });
     const jobKind = status => status === 'delivered' || status === 'reviewed' ? 'on' : ['running', 'dispatching', 'sending', 'queued', 'ready'].includes(status) ? 'info' : ['uncertain', 'failed', 'partial'].includes(status) ? 'error' : 'off';
-    const needsAttention = job => ['uncertain', 'failed', 'partial'].includes(job.status) || Boolean(job.waiting) || job.reason === 'reply-context-missing';
+    const contextWait = job => job.status === 'ready' && ['reply-context-missing', 'reply-context-expired'].includes(job.reason);
+    const needsAttention = job => ['uncertain', 'failed', 'partial'].includes(job.status) || Boolean(job.waiting) || contextWait(job);
     const inProgress = job => ['queued', 'dispatching', 'running', 'ready', 'sending'].includes(job.status);
     const reasons = () => ({ unbound: t('尚未绑定线程', 'No thread binding'), 'reply-context-missing': t('缺少微信回复上下文，请在微信再发一条消息', 'Reply context is missing; send another WeChat message'), 'unsupported-message': t('当前支持文字私聊，请用文字重发', 'Text DMs are supported; resend as text'), 'queue-full': t('待处理消息已满', 'Pending queue is full'), restart: t('服务重启，未自动重试', 'Service restarted; no automatic retry'), 'execution-or-delivery-uncertain': t('执行或发送结果不确定，请查看线程', 'Execution or delivery is uncertain; inspect the thread'), 'binding-changed': t('绑定已变化', 'Binding changed'), 'attachments-incomplete': t('部分附件尚未发送，请查看下方说明或打开线程。', 'Some attachments were not sent. See details below or open the thread.'), 'admission-changed': t('执行前权限或绑定已变化', 'Permission or binding changed before execution'), 'delivery-revoked': t('回复权限已撤销', 'Reply permission was revoked'), 'notification-revoked': t('定时通知已关闭', 'Scheduled notification was disabled') });
     const commandList = () => [
@@ -559,7 +560,7 @@
                 const [kindIcon, kindName] = kinds[job.kind] || ['fa-message', t('微信消息', 'WeChat message')];
                 kind.append(icon(kindIcon), document.createTextNode(kindName));
                 const deliveryUnconfirmed = job.status === 'uncertain' && job.blocksFollowing === false;
-                top.append(kind, badge(deliveryUnconfirmed ? t('投递未确认', 'Delivery unconfirmed') : labels()[job.status] || job.status, jobKind(job.status)));
+                top.append(kind, badge(deliveryUnconfirmed ? t('投递未确认', 'Delivery unconfirmed') : contextWait(job) ? t('等待微信消息', 'Waiting for WeChat') : labels()[job.status] || job.status, jobKind(job.status)));
                 const recipient = el('span', job.peerId, 'channel-job-peer'); recipient.title = job.peerId;
                 const meta = el('div', null, 'channel-job-meta'), date = new Date(job.at), time = el('time');
                 if (Number.isFinite(date.getTime())) {
@@ -581,13 +582,19 @@
                     'connection-unavailable': t('暂时无法连接微信，自动重试后仍未成功。', 'Unable to connect to WeChat after automatic retries.'),
                     'delivery-interrupted': t('本条发送被维护或停机中断。', 'This delivery was interrupted by maintenance or shutdown.'),
                     'reply-read-pending': t('暂时无法读取原生回复；系统会有限重试，不会重新执行任务。', 'The native reply is temporarily unavailable. Reads are retried a limited number of times; the task is never rerun.'),
-                    'execution-not-started': t('任务尚未执行，请检查线程是否可用后在微信重发。', 'The task did not start. Check the thread and resend from WeChat.')
+                    'execution-not-started': t('任务尚未执行，请检查线程是否可用后在微信重发。', 'The task did not start. Check the thread and resend from WeChat.'),
+                    'reply-context-missing': job.status === 'ready'
+                        ? t('尚未建立微信回复上下文。在微信发任意一条消息后自动发送，无需到网页放行。', 'No WeChat reply context yet. Send any WeChat message and this is delivered automatically; no manual release is needed.')
+                        : t('缺少微信回复上下文，本条未送达且不再补发；结果保留在线程中。', 'No WeChat reply context; this was not delivered and will not be resent. The result remains in its thread.'),
+                    'reply-context-expired': job.status === 'ready'
+                        ? t('微信长时间未互动，暂不接受主动发送。在微信发任意一条消息后自动补发，无需到网页放行。', 'WeChat paused delivery after a long idle period. Send any WeChat message and this is delivered automatically; no manual release is needed.')
+                        : t('微信回复上下文已过期且未及时恢复，本条未送达且不再补发；结果保留在线程中。', 'WeChat reply context expired and was not renewed in time; this was not delivered and will not be resent. The result remains in its thread.')
                 };
                 const displayReason = deliveryUnconfirmed ? 'delivery-unconfirmed' : job.reason;
                 if (displayReason && (deliveryReasons[displayReason] || reasons()[displayReason])) row.append(el('p', deliveryReasons[displayReason] || reasons()[displayReason], 'channel-job-reason'));
                 if (Number.isSafeInteger(job.platformCode)) row.append(el('small', t(`微信返回码：${job.platformCode}`, `WeChat response code: ${job.platformCode}`), 'channel-job-reason'));
                 if (job.blocksFollowing === false && ['uncertain', 'partial', 'failed'].includes(job.status)) row.append(el('p', t('不阻塞后续聊天或定时通知，无需手动放行。', 'Later chats and scheduled notifications can continue. No manual release is needed.'), 'channel-job-reason'));
-                if (job.blocksFollowing === true) row.append(el('p', t('任务执行结果尚未确定；系统会先核对原生完成记录，无法确认时才需人工处理。', 'Task execution is unresolved. The system checks native completion records before requiring manual review.'), 'channel-job-reason'));
+                if (job.blocksFollowing === true) row.append(el('p', t('任务执行结果尚未确定，正在自动核对原生完成记录；该聊天最多暂停 5 分钟，之后自动继续，无需手动放行。', 'Task execution is unresolved. Native completion records are being checked; this chat pauses for at most 5 minutes and then continues automatically.'), 'channel-job-reason'));
                 const issueLabels = { size: t('超过 16 MiB', 'Exceeds 16 MiB'), limit: t('超过附件数量限制', 'Attachment limit exceeded'), unreadable: t('读取或校验失败', 'Read or verification failed'), unavailable: t('发送组件不可用', 'Delivery unavailable'), pending: t('尚在生成', 'Still generating'), failed: t('生成未完成', 'Generation incomplete'),
                     'media-upload-failed': t('上传失败，已尝试恢复', 'Upload failed after retries'), 'send-unconfirmed': t('发送回执未确认，未重复发送', 'Send receipt unconfirmed; not resent'),
                     'wechat-rejected': t('微信拒绝接收', 'Rejected by WeChat'), 'wechat-rate-limited': t('微信暂时限制发送', 'Rate limited by WeChat'), 'connection-unavailable': t('暂时无法连接微信', 'Unable to connect to WeChat') };

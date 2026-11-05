@@ -3,7 +3,12 @@ const MESSAGE = 'pivane-channel-message';
 const DELIVERABLE_ENTRY = 'pivane-deliverable';
 const CRON_STATE = 'pivane-cron-run';
 const CRON_MESSAGE = 'pivane-cron-message';
+const THREAD_STATE = 'pivane-thread-turn';
 const TERMINAL = new Set(['completed', 'stopped', 'error']);
+// A Bot's notebook and topic index join a starting run right after its prompt
+// (bot-context-extension.ts). They are hidden program context, never another input.
+const CONTEXT_NOTICES = new Set(['pivane-bot-notebook', 'pivane-bot-topic-index']);
+const isContextNotice = entry => entry.type === 'custom_message' && CONTEXT_NOTICES.has(entry.customType) && entry.display === false;
 const SUBAGENT_RESULT_STATUSES = new Set(['completed', 'failed', 'paused', 'stopped']);
 
 function isTurnNotice(entry) {
@@ -34,7 +39,7 @@ function ownedEntries(branch, start, end, messageType, key, id) {
     let prompt = false;
     for (const entry of entries) {
         if (entry.type === 'custom_message') {
-            if (prompt && isTurnNotice(entry)) continue;
+            if (prompt && (isTurnNotice(entry) || isContextNotice(entry))) continue;
             if (prompt || entry.customType !== messageType || entry.details?.[key] !== id) return null;
             prompt = true;
         } else if (entry.type === 'message' && entry.message?.role === 'user') return null;
@@ -84,6 +89,21 @@ function channelReply(manager, id) {
     const entries = ownedEntries(branch, rows[0].index, branch.length, MESSAGE, 'messageId', id);
     return entries?.findLast(entry => entry.type === 'message' && entry.message?.role === 'assistant') || null;
 }
+// Versions before context notices were owned settled such a turn as an error without a
+// reply. The same settlement's thread receipt independently names its completed reply;
+// accept only that exact proof, and only for turns that carried a context notice.
+function receiptCompletion(branch, index, entries, id, state) {
+    if (state.status !== 'error' || state.replyEntryId || !entries.some(isContextNotice)) return null;
+    for (const entry of branch.slice(index + 1, index + 6)) {
+        if (entry.type !== 'custom') return null;
+        if (entry.customType !== THREAD_STATE) continue;
+        const data = entry.data;
+        if (data?.status !== 'completed' || data.sessionId !== state.sessionId || data.source?.kind !== 'channel' || data.source.id !== id) return null;
+        const reply = replyIn(entries, data.replyEntryId);
+        return reply?.message.stopReason === 'stop' ? { state: { ...state, status: 'completed', replyEntryId: reply.id }, reply } : null;
+    }
+    return null;
+}
 function outcome(manager, id) {
     const branch = manager.getBranch(), rows = channelMarkers(manager, branch, id);
     if (!rows) return null;
@@ -92,6 +112,8 @@ function outcome(manager, id) {
     if (rows.length !== 2 || rows[0].data.status !== 'running' || !TERMINAL.has(state.status)) return null;
     const entries = ownedEntries(branch, rows[0].index, rows[1].index, MESSAGE, 'messageId', id);
     if (!entries) return null;
+    const proven = receiptCompletion(branch, rows[1].index, entries, id, state);
+    if (proven) return collect(proven.state, entries, proven.reply);
     const reply = replyIn(entries, state.replyEntryId);
     if (!reply && (state.replyEntryId || state.status === 'completed')) return null;
     return collect(state, entries, reply);
@@ -116,4 +138,4 @@ function scheduledOutcome(manager, event) {
     if (!reply && (state.replyEntryId || state.status === 'completed')) return null;
     return collect(state, entries, reply);
 }
-module.exports = { STATE, MESSAGE, CRON_MESSAGE, DELIVERABLE_ENTRY, stateFor, channelReply, outcome, scheduledOutcome, collect, isTurnNotice };
+module.exports = { STATE, MESSAGE, CRON_MESSAGE, DELIVERABLE_ENTRY, stateFor, channelReply, outcome, scheduledOutcome, collect, isTurnNotice, isContextNotice };

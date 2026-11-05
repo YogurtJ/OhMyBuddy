@@ -7,7 +7,7 @@ const { setTimeout: delay } = require('node:timers/promises');
 const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-channel-delivery-')));
 process.env.PI_CODING_AGENT_DIR = path.join(root, 'agent'); process.env.PI_PROJECT_ROOTS = root; process.env.PI_OFFLINE = '1';
 const { ChannelsService } = require('../server/channels/service');
-const { ChannelStore, blocksFollowing } = require('../server/channels/store');
+const { ChannelStore, blocksFollowing, UNRESOLVED_HOLD_MS } = require('../server/channels/store');
 const { ChannelDeliveryError } = require('../server/channels/delivery-errors');
 const { WeixinAdapter, createTransport, BASE } = require('../server/channels/weixin-adapter');
 test.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -161,11 +161,17 @@ test('unconfirmed legacy notifications do not block later deliveries, binding ch
 test('unresolved executions still hold new input but not completed notifications', async t => {
     const { s, db, event, sends } = fixture(t); await s.notifyScheduledRun(event);
     const original = db.value.jobs[0];
-    db.change(v => v.jobs.unshift({ ...original, id: 'execution', kind: undefined, directReply: undefined, status: 'uncertain', recoveryAttempts: 5 },
+    db.change(v => v.jobs.unshift({ ...original, id: 'execution', kind: undefined, directReply: undefined, status: 'uncertain', recoveryAttempts: 5, uncertainAt: Date.now() },
         { ...original, id: 'queued', kind: undefined, directReply: undefined, status: 'queued', text: 'must wait' }));
     assert.equal(blocksFollowing(db.value.jobs[0]), true);
     s.pump(); await drain(s);
     assert.equal(db.value.jobs[1].status, 'queued'); assert.equal(db.value.jobs[2].status, 'delivered'); assert.equal(sends.length, 1);
+    // The hold is bounded: the chat continues on its own; the worker still serialises real turns.
+    s.updateJob('execution', { uncertainAt: Date.now() - UNRESOLVED_HOLD_MS - 1 });
+    const attempted = []; s.run = async id => { attempted.push(id); };
+    s.pump(); await drain(s); assert.deepEqual(attempted, ['queued']);
+    assert.equal(s.job('execution').status, 'uncertain', 'no invented review or completion');
+    assert.equal(blocksFollowing({ status: 'uncertain' }), false, 'legacy records without a start time never hold the chat');
 });
 
 test('native completion is automatically recovered after restart without replaying a task', async t => {
@@ -287,4 +293,58 @@ test('adapter distinguishes CDN preparation errors from uncertain sendMessage an
     await assert.rejects(adapter.sendMedia(account, peer, {}, 'id'), e => !(e instanceof ChannelDeliveryError));
     adapter.api.sendMessage = async () => ({ errcode: -14 });
     await assert.rejects(adapter.send(account, peer, 'hello', 'id'), e => e instanceof ChannelDeliveryError && e.reason === 'wechat-login-expired');
+});
+
+test('an expired reply context waits for the next WeChat message instead of needing review', async t => {
+    const { s, db, event } = fixture(t); await s.notifyScheduledRun(event);
+    const id = db.value.jobs[0].id, delivered = []; let refuse = true, calls = 0;
+    s.adapter.send = async (_a, peer, body) => {
+        calls++; if (refuse) throw new ChannelDeliveryError('reply-context-expired', false, -2);
+        delivered.push([peer.contextToken, body]); return {};
+    };
+    s.pump(); await drain(s);
+    const job = s.job(id);
+    assert.equal(job.status, 'ready'); assert.equal(job.reason, 'reply-context-expired'); assert.equal(job.platformCode, -2);
+    assert.equal(job.sendStarted, false); assert.equal(blocksFollowing(job), false); assert.ok(db.value.peers[0].contextExpiredAt);
+    assert.doesNotThrow(() => s.assertPeerIdle('bot', 'peer'));
+    s.pump(); await drain(s); assert.equal(calls, 1, 'the refused context is not used again');
+    refuse = false; s.adapter.message = raw => raw;
+    s.receive('bot', { msgs: [{ messageId: 'hello', peerId: 'peer', text: 'hi', contextToken: 'fresh' }] });
+    assert.equal(db.value.peers[0].contextExpiredAt, undefined);
+    s.updateJob(db.value.jobs.at(-1).id, { status: 'cancelled' });
+    s.pump(); await drain(s);
+    assert.equal(s.job(id).status, 'delivered'); assert.deepEqual(delivered.map(([token]) => token), ['fresh']);
+});
+
+test('repeated context refusal and day-old waiting results end without delivery or review', async t => {
+    const { s, db, event, sends } = fixture(t); await s.notifyScheduledRun(event);
+    const id = db.value.jobs[0].id;
+    s.updateJob(id, { contextAttempts: 2 });
+    s.adapter.send = async () => { throw new ChannelDeliveryError('reply-context-expired', false, -2); };
+    s.pump(); await drain(s);
+    assert.equal(s.job(id).status, 'failed'); assert.equal(s.job(id).reason, 'reply-context-expired'); assert.equal(blocksFollowing(s.job(id)), false);
+    const late = fixture(t); late.db.change(v => { v.peers[0].contextExpiredAt = 1; });
+    await late.s.notifyScheduledRun(late.event); const lateId = late.db.value.jobs[0].id;
+    late.s.pump(); assert.equal(late.s.job(lateId).status, 'ready'); assert.equal(late.s.job(lateId).reason, 'reply-context-expired');
+    late.s.updateJob(lateId, { at: Date.now() - 25 * 3600 * 1000 }); late.s.pump();
+    assert.equal(late.s.job(lateId).status, 'failed'); assert.equal(late.s.job(lateId).directReply, undefined);
+    assert.equal(sends.length, 0); assert.equal(late.sends.length, 0);
+});
+
+test('a refusal after this reply was accepted concerns only that attachment, not the chat context', async t => {
+    const { s, db, event, sends } = fixture(t); await s.notifyScheduledRun(event);
+    s.collectDeliverables = async () => [{ name: 'a.png', bytes: Buffer.from('x') }];
+    s.adapter.sendMedia = async () => { throw new ChannelDeliveryError('reply-context-expired', false, -2); };
+    await s.run(db.value.jobs[0].id, {});
+    const job = db.value.jobs[0];
+    assert.equal(job.status, 'partial'); assert.deepEqual(job.deliveryIssues.map(i => i.reason), ['wechat-rejected']);
+    assert.equal(db.value.peers[0].contextExpiredAt, undefined); assert.equal(sends.length, 2);
+});
+
+test('sendmessage ret -2 is classified as an expired reply context without exposing provider text', async t => {
+    require('node-fetch');
+    t.mock.method(require.cache[require.resolve('node-fetch')], 'exports', async () => ({ ok: true, status: 200, headers: {},
+        buffer: async () => Buffer.from(JSON.stringify({ ret: -2, errmsg: 'private' })) }));
+    await assert.rejects(createTransport(new AbortController().signal)(BASE + '/ilink/bot/sendmessage'),
+        e => e instanceof ChannelDeliveryError && e.reason === 'reply-context-expired' && e.platformCode === -2 && !e.retryable && !e.message.includes('private'));
 });

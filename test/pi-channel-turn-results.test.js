@@ -313,3 +313,50 @@ test('registerChannelTurns never selects a later web assistant after its running
     const receipt = m.getBranch().at(-1).data;
     assert.equal(receipt.status, 'error'); assert.equal(receipt.replyEntryId, null); assert.equal(outcome(m, turnId), null);
 });
+
+const contextNotice = (m, type = 'pivane-bot-topic-index') => m.appendCustomMessageEntry(type, 'Synthetic Bot context', false, { fingerprint: 'fixture' });
+
+test('Bot notebook and topic index notices joining a channel run keep its reply owned', () => {
+    for (const type of ['pivane-bot-topic-index', 'pivane-bot-notebook']) {
+        const m = manager(), handlers = {};
+        const command = registerChannelTurns({ on: (name, callback) => { handlers[name] = callback; },
+            appendEntry: (kind, data) => m.appendCustomEntry(kind, data),
+            sendMessage: message => m.appendCustomMessageEntry(message.customType, message.content, message.display, message.details) });
+        const ctx = { sessionManager: m, isIdle: () => true, hasPendingMessages: () => false, model: { input: ['text'] } };
+        command(ctx, { action: 'start', id: turnId, sessionId: m.getSessionId(), peerId: 'synthetic-peer', text: 'Hello' });
+        contextNotice(m, type); file(m); plan(m); const replyEntryId = assistant(m);
+        handlers.agent_settled({}, ctx);
+        const result = outcome(m, turnId);
+        assert.equal(result.status, 'completed', type); assert.equal(result.replyEntryId, replyEntryId); assertOwn(result);
+    }
+    // A visible message of the same type, or a notice before the owning prompt, is still foreign input.
+    const visible = manager(); channel(visible); channelPrompt(visible); visible.appendCustomMessageEntry('pivane-bot-topic-index', 'Visible', true);
+    channel(visible, { status: 'completed', replyEntryId: assistant(visible) });
+    assert.equal(outcome(visible, turnId), null);
+    const before = manager(); channel(before); contextNotice(before); channelPrompt(before);
+    channel(before, { status: 'completed', replyEntryId: assistant(before) });
+    assert.equal(outcome(before, turnId), null);
+});
+
+test('legacy error settlement is recovered only from the exact completed thread receipt of a context-notice turn', () => {
+    const build = ({ notice = true, source = turnId, threadStatus = 'completed', reply = true, stopReason = 'stop', gap = false } = {}) => {
+        const m = manager(); channel(m); channelPrompt(m);
+        if (notice) contextNotice(m);
+        file(m); plan(m);
+        const replyEntryId = assistant(m, 'Own reply', stopReason);
+        channel(m, { status: 'error', replyEntryId: null });
+        if (gap) m.appendMessage({ role: 'user', content: 'Later web input', timestamp: Date.now() });
+        m.appendCustomEntry('pivane-thread-turn', { version: 1, id: 'e'.repeat(64), sessionId: m.getSessionId(), status: threadStatus,
+            source: { kind: 'channel', id: source }, replyEntryId: reply ? replyEntryId : null, completedAt: 2 });
+        return m;
+    };
+    const recovered = outcome(build(), turnId);
+    assert.equal(recovered.status, 'completed'); assertOwn(recovered);
+    const cases = { noNotice: { notice: false }, foreignSource: { source: 'other' }, errorReceipt: { threadStatus: 'error' },
+        noReply: { reply: false }, abortedReply: { stopReason: 'aborted' }, interveningInput: { gap: true } };
+    for (const [name, options] of Object.entries(cases)) {
+        const result = outcome(build(options), turnId);
+        assert.equal(result.status, 'error', name); assert.equal(result.body, '', name);
+        assert.deepEqual(result.deliverables, [], name); assert.deepEqual(result.mediaPlans, [], name);
+    }
+});

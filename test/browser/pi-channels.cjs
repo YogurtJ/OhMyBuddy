@@ -171,7 +171,8 @@ const server = http.createServer((req, res) => {
                     { id: 'unconfirmed-delivery', status: 'uncertain', kind: 'cron', at: Date.now(), reason: 'execution-or-delivery-uncertain', blocksFollowing: false, sentChunks: 1 },
                     { id: 'blocked-execution', status: 'uncertain', at: Date.now(), blocksFollowing: true, canRecover: true },
                     { id: 'expired-login', status: 'failed', at: Date.now(), reason: 'wechat-login-expired', blocksFollowing: false, platformCode: -14 },
-                    { id: 'retrying-delivery', status: 'sending', at: Date.now(), reason: 'delivery-retrying', blocksFollowing: false }
+                    { id: 'retrying-delivery', status: 'sending', at: Date.now(), reason: 'delivery-retrying', blocksFollowing: false },
+                    { id: 'context-wait', status: 'ready', kind: 'cron', at: Date.now(), reason: 'reply-context-expired', blocksFollowing: false, platformCode: -2 }
                 ];
             });
             await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
@@ -183,8 +184,13 @@ const server = http.createServer((req, res) => {
             assert.match(await page.locator('[data-job-id="expired-login"]').innerText(), /WeChat credentials expired/);
             assert.match(await page.locator('[data-job-id="expired-login"]').innerText(), /WeChat response code: -14/);
             assert.match(await page.locator('[data-job-id="retrying-delivery"]').innerText(), /Automatically retrying/);
+            const contextWait = page.locator('[data-job-id="context-wait"]');
+            assert.match(await contextWait.innerText(), /Waiting for WeChat/);
+            assert.match(await contextWait.innerText(), /Send any WeChat message.*no manual release is needed/);
+            assert.equal(await contextWait.getByRole('button', { name: 'Mark reviewed' }).count(), 1, 'review stays optional for an undelivered result');
+            assert.match(await page.locator('[data-job-id="blocked-execution"]').innerText(), /at most 5 minutes/);
             await page.locator('[data-job-filter="attention"]').click();
-            assert.equal(await page.locator('.channel-job').count(), 3);
+            assert.equal(await page.locator('.channel-job').count(), 4);
             await page.locator('[data-job-filter="all"]').click();
             const deliveryOverflow = await page.evaluate(() => [...document.querySelectorAll('.channel-job,.channel-job-reason')].some(n => n.getBoundingClientRect().right > innerWidth + 1));
             assert.equal(deliveryOverflow, false);

@@ -17,6 +17,8 @@ async function sendItem(service, job, operation) {
         const { account, peer } = recipient(service, job);
         try { return await operation(account, peer, () => recipient(service, job)); }
         catch (error) {
+            // Remember which context WeChat refused; a newer inbound message may already have replaced it.
+            if (error instanceof ChannelDeliveryError && error.reason === 'reply-context-expired') error.expiredContext = peer.contextToken;
             if (!(error instanceof ChannelDeliveryError) || !error.retryable || attempt >= 2) throw error;
             // Only a proved pre-send failure/rejection is retried. Never retry a
             // timeout/reset or use client_id as an undocumented idempotency key.
@@ -28,6 +30,26 @@ async function sendItem(service, job, operation) {
 }
 function failure(service, job, error) {
     const current = service.job(job.id);
+    if (error instanceof ChannelDeliveryError && error.reason === 'reply-context-expired') {
+        if (current.sentChunks || current.sentMedia) {
+            // The same context was accepted moments ago in this reply: not an expired context.
+            error.reason = 'wechat-rejected';
+        } else {
+            // WeChat refused this chat's reply context (long idle) and accepted nothing of this reply.
+            // Hold the chat's results until its next inbound message renews the context; no review needed.
+            service.db.change(v => {
+                const peer = v.peers.find(p => p.accountId === job.accountId && p.peerId === job.peerId);
+                if (peer && peer.contextToken === error.expiredContext) peer.contextExpiredAt = Date.now();
+            });
+        }
+        const attempts = (current.contextAttempts || 0) + 1;
+        if (error.reason === 'reply-context-expired' && attempts < 3) {
+            // A definite refusal with nothing accepted: the next attempt is a first send, not a replay.
+            service.updateJob(job.id, { status: 'ready', reason: 'reply-context-expired', contextAttempts: attempts, sendStarted: false,
+                deliveryError: undefined, platformCode: error.platformCode });
+            return;
+        }
+    }
     service.updateJob(job.id, { status: error instanceof ChannelDeliveryError ? (current.sentChunks || current.sentMedia ? 'partial' : 'failed') : 'uncertain',
         reason: error instanceof ChannelDeliveryError ? error.reason : 'delivery-unconfirmed',
         deliveryError: undefined, platformCode: error instanceof ChannelDeliveryError ? error.platformCode : undefined });
@@ -52,7 +74,10 @@ async function deliver(service, job, { chunks, mediaFiles, deliveryIssues, isSto
             if (error instanceof ChannelDeliveryError && ['delivery-revoked', 'delivery-interrupted', 'wechat-login-expired', 'reply-context-missing'].includes(error.reason)) {
                 failure(service, job, error); return;
             }
-            const reason = error instanceof ChannelDeliveryError ? error.reason : 'send-unconfirmed';
+            // The text of this reply was just accepted with the same context, so a refusal here
+            // concerns this attachment only (for example consecutive media), not an expired chat.
+            const reason = !(error instanceof ChannelDeliveryError) ? 'send-unconfirmed'
+                : error.reason === 'reply-context-expired' ? 'wechat-rejected' : error.reason;
             service.deliveryIssue(deliveryIssues, mediaFiles[i].name, reason);
             service.deliveryIssue(sendIssues, mediaFiles[i].name, reason);
             service.updateJob(job.id, { deliveryIssues });

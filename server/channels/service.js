@@ -1,7 +1,10 @@
 const path = require('node:path');
 const { randomUUID, createHash } = require('node:crypto');
 const { setTimeout: delay } = require('node:timers/promises');
-const { ChannelStore, pending, blocksFollowing } = require('./store');
+const { ChannelStore, pending, blocksFollowing, waitingForContext } = require('./store');
+// A result waiting for WeChat to accept this chat again is delivered after the next inbound
+// message, but not a day later: an older one stays readable in its thread.
+const CONTEXT_WAIT_MS = 24 * 60 * 60 * 1000;
 const { WeixinComponent } = require('./weixin-component');
 const { WeixinAdapter, createTransport, validId } = require('./weixin-adapter');
 const { outcome } = require('./runtime');
@@ -195,7 +198,8 @@ class ChannelsService {
         });
     }
     assertPeerIdle(accountId, peerId) {
-        if (this.db.value.jobs.some(j => j.accountId === accountId && j.peerId === peerId && pending(j))) throw fail('此聊天还有待处理或待核对消息，请先处理后更改绑定', 409);
+        // A result only waiting for reply context re-checks its binding before sending; it never holds a change.
+        if (this.db.value.jobs.some(j => j.accountId === accountId && j.peerId === peerId && pending(j) && !waitingForContext(j))) throw fail('此聊天还有待处理或待核对消息，请先处理后更改绑定', 409);
     }
     assertUnbound(cwd, sessionId) {
         if (this.initializing || this.error || !this.db) throw fail('消息渠道状态尚无法核对，请先处理后再删除或移动线程', 409);
@@ -280,6 +284,8 @@ class ChannelsService {
                 let peer = v.peers.find(p => p.accountId === accountId && p.peerId === msg.peerId);
                 if (!peer) { if (v.peers.length >= 500) continue; peer = { accountId, peerId: msg.peerId, contextToken: '' }; v.peers.push(peer); }
                 Object.assign(peer, { ...(msg.contextToken ? { contextToken: msg.contextToken } : {}), lastSeenAt: Date.now() });
+                // A new inbound message renews the reply context; waiting results continue with it.
+                if (msg.contextToken) delete peer.contextExpiredAt;
                 const binding = v.bindings.find(b => b.accountId === accountId && b.peerId === msg.peerId);
                 const activeCount = v.jobs.filter(j => ['queued', 'dispatching', 'running'].includes(j.status) && j.accountId === accountId && j.peerId === msg.peerId).length;
                 const slash = !msg.images?.length ? parseSlash(msg.text) : null;
@@ -425,9 +431,15 @@ class ChannelsService {
             if (job.kind === 'cron' && this.canNotifyScheduled && !this.canNotifyScheduled(job.cronJobId)) {
                 this.updateJob(job.id, { status: 'cancelled', reason: 'notification-revoked', directReply: undefined, deliverables: undefined, mediaPlans: undefined }); continue;
             }
-            if (job.status === 'ready' && !this.db.value.peers.some(p => p.accountId === job.accountId && p.peerId === job.peerId && p.contextToken)) {
-                if (job.reason !== 'reply-context-missing') this.updateJob(job.id, { reason: 'reply-context-missing' });
-                continue;
+            if (job.status === 'ready') {
+                const peer = this.db.value.peers.find(p => p.accountId === job.accountId && p.peerId === job.peerId);
+                const wait = !peer?.contextToken ? 'reply-context-missing' : peer.contextExpiredAt ? 'reply-context-expired' : null;
+                if (wait) {
+                    // Never sent: WeChat refused it or no context exists. It stays out of the way of the chat.
+                    if (Date.now() - (job.at || 0) > CONTEXT_WAIT_MS) this.updateJob(job.id, { status: 'failed', reason: wait, directReply: undefined, deliverables: undefined, mediaPlans: undefined });
+                    else if (job.reason !== wait) this.updateJob(job.id, { reason: wait });
+                    continue;
+                }
             }
             if (!control && ([...this.runs.entries()].some(([id, r]) => same(r.target, job.target)
                 || this.job(id)?.accountId === job.accountId && this.job(id)?.peerId === job.peerId)
@@ -443,7 +455,7 @@ class ChannelsService {
                         this.updateJob(job.id, { status: attempts < 5 ? 'ready' : 'failed', reason: 'reply-read-pending', readAttempts: attempts, nextAttemptAt: Date.now() + 30000 });
                     } else if (current.status === 'queued') this.updateJob(job.id, { status: 'failed', reason: 'execution-not-started' });
                     else if (['dispatching', 'running', 'sending'].includes(current.status)) {
-                        this.updateJob(job.id, { status: 'uncertain', reason: current.sendStarted ? 'delivery-unconfirmed' : 'execution-or-delivery-uncertain' });
+                        this.updateJob(job.id, { status: 'uncertain', reason: current.sendStarted ? 'delivery-unconfirmed' : 'execution-or-delivery-uncertain', uncertainAt: Date.now() });
                     }
                 }
                 catch { this.error = '渠道投递记录无法保存，已停止后续投递'; }
@@ -601,6 +613,11 @@ class ChannelsService {
                         if (result) {
                             if (!['completed', 'stopped', 'error'].includes(result.status)) throw fail('No native completion proof');
                             this.updateJob(id, { status: 'ready', text: undefined, images: undefined, waiting: false });
+                        } else if (this.job(id).status === 'running') {
+                            // The turn settled but its reply could not be proved yet. Never leave it "running":
+                            // the bounded native recovery reads it again without rerunning the task.
+                            this.updateJob(id, { status: 'uncertain', reason: 'execution-or-delivery-uncertain', uncertainAt: Date.now(), waiting: false });
+                            return;
                         }
                     }
                 }

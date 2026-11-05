@@ -186,3 +186,14 @@ test('compact without completion proof becomes uncertain rather than claiming su
     s.pump(); await until(() => s.runs.size === 0);
     assert.equal(s.job('job').status, 'uncertain'); assert.equal(sends.length, 0);
 });
+
+test('a settled turn whose reply cannot be proved yet is recovered from native history, never left running', async t => {
+    const { s, worker, calls, sends } = fixture(t, 'Hello');
+    worker.channelTurn = async (input, hooks) => { calls.push({ type: 'channel', input }); hooks.accepted(); return null; };
+    s.pump(); await until(() => s.runs.size === 0);
+    assert.equal(s.job('job').status, 'uncertain'); assert.ok(s.job('job').uncertainAt);
+    s.pump(); await until(() => s.runs.size === 0); assert.equal(s.job('job').status, 'ready');
+    s.pump(); await until(() => s.runs.size === 0);
+    assert.equal(s.job('job').status, 'delivered'); assert.deepEqual(sends, ['reply']);
+    assert.equal(calls.filter(c => c.type === 'channel').length, 1, 'the task is never run again');
+});

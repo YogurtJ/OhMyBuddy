@@ -4,10 +4,19 @@ const { randomUUID } = require('node:crypto');
 const { privateDir, readSafe, atomicJson, hash } = require('../pi-maintenance-files');
 const { openPrivateFileSync, privateFileMode } = require('../pi-private-files');
 const empty = () => ({ version: 1, revision: randomUUID(), accounts: [], bindings: [], peers: [], jobs: [] });
-// Only an unresolved execution can hold subsequent inputs. An unconfirmed
-// reply is a delivery receipt; it must never freeze this chat or another peer.
-const blocksFollowing = job => job.status === 'uncertain' && !job.sendStarted && !['thread', 'cron', 'notice'].includes(job.kind);
+// Only an unresolved execution can hold subsequent inputs, and only while its native result
+// is being checked. An unconfirmed reply is a delivery receipt; it never freezes this chat.
+// The worker's own exclusivity still serialises turns, so releasing the hold cannot overlap
+// a run that is actually still executing. Old records without a start time never hold.
+const UNRESOLVED_HOLD_MS = 5 * 60 * 1000;
+const blocksFollowing = (job, now = Date.now()) => job.status === 'uncertain' && !job.sendStarted
+    && !['thread', 'cron', 'notice', 'bot-push'].includes(job.kind)
+    && Number.isFinite(job.uncertainAt) && now - job.uncertainAt < UNRESOLVED_HOLD_MS;
 const pending = job => ['queued', 'dispatching', 'running', 'ready', 'sending'].includes(job.status) || blocksFollowing(job);
+// A finished result that only waits for WeChat to accept this chat again (no or expired
+// reply context). It is delivered after the next inbound message and never holds the chat.
+const CONTEXT_WAIT = new Set(['reply-context-missing', 'reply-context-expired']);
+const waitingForContext = job => job.status === 'ready' && CONTEXT_WAIT.has(job.reason);
 class ChannelStore {
     constructor(directory) { this.directory = directory; this.file = path.join(directory, 'state.json'); this.ownerFile = path.join(directory, 'owner.sqlite'); this.owner = null; this.value = empty(); this.diskHash = null; this.load(); }
     load() {
@@ -30,8 +39,8 @@ class ChannelStore {
                 || b.excludedTurnId != null && !/^[a-f0-9]{64}$/.test(b.excludedTurnId)
                 || !require('./bot-channel').validBotBinding(b))
             || value.jobs.some(j => !j || typeof j.id !== 'string' || typeof j.status !== 'string'
-                || ['retryCount', 'recoveryAttempts', 'readAttempts'].some(key => j[key] !== undefined && (!Number.isSafeInteger(j[key]) || j[key] < 0 || j[key] > 1000))
-                || j.nextAttemptAt !== undefined && (!Number.isFinite(j.nextAttemptAt) || j.nextAttemptAt < 0)
+                || ['retryCount', 'recoveryAttempts', 'readAttempts', 'contextAttempts'].some(key => j[key] !== undefined && (!Number.isSafeInteger(j[key]) || j[key] < 0 || j[key] > 1000))
+                || ['nextAttemptAt', 'uncertainAt'].some(key => j[key] !== undefined && (!Number.isFinite(j[key]) || j[key] < 0))
                 || j.platformCode !== undefined && !Number.isSafeInteger(j.platformCode)
                 || j.deliveryError !== undefined && (typeof j.deliveryError !== 'string' || j.deliveryError.length > 64)
                 || j.bot !== undefined && (!j.bot || typeof j.bot !== 'object' || !/^[a-f0-9-]{36}$/.test(j.bot.profileId || '')
@@ -41,6 +50,7 @@ class ChannelStore {
                     || j.deliveryIssues.some(i => !i || typeof i.name !== 'string' || i.name.length > 120 || typeof i.reason !== 'string' || i.reason.length > 64)))
             || value.peers.some(p => !p || !id(p.accountId) || !id(p.peerId) || typeof p.contextToken !== 'string' || p.contextToken.length > 8192
                 || p.typingTicket !== undefined && (typeof p.typingTicket !== 'string' || p.typingTicket.length > 4096)
+                || p.contextExpiredAt !== undefined && (!Number.isFinite(p.contextExpiredAt) || p.contextExpiredAt < 0)
                 || p.resumeCwd !== undefined && (typeof p.resumeCwd !== 'string' || !path.isAbsolute(p.resumeCwd) || p.resumeCwd.length > 4096)
                 || p.resumeListedAt !== undefined && (!Number.isFinite(p.resumeListedAt) || p.resumeListedAt < 0)
                 || p.resumeCandidates !== undefined && (!Array.isArray(p.resumeCandidates) || p.resumeCandidates.length > 20 || p.resumeCandidates.some(c => !id(c)))))
@@ -70,7 +80,8 @@ class ChannelStore {
             lock.prepare('INSERT OR REPLACE INTO owner VALUES (1,?,?)').run(owner.pid, owner.nonce);
             lock.exec('COMMIT'); this.owner = owner; this.lock = lock;
         } catch (error) { try { lock.exec('ROLLBACK'); } catch {} lock.close(); throw error; }
-        this.change(value => { for (const job of value.jobs) if (['dispatching', 'running', 'sending'].includes(job.status)) { job.status = 'uncertain'; job.reason = 'restart'; } });
+        const now = Date.now();
+        this.change(value => { for (const job of value.jobs) if (['dispatching', 'running', 'sending'].includes(job.status)) { job.status = 'uncertain'; job.reason = 'restart'; job.uncertainAt = now; } });
     }
     change(fn, { config = false, revision } = {}) {
         if (!this.owner) throw new Error('渠道服务未取得写入所有权');
@@ -90,4 +101,4 @@ class ChannelStore {
         finally { this.lock.close(); this.lock = null; this.owner = null; }
     }
 }
-module.exports = { ChannelStore, pending, blocksFollowing };
+module.exports = { ChannelStore, pending, blocksFollowing, waitingForContext, UNRESOLVED_HOLD_MS };

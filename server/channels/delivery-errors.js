@@ -17,7 +17,9 @@ function checkSendResponse(value, status = 200) {
     const code = [value.ret, value.errcode].find(n => n !== undefined && n !== 0);
     if (code !== undefined) {
         if (!Number.isSafeInteger(code)) throw new Error('Invalid WeChat send status');
-        throw new ChannelDeliveryError(code === -14 ? 'wechat-login-expired' : 'wechat-rejected', false, code);
+        // -2 is the reply context check: after long idle WeChat no longer accepts this chat's
+        // context token. The message was refused, so it can wait for the next inbound message.
+        throw new ChannelDeliveryError(code === -14 ? 'wechat-login-expired' : code === -2 ? 'reply-context-expired' : 'wechat-rejected', false, code);
     }
     return value;
 }
