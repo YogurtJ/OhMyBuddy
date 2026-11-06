@@ -323,7 +323,7 @@
             try {
                 if (this.revision === null) await this.load();
                 const data = await this.api('/api/pi/bots', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ expectedRevision: this.revision }) });
+                    body: JSON.stringify({ expectedRevision: this.revision, language: globalThis.PiI18n?.locale === 'en' ? 'en' : 'zh-CN' }) });
                 localStorage.setItem(LAST_KEY, data.bot.id);
                 await this.load();
                 this.go(data.bot.id);

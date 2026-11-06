@@ -2,6 +2,10 @@
 
 本页概括用户可见变化与升级要点。安装步骤见[安装与恢复](docs/INSTALL_RECOVERY.md)；每版完整说明和验收附件见 [Releases](https://github.com/YogurtJ/OhMyBuddy/releases)。历史行为不代表当前功能，当前用法以[用户指南](docs/USER_GUIDE.md)为准。
 
+## 未发布
+
+- 修复英文界面创建伙伴时仍使用中文初始名字的问题：新建时按当前界面语言使用“新伙伴”或“New buddy”，已有伙伴名字不变。
+
 ## 1.12.1（已发布）
 
 [1.12.1 版本说明](docs/releases/1.12.1.md)涵盖自定义服务商一步接入与模型探测、伙伴话题编辑与整理界面改版及工作台用户消息气泡对比度优化。2026-11-04 已[正式发布](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.12.1)并设为 Latest；八份发行附件匿名完整回下载摘要一致。冻结源码 `f035b44919f36fcf5d1621d67706d1a6513f74ef`，源码包 SHA256 `3077f533378233c6b0909cb312037aa83ddbdc8b7e5485a3fbd327416fc21854`。三平台定向验收、1.12.0 基线复用及签名升级恢复见[平台验证范围](docs/RELEASE_INSTALL_VALIDATION.md)。
