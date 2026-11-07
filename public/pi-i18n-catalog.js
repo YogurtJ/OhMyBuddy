@@ -11280,6 +11280,18 @@
     );
     rows.push(
         ["临时侧聊 · 刷新后不保留", "Temporary chat · cleared on refresh"],
+        ["添加附件（随侧聊结束释放）", "Add attachments (released when side chat ends)"],
+        ["闲置 12 小时后结束运行。记录和上传附件仅留在当前侧聊，结束、刷新或关页后自动释放。", "Ends after 12 hours of inactivity. Messages and uploaded attachments stay only in this side chat and are automatically released when it ends, refreshes, or closes."],
+        ["临时附件 · 待随消息发送", "Temporary attachment · ready to send"],
+        ["临时附件 · 随侧聊结束释放", "Temporary attachment · released when side chat ends"],
+        ["临时附件 · 已随侧聊释放", "Temporary attachment · released with side chat"],
+        ["临时文本附件", "Temporary text attachment"],
+        ["正在上传临时附件…", "Uploading temporary attachment…"],
+        ["已确认临时附件上传成功", "Temporary attachment upload confirmed"],
+        ["请等待当前侧聊操作完成后再添加附件", "Wait for the current side-chat action to finish before adding attachments"],
+        ["当前无工具侧聊仅支持图片与文本文件", "Tool-free side chat supports only images and text files"],
+        ["侧聊状态已变化，附件未加入当前草稿", "Side chat changed; attachment was not added to the draft"],
+        ["当前侧聊未启用文件上传", "File uploads are not enabled for this side chat"],
         ["当前任务", "Current task"],
         ["尚未提供分步计划，当前状态会随主任务更新。", "No step-by-step plan has been provided. Status follows the main task."],
         ["和 {0} 侧聊", "Side chat with {0}"],

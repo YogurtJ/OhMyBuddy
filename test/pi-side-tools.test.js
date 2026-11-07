@@ -19,7 +19,7 @@ test('side tool gate grants one reply, blocks rejected/expired/aborted operation
     const ctx = { cwd: '/fixture', hasUI: true, ui: { setStatus: (key, value) => states.push([key, value]), confirm: async () => { confirms++; return allow; } } };
     const call = name => handlers.get('tool_call')({ toolName: name, input: { path: 'file', command: 'pwd' } }, ctx);
     handlers.get('before_agent_start')({}, ctx);
-    for (const name of ['read', 'grep', 'find', 'ls']) assert.equal(await call(name), undefined);
+    for (const name of ['read', 'grep', 'find', 'ls', 'read_document', 'get_attachment']) assert.equal(await call(name), undefined);
     assert.equal(confirms, 0);
     assert.equal(await call('bash'), undefined); assert.equal(confirms, 1);
     assert.equal(await call('write'), undefined); assert.equal(confirms, 1);
@@ -145,4 +145,113 @@ test('real side SDK reads, confirms edits/writes/commands, resets permission, de
     closeSide.cancelExpiry();
     await closeSide.dispose(); assert.equal(supervisor.ephemeralWorkers.size, 0);
     assert.equal(fs.readFileSync(output, 'utf8'), 'written', 'closing during confirmation must not execute the pending write');
+});
+
+test('side chat temporary uploads support documents, files, text and images, and release all resources on end', { timeout: 90000 }, async t => {
+    const express = require('express');
+    const { zip, docxFiles } = require('./document-fixtures.cjs');
+    const { createPiAgentGateway } = require('../server/pi-agent-routes');
+    const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pi-side-uploads-')));
+    const agentDir = path.join(root, 'agent');
+    fs.mkdirSync(agentDir, { recursive: true });
+    process.env.PI_CODING_AGENT_DIR = agentDir;
+    process.env.PI_PROJECT_ROOTS = root;
+    process.env.PI_WEB_TOKEN = 'side-upload-token';
+    process.env.PI_OFFLINE = '1';
+    const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const docxBytes = zip(docxFiles());
+    const binBytes = Buffer.from('SIDE_EPHEMERAL_BINARY_PAYLOAD');
+    const requests = [], events = [];
+    const provider = http.createServer(async (req, res) => {
+        let raw = ''; for await (const chunk of req) raw += chunk;
+        const body = JSON.parse(raw); requests.push(body);
+        const userIndex = body.messages.findLastIndex(message => message.role === 'user');
+        const content = body.messages[userIndex].content;
+        const text = typeof content === 'string' ? content : content.filter(block => block.type === 'text').map(block => block.text).join('');
+        const results = body.messages.slice(userIndex + 1).filter(message => message.role === 'tool');
+        const tools = [];
+        if (!results.length) {
+            const docMatch = text.match(/<pivane_document id="([a-f0-9]{64})"/);
+            const attMatch = text.match(/<pivane_attachment id="([a-f0-9]{64})"/);
+            if (docMatch) tools.push({ name: 'read_document', arguments: { id: docMatch[1], action: 'read', start: 1, count: 5 } });
+            if (attMatch) tools.push({ name: 'get_attachment', arguments: { id: attMatch[1] } });
+        }
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        const send = data => res.write(`data: ${JSON.stringify(data)}\n\n`);
+        send({ id: 'fixture', object: 'chat.completion.chunk', model: body.model, choices: [{ index: 0, delta: tools.length ? { role: 'assistant', tool_calls: tools.map((tool, index) => ({ index, id: `side-up-${requests.length}-${index}`, type: 'function', function: { name: tool.name, arguments: JSON.stringify(tool.arguments) } })) } : { role: 'assistant', content: 'UPLOAD_DONE' }, finish_reason: null }] });
+        send({ id: 'fixture', object: 'chat.completion.chunk', model: body.model, choices: [{ index: 0, delta: {}, finish_reason: tools.length ? 'tool_calls' : 'stop' }], usage: { prompt_tokens: 80, completion_tokens: 10, total_tokens: 90 } });
+        res.end('data: [DONE]\n\n');
+    });
+    provider.listen(0, '127.0.0.1'); await once(provider, 'listening');
+    const textOnlyModel = { provider: 'fixture', id: 'text-only', name: 'TextOnly', api: 'openai-completions', input: ['text'], contextWindow: 32000, maxTokens: 1000, reasoning: false, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
+    const visionModel = { provider: 'fixture', id: 'vision', name: 'Vision', api: 'openai-completions', input: ['text', 'image'], contextWindow: 32000, maxTokens: 1000, reasoning: false, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
+    fs.writeFileSync(path.join(agentDir, 'models.json'), JSON.stringify({ providers: { fixture: { api: 'openai-completions', apiKey: 'fixture-key', baseUrl: `http://127.0.0.1:${provider.address().port}/v1`, models: [textOnlyModel, visionModel] } } }));
+    fs.writeFileSync(path.join(agentDir, 'settings.json'), JSON.stringify({ defaultProvider: 'fixture', defaultModel: 'text-only', compaction: { enabled: false } }));
+    const gateway = createPiAgentGateway();
+    gateway.titles.saveSettings({ enabled: false });
+    const app = express(); app.use(express.json()); gateway.mount(app);
+    const server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    const priorOrigin = process.env.PI_WORKSPACE_INTERNAL_ORIGIN;
+    process.env.PI_WORKSPACE_INTERNAL_ORIGIN = origin;
+    t.after(async () => {
+        if (priorOrigin === undefined) delete process.env.PI_WORKSPACE_INTERNAL_ORIGIN;
+        else process.env.PI_WORKSPACE_INTERNAL_ORIGIN = priorOrigin;
+        await gateway.dispose(); provider.closeAllConnections();
+        await Promise.all([new Promise(resolve => server.close(resolve)), new Promise(resolve => provider.close(resolve))]);
+        fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    const owner = { readyState: 1 }, source = { cwd: root, sessionId: 'parent', request: async type => type === 'get_available_models' ? { models: [textOnlyModel, visionModel] } : { model: textOnlyModel, sessionId: 'parent' } };
+    const prepared = await gateway.sideChat.prepare(owner, source, { mode: 'blank', toolMode: 'assist' }, () => true);
+    const side = gateway.sideChat.claim(prepared.ticket, { close() {} }, event => events.push(event));
+    const opened = await side.ready;
+    const sideSessionId = opened.state.sessionId;
+    const headers = { Authorization: 'Bearer side-upload-token', 'Content-Type': 'application/octet-stream' };
+
+    const docRes = await fetch(`${origin}/api/pi/side-chat/uploads?${new URLSearchParams({ sideSessionId, name: 'spec.docx', requestId: 'doc-1' })}`, { method: 'POST', headers, body: docxBytes });
+    assert.equal(docRes.status, 200);
+    const docUploaded = await docRes.json();
+    const dupRes = await fetch(`${origin}/api/pi/side-chat/uploads?${new URLSearchParams({ sideSessionId, name: 'spec.docx', requestId: 'doc-1' })}`, { method: 'POST', headers, body: docxBytes });
+    assert.equal((await dupRes.json()).reused, true);
+    const statusRes = await fetch(`${origin}/api/pi/side-chat/uploads/status?${new URLSearchParams({ sideSessionId, requestId: 'doc-1' })}`, { headers: { Authorization: 'Bearer side-upload-token' } });
+    assert.equal(statusRes.status, 200);
+    assert.equal((await statusRes.json()).reference.id, docUploaded.reference.id);
+
+    const binRes = await fetch(`${origin}/api/pi/side-chat/uploads?${new URLSearchParams({ sideSessionId, name: 'archive.bin', requestId: 'bin-1' })}`, { method: 'POST', headers, body: binBytes });
+    assert.equal(binRes.status, 200);
+    const binUploaded = await binRes.json();
+    assert.ok(side.tempDir && fs.existsSync(side.tempDir), 'side uploads live in an isolated temporary directory');
+    const tempDir = side.tempDir;
+
+    const dlRes = await fetch(`${origin}/api/pi/side-chat/uploads?${new URLSearchParams({ sideSessionId, id: binUploaded.reference.id })}`, { headers: { Authorization: 'Bearer side-upload-token' } });
+    assert.equal(dlRes.status, 200);
+    assert.deepEqual(Buffer.from(await dlRes.arrayBuffer()), binBytes);
+
+    // Image prompt on a text-only model is rejected cleanly without marking the side chat uncertain.
+    await assert.rejects(side.handle({ type: 'prompt', message: 'Check image', images: [{ type: 'image', mimeType: 'image/png', data: pngBase64 }] }), { code: 'RPC_REJECTED' });
+    assert.equal(side.uncertain, false);
+    await side.handle({ type: 'set_side_model', provider: 'fixture', modelId: 'vision' });
+
+    const settled = () => events.filter(event => event.type === 'agent_settled').length;
+    const beforeSettled = settled();
+    const promptMessage = `Inspect uploads\n\n<attached_file name="notes.txt">\nINLINE_TEXT_ATTACHMENT\n</attached_file>\n\n${docUploaded.marker}\n\n${binUploaded.marker}`;
+    await side.handle({ type: 'prompt', message: promptMessage, images: [{ type: 'image', mimeType: 'image/png', data: pngBase64 }] });
+    await waitFor(() => settled() > beforeSettled);
+    assert.equal(events.filter(event => event.method === 'confirm').length, 0, 'read_document and get_attachment are read-only in side chat');
+    const visible = (await side.handle({ type: 'get_messages' })).messages;
+    assert.ok(JSON.stringify(visible).includes('合同 & 分析'), 'read_document parsed the temporary DOCX');
+    const toolResult = visible.find(m => m.role === 'toolResult' && m.toolName === 'get_attachment');
+    const materializedPath = JSON.parse(toolResult.content[0].text).path;
+    assert.ok(materializedPath.startsWith(tempDir), 'get_attachment stays inside the side tempDir');
+    assert.equal(fs.readFileSync(materializedPath).toString('utf8'), 'SIDE_EPHEMERAL_BINARY_PAYLOAD');
+    assert.equal(fs.existsSync(path.join(root, '.ohmybuddy-attachments')), false, 'never writes into project .ohmybuddy-attachments');
+    assert.equal(fs.existsSync(path.join(agentDir, 'ohmybuddy-uploads')), false, 'never writes into persistent ohmybuddy-uploads');
+    assert.equal(fs.existsSync(path.join(agentDir, 'ohmybuddy-session-images')), false, 'never writes into persistent ohmybuddy-session-images');
+
+    await side.handle({ type: 'close_side_segment' });
+    assert.equal(fs.existsSync(tempDir), false, 'ending the side segment immediately deletes the temporary directory');
+    assert.equal(fs.existsSync(materializedPath), false, 'materialized file is deleted when side chat ends');
+    const afterEndRes = await fetch(`${origin}/api/pi/side-chat/uploads?${new URLSearchParams({ sideSessionId, id: binUploaded.reference.id })}`, { headers: { Authorization: 'Bearer side-upload-token' } });
+    assert.equal(afterEndRes.status, 409);
 });

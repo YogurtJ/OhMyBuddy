@@ -24,7 +24,8 @@ try {
     const seed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
     if (seed.version !== 1 || !Array.isArray(seed.entries) || typeof seed.systemPrompt !== 'string') throw new Error('Invalid side bootstrap');
     if (seed.toolMode !== undefined && !['none', 'assist'].includes(seed.toolMode)) throw new Error('Invalid tool profile');
-    const tools = seed.toolMode === 'assist' ? [...sideTools.READ_TOOLS, 'edit', 'write', process.platform === 'win32' ? 'powershell' : 'bash'] : [];
+    const builtinTools = seed.toolMode === 'assist' ? [...sideTools.BUILTIN_READ_TOOLS, 'edit', 'write', process.platform === 'win32' ? 'powershell' : 'bash'] : [];
+    const expectedTools = [...builtinTools, ...(builtinTools.length && sideTools.sideUploadsEnabled() ? ['read_document', 'get_attachment'] : [])].sort();
     const cwd = process.cwd(), agentDir = getAgentDir();
     const nativeSettings = SettingsManager.create(cwd, agentDir, { projectTrusted: false });
     const disk = nativeSettings.getGlobalSettings();
@@ -39,7 +40,7 @@ try {
         const services = await createAgentSessionServices({ cwd, agentDir, settingsManager,
             resourceLoaderOptions: { noExtensions: true, noSkills: true, noPromptTemplates: true, noContextFiles: true, noThemes: true,
                 extensionFactories: [pi => registerModelSpeed(pi, { agentDir, inherited: seed.speed, bridge: true, command: true, preserveExisting: false }),
-                    ...(tools.length ? [{ name: 'pivane-side-tools', factory: pi => { sideTools.sideToolGate(pi); gateLoaded = true; } }] : [])],
+                    ...(builtinTools.length ? [{ name: 'pivane-side-tools', factory: pi => { sideTools.sideToolGate(pi); gateLoaded = true; } }] : [])],
                 systemPromptOverride: () => seed.systemPrompt, appendSystemPromptOverride: () => [],
                 agentsFilesOverride: () => ({ agentsFiles: [] }) },
             resourceLoaderReloadOptions: { projectTrusted: false },
@@ -47,10 +48,10 @@ try {
         const model = services.modelRuntime.getModel(seed.provider, seed.modelId);
         if (!model) throw new Error(`Side model is not registered: ${seed.provider}/${seed.modelId}`);
         const result = await createAgentSessionFromServices({ services, sessionManager: imageContext.imageSessionManager(sessionManager, agentDir), sessionStartEvent, model,
-            thinkingLevel: seed.thinkingLevel, ...(tools.length ? { tools } : { noTools: 'all' }) });
+            thinkingLevel: seed.thinkingLevel, ...(builtinTools.length ? { tools: builtinTools.map(name => `+${name}`) } : { noTools: 'all' }) });
         installImageCompatibility(result.session, { agentDir, emit: record => writeRawStdout(JSON.stringify(record) + '\n') });
         const active = result.session.agent.state.tools.map(tool => tool.name).sort();
-        if (result.session.sessionFile || tools.length && !gateLoaded || JSON.stringify(active) !== JSON.stringify([...tools].sort())) throw new Error('Side isolation check failed');
+        if (result.session.sessionFile || builtinTools.length && !gateLoaded || JSON.stringify(active) !== JSON.stringify(expectedTools)) throw new Error('Side isolation check failed');
         return { ...result, services, diagnostics: services.diagnostics };
     };
     runtime = await createAgentSessionRuntime(createRuntime, { cwd, agentDir, sessionManager });

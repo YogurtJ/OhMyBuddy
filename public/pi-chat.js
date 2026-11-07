@@ -515,6 +515,42 @@ document.addEventListener('DOMContentLoaded', () => {
             busy: state.streaming || state.compacting || state.compactRequested, waiting: state.pendingUi.size > 0 }),
         prepare: options => requestRpc('prepare_side_chat', options, 65000),
         modelOptions: () => requestRpc('get_side_model_options', {}, 45000),
+        previewAttachment: file => previewAttachment(file),
+        uploadSideAttachment: async ({ sideSessionId, file, requestId, purpose }) => {
+            const query = new URLSearchParams({ sideSessionId, name: file.name, requestId, ...(purpose ? { purpose } : {}) });
+            const matches = result => window.PiDocumentReferences?.valid(result?.reference) && result.reference.name === file.name && result.reference.size === file.size;
+            try {
+                const result = await apiFetch(`/api/pi/side-chat/uploads?${query}`, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file });
+                if (!matches(result)) throw new Error(translateUi('附件上传返回无效，请核对原上传'));
+                return result;
+            } catch (error) {
+                const uncertain = !error.status || error.status >= 500;
+                if (uncertain) {
+                    try {
+                        const statusQuery = new URLSearchParams({ sideSessionId, requestId });
+                        const saved = await apiFetch(`/api/pi/side-chat/uploads/status?${statusQuery}`);
+                        if (matches(saved)) return saved;
+                    } catch {}
+                    error.message = translateUi('上传结果未确认，未自动重试（标识 {0}）', requestId) + '：' + error.message;
+                    error.uploadUnknown = true;
+                    error.requestId = requestId;
+                }
+                throw error;
+            }
+        },
+        sideAttachmentStatus: ({ sideSessionId, requestId }) => apiFetch(`/api/pi/side-chat/uploads/status?${new URLSearchParams({ sideSessionId, requestId })}`),
+        downloadSideAttachment: async (sideSessionId, reference) => {
+            const query = new URLSearchParams({ sideSessionId, id: reference.id });
+            const response = await (window.WorkspaceAccess?.fetch || fetch)(`/api/pi/side-chat/uploads?${query}`, { headers: apiHeaders() });
+            if (!response.ok) {
+                let message; try { message = (await response.json()).error; } catch {}
+                throw new Error(translateUi(message || `HTTP ${response.status}`));
+            }
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob), link = document.createElement('a');
+            link.href = url; link.download = reference.name; link.hidden = true; document.body.append(link); link.click(); link.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 10000);
+        },
         renderMarkdown, renderStreamingMarkdown, finalReplyIndices, copyText: copyTextToClipboard, toast,
         focusMain: () => {
             elements.inspector.classList.remove('open');
@@ -1093,7 +1129,7 @@ document.addEventListener('DOMContentLoaded', () => {
             state.archiveEnabled = status.archives === true;
             conversationSearch.setArchivesEnabled(state.archiveEnabled);
             workflows.setEnabled(status.sessionWorkflows === true, status.sessionForkRequests === true);
-            sideChat.setEnabled(status.sideChat === true, status.sideChatContext === true, status.sideChatRetention === true, status.sideChatTools === true, status.sideChatModels === true, status.sideChatLifecycle === true);
+            sideChat.setEnabled(status.sideChat === true, status.sideChatContext === true, status.sideChatRetention === true, status.sideChatTools === true, status.sideChatModels === true, status.sideChatLifecycle === true, status.sideChatAttachments !== false && status.documentUploads !== false);
             window.PiReplyTts.setEnabled(status.replyTts === true);
             elements.tokenDialog.classList.add('hidden');
             $('workspace-bot-toggle').hidden = status.bots !== true;

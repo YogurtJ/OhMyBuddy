@@ -24,7 +24,7 @@ const { BOT, MAIN, botRecord, newWorld, serve, botPage, layout } = require('./pi
             await page.routeWebSocket('**/api/pi/ws', ws => ws.onMessage(raw => {
                 const cmd = JSON.parse(raw);
                 let data = {};
-                if (cmd.type === 'open_side_chat') { side = ws; data = { state: { model, isStreaming: busy, toolMode: 'assist' }, reference: ref, messages, stats: {}, limits: { messageCharacters: 8000 } }; }
+                if (cmd.type === 'open_side_chat') { side = ws; data = { state: { sessionId: '11111111-1111-4111-8111-111111111111', model, isStreaming: busy, toolMode: 'assist' }, reference: ref, messages, stats: {}, limits: { messageCharacters: 8000 } }; }
                 else if (cmd.type === 'get_side_models') data = { models: [model], levels: ['off'] };
                 else if (cmd.type === 'get_state') data = { model, isStreaming: busy, toolMode: 'assist' };
                 else if (cmd.type === 'get_messages') data = { messages };
@@ -86,6 +86,10 @@ const { BOT, MAIN, botRecord, newWorld, serve, botPage, layout } = require('./pi
             assert.ok(Math.abs(settingsLayout.source.top - settingsLayout.refresh.top) <= 1, 'background and refresh share a row: ' + JSON.stringify(settingsLayout));
             assert.ok(settingsLayout.thinking.left >= settingsLayout.model.right + 6);
             await page.locator('#pi-side-reference > summary').click();
+            await page.locator('#pi-side-file').setInputFiles([{ name: 'buddy-note.txt', mimeType: 'text/plain', buffer: Buffer.from('buddy-side-note') }]);
+            await page.waitForFunction(() => document.querySelectorAll('.pi-side-attachments .pi-attachment-chip').length === 1);
+            await page.locator('.pi-side-attachments [data-remove-attachment]').click();
+            await page.waitForFunction(() => document.querySelectorAll('.pi-side-attachments .pi-attachment-chip').length === 0);
             await page.locator('#pi-side-input').fill('顺便解释一下这个方案'); await page.locator('#pi-side-send').click();
             await page.waitForFunction(() => document.querySelector('.pi-side-delivery')?.textContent === '正在发送…');
             assert.match(await page.locator('#pi-side-messages').textContent(), /顺便解释一下这个方案/);

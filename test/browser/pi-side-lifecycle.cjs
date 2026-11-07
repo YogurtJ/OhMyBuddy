@@ -25,6 +25,15 @@ async function run(browser, base, width, locale) {
             }
             return route.fulfill({ json: { version: 1, revision: favoriteRevision, favorites } });
         }
+        if (route.request().method() === 'POST' && p.endsWith('/side-chat/uploads')) {
+            const url = new URL(route.request().url());
+            const name = url.searchParams.get('name');
+            const body = route.request().postDataBuffer() || Buffer.alloc(0);
+            const ext = name.split('.').at(-1).toLowerCase();
+            const format = ['docx', 'xlsx', 'pptx', 'pdf'].includes(ext) ? ext : 'file';
+            const reference = { id: 'a'.repeat(64), revision: 'b'.repeat(64), name, format, size: body.length };
+            return route.fulfill({ json: { reference, marker: `<pivane_document id="${reference.id}" revision="${reference.revision}" name="${reference.name}" format="${reference.format}" bytes="${reference.size}" />`, reused: false } });
+        }
         assert.equal(route.request().method(), 'GET');
         return route.fulfill({ json: p.endsWith('/status') ? { ok: true, projectRoots: ['/fixture'], sideChat: true, sideChatContext: true, sideChatTools: true, sideChatModels: true, sideChatRetention: true, sideChatLifecycle: true }
             : p.endsWith('/projects') ? { roots: ['/fixture'], projects: [{ cwd, name: 'Fixture', sessionCount: 2 }] }
@@ -39,7 +48,7 @@ async function run(browser, base, width, locale) {
             if (cmd.type === 'open_session') data = { session: cmd.sessionId === 'other' ? other : session, state: { model, thinkingLevel: 'off', isStreaming: false }, messages: { messages: [] }, models: { models: [model, alternate] }, thinkingLevels: { levels: ['off'] }, stats: {}, commands: { commands: [] } };
             else if (cmd.type === 'get_side_model_options') data = { model, thinkingLevel: 'off', models: [{ ...model, levels: ['off'] }, { ...alternate, levels: ['off', 'high'] }, ...Array.from({length: 350}, (_, i) => ({ provider: 'many', id: `extra-${i}`, name: `Extra model ${i}`, levels: ['off'] }))] };
             else if (cmd.type === 'prepare_side_chat') { prepares.push(cmd); if (rejectPrepare) error = 'context does not fit'; data = { ticket: String(prepares.length), reference: { mode: cmd.mode, capturedAt: new Date().toISOString(), messageCount: 0, source: { cwd }, preview: [] }, limits: { messageCharacters: 8000 } }; }
-            else if (cmd.type === 'open_side_chat') { const prep = prepares[Number(cmd.ticket) - 1]; side = { ws, model: prep.model?.id === 'alternate' ? alternate : model, level: prep.thinkingLevel || 'off', busy: false, messages: [] }; sides.push(side); active = side; data = { state: state(side), reference: { mode: prep.mode, capturedAt: new Date().toISOString(), preview: [] }, messages: [], stats: {}, limits: { messageCharacters: 8000 } }; }
+            else if (cmd.type === 'open_side_chat') { const prep = prepares[Number(cmd.ticket) - 1]; side = { ws, sessionId: '00000000-0000-4000-8000-00000000000' + prepares.length, model: prep.model?.id === 'alternate' ? alternate : model, level: prep.thinkingLevel || 'off', busy: false, messages: [] }; sides.push(side); active = side; data = { state: { ...state(side), sessionId: side.sessionId }, reference: { mode: prep.mode, capturedAt: new Date().toISOString(), preview: [] }, messages: [], stats: {}, limits: { messageCharacters: 8000 } }; }
             else if (cmd.type === 'set_side_model') { side.model = cmd.modelId === 'alternate' ? alternate : model; side.level = 'off'; data = { state: state(side), levels: side.model === alternate ? ['off', 'high'] : ['off'], limits: { messageCharacters: 8000 } }; }
             else if (cmd.type === 'get_side_models') data = { models: [model, alternate], levels: side.level === 'high' ? ['off', 'high'] : ['off'] };
             else if (cmd.type === 'get_state') data = state(side);
@@ -187,8 +196,19 @@ async function run(browser, base, width, locale) {
     await page.locator('#pi-side-model-select').click();
     await page.locator('dialog[open] .pi-model-search').fill('Alternative'); await page.locator('dialog[open] .pi-model-option').click();
     await page.waitForFunction(() => document.querySelector('#pi-side-model').textContent === 'Alternative model');
+    await page.locator('#pi-side-file').setInputFiles([
+        { name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('side-ephemeral-note') },
+        { name: 'spec.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\nside-pdf') }
+    ]);
+    await page.waitForFunction(() => document.querySelectorAll('.pi-side-attachments .pi-attachment-chip').length === 2);
+    assert.equal(await page.locator('#pi-side-send').isDisabled(), false, 'attachment alone enables side send');
+    await page.locator('#pi-side-send').click();
+    await page.waitForFunction(() => document.querySelectorAll('.pi-side-attachments .pi-attachment-chip').length === 0 && document.querySelectorAll('#pi-side-messages .pi-document-card').length === 1);
+    assert.equal(await page.locator('#pi-side-messages .pi-side-attached-file').count(), 1);
+    await page.locator('#pi-side-file').setInputFiles([{ name: 'draft-only.txt', mimeType: 'text/plain', buffer: Buffer.from('unreleased-draft') }]);
+    await page.waitForFunction(() => document.querySelectorAll('.pi-side-attachments .pi-attachment-chip').length === 1);
     await page.locator('#pi-side-end').click();
-    await page.waitForFunction(() => !document.querySelector('#pi-side-input').disabled);
+    await page.waitForFunction(() => !document.querySelector('#pi-side-input').disabled && document.querySelectorAll('.pi-side-attachments .pi-attachment-chip').length === 0 && document.querySelectorAll('#pi-side-messages .pi-document-card').length === 0);
     await page.locator('#pi-side-input').fill('After runtime switch and clear'); await page.locator('#pi-side-send').click();
     await page.waitForFunction(() => document.querySelector('#pi-side-input').value === '');
     assert.equal(prepares.at(-1).model.id, 'alternate'); assert.equal(active.model.id, 'alternate');

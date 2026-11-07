@@ -2,7 +2,10 @@
     const translateUi = globalThis.PiI18n?.t || ((text, ...values) => text.replace(/\{(\d+)\}/g, (_, index) => values[index] ?? `{${index}}`));
     const $ = id => document.getElementById(id);
     const textOf = message => typeof message?.content === 'string' ? message.content : (message?.content || []).filter(block => block.type === 'text').map(block => block.text).join('\n');
+    const imagesOf = message => Array.isArray(message?.content) ? message.content.filter(block => block?.type === 'image') : Array.isArray(message?.images) ? message.images : [];
     const tokenText = value => typeof value === 'number' && Number.isFinite(value) ? value >= 1000 ? `${(value / 1000).toFixed(1)}k` : String(value) : '--';
+    const randomRequestId = () => [...crypto.getRandomValues(new Uint8Array(16))].map(byte => byte.toString(16).padStart(2, '0')).join('');
+    const unescapeAttr = value => String(value).replace(/&(amp|lt|gt|quot|apos);/g, (_, entity) => ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }[entity]));
 
     function createThread(host, root, manager) {
     const $ = id => root.querySelector(`#${id}`);
@@ -26,9 +29,43 @@
             this.toolMode = manager.toolsEnabled ? 'assist' : 'none';
             this.toolAccess = 'read';
             this.input = $('pi-side-input');
+            this.fileInput = $('pi-side-file');
+            this.attachButton = $('pi-side-attach');
             this.quotes = [];
+            this.files = [];
+            this.attachmentEpoch = 0;
+            this.attachmentReads = 0;
+            this.attachmentQueue = Promise.resolve();
             this.quoteHost = document.createElement('div'); this.quoteHost.className = 'pi-side-quotes';
-            $('pi-side-form').before(this.quoteHost);
+            this.attachmentHost = document.createElement('div'); this.attachmentHost.className = 'pi-attachments pi-side-attachments hidden';
+            $('pi-side-form').before(this.quoteHost, this.attachmentHost);
+            if (this.attachButton && this.fileInput) {
+                this.attachButton.title = translateUi('添加附件（随侧聊结束释放）');
+                this.attachButton.setAttribute('aria-label', translateUi('添加附件'));
+                this.attachButton.addEventListener('click', () => { if (!this.attachButton.disabled) this.fileInput.click(); });
+                this.fileInput.addEventListener('change', () => {
+                    if (this.fileInput.files?.length) void this.handleFiles(this.fileInput.files);
+                });
+            }
+            window.PiAttachments?.bindTransfers({
+                zone: root,
+                input: this.input,
+                onFiles: (files, meta) => this.handleFiles(files, meta),
+                onError: message => this.status(message, true)
+            });
+            this.attachmentHost.addEventListener('click', event => {
+                const chip = event.target.closest('[data-attachment-id]');
+                if (!chip) return;
+                const file = this.files.find(item => item.id === chip.dataset.attachmentId);
+                if (!file) return;
+                if (event.target.closest('[data-remove-attachment]')) {
+                    this.files = this.files.filter(item => item !== file);
+                    this.renderAttachments();
+                    this.controls();
+                    return;
+                }
+                if (event.target.closest('[data-preview-attachment]')) void this.previewAttachment(file);
+            });
             this.content = $('pi-side-messages');
             this.source = $('pi-side-source');
             this.scroll = new window.PiTranscriptScroll({ viewport: $('pi-side-transcript'), content: $('pi-side-content'),
@@ -75,7 +112,7 @@
             for (const text of [
                 '独立讨论，不打断主对话；可以参考主对话，也可以单独聊。',
                 '新开侧聊不会继承此前讨论，需要的内容请自行复制。',
-                '闲置 12 小时后结束运行。记录仅留在当前页面，刷新或关页后不保留。',
+                '闲置 12 小时后结束运行。记录和上传附件仅留在当前侧聊，结束、刷新或关页后自动释放。',
                 '修改文件或运行命令前，需要你确认。主侧共享文件，请避免同时修改同一处。'
             ]) { const item = document.createElement('li'); item.textContent = translateUi(text); $('pi-side-info-points').append(item); }
             $('pi-side-info').addEventListener('click', () => this.toggleInfo());
@@ -124,23 +161,27 @@
         }
         controls() {
             const ready = this.enabled && this.host.context().connected;
+            const pending = this.attachmentReads > 0;
+            const unconfirmed = this.files.some(file => file.kind === 'pending-upload');
             const locked = Boolean(this.busy || this.sending || this.starting || this.submitting || this.configuring || this.confirmation || this.transitioning);
-            $('pi-side-refresh').disabled = !ready || locked;
-            $('pi-side-new').disabled = !ready || locked;
-            this.source.disabled = !ready || locked;
+            $('pi-side-refresh').disabled = !ready || locked || pending;
+            $('pi-side-new').disabled = !ready || locked || pending;
+            this.source.disabled = !ready || locked || pending;
             $('pi-side-tool-mode').textContent = this.toolMode !== 'assist' ? translateUi('无工具') : this.confirmation ? translateUi('等待确认') : this.toolAccess === 'write' ? translateUi('本次可修改') : translateUi('可读取');
             $('pi-side-end').disabled = !this.hasState() || Boolean(this.transitioning);
             this.input.disabled = !ready || Boolean(this.starting || this.transitioning);
+            if (this.attachButton) this.attachButton.disabled = !ready || locked || pending || this.phase === 'expired' || this.phase === 'ended';
+            this.attachmentHost.setAttribute('aria-busy', String(pending));
             $('pi-side-send').hidden = this.busy;
             $('pi-side-stop').hidden = !this.busy;
             $('pi-side-stop').disabled = !this.connected;
-            $('pi-side-send').disabled = !ready || locked || this.phase === 'expired' || this.phase === 'ended' || (!this.input.value.trim() && !this.quotes.length);
-            const modelDisabled = !ready || locked || !this.catalog?.length;
+            $('pi-side-send').disabled = !ready || locked || pending || unconfirmed || this.phase === 'expired' || this.phase === 'ended' || (!this.input.value.trim() && !this.quotes.length && !this.files.length);
+            const modelDisabled = !ready || locked || pending || !this.catalog?.length;
             if (this.modelPicker) this.modelPicker.setDisabled(modelDisabled);
             else $('pi-side-model-select').disabled = true;
-            $('pi-side-thinking-select').disabled = !ready || locked || !$('pi-side-thinking-select').options.length;
-            this.speedSelect.disabled = !this.connected || !ready || locked || !this.modelState?.speed?.levels?.length;
-            if (this.configuring) { this.input.disabled = true; $('pi-side-send').disabled = true; }
+            $('pi-side-thinking-select').disabled = !ready || locked || pending || !$('pi-side-thinking-select').options.length;
+            this.speedSelect.disabled = !this.connected || !ready || locked || pending || !this.modelState?.speed?.levels?.length;
+            if (this.configuring) { this.input.disabled = true; $('pi-side-send').disabled = true; if (this.attachButton) this.attachButton.disabled = true; }
             this.renderFeedback();
             this.manager.host.changed?.();
         }
@@ -247,6 +288,159 @@
                 this.quotes = this.quotes.filter(item => item !== quote); this.renderQuotes(); this.controls();
             })));
         }
+        validateDraft(text = this.input.value, files = this.files, quotes = this.quotes, { allowPending = false } = {}) {
+            const limits = window.PiAttachments?.limits || { files: 8, documents: 5, images: 6, batchBytes: 200 * 1024 * 1024 };
+            if (!allowPending && files.some(file => file.kind === 'pending-upload')) throw new Error(translateUi('有附件上传结果待确认，请先查询结果或移除该项'));
+            if (quotes.length + files.length > limits.files) throw new Error(translateUi('一次最多添加 8 个附件'));
+            if (files.reduce((sum, item) => sum + (item.size || 0), 0) > limits.batchBytes) throw new Error(translateUi('附件总量不能超过 200 MiB'));
+            if (files.filter(item => item.kind === 'image').length > limits.images) throw new Error(translateUi('一次最多添加 6 张图片'));
+            if (files.filter(item => item.kind === 'document' && !['file', 'image'].includes(item.format)).length > limits.documents) throw new Error(translateUi('一次最多添加 5 个文档附件'));
+            const prose = quotes.map(window.PiQuotes.serialize).join('') + text;
+            if (prose.length > this.limits.messageCharacters) throw new Error(translateUi('引用与问题超过侧聊长度限制，请减少选中文字'));
+            if (window.PiAttachments) {
+                const inlineFiles = files.filter(item => item.kind !== 'document' || item.reference);
+                window.PiAttachments.validatePayload(window.PiAttachments.payload(prose, inlineFiles));
+            }
+        }
+        renderAttachments() {
+            this.attachmentHost.classList.toggle('hidden', !this.files.length);
+            this.attachmentHost.replaceChildren(...this.files.map(file => {
+                const chip = document.createElement('div'); chip.className = 'pi-attachment-chip'; chip.dataset.attachmentId = file.id;
+                const open = document.createElement('button'); open.className = 'pi-attachment-open'; open.type = 'button'; open.dataset.previewAttachment = '';
+                open.title = translateUi(file.kind === 'pending-upload' ? '查询上传结果' : '预览附件');
+                open.setAttribute('aria-label', translateUi('预览 {0}', file.name));
+                if (file.kind === 'image') {
+                    const img = document.createElement('img'); img.src = file.preview; img.alt = '';
+                    open.append(img);
+                } else {
+                    const mark = document.createElement('span'); mark.className = 'pi-file-mark';
+                    const icon = document.createElement('i'); icon.className = `fa-solid ${file.kind === 'pending-upload' ? 'fa-circle-question' : 'fa-file'}`;
+                    mark.append(icon); open.append(mark);
+                }
+                const meta = document.createElement('span'); meta.title = file.name;
+                const name = document.createElement('strong'); name.textContent = file.name;
+                const detail = document.createElement('small');
+                const stateLabel = file.kind === 'pending-upload' ? translateUi('上传结果待确认 · 点击查询') : translateUi('临时附件 · 待随消息发送');
+                detail.textContent = `${stateLabel}${file.size == null ? '' : ` · ${Math.ceil(file.size / 1024)} KiB`}`;
+                meta.append(name, detail);
+                const remove = document.createElement('button'); remove.type = 'button'; remove.dataset.removeAttachment = '';
+                remove.title = translateUi('移除附件'); remove.setAttribute('aria-label', translateUi('移除附件'));
+                const removeIcon = document.createElement('i'); removeIcon.className = 'fa-solid fa-xmark'; remove.append(removeIcon);
+                chip.append(open, meta, remove);
+                return chip;
+            }));
+        }
+        resetStagedUploads() {
+            this.sideSessionId = null;
+            for (const file of this.files) { delete file.reference; delete file.sideSessionId; }
+        }
+        clearAttachments() {
+            this.attachmentEpoch++;
+            this.attachmentReads = 0;
+            this.attachmentQueue = Promise.resolve();
+            this.files = [];
+            if (this.fileInput) this.fileInput.value = '';
+            this.renderAttachments();
+        }
+        async checkAttachmentUpload(file) {
+            if (file.checking || !this.connected || !this.sideSessionId || !this.host.sideAttachmentStatus) return;
+            const epoch = this.attachmentEpoch; file.checking = true;
+            try {
+                const saved = await this.host.sideAttachmentStatus({ sideSessionId: this.sideSessionId, requestId: file.requestId });
+                if (epoch !== this.attachmentEpoch || !this.files.includes(file)) return;
+                const format = window.PiAttachments.classify(file.source);
+                const item = { id: file.id, kind: 'document', format: format.format, name: file.name, size: file.size, source: file.source, requestId: file.requestId, reference: saved.reference, sideSessionId: this.sideSessionId };
+                const next = this.files.map(existing => existing === file ? item : existing);
+                this.validateDraft(this.input.value, next, this.quotes, { allowPending: true });
+                this.files = next;
+                this.status(translateUi('已确认临时附件上传成功'));
+            } catch (error) {
+                if (epoch === this.attachmentEpoch) this.status(translateUi('上传结果仍待确认：{0}；保留原标识，未重新上传', error.message), true);
+            } finally {
+                file.checking = false;
+                if (epoch === this.attachmentEpoch) { this.renderAttachments(); this.controls(); }
+            }
+        }
+        async previewAttachment(file) {
+            if (file.kind === 'pending-upload') { await this.checkAttachmentUpload(file); return; }
+            if (file.kind === 'document') {
+                if (file.source instanceof Blob) {
+                    const url = URL.createObjectURL(file.source), link = document.createElement('a');
+                    link.href = url; link.download = file.name; link.hidden = true; document.body.append(link); link.click(); link.remove();
+                    setTimeout(() => URL.revokeObjectURL(url), 10000);
+                    return;
+                }
+                if (file.reference && this.connected && this.sideSessionId && this.host.downloadSideAttachment) {
+                    try { await this.host.downloadSideAttachment(this.sideSessionId, file.reference); }
+                    catch (error) { this.host.toast(error.message, 'error'); }
+                }
+                return;
+            }
+            this.host.previewAttachment?.(file);
+        }
+        handleFiles(fileList, metadata = {}) {
+            if (!window.PiAttachments) return Promise.resolve();
+            const files = [...fileList];
+            if (this.fileInput) this.fileInput.value = '';
+            const ready = this.enabled && this.host.context().connected;
+            const locked = Boolean(this.busy || this.sending || this.starting || this.submitting || this.configuring || this.confirmation || this.transitioning);
+            if (!ready || locked || ['expired', 'ended'].includes(this.phase)) {
+                const message = translateUi(!ready ? '请先连接主会话' : '请等待当前侧聊操作完成后再添加附件');
+                this.status(message, true); this.host.toast(message, 'info');
+                return Promise.resolve();
+            }
+            const epoch = this.attachmentEpoch;
+            this.attachmentReads++;
+            this.controls();
+            this.attachmentQueue = this.attachmentQueue.then(async () => {
+                const errors = [...(metadata.errors || [])], accepted = [], failed = [];
+                const limits = window.PiAttachments.limits;
+                for (const file of files) {
+                    if (epoch !== this.attachmentEpoch || this.destroyed) return;
+                    try {
+                        const format = window.PiAttachments.classify(file);
+                        if (this.quotes.length + this.files.length >= limits.files) throw new Error(translateUi('一次最多添加 8 个附件'));
+                        if (this.files.reduce((sum, item) => sum + (item.size || 0), 0) + file.size > limits.batchBytes) throw new Error(translateUi('附件总量不能超过 200 MiB'));
+                        if (format.kind === 'image' && this.files.filter(item => item.kind === 'image').length >= limits.images) throw new Error(translateUi('一次最多添加 6 张图片'));
+                        if (format.kind === 'document' && format.format !== 'file' && this.files.filter(item => item.kind === 'document' && !['file', 'image'].includes(item.format)).length >= limits.documents) throw new Error(translateUi('一次最多添加 5 个文档附件'));
+                        let item;
+                        if (format.kind === 'document') {
+                            if (!this.manager.toolsEnabled || !this.manager.uploadsEnabled) throw new Error(translateUi('当前无工具侧聊仅支持图片与文本文件'));
+                            const maximum = format.format === 'file' ? limits.fileBytes : limits.documentBytes;
+                            if (!file.size || file.size > maximum) throw new Error(translateUi('单个附件须为非空文件且不超过 {0} MiB', maximum / 1024 / 1024));
+                            item = { id: window.PiAttachments.id(), name: file.name, size: file.size, ...format, source: file, requestId: randomRequestId() };
+                        } else {
+                            item = await window.PiAttachments.read(file, {
+                                preserveImages: false,
+                                assertCurrent: () => { if (epoch !== this.attachmentEpoch || this.destroyed) throw new Error(translateUi('侧聊状态已变化，附件未加入当前草稿')); }
+                            });
+                        }
+                        if (epoch !== this.attachmentEpoch || this.destroyed) return;
+                        this.validateDraft(this.input.value, [...this.files, item], this.quotes, { allowPending: true });
+                        this.files.push(item); accepted.push(file);
+                    } catch (error) {
+                        if (epoch !== this.attachmentEpoch || this.destroyed) return;
+                        failed.push(file);
+                        errors.push(`${file.name}: ${error.message}`);
+                    }
+                    this.renderAttachments();
+                }
+                if (epoch !== this.attachmentEpoch || this.destroyed) return;
+                if (errors.length) {
+                    const summary = window.PiAttachments.errorSummary(errors);
+                    this.status(summary, true);
+                    this.host.toast(summary, 'error', 6500);
+                }
+                return { accepted, failed };
+            }).finally(() => {
+                if (epoch === this.attachmentEpoch && !this.destroyed) {
+                    this.attachmentReads--;
+                    this.renderAttachments();
+                    this.controls();
+                }
+            });
+            return this.attachmentQueue;
+        }
         async open({ question, quote } = {}) {
             const key = this.identity();
             if (!this.enabled) throw new Error(translateUi("当前后端尚未启用侧聊"));
@@ -258,7 +452,7 @@
             if (this.destroyed || this.manager.current !== this || key !== this.identity()) return false;
             if (quote) {
                 const quotes = [...this.quotes, quote];
-                if (quotes.length > 8 || (quotes.map(window.PiQuotes.serialize).join('') + this.input.value).length > this.limits.messageCharacters) throw new Error(translateUi('引用与问题超过侧聊长度限制，请减少选中文字'));
+                this.validateDraft(this.input.value, this.files, quotes, { allowPending: true });
                 this.quotes = quotes; this.renderQuotes(); this.controls();
             }
             if (question) {
@@ -359,7 +553,8 @@
                             const data = await this.request('open_side_chat', { token: this.host.context().token, ticket: prepared.ticket }, 90000);
                             if (generation !== this.generation) return reject(new Error(translateUi("侧聊已结束")));
                             this.phase = 'active'; this.segmentStarted = Date.now(); this.updateSessionNote();
-                            this.connected = true; this.busy = Boolean(data.state?.isStreaming || data.state?.isCompacting);
+                            this.connected = true; this.sideSessionId = data.state?.sessionId || null;
+                            this.busy = Boolean(data.state?.isStreaming || data.state?.isCompacting);
                             this.limits = data.limits;
                             this.input.maxLength = data.limits.messageCharacters;
                             this.input.value = draft;
@@ -376,7 +571,7 @@
                         clearTimeout(handshake);
                         reject(Object.assign(new Error(translateUi("侧聊已结束")), { code: generation === this.generation ? 'SIDE_DISCONNECTED' : 'SIDE_CANCELLED' }));
                         if (generation !== this.generation) return;
-                        this.connected = false; this.busy = false; this.live = null;
+                        this.connected = false; this.busy = false; this.live = null; this.resetStagedUploads();
                         this.confirmation = null; this.toolAccess = 'read'; this.renderConfirmation();
                         if (this.socket === socket) this.socket = null;
                         this.rejectRequests(new Error(translateUi("侧聊连接已断开")));
@@ -515,6 +710,7 @@
         dropSocket() {
             const socket = this.socket;
             this.generation++; this.socket = null; this.connected = false; this.busy = false; this.submitting = false; this.configuring = false;
+            this.resetStagedUploads();
             this.rejectRequests(Object.assign(new Error(translateUi("侧聊已结束")), { code: 'SIDE_CANCELLED' }));
             this.confirmation = null; this.renderConfirmation(); this.toolAccess = 'read';
             socket?.close(1000, 'Side chat ended');
@@ -539,6 +735,7 @@
                     $('pi-side-model').textContent = translateUi('临时侧聊'); $('pi-side-model').title = '';
                 }
                 this.live = null; this.uncertain = false; this.toolEvents.clear();
+                this.clearAttachments();
                 this.render([]); this.input.value = ''; this.quotes = []; this.renderQuotes(); this.resizeInput(); this.scroll.reset();
                 this.reference = null; this.referenceValue = this.defaultSource(); this.source.value = this.referenceValue;
                 $('pi-side-reference-label').textContent = translateUi('背景与模型'); $('pi-side-reference-preview').replaceChildren();
@@ -551,15 +748,18 @@
         }
         async send() {
             if (this.manager.current !== this || this.destroyed) return false;
+            if (this.attachmentReads > 0) { this.status(translateUi('附件正在读取，请稍候'), true); return false; }
             if (this.busy || this.sending || this.submitting || this.starting || this.configuring || this.transitioning || ['expired', 'ended'].includes(this.phase)) return false;
-            const draft = this.input.value, quotes = this.quotes;
-            const message = quotes.map(window.PiQuotes.serialize).join('') + draft.trim();
-            if (!message.trim()) return false;
-            if (message.length > this.limits.messageCharacters) { this.status(translateUi('引用与问题超过侧聊长度限制，请减少选中文字'), true); return false; }
-            if (/^\//.test(message)) { this.status(translateUi('侧聊不执行斜杠命令，请用普通文字提问'), true); return false; }
+            const draft = this.input.value, quotes = this.quotes, files = [...this.files];
+            const prose = quotes.map(window.PiQuotes.serialize).join('') + draft.trim();
+            if (!prose.trim() && !files.length) return false;
+            try { this.validateDraft(draft.trim(), files, quotes); }
+            catch (error) { this.status(error.message, true); return false; }
+            if (/^\//.test(prose)) { this.status(translateUi('侧聊不执行斜杠命令，请用普通文字提问'), true); return false; }
             const confirmUncertain = this.uncertain && window.confirm(translateUi('上次发送结果不确定，请先核对侧聊记录。确认仍要发送？'));
             if (this.uncertain && !confirmUncertain) return false;
-            const attempt = { role: 'user', content: message, timestamp: Date.now(), delivery: 'sending', baseCount: null };
+            const previewPayload = window.PiAttachments ? window.PiAttachments.payload(prose, files.filter(item => item.kind !== 'document' || item.reference)) : { message: prose, images: [] };
+            const attempt = { role: 'user', content: previewPayload.message, images: previewPayload.images, timestamp: Date.now(), delivery: 'sending', baseCount: null };
             this.sending = attempt; this.delivery = attempt;
             this.status(translateUi('正在发送…')); this.render(this.messages, this.live); this.scroll.jumpToLatest(); this.controls();
             let generation = this.generation;
@@ -570,12 +770,35 @@
                     if (this.destroyed || this.manager.current !== this) return false;
                 }
                 if (this.parentKey !== this.identity()) throw Object.assign(new Error(translateUi('主会话已切换，请开始新的侧聊')), { code: 'RPC_REJECTED' });
-                if (message.length > this.limits.messageCharacters) throw Object.assign(new Error(translateUi('引用与问题超过侧聊长度限制，请减少选中文字')), { code: 'RPC_REJECTED' });
+                for (let index = 0; index < files.length; index++) {
+                    const file = files[index];
+                    if (file.kind !== 'document' || file.reference && file.sideSessionId === this.sideSessionId) continue;
+                    if (!this.sideSessionId || !this.host.uploadSideAttachment) throw Object.assign(new Error(translateUi('当前侧聊未启用文件上传')), { code: 'RPC_REJECTED' });
+                    this.status(translateUi('正在上传临时附件…'));
+                    try {
+                        const uploaded = await this.host.uploadSideAttachment({ sideSessionId: this.sideSessionId, file: file.source, requestId: file.requestId });
+                        if (generation !== this.generation || this.destroyed) return false;
+                        file.reference = uploaded.reference;
+                        file.sideSessionId = this.sideSessionId;
+                    } catch (error) {
+                        if (error.uploadUnknown) {
+                            const pendingItem = { id: file.id, kind: 'pending-upload', name: file.name, size: file.size, source: file.source, requestId: error.requestId || file.requestId };
+                            this.files = this.files.map(existing => existing === file ? pendingItem : existing);
+                            this.renderAttachments();
+                        }
+                        throw Object.assign(error, { code: 'RPC_REJECTED' });
+                    }
+                }
+                const { message, images } = window.PiAttachments ? window.PiAttachments.payload(prose, files) : { message: prose, images: [] };
+                attempt.content = message; attempt.images = images;
                 attempt.baseCount = this.messages.length;
-                this.submitting = true; this.status(translateUi('正在发送…')); this.controls();
-                await this.request('prompt', { message, ...(confirmUncertain ? { confirmUncertain: true } : {}) }, 65000);
+                this.submitting = true; this.status(translateUi('正在发送…')); this.render(this.messages, this.live); this.controls();
+                await this.request('prompt', { message, ...(images.length ? { images } : {}), ...(confirmUncertain ? { confirmUncertain: true } : {}) }, 65000);
                 if (generation !== this.generation) return false;
-                if (this.input.value === draft && this.quotes === quotes) { this.input.value = ''; this.quotes = []; this.renderQuotes(); this.resizeInput(); }
+                if (this.input.value === draft && this.quotes === quotes && this.files.length === files.length && this.files.every((item, index) => item === files[index])) {
+                    this.input.value = ''; this.quotes = []; this.files = [];
+                    this.renderQuotes(); this.renderAttachments(); this.resizeInput();
+                }
                 this.uncertain = false; attempt.delivery = 'accepted';
                 return true;
             } catch (error) {
@@ -648,7 +871,7 @@
                 }
             }
             if (event.type === 'message_end' && ['user', 'assistant', 'toolResult'].includes(event.message?.role)) {
-                if (!this.messages.some(item => item.role === event.message.role && (event.message.role !== 'toolResult' || item.toolCallId === event.message.toolCallId) && item.timestamp === event.message.timestamp && textOf(item) === textOf(event.message))) this.messages.push(event.message);
+                if (!this.messages.some(item => item.role === event.message.role && (event.message.role !== 'toolResult' || item.toolCallId === event.message.toolCallId) && item.timestamp === event.message.timestamp && textOf(item) === textOf(event.message) && imagesOf(item).length === imagesOf(event.message).length)) this.messages.push(event.message);
                 if (event.message.role === 'assistant') {
                     this.live = null;
                     const panel = document.getElementById('pi-inspector');
@@ -696,13 +919,66 @@
             if (saved) details.open = saved.open;
             return details;
         }
+        renderDocumentCard(reference) {
+            const card = document.createElement('div'); card.className = 'pi-document-card';
+            const icon = document.createElement('i'); icon.className = 'fa-solid fa-file-lines'; icon.setAttribute('aria-hidden', 'true');
+            const caption = document.createElement('span'), name = document.createElement('strong'), info = document.createElement('small');
+            name.textContent = reference.name; name.title = reference.name;
+            const kind = reference.format === 'file' ? reference.name.split('.').at(-1).toUpperCase().slice(0, 12) : reference.format.toUpperCase();
+            const active = Boolean(this.connected && this.sideSessionId && this.host.downloadSideAttachment);
+            info.textContent = `${translateUi(active ? '临时附件 · 随侧聊结束释放' : '临时附件 · 已随侧聊释放')} · ${kind} · ${Math.ceil(reference.size / 1024)} KiB`;
+            caption.append(name, info);
+            card.append(icon, caption);
+            if (active) {
+                const sessionId = this.sideSessionId;
+                const download = document.createElement('button'); download.type = 'button'; download.className = 'icon-btn subtle';
+                download.title = translateUi('下载原件'); download.setAttribute('aria-label', translateUi('下载 {0}', reference.name));
+                download.innerHTML = '<i class="fa-solid fa-download" aria-hidden="true"></i>';
+                download.addEventListener('click', async () => {
+                    download.disabled = true;
+                    try { await this.host.downloadSideAttachment(sessionId, reference); }
+                    catch (error) { this.host.toast(error.message, 'error'); }
+                    finally { download.disabled = false; }
+                });
+                card.append(download);
+            }
+            return card;
+        }
+        renderUserMessage(container, text) {
+            const attachedFiles = [];
+            const attachedPattern = /(?:\n\n)?<attached_file name="([^"<>\r\n]{1,240})">\n([\s\S]*?)\n<\/attached_file>/g;
+            const stripped = String(text || '').replace(attachedPattern, (_, rawName, content) => {
+                attachedFiles.push({ name: unescapeAttr(rawName), text: content });
+                return '';
+            });
+            const parts = globalThis.PiDocumentReferences ? globalThis.PiDocumentReferences.split(stripped) : [{ text: stripped }];
+            for (const part of parts) {
+                if (part.reference) container.append(this.renderDocumentCard(part.reference));
+                else if (part.text.trim()) {
+                    const node = document.createElement('div');
+                    window.PiQuotes.renderUser(node, part.text);
+                    container.append(node);
+                }
+            }
+            for (const [index, file] of attachedFiles.entries()) {
+                const details = document.createElement('details'); details.className = 'pi-side-tool pi-side-attached-file';
+                details.dataset.detailKey = `attached-${index}-${file.name}`;
+                const summary = document.createElement('summary');
+                summary.textContent = `${file.name} · ${translateUi('临时文本附件')}`;
+                const pre = document.createElement('pre'); pre.textContent = file.text;
+                details.append(summary, pre);
+                const saved = this.toolViewState?.get(details.dataset.detailKey);
+                if (saved) details.open = saved.open;
+                container.append(details);
+            }
+        }
         render(messages, live = null) {
             this.messages = messages;
             const position = this.scroll.capture();
             this.toolViewState = new Map([...this.content.querySelectorAll('[data-detail-key]')].map(node => [node.dataset.detailKey,
                 { open: node.open, scroll: [...node.querySelectorAll('pre')].map(pre => ({ top: pre.scrollTop, left: pre.scrollLeft })) }]));
             this.content.replaceChildren(); this.liveNode = null;
-            if (this.delivery?.baseCount != null && messages.slice(this.delivery.baseCount).some(message => message.role === 'user' && textOf(message) === this.delivery.content)) this.delivery = null;
+            if (this.delivery?.baseCount != null && messages.slice(this.delivery.baseCount).some(message => message.role === 'user' && textOf(message) === this.delivery.content && imagesOf(message).length === (this.delivery.images?.length || 0))) this.delivery = null;
             const sequence = [...messages, ...(this.delivery ? [this.delivery] : []), ...(live ? [live] : [])];
             const finalReplies = this.host.finalReplyIndices(sequence, this.busy);
             for (const [index, message] of sequence.entries()) {
@@ -713,6 +989,7 @@
                     continue;
                 }
                 const text = message.role === 'compactionSummary' ? message.summary : textOf(message);
+                const images = imagesOf(message);
                 const article = document.createElement('article'); article.className = `pi-message ${message.role}`;
                 article.dataset.messageKey = JSON.stringify(['side', message.role, message.timestamp]);
                 const header = document.createElement('header'); const strong = document.createElement('strong');
@@ -724,8 +1001,17 @@
                 const body = document.createElement('div'); body.className = 'pi-message-body'; body.dataset.readingKey = article.dataset.messageKey;
                 const markdown = document.createElement('div'); markdown.className = 'pi-markdown';
                 if (message.role === 'assistant') markdown.innerHTML = text ? this.host.renderMarkdown(text) : `<p class="pi-side-empty">${translateUi("思考中")}</p>`;
+                else if (message.role === 'user') this.renderUserMessage(markdown, text);
                 else window.PiQuotes.renderUser(markdown, text);
-                body.appendChild(markdown);
+                if (markdown.childNodes.length || message.role === 'assistant') body.appendChild(markdown);
+                for (const [imgIndex, block] of images.entries()) {
+                    const img = document.createElement('img');
+                    img.className = 'pi-message-image';
+                    img.src = `data:${block.mimeType};base64,${block.data}`;
+                    img.alt = translateUi('消息附件');
+                    img.addEventListener('click', () => this.host.previewAttachment?.({ kind: 'image', name: translateUi('图片 {0}', imgIndex + 1), mimeType: block.mimeType, data: block.data, preview: img.src }));
+                    body.appendChild(img);
+                }
                 if (message.errorMessage || ['error', 'aborted'].includes(message.stopReason)) {
                     const error = document.createElement('p'); error.className = 'pi-inline-error'; error.textContent = message.errorMessage || translateUi("回复已停止"); body.appendChild(error);
                 }
@@ -764,11 +1050,12 @@
                 this.updateUsage(stats); this.controls();
             } catch {}
         }
-        hasState() { return Boolean(this.socket || this.starting || this.messages.length || this.history.length || this.input.value || this.quotes.length); }
+        hasState() { return Boolean(this.socket || this.starting || this.messages.length || this.history.length || this.input.value || this.quotes.length || this.files.length || this.attachmentReads); }
         destroy() {
             this.destroyed = true;
             this.starting = null;
             this.dropSocket();
+            this.clearAttachments();
             this.history = []; this.messages = []; this.quotes = []; this.toolEvents.clear(); this.input.value = '';
             this.scroll.resizeObserver.disconnect(); this.scroll.mutationObserver.disconnect();
             if (this.scroll.frame !== null) cancelAnimationFrame(this.scroll.frame);
@@ -870,10 +1157,11 @@
             requestAnimationFrame(() => { if (this.current === entry) entry.root.scrollTop = entry.panelTop || 0; });
             if (entry.connected) void entry.synchronize();
         }
-        setEnabled(enabled, fullContext = false, retention = false, toolsEnabled = false, modelsEnabled = false, lifecycleEnabled = false) {
+        setEnabled(enabled, fullContext = false, retention = false, toolsEnabled = false, modelsEnabled = false, lifecycleEnabled = false, uploadsEnabled = true) {
             this.lifecycleEnabled = lifecycleEnabled;
             this.modelsEnabled = modelsEnabled;
             this.toolsEnabled = toolsEnabled;
+            this.uploadsEnabled = uploadsEnabled;
             this.enabled = enabled; this.fullContext = fullContext;
             // Capability changes are only applied before an entry has a running conversation.
             if (retention !== this.retention && !this.current.hasState() && !this.entries.size) {

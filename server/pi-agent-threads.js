@@ -65,6 +65,14 @@ class AgentThreadsService {
             if (Buffer.byteLength(bearer) === Buffer.byteLength(expected) && timingSafeEqual(Buffer.from(bearer), Buffer.from(expected)))
                 return { kind: 'agent-thread', worker };
         }
+        if (String(req.path || '').replace(/^\/api\/pi(?=\/)/, '') === '/uploads/read' && this.supervisor.ephemeralWorkers) {
+            for (const worker of this.supervisor.ephemeralWorkers) {
+                if (worker.disposed || worker.restarting || !worker.sideConnection || worker.sideConnection.closed) continue;
+                const expected = `Bearer ${worker.navigationToken}`;
+                if (Buffer.byteLength(bearer) === Buffer.byteLength(expected) && timingSafeEqual(Buffer.from(bearer), Buffer.from(expected)))
+                    return { kind: 'side-chat-thread', worker, sideConnection: worker.sideConnection };
+            }
+        }
         return null;
     }
     async catalog(cwd) {

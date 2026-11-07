@@ -32,11 +32,11 @@
 
 主侧共享文件，继承的工具记录只作背景、不重放；停止和关页不回滚已完成修改。生命周期及本页保留上限见上节。
 
-不提供侧聊持久化、刷新恢复、文件上传、自动合并、后台委派或代码目录隔离。长期任务使用正式分叉线程。
+不提供侧聊持久化、刷新恢复、自动合并、后台委派或代码目录隔离。支持临时附件上传（图片、文本、Office/PDF 与通用文件），并在侧聊结束、新开段、过期或关页时自动释放，不写入持久上传库或项目附件目录。长期任务使用正式分叉线程。
 
 ## 工具与执行授权
 
-支持 `read/grep/find/ls/edit/write` 和当前平台的命令工具（POSIX 使用 `bash`，Windows 使用 `powershell`）。读取和代码检索不需额外确认；命令可能写文件、访问网络或产生其他副作用，不能当作只读。没有自动继承主线程的任意扩展、MCP、Skills 或委派工具。
+支持 `read/grep/find/ls/edit/write`、当前平台的命令工具（POSIX 使用 `bash`，Windows 使用 `powershell`），以及针对本段侧聊临时上传文件的只读工具 `read_document` 和 `get_attachment`。读取、代码检索与临时附件读取不需额外确认；命令可能写文件、访问网络或产生其他副作用，不能当作只读。没有自动继承主线程的任意扩展、MCP、Skills 或委派工具。
 
 侧聊遵守行为约束：围绕侧问题讨论和调查，不主动继续主任务；明确要求修改后，先读当前文件、项目约定及差异，保留既有改动，避开与主 Agent 同时修改同一处。较大改动应使用正式任务或独立工作树。该约束不是文件锁，两个进程及外部编辑器之间不保证原子合并。
 
@@ -147,7 +147,7 @@
 
 前端 PiSideChat 管理本页的 cwd/sessionId -> SideThread；各自持有独立连接、请求表、流式消息投影、草稿和滚动控制器。非当前段 DOM 脱离页面，只附着当前线程的 DOM，避免重复 ID 和迟到事件串入。返回不重新 prepare、不再次发送问题；只向已有侧 runtime 读取状态。缓存只在页面内存，不写 localStorage/IndexedDB、工作台偏好或平行历史文件。关闭/注销销毁全部缓存及滚动 observers，未成功建立且没有草稿的空项释放名额。
 
-侧连接允许 prompt、abort、get_state、get_messages、get_session_stats、quit_side_chat，并在 assist 模式允许 answer_side_confirmation。后者只接受本段有效的 requestId 和布尔 confirmed，不能透传任意 extension_ui_response。prompt 只有普通文字，拒绝 images、streamingBehavior 和斜杠命令；原始 bash RPC、工具管理、任意模型管理及会话管理仍不开放；独立模型仅通过 get_side_models/set_side_model/set_side_thinking 专用校验接口选择，Agent 的工具调用由原生工具执行与确认协议处理。
+侧连接允许 prompt、abort、get_state、get_messages、get_session_stats、quit_side_chat，并在 assist 模式允许 answer_side_confirmation。后者只接受本段有效的 requestId 和布尔 confirmed，不能透传任意 extension_ui_response。prompt 接收普通文字、经过校验的图片与本段侧聊的临时附件引用，拒绝 streamingBehavior 和斜杠命令；原始 bash RPC、工具管理、任意模型管理及会话管理仍不开放；独立模型仅通过 get_side_models/set_side_model/set_side_thinking 专用校验接口选择，Agent 的工具调用由原生工具执行与确认协议处理。
 
 成功确认后只清除仍匹配的输入；明确拒绝保留草稿，超时/断线保留并要求确认，不自动重放。回复只保留复制，不提供自动写入主草稿操作；切线程不会将旧侧结果写入新草稿。
 

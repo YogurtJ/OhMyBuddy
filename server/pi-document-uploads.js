@@ -261,11 +261,17 @@ function mountDocumentUploads(router, service) {
         res.json(await service.upload(req.query, req.body, { reserved: true }));
     }));
     router.post('/uploads/read', respond(async (req, res) => {
-        const worker = req.workspaceIdentity?.kind === 'agent-thread' && req.workspaceIdentity.worker;
         const controller = new AbortController();
         const cancel = () => { if (!res.writableFinished) controller.abort(); };
         res.once('close', cancel);
-        try { res.json(await service.read(worker, req.body, controller.signal, { reserved: true })); }
+        try {
+            if (req.workspaceIdentity?.kind === 'side-chat-thread') {
+                res.json(await req.workspaceIdentity.sideConnection.readUpload(req.body, controller.signal));
+                return;
+            }
+            const worker = req.workspaceIdentity?.kind === 'agent-thread' && req.workspaceIdentity.worker;
+            res.json(await service.read(worker, req.body, controller.signal, { reserved: true }));
+        }
         finally { res.removeListener('close', cancel); }
     }));
     router.get('/uploads/status', respond(async (req, res) => {

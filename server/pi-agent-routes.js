@@ -115,7 +115,7 @@ function createPiAgentGateway(options = {}) {
         isSuspended: () => maintenance.locked || Boolean(store.sessionMoves?.running) });
     const sessionImageStorage = new (require('./pi-session-image-storage').SessionImageStorage)(documents, storageIntegration);
     Object.assign(profiles, { nativeService, settingsService, maintenance });
-    const sideChat = new PiSideChatService({ store, supervisor, usage });
+    const sideChat = new PiSideChatService({ store, supervisor, usage, documents });
     const notifications = new (require('./pi-notification-service').PiNotificationService)({ access, store });
     let proactive = null;
     supervisor.on('attention', event => {
@@ -193,6 +193,7 @@ function createPiAgentGateway(options = {}) {
     const artifacts = require('./pi-artifacts-routes').mountArtifacts(router, { store, supervisor, preferences, mediaRoot: options.artifactMediaRoot,
         isSuspended: () => maintenance.locked || maintenance.referenceLocked || Boolean(store.sessionMoves?.running) || Boolean(sessionTransfer.running) });
     require('./pi-document-uploads').mountDocumentUploads(router, documents);
+    require('./pi-side-chat').mountSideChatUploads(router, sideChat);
     require('./pi-session-image-storage').mountSessionImageStorage(router, sessionImageStorage);
     notifications.mount(router);
     require('./pi-extension-assistant').mountExtensionAssistant(router, { store, profiles, supervisor, resourceService, settingsService, access });
@@ -423,6 +424,7 @@ function createPiAgentGateway(options = {}) {
             sideChatTools: true,
             sideChatModels: true,
             sideChatLifecycle: true,
+            sideChatAttachments: true,
             manualUnread: true,
             archives: true,
             projectIdentity: true,

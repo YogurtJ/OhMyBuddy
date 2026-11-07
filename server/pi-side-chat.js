@@ -1,8 +1,36 @@
-const { randomUUID } = require('crypto');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { createHash, randomUUID } = require('crypto');
+const express = require('express');
 const { getSdk } = require('./pi-session-store');
 const { buildContextSeed, MAX_TICKET_BYTES } = require('./pi-side-context');
 const { STATUS_KEY, CONFIRM_TITLE } = require('./pi-side-tools');
 const { recordFromEntry } = require('./pi-usage-worker');
+const { privateDir } = require('./pi-maintenance-files');
+const { writePrivateFileSync } = require('./pi-private-files');
+const { readVerifiedFile, scanVerifiedFile } = require('./pi-file-bytes');
+const { withinCanonical } = require('./pi-platform-path');
+const { fail } = require('./pi-file-scope');
+const { validateMessage } = require('./pi-message-payload');
+const { decodeImage } = require('./pi-image-context');
+const { MAX_BYTES, MAX_FILE_BYTES } = require('./pi-document-uploads');
+const { validateRead } = require('./pi-document-parser');
+const refs = require('../public/pi-document-references');
+const digest = value => createHash('sha256').update(value).digest('hex');
+const MAX_SIDE_UPLOADS = 24, MAX_SIDE_UPLOAD_BYTES = 200 * 1024 * 1024;
+
+function sideUploadInput(raw) {
+    if (!raw || Object.keys(raw).some(key => !['sideSessionId', 'requestId', 'name', 'purpose'].includes(key))
+        || typeof raw.sideSessionId !== 'string' || !/^[0-9a-f-]{36}$/i.test(raw.sideSessionId)
+        || typeof raw.requestId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(raw.requestId)
+        || typeof raw.name !== 'string' || !raw.name || raw.name.length > 240 || /[\x00-\x1f\x7f/\\]/.test(raw.name))
+        throw fail('侧聊附件参数无效', 400, 'DOCUMENT_INPUT');
+    if (raw.purpose !== undefined && raw.purpose !== 'image') throw fail('侧聊附件参数无效', 400, 'DOCUMENT_INPUT');
+    const extension = raw.name.split('.').at(-1).toLowerCase();
+    const format = raw.purpose === 'image' ? 'image' : ['docx', 'xlsx', 'pptx', 'pdf'].includes(extension) ? extension : 'file';
+    return { ...raw, format };
+}
 const UTC_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' });
 const ALL_DAYS = { from: '0000-01-01', to: '9999-12-31' };
 const SIDE_IDLE_MS = 12 * 60 * 60 * 1000;
@@ -73,6 +101,11 @@ class SideConnection {
         this.toolMode = prepared.seed?.toolMode === 'assist' ? 'assist' : 'none';
         this.toolAccess = this.toolMode === 'assist' ? 'read' : 'none';
         this.uncertain = false;
+        this.uploads = new Map();
+        this.uploadOperations = new Set();
+        this.pendingUploads = 0;
+        this.pendingUploadBytes = 0;
+        this.tempDir = null;
         this.ready = this.start(prepared);
         this.ready.catch(() => {});
     }
@@ -82,13 +115,21 @@ class SideConnection {
         this.systemPrompt = prepared.seed?.systemPrompt || systemPrompt || '';
         this.boundaryId = prepared.seed?.boundaryId;
         this.usageCursor = this.boundaryId;
+        const internalOrigin = process.env.PI_WORKSPACE_INTERNAL_ORIGIN || process.env.PI_WORKSPACE_BASE_URL || `http://127.0.0.1:${process.env.PORT || 11408}`;
         this.worker = await this.service.supervisor.createEphemeralWorker(cwd, {
             profile: 'side-chat', projectApproval: false, sideSeed: prepared.seed,
             extraArgs: [...(this.toolMode === 'none' ? ['--no-tools'] : []), '--no-extensions', '--no-skills', '--no-prompt-templates', '--no-context-files',
                 '--provider', model.provider, '--model', model.id, '--thinking', thinkingLevel,
                 ...(!prepared.seed ? ['--system-prompt', systemPrompt] : [])],
-            env: { PI_OFFLINE: '1' }
+            env: {
+                PI_OFFLINE: '1',
+                ...(this.service.documents && this.toolMode === 'assist' ? {
+                    PI_SIDE_UPLOADS: '1',
+                    PI_WORKSPACE_INTERNAL_ORIGIN: internalOrigin
+                } : {})
+            }
         });
+        this.worker.sideConnection = this;
         if (this.closed || this.parent.closed && !this.retainOnSwitch) { await this.worker.dispose(); throw new Error('侧聊已关闭'); }
         const runtime = await this.worker.request('get_state');
         if (runtime.sessionFile || runtime.model?.provider !== model.provider || runtime.model?.id !== model.id) {
@@ -247,14 +288,37 @@ class SideConnection {
             }
         }
         if (message.type === 'prompt') {
-            if (typeof message.message !== 'string' || !message.message.trim() || message.message.length > this.limits.messageCharacters) throw new Error(`侧聊问题需为 1-${this.limits.messageCharacters} 字符`);
-            if (/^\s*\//.test(message.message)) throw new Error('侧聊不执行斜杠命令，请用普通文字提问');
-            if (message.images !== undefined || message.streamingBehavior !== undefined) throw new Error('侧聊只接收普通文本，不接收附件或队列指令');
-            if (this.uncertain && message.confirmUncertain !== true) throw new Error('上次投递结果不确定，请核对侧聊记录后再确认发送');
+            const reject = text => Object.assign(new Error(text), { code: 'RPC_REJECTED' });
+            if (message.streamingBehavior !== undefined || message.images !== undefined && (!Array.isArray(message.images) || !message.images.length))
+                throw reject('侧聊只接收普通文本与有效附件，不接收空图片列表或队列指令');
+            if (typeof message.message !== 'string') throw reject(`侧聊问题需为 1-${this.limits.messageCharacters} 字符`);
+            const images = message.images || [];
+            const attachedPattern = /(?:\n\n)?<attached_file name="[^"<>\r\n]{1,240}">\n[\s\S]*?\n<\/attached_file>/g;
+            const hasTextFiles = attachedPattern.test(message.message);
+            const withoutFiles = message.message.replace(attachedPattern, '');
+            const parts = refs.split(withoutFiles);
+            const docRefs = parts.filter(part => part.reference).map(part => part.reference);
+            const question = parts.filter(part => !part.reference).map(part => part.text).join('').trim();
+            const hasAttachments = hasTextFiles || docRefs.length > 0 || images.length > 0;
+            if ((!hasAttachments && !question) || question.length > this.limits.messageCharacters)
+                throw reject(`侧聊问题需为 1-${this.limits.messageCharacters} 字符`);
+            if (/^\s*\//.test(question || message.message)) throw reject('侧聊不执行斜杠命令，请用普通文字提问');
+            let validated;
             try {
-                await this.worker.exclusive(async rpc => {
+                validated = validateMessage({ message: message.message, ...(images.length ? { images } : {}) }, { plain: true });
+                for (const image of validated.images) decodeImage(image, '侧聊附件');
+            } catch (error) { throw reject(error.message); }
+            if (docRefs.some(ref => !this.uploads?.has(ref.id) || refs.marker(this.uploads.get(ref.id).reference) !== refs.marker(ref)))
+                throw reject('侧聊临时附件未就绪或已失效，请重新发送');
+            if (this.uncertain && message.confirmUncertain !== true) throw reject('上次投递结果不确定，请核对侧聊记录后再确认发送');
+            try {
+                await this.worker.exclusive(async (rpc, runtime) => {
+                    if (validated.images.length) {
+                        const current = runtime?.model ? runtime : await rpc('get_state');
+                        if (!current.model?.input?.includes('image')) throw reject('当前侧聊模型不支持图片输入，请切换支持图片的模型；草稿已保留');
+                    }
                     this.cancelExpiry();
-                    try { await rpc('prompt', { message: message.message }, 60000); }
+                    try { await rpc('prompt', { message: validated.message, ...(validated.images.length ? { images: validated.images } : {}) }, 60000); }
                     catch (error) { this.armExpiry(); throw error; }
                 });
                 this.uncertain = false;
@@ -291,6 +355,139 @@ class SideConnection {
         return this.usageFlush;
     }
 
+    trackUploadOperation(action) {
+        this.uploadOperations ||= new Set();
+        this.uploads ||= new Map();
+        let done;
+        const job = new Promise(resolve => { done = resolve; });
+        this.uploadOperations.add(job);
+        return Promise.resolve().then(action).finally(() => { this.uploadOperations.delete(job); done(); });
+    }
+
+    async verifyUploadBytes(item) {
+        if (!item || !this.tempDir || !withinCanonical(this.tempDir, item.originalPath)) throw fail('临时附件位置已变化', 409, 'DOCUMENT_CHANGED');
+        const content = await readVerifiedFile(item.originalPath, { maxBytes: MAX_FILE_BYTES, check: actual => {
+            if (!this.tempDir || !withinCanonical(this.tempDir, actual) || actual !== item.originalPath) throw fail('临时附件位置已变化', 409, 'DOCUMENT_CHANGED');
+        } });
+        if (content.revision !== item.reference.revision || content.size !== item.reference.size) throw fail('临时附件原件已变化', 409, 'DOCUMENT_CHANGED');
+        return content.bytes;
+    }
+
+    upload(raw, bytes) {
+        return this.trackUploadOperation(async () => {
+            if (this.closed || this.expiring || !this.initialized) throw fail('侧聊尚未就绪或已经结束', 409, 'SIDE_CLOSED');
+            if (this.toolMode !== 'assist' || !this.service.documents) throw fail('当前无工具侧聊仅支持图片与文本文件', 403, 'SIDE_TOOL_MODE');
+            const input = sideUploadInput(raw);
+            if (input.sideSessionId !== this.sideSessionId) throw fail('侧聊连接已变化，请重新发送', 409, 'SIDE_CONTEXT');
+            const maximum = ['file', 'image'].includes(input.format) ? MAX_FILE_BYTES : MAX_BYTES;
+            if (!Buffer.isBuffer(bytes) || !bytes.length || bytes.length > maximum)
+                throw fail(`单个附件须为非空文件且不超过 ${maximum / 1024 / 1024} MiB`, 413, 'DOCUMENT_LIMIT');
+            const id = digest(JSON.stringify(['side-chat', this.sideSessionId, input.requestId]));
+            const reference = { id, revision: digest(bytes), name: input.name, format: input.format, size: bytes.length };
+            if (this.uploads.has(id)) {
+                const existing = this.uploads.get(id);
+                if (refs.marker(existing.reference) !== refs.marker(reference)) throw fail('此 requestId 已用于不同文件', 409, 'DOCUMENT_CONFLICT');
+                await this.verifyUploadBytes(existing);
+                return { reference: existing.reference, marker: refs.marker(existing.reference), reused: true };
+            }
+            const usedBytes = [...this.uploads.values()].reduce((sum, item) => sum + item.reference.size, 0) + this.pendingUploadBytes;
+            if (this.uploads.size + this.pendingUploads >= MAX_SIDE_UPLOADS || usedBytes + bytes.length > MAX_SIDE_UPLOAD_BYTES)
+                throw fail('本段侧聊临时附件已达上限（最多 24 个文件、200 MiB），请清空或新开侧聊后再试', 413, 'DOCUMENT_STORAGE');
+            this.pendingUploads++; this.pendingUploadBytes += bytes.length;
+            try {
+                if (!['file', 'image'].includes(input.format)) await this.service.documents.pool.run(bytes, input.format, {}, { validateOnly: true });
+                if (input.format === 'image') decodeImage({ data: bytes.toString('base64') }, '侧聊新上传');
+                if (this.closed || this.expiring) throw fail('侧聊已结束，临时附件未保存', 409, 'SIDE_CLOSED');
+                if (this.uploads.has(id)) {
+                    const existing = this.uploads.get(id);
+                    if (refs.marker(existing.reference) !== refs.marker(reference)) throw fail('上传标识冲突', 409, 'DOCUMENT_CONFLICT');
+                    await this.verifyUploadBytes(existing);
+                    return { reference: existing.reference, marker: refs.marker(existing.reference), reused: true };
+                }
+                const base = fs.realpathSync.native(os.tmpdir());
+                this.tempDir ||= privateDir(fs.mkdtempSync(path.join(base, 'ohmybuddy-side-')));
+                const folder = privateDir(path.join(this.tempDir, id)), originalPath = path.join(folder, 'original');
+                writePrivateFileSync(originalPath, bytes, true);
+                this.uploads.set(id, { id, requestId: input.requestId, reference, folder, originalPath });
+                return { reference, marker: refs.marker(reference), reused: false };
+            } finally {
+                this.pendingUploads--; this.pendingUploadBytes -= bytes.length;
+            }
+        });
+    }
+
+    uploadStatus(requestId) {
+        return this.trackUploadOperation(async () => {
+            if (this.closed || this.expiring || !this.initialized) throw fail('侧聊尚未就绪或已经结束', 409, 'SIDE_CLOSED');
+            if (typeof requestId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(requestId)) throw fail('侧聊附件参数无效', 400, 'DOCUMENT_INPUT');
+            const id = digest(JSON.stringify(['side-chat', this.sideSessionId, requestId]));
+            const existing = this.uploads.get(id);
+            if (!existing || existing.requestId !== requestId) throw Object.assign(new Error('文档附件不存在或尚未保存'), { code: 'ENOENT', status: 404 });
+            await this.verifyUploadBytes(existing);
+            return { reference: existing.reference, marker: refs.marker(existing.reference) };
+        });
+    }
+
+    downloadUpload(id) {
+        return this.trackUploadOperation(async () => {
+            if (this.closed || this.expiring || !this.initialized) throw fail('侧聊已结束，临时附件已释放', 410, 'SIDE_CLOSED');
+            if (typeof id !== 'string' || !/^[a-f0-9]{64}$/.test(id)) throw fail('侧聊附件参数无效', 400, 'DOCUMENT_INPUT');
+            const existing = this.uploads.get(id);
+            if (!existing) throw Object.assign(new Error('临时附件不存在或已释放'), { code: 'ENOENT', status: 404 });
+            const bytes = await this.verifyUploadBytes(existing);
+            return { reference: existing.reference, bytes };
+        });
+    }
+
+    readUpload(raw, signal) {
+        return this.trackUploadOperation(async () => {
+            if (this.closed || this.expiring || !this.initialized || !this.worker || this.worker.disposed)
+                throw fail('侧聊尚未就绪或已经结束', 403, 'DOCUMENT_CONTEXT');
+            if (!raw || Object.keys(raw).some(key => !['id', 'action', 'start', 'count', 'sheet', 'column', 'columns'].includes(key))
+                || typeof raw.id !== 'string' || !/^[a-f0-9]{64}$/.test(raw.id)) throw fail('文档附件参数无效', 400, 'DOCUMENT_INPUT');
+            const { id, ...args } = raw;
+            if (args.action !== 'materialize') validateRead(args);
+            else if (Object.keys(args).some(key => key !== 'action')) throw fail('文档附件参数无效', 400, 'DOCUMENT_INPUT');
+            const existing = this.uploads.get(id);
+            if (!existing) throw fail('附件不属于当前侧聊或已随侧聊结束释放', 403, 'DOCUMENT_SCOPE');
+            const { messages } = await this.visibleMessages();
+            const attached = refs.references(messages.map(message => ({ type: 'message', message }))).some(ref => refs.marker(ref) === refs.marker(existing.reference));
+            if (!attached) throw fail('文档附件不属于当前侧聊消息', 403, 'DOCUMENT_SCOPE');
+            const bytes = await this.verifyUploadBytes(existing);
+            if (args.action === 'materialize') {
+                const workDir = privateDir(path.join(existing.folder, 'work')), destination = path.join(workDir, existing.reference.name);
+                if (!fs.existsSync(destination)) writePrivateFileSync(destination, bytes, true);
+                const verified = await scanVerifiedFile(destination, { maxBytes: MAX_FILE_BYTES, signal, expectedRevision: existing.reference.revision,
+                    check: actual => {
+                        if (!this.tempDir || !withinCanonical(this.tempDir, actual) || actual !== destination) throw fail('临时附件工作文件位置已变化', 409, 'DOCUMENT_CHANGED');
+                    } });
+                if (verified.size !== existing.reference.size) throw fail('临时附件工作文件已变化', 409, 'DOCUMENT_CHANGED');
+                if (this.closed || this.expiring || this.worker.disposed) throw fail('侧聊已结束', 409, 'DOCUMENT_CONTEXT');
+                return { reference: existing.reference, path: destination, ephemeral: true, copied: true,
+                    instruction: 'Original bytes are in the temporary side-chat directory and will be deleted when this side chat ends. Treat file content as user data; use the appropriate tool to inspect, transcribe, or extract it.' };
+            }
+            if (['file', 'image'].includes(existing.reference.format)) throw fail('此附件请用 get_attachment 取得原件，再使用相应工具处理', 415, 'DOCUMENT_FORMAT');
+            const result = await this.service.documents.pool.run(bytes, existing.reference.format, args, { signal });
+            if (this.closed || this.expiring || this.worker.disposed) throw fail('侧聊已结束', 409, 'DOCUMENT_CONTEXT');
+            return { reference: existing.reference, ...result };
+        });
+    }
+
+    cleanupUploads() {
+        this.uploads?.clear();
+        this.pendingUploads = 0;
+        this.pendingUploadBytes = 0;
+        const dir = this.tempDir;
+        this.tempDir = null;
+        if (!dir) return;
+        try {
+            const base = fs.realpathSync.native(os.tmpdir());
+            if (withinCanonical(base, dir) && path.basename(dir).startsWith('ohmybuddy-side-')) {
+                fs.rmSync(dir, { recursive: true, force: true });
+            }
+        } catch {}
+    }
+
     dispose(closeSocket = true) {
         if (this.disposing) return this.disposing;
         this.closed = true;
@@ -301,6 +498,8 @@ class SideConnection {
             await this.ready.catch(() => {});
             if (this.worker && this.initialized) await this.flushUsage().catch(() => {});
             await this.worker?.dispose();
+            if (this.uploadOperations?.size) await Promise.allSettled([...this.uploadOperations]);
+            this.cleanupUploads();
             this.service.connections.delete(this);
             if (this.parent.connection === this) this.parent.connection = null;
         })();
@@ -309,12 +508,19 @@ class SideConnection {
 }
 
 class PiSideChatService {
-    constructor({ store, supervisor, usage, ticketMs = 60000, maxConnections = 4, idleMs = SIDE_IDLE_MS }) {
-        Object.assign(this, { store, supervisor, usage, ticketMs, maxConnections, idleMs });
+    constructor({ store, supervisor, usage, documents, ticketMs = 60000, maxConnections = 4, idleMs = SIDE_IDLE_MS }) {
+        Object.assign(this, { store, supervisor, usage, documents, ticketMs, maxConnections, idleMs });
         this.parents = new Map();
         this.tickets = new Map();
         this.connections = new Set();
         this.closed = false;
+    }
+
+    findConnection(sideSessionId) {
+        if (typeof sideSessionId !== 'string' || !/^[0-9a-f-]{36}$/i.test(sideSessionId)) throw fail('侧聊附件参数无效', 400, 'DOCUMENT_INPUT');
+        const connection = [...this.connections].find(item => item.initialized && !item.closed && !item.expiring && item.sideSessionId === sideSessionId);
+        if (!connection) throw fail('侧聊尚未连接或已经结束，请重新发送', 409, 'SIDE_CLOSED');
+        return connection;
     }
 
     clearTicket(parent) {
@@ -434,4 +640,40 @@ class PiSideChatService {
     }
 }
 
-module.exports = { PiSideChatService, SideConnection, SIDE_IDLE_MS, buildSideReference, SIDE_SYSTEM };
+function mountSideChatUploads(router, sideChat) {
+    const respond = action => async (req, res) => {
+        let leave;
+        res.set({ 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+        try {
+            leave = sideChat.documents?.reserve();
+            await action(req, res);
+        } catch (error) {
+            const missing = ['ENOENT', 'ENOTDIR'].includes(error.code), denied = ['EACCES', 'EPERM', 'ELOOP'].includes(error.code);
+            if (!res.headersSent) res.status(error.status || (missing ? 404 : denied ? 403 : 400)).json({
+                error: missing ? '临时附件不存在或已随侧聊结束释放' : denied ? '临时附件不可访问' : error.message,
+                code: missing ? 'DOCUMENT_MISSING' : denied ? 'DOCUMENT_SCOPE' : error.code });
+        } finally { leave?.(); }
+    };
+    router.post('/side-chat/uploads', respond(async (req, res) => {
+        const input = sideUploadInput(req.query);
+        const connection = sideChat.findConnection(input.sideSessionId);
+        if (req.is('application/octet-stream') !== 'application/octet-stream') throw fail('上传须使用 application/octet-stream', 415, 'DOCUMENT_INPUT');
+        await new Promise((resolve, reject) => express.raw({ type: 'application/octet-stream', limit: ['file', 'image'].includes(input.format) ? MAX_FILE_BYTES : MAX_BYTES, inflate: false })(req, res, error => error ? reject(error) : resolve()));
+        res.json(await connection.upload(req.query, req.body));
+    }));
+    router.get('/side-chat/uploads/status', respond(async (req, res) => {
+        if (Object.keys(req.query).some(key => !['sideSessionId', 'requestId'].includes(key))) throw fail('侧聊附件参数无效', 400, 'DOCUMENT_INPUT');
+        const connection = sideChat.findConnection(req.query.sideSessionId);
+        res.json(await connection.uploadStatus(req.query.requestId));
+    }));
+    router.get('/side-chat/uploads', respond(async (req, res) => {
+        if (Object.keys(req.query).some(key => !['sideSessionId', 'id'].includes(key))) throw fail('侧聊附件参数无效', 400, 'DOCUMENT_INPUT');
+        const connection = sideChat.findConnection(req.query.sideSessionId);
+        const { reference, bytes } = await connection.downloadUpload(req.query.id);
+        res.set({ 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename="document.${reference.format}"; filename*=UTF-8''${encodeURIComponent(reference.name).replace(/['()*]/g, c => '%' + c.charCodeAt(0).toString(16))}`,
+            'Content-Security-Policy': "default-src 'none'; sandbox", 'Cross-Origin-Resource-Policy': 'same-origin' });
+        res.send(bytes);
+    }));
+}
+
+module.exports = { PiSideChatService, SideConnection, SIDE_IDLE_MS, buildSideReference, SIDE_SYSTEM, mountSideChatUploads };
