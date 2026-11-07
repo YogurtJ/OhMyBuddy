@@ -81,9 +81,9 @@ async function run(browser, base, width, language) {
     const english = language.startsWith('en');
     assert.equal(await page.locator('html').getAttribute('lang'), english ? 'en' : 'zh-CN');
     assert.equal(await page.locator('#workspace-settings-toggle').getAttribute('title'), english ? 'OhMyBuddy settings' : 'OhMyBuddy 设置');
-    assert.equal(await page.locator('#workspace-profiles-toggle > span:not(.workspace-nav-short)').textContent(), english ? 'Assistant profiles' : '助手身份');
-    assert.equal(await page.locator('#workspace-profiles-toggle').getAttribute('title'), english ? 'Assistant profiles' : '助手身份');
-    assert.equal(await page.locator('[data-more-tab="profiles"] span').textContent(), english ? 'Assistant profiles' : '助手身份');
+    assert.equal(await page.locator('#workspace-profiles-toggle > span:not(.workspace-nav-short)').textContent(), english ? 'Buddy identities' : '伙伴身份');
+    assert.equal(await page.locator('#workspace-profiles-toggle').getAttribute('title'), english ? 'Buddy identities' : '伙伴身份');
+    assert.equal(await page.locator('[data-more-tab="profiles"] span').textContent(), english ? 'Buddy identities' : '伙伴身份');
     assert.equal(await page.locator('[data-delivery-mode="steer"] small').textContent(), english ? 'Delivered after this tool step' : '本轮工具后送达');
     assert.equal(await page.locator('[data-delivery-mode="follow_up"] small').textContent(), english ? 'Delivered after the current task' : '当前任务完成后送达');
     const transcript = await page.locator('#pi-transcript-content').innerText();

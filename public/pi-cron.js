@@ -301,7 +301,7 @@
             const panel = (title, parent = form) => { const p = node('section', 'cron-card'); p.append(node('h3', '', t(title))); parent.append(p); return p; };
             const destination = panel('发送到哪里'), destGrid = node('div', 'cron-grid'); destination.append(destGrid);
             const kind = field(destGrid, '目标类型', 'select', draft.target.kind, { choices: [['thread', t('指定线程')], ['profile', t('身份的主线程')]] });
-            const profile = field(destGrid, '助手身份', 'select', draft.target.profileId || profiles[0]?.id, { choices: profiles.filter(p => p.enabled).map(p => [p.id, p.name]) });
+            const profile = field(destGrid, '伙伴身份', 'select', draft.target.profileId || profiles[0]?.id, { choices: profiles.filter(p => p.enabled).map(p => [p.id, p.name]) });
             const initialHome = draft.target.kind === 'profile' ? snapshot.homes.find(home => home.profileId === draft.target.profileId) : null;
             const cwd = field(destGrid, '工作目录', 'text', draft.target.cwd || initialHome?.cwd || currentCwd() || projects[0]?.cwd || '', { placeholder: t('项目的绝对路径') });
             const directoryField = pickers.directory(cwd, { api, getProjects });
@@ -467,7 +467,7 @@
             if (!snapshot || !await leave()) return;
             draft = { home: true }; dirty = false; showDetail(); detail.replaceChildren();
             const form = node('div', 'cron-form'); form.append(back(), node('h2', '', t('主线程')), node('p', 'cron-muted', t('主线程按需创建，也可以指定已有线程作为定时任务的默认目标。')));
-            const profile = field(form, '助手身份', 'select', filterProfile || profiles[0]?.id || '', { choices: profiles.filter(p => p.enabled).map(p => [p.id, p.name]) });
+            const profile = field(form, '伙伴身份', 'select', filterProfile || profiles[0]?.id || '', { choices: profiles.filter(p => p.enabled).map(p => [p.id, p.name]) });
             const cwd = field(form, '工作目录', 'text', '', { placeholder: t('项目的绝对路径') });
             pickers.directory(cwd, { api, getProjects });
             const sessions = pickers.thread(form, () => { requestId = randomId(); dirty = true; });

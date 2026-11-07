@@ -156,8 +156,8 @@
             `请帮我配置 OhMyBuddy 内置的 ${entry.name}。该组件随 OhMyBuddy 安装和更新，请先检查当前版本、资源开关、身份与会话加载状态，再调整配置，不要另行安装或修改上游源码。`,
             `Help me configure ${entry.name}, bundled with OhMyBuddy. Check its version, resource toggles, profile and actual session loading before adjusting settings. It updates with OhMyBuddy; do not install another copy or modify upstream source.`);
         if (entry?.id === 'pi-hermes-memory' && inventory?.profileMemoryInstalled) need += text(
-            '\nOhMyBuddy 已安装独立的档案记忆适配组件。请先检查助手身份和实际加载状态；不要另行全局启用上游默认扩展，以免扩大历史索引范围。',
-            '\nOhMyBuddy already has the separate profile memory adapter installed. Inspect assistant profiles and actual loading first; do not additionally enable the upstream default extension globally, which would broaden history indexing.');
+            '\nOhMyBuddy 已安装独立的档案记忆适配组件。请先检查伙伴身份和实际加载状态；不要另行全局启用上游默认扩展，以免扩大历史索引范围。',
+            '\nOhMyBuddy already has the separate profile memory adapter installed. Inspect Buddy identities and actual loading first; do not additionally enable the upstream default extension globally, which would broaden history indexing.');
         window.dispatchEvent(new CustomEvent('pi:extension-assistant', { detail: { need, scope: document.getElementById('extensions-scope')?.value || 'global' } }));
     }
     function mountExplore(root) {

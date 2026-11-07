@@ -951,7 +951,7 @@
             notes.append(icon('fa-ellipsis')); notes.hidden = !this.windowId;
             notes.setAttribute('aria-haspopup', 'menu'); notes.setAttribute('aria-expanded', 'false'); notes.setAttribute('aria-controls', 'pi-bot-more-menu');
             const more = el('div', 'pi-bot-more-menu'); more.id = 'pi-bot-more-menu'; more.popover = 'auto'; more.setAttribute('role', 'menu'); more.setAttribute('aria-label', translateUi('更多功能'));
-            for (const [action, label, glyph] of [['side', '侧聊', 'fa-comment-dots'], ['notes', '我记着的事', 'fa-thumbtack'], ['schedule', '定时任务', 'fa-clock'], ['identity-details', '助手身份详情', 'fa-id-card'], ['settings', '伙伴设置', 'fa-gear']]) {
+            for (const [action, label, glyph] of [['side', '侧聊', 'fa-comment-dots'], ['notes', '我记着的事', 'fa-thumbtack'], ['schedule', '定时任务', 'fa-clock'], ['identity-details', '伙伴身份详情', 'fa-id-card'], ['settings', '伙伴设置', 'fa-gear']]) {
                 const item = button('', translateUi(label)); item.dataset.botAction = action; item.setAttribute('role', 'menuitem');
                 item.append(icon(glyph), el('span', null, translateUi(label)));
                 if (action === 'side') item.append(el('small', 'pi-bot-side-hint'));

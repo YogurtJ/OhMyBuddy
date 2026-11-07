@@ -248,8 +248,8 @@ async function check(browser, base, width, language, scenario = 'normal') {
     assert.equal(homes[0].cwd, cwd);
     await page.screenshot({ path: `/tmp/pivane-cron-main-${width}-${language}.png`, fullPage: true });
     const writesBefore = writes.length;
-    // Scoped to the task form: the navigation rail also has an "Assistant profiles" button.
-    await page.locator('#cron-tab').getByLabel(zh ? '助手身份' : 'Assistant profiles', { exact: true }).selectOption('bot-momo');
+    // Scoped to the task form: the navigation rail also has a "Buddy identities" button.
+    await page.locator('#cron-tab').getByLabel(zh ? '伙伴身份' : 'Buddy identities', { exact: true }).selectOption('bot-momo');
     await page.getByRole('button', { name: zh ? '打开主聊天' : 'Open main chat', exact: true }).waitFor();
     assert.match(await page.locator('.cron-form .cron-muted').last().textContent(), zh ? /伙伴的主线程就是它的主聊天/ : /A Buddy's main thread is its main chat/);
     assert.equal(await page.getByRole('button', { name: zh ? '设为主线程' : 'Set as main thread', exact: true }).count(), 0);

@@ -273,7 +273,7 @@
                     // The server derives the project directory from the verified session;
                     // this page never submits a client-side projectKey.
                     if (targetKind !== 'memory' || !sessionScope || snapshot?.capabilities?.projectWritesBySession !== true) {
-                        notice = t('请选择助手范围；项目范围写入须由服务端提供已验证的项目标识。'); render(); return;
+                        notice = t('请选择伙伴范围；项目范围写入须由服务端提供已验证的项目标识。'); render(); return;
                     }
                     input.sessionId = sessionScope;
                 }
@@ -499,12 +499,12 @@
                 items: [{ id: 'entries', label: t('条目'), icon: 'list' }, { id: 'document', label: t('全文'), icon: 'file-lines', disabled: target === 'project' }] })
                 : addButton();
             root.append(el('div', { class: 'pi-id-page-head' }, [el('div', {}, [node('h3', t(kind === 'memory' ? '记忆' : '技能')),
-                node('p', t(kind === 'memory' ? '助手跨对话记住的信息。关于你的内容保存在 USER.md，其他长期信息保存在 MEMORY.md。'
+                node('p', t(kind === 'memory' ? '伙伴跨对话记住的信息。关于你的内容保存在 USER.md，其他长期信息保存在 MEMORY.md。'
                     : '此身份在协作中积累的可复用做法。新技能先作为草稿，审核后才会启用。'))]), actions]));
             const settingsAction = button(t('前往设定'), () => ui.navigate?.('persona'), 'quiet');
             if (savedProfile?.enabled === false) root.append(noticeBox(t('此身份已停用，启用后才能使用记忆与技能。'), [settingsAction]));
-            else if (kind === 'memory' && savedProfile?.memory?.enabled === false) root.append(noticeBox(t('长期记忆未启用：助手不会读取或写入这些内容。'), [settingsAction]));
-            else if (kind === 'skill' && savedProfile?.skills?.learnedEnabled === false) root.append(noticeBox(t('已学习技能未启用：助手暂时不会使用这些技能。'), [settingsAction]));
+            else if (kind === 'memory' && savedProfile?.memory?.enabled === false) root.append(noticeBox(t('长期记忆未启用：伙伴不会读取或写入这些内容。'), [settingsAction]));
+            else if (kind === 'skill' && savedProfile?.skills?.learnedEnabled === false) root.append(noticeBox(t('已学习技能未启用：伙伴暂时不会使用这些技能。'), [settingsAction]));
         }
         const projectWritable = () => Boolean(sessionScope) && snapshot?.capabilities?.projectWritesBySession === true;
         function addButton() {
@@ -599,7 +599,7 @@
         }
         // Advisory counter from verified memory_search results; absent until a search finds the entry.
         const recalled = item => item?.kind === 'memory' && item.state !== 'deleted' && Number.isSafeInteger(item.recall?.hits) && item.recall.hits > 0;
-        const recallNote = item => t('记忆搜索找到这条 {0} 次，最近一次 {1}。USER／MEMORY 全文每轮都会提供给助手，这里只统计助手主动搜索找到它的次数；内容修改后重新计数。',
+        const recallNote = item => t('记忆搜索找到这条 {0} 次，最近一次 {1}。USER／MEMORY 全文每轮都会提供给伙伴，这里只统计伙伴主动搜索找到它的次数；内容修改后重新计数。',
             item.recall.hits, item.recall.lastHitAt || '—');
         function renderEntry(row) {
             const open = selected?.id === row.id, item = open ? original() : row;
@@ -708,7 +708,7 @@
         function renderInjection() {
             if (!injection) return;
             const stats = injection.profile || {};
-            root.append(el('details', { class: 'pi-id-card pi-knowledge-injection', dataset: { detail: 'injection' } }, [node('summary', t('助手下一轮会读到什么')),
+            root.append(el('details', { class: 'pi-id-card pi-knowledge-injection', dataset: { detail: 'injection' } }, [node('summary', t('伙伴下一轮会读到什么')),
                 node('p', t('身份记忆：{0} 条 / {1} 字', number(stats.entries), number(stats.chars)), 'pi-id-help'),
                 node('pre', injection.block || '', 'pi-knowledge-raw'), injection.truncated && node('p', t('已截断，仅显示部分内容'), 'pi-id-help'),
                 node('p', t('注入不代表模型一定遵守。'), 'pi-id-help')]));
@@ -746,7 +746,7 @@
             };
             if (state.message) root.append(noticeBox(state.message, state.status === 'conflict' ? [button(t('从服务器重新读取'), () => void refreshDocument(key), 'quiet')] : []));
             if (!editable) {
-                root.append(noticeBox(t(state.status === 'disabled' ? '长期记忆未启用：助手不会读取或写入这些内容。'
+                root.append(noticeBox(t(state.status === 'disabled' ? '长期记忆未启用：伙伴不会读取或写入这些内容。'
                     : state.status === 'unsupported' ? '此服务尚未安装记忆组件。' : '文档尚不可用，请刷新核对。'),
                 [button(t('从服务器重新读取'), () => void refreshDocument(key), 'ghost'), button(t('前往设定'), () => ui.navigate?.('persona'), 'quiet')]));
                 return;

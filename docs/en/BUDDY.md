@@ -15,7 +15,7 @@ When the server supports Buddies, **Buddy** appears in the navigation. With no B
 The first time you open the main chat, the Buddy greets you locally (no model call). You can take a two-to-three-minute interview or skip it. The interview covers how to address you, what it mainly helps with, its name, its personality and its working style, one item at a time. Each setup card can be saved, edited or postponed. The Buddy only says it saved something after the save tool succeeded.
 
 - **A second Buddy** can copy the "About you" notes you tick from another Buddy. The copy happens once; afterwards each Buddy keeps its own notes.
-- **Make it a Buddy:** on the Identities page, an enabled identity can become a Buddy. It keeps its name, avatar, personality, memory and skills, gets its own main chat and working folder, and asks only what is still undecided. Earlier conversations stay in Workspace.
+- **Make it a Buddy:** on the Buddy Identities page, an enabled identity can become a Buddy. It keeps its name, avatar, personality, memory and skills, gets its own main chat and working folder, and asks only what is still undecided. Earlier conversations stay in Workspace.
 - **Use a Buddy in a real project:** in Workspace, choose **New thread as an identity…** in a project menu and pick the Buddy. The thread carries its personality, memory and skills, uses ordinary Workspace tools and permissions, and does not appear in the Buddy's chats.
 
 Before you rely on a Buddy, open **Data, permissions & backup** on the welcome page, in the greeting or in settings. Chats, memory and files live on the machine that runs OhMyBuddy, and replies send relevant context to the model provider you configured.

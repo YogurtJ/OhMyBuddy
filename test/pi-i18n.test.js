@@ -123,7 +123,7 @@ test('language card reloads safely without the optional workbench bridge and ret
 test('static translations use source text across catalog order changes and consume their markers once', () => {
     for (const saved of ['zh-CN', 'en']) {
         const comments = [
-            ['i18n:s2469', ' 助手身份 '],
+            ['i18n:s2469', ' 伙伴身份 '],
             ['i18n:s2892', '消息显示'],
             ['i18n:s2758', '简洁'],
             ['i18n:s3528', '本轮工具后送达'],
@@ -134,7 +134,7 @@ test('static translations use source text across catalog order changes and consu
             ['unrelated', '保存']
         ].map(([data, source]) => ({ data, nextSibling: { nodeType: 3, data: source }, remove() { this.removed = true; } }));
         const attributes = new Map([
-            ['data-i18n-title', 's2469'], ['title', '助手身份'],
+            ['data-i18n-title', 's2469'], ['title', '伙伴身份'],
             ['data-i18n-aria-label', 's3529'], ['aria-label', '当前任务完成后送达'],
             ['data-i18n-placeholder', 's0'], ['placeholder', 'unknown <raw>'], ['data-i18n-alt', 's0']
         ]);
@@ -146,9 +146,9 @@ test('static translations use source text across catalog order changes and consu
         api.translateStatic();
         const english = saved === 'en';
         assert.deepEqual(comments.map(comment => comment.nextSibling.data), english
-            ? [' Assistant profiles ', 'Message display', 'Compact', 'Delivered after this tool step', 'Delivered after the current task', 'Small', 'Font size', 'unknown <raw>', '保存']
-            : [' 助手身份 ', '消息显示', '简洁', '本轮工具后送达', '当前任务完成后送达', '小', '字体大小', 'unknown <raw>', '保存']);
-        assert.equal(attributes.get('title'), english ? 'Assistant profiles' : '助手身份');
+            ? [' Buddy identities ', 'Message display', 'Compact', 'Delivered after this tool step', 'Delivered after the current task', 'Small', 'Font size', 'unknown <raw>', '保存']
+            : [' 伙伴身份 ', '消息显示', '简洁', '本轮工具后送达', '当前任务完成后送达', '小', '字体大小', 'unknown <raw>', '保存']);
+        assert.equal(attributes.get('title'), english ? 'Buddy identities' : '伙伴身份');
         assert.equal(attributes.get('aria-label'), english ? 'Delivered after the current task' : '当前任务完成后送达');
         assert.equal(attributes.get('placeholder'), 'unknown <raw>'); assert.equal(attributes.has('alt'), false);
         assert.equal([...attributes.keys()].some(key => key.startsWith('data-i18n-')), false);

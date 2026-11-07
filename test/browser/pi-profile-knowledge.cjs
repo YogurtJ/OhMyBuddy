@@ -178,7 +178,7 @@ async function run(browser, base, width, locale, theme) {
     assert.equal((await recallChip.innerText()).trim(), T('检索命中 {0} 次', 3));
     assert.equal(await entry(ids.memory2).locator('.pi-knowledge-recall').count(), 0);
     await entry(ids.memory).locator('.pi-id-entry-main').click();
-    const recallNote = T('记忆搜索找到这条 {0} 次，最近一次 {1}。USER／MEMORY 全文每轮都会提供给助手，这里只统计助手主动搜索找到它的次数；内容修改后重新计数。', 3, '2026-10-15');
+    const recallNote = T('记忆搜索找到这条 {0} 次，最近一次 {1}。USER／MEMORY 全文每轮都会提供给伙伴，这里只统计伙伴主动搜索找到它的次数；内容修改后重新计数。', 3, '2026-10-15');
     await entry(ids.memory).locator('.pi-knowledge-recall-note').waitFor();
     assert.equal((await entry(ids.memory).locator('.pi-knowledge-recall-note').innerText()).trim(), recallNote);
     assert.equal(await recallChip.getAttribute('title'), recallNote);
@@ -190,7 +190,7 @@ async function run(browser, base, width, locale, theme) {
     await page.waitForFunction(() => !manager.busy());
     await page.waitForFunction(text => document.querySelector('#knowledge .pi-id-entry.is-open .pi-knowledge-recall')?.textContent.trim() === text, T('检索命中 {0} 次', 5));
     assert.equal((await entry(ids.memory).locator('.pi-knowledge-recall-note').innerText()).trim(),
-        T('记忆搜索找到这条 {0} 次，最近一次 {1}。USER／MEMORY 全文每轮都会提供给助手，这里只统计助手主动搜索找到它的次数；内容修改后重新计数。', 5, '2026-10-16'));
+        T('记忆搜索找到这条 {0} 次，最近一次 {1}。USER／MEMORY 全文每轮都会提供给伙伴，这里只统计伙伴主动搜索找到它的次数；内容修改后重新计数。', 5, '2026-10-16'));
     assert.ok(reads.length > detailReads, 'the list was reloaded');
     await entry(ids.memory).locator('.pi-id-entry-main').click();
     await entry(ids.memory).locator('.pi-knowledge-recall-note').waitFor({ state: 'detached' });
@@ -521,7 +521,7 @@ async function run(browser, base, width, locale, theme) {
     state.status = 'ready'; state.documentStatus = 'unsupported'; await page.evaluate(() => manager.open('profile-one', { view: 'memory', target: 'user', mode: 'document' }));
     await main.getByText(T('此服务尚未安装记忆组件。'), { exact: true }).waitFor(); assert.equal(await main.locator('.pi-id-editor-text').count(), 0);
     await page.evaluate(() => { profile.memory.enabled = false; manager.profileSaved(profile); });
-    await main.getByText(T('长期记忆未启用：助手不会读取或写入这些内容。'), { exact: true }).first().waitFor();
+    await main.getByText(T('长期记忆未启用：伙伴不会读取或写入这些内容。'), { exact: true }).first().waitFor();
     assert.deepEqual(errors, [], 'no pageerror');
     console.log(`PASS knowledge ${width} ${locale} ${theme}: ${calls.length} mutations/actions/documents; ${screenshots.length} screenshots`);
     await context.close();

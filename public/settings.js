@@ -171,7 +171,7 @@ function start() {
         activeProfileMetadata = view === 'profiles' ? metadata : null;
         const viewEpoch = ++settingsViewEpoch;
         window.PiExtensions?.setView(view, extensionTab ? tab : view);
-        $('workspace-settings-title').textContent = translateUi(view === 'profiles' ? '助手身份'
+        $('workspace-settings-title').textContent = translateUi(view === 'profiles' ? '伙伴身份'
             : view === 'extensions' ? '扩展' : 'OhMyBuddy 设置');
         state.activeTab = tab;
         if (tab === 'media') { void subagentSettings.open(); void loadMediaChatExecution(); }

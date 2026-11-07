@@ -12,7 +12,7 @@
     function create({ apiFetch, currentCwd }) {
         const U = globalThis.PiIdentityUI, { el, icon, button, chip, card, stat, empty } = U;
         const root = $('pi-profiles-content');
-        $('pi-meta-profile-row')?.querySelector('dt')?.replaceChildren(document.createTextNode(t('助手身份')));
+        $('pi-meta-profile-row')?.querySelector('dt')?.replaceChildren(document.createTextNode(t('伙伴身份')));
         root.classList.add('pi-id-root');
         const list = el('aside', { id: 'pi-profiles-list', class: 'pi-id-list', 'aria-label': t('身份列表') });
         const detail = el('div', { class: 'pi-profile-detail pi-id-detail' });
@@ -84,7 +84,7 @@
         function renderList() {
             const focus = document.activeElement?.id === 'pi-profile-list-query';
             root.classList.toggle('has-profile', Boolean(draft) && !listView);
-            const refresh = button({ label: t('刷新助手身份'), icon: 'rotate', iconOnly: true, variant: 'ghost', size: 'sm', disabled: busy(), attrs: { id: 'pi-profiles-refresh' }, onClick: () => void load() });
+            const refresh = button({ label: t('刷新伙伴身份'), icon: 'rotate', iconOnly: true, variant: 'ghost', size: 'sm', disabled: busy(), attrs: { id: 'pi-profiles-refresh' }, onClick: () => void load() });
             list.replaceChildren(el('div', { class: 'pi-id-list-head' }, [el('h2', {}, [t('身份'), el('span', { class: 'pi-id-count', text: U.number(profiles().length) })]), refresh,
                 button({ label: t('新建'), icon: 'plus', variant: 'primary', size: 'sm', attrs: { id: 'pi-profile-add' }, onClick: () => void editProfile(null) })]),
             el('label', { class: 'pi-id-search' }, [icon('magnifying-glass'), el('input', { id: 'pi-profile-list-query', class: 'pi-id-input', type: 'search', value: listQuery, placeholder: t('搜索身份'), 'aria-label': t('搜索身份'), on: { input: event => { listQuery = event.target.value; filterList(); } } })]));
@@ -114,12 +114,12 @@
                 row.hidden = !`${profile.name} ${profile.description || ''}`.toLocaleLowerCase().includes(query); if (!row.hidden) count++;
             }
             const message = list.querySelector('.pi-profile-list-empty');
-            if (message) { message.hidden = count > 0; message.textContent = t(profiles().length ? '没有匹配的身份，请尝试其他关键词。' : '尚无助手身份。'); }
+            if (message) { message.hidden = count > 0; message.textContent = t(profiles().length ? '没有匹配的身份，请尝试其他关键词。' : '尚无伙伴身份。'); }
         }
         function renderHeader() {
             header.hidden = tabs.hidden = !draft; placeholder.hidden = Boolean(draft);
             if (!draft) {
-                placeholder.replaceChildren(empty({ icon: 'user-gear', title: t('让助手更懂你的工作方式'), text: t('选择一个身份，调整它的行为、偏好和长期记忆。'), actions: [button({ label: t('新建身份'), icon: 'plus', variant: 'primary', onClick: () => void editProfile(null) })] })); return;
+                placeholder.replaceChildren(empty({ icon: 'user-gear', title: t('让伙伴更懂你的工作方式'), text: t('选择一个身份，调整它的行为、偏好和长期记忆。'), actions: [button({ label: t('新建身份'), icon: 'plus', variant: 'primary', onClick: () => void editProfile(null) })] })); return;
             }
             const profile = savedProfile() || draft, health = learningHealth.get(selected)?.health;
             const pending = learningHealth.get(selected)?.drafts?.pending;
@@ -217,7 +217,7 @@
         function renderPersona() {
             if (!draft) { personaRoot.replaceChildren(); return; }
             const basicFields = el('div', { class: 'pi-profile-fields' }, [field('名称', 'name', draft.name, { maxLength: 80, 'aria-required': 'true', placeholder: t('例如：研究伙伴') }),
-                el('small', { id: 'pi-profile-name-error', class: 'pi-id-help', hidden: true }), field('描述', 'description', draft.description, { maxLength: 500, rows: 3, placeholder: t('这个助手擅长什么，与你如何协作？') }, 'textarea')]);
+                el('small', { id: 'pi-profile-name-error', class: 'pi-id-help', hidden: true }), field('描述', 'description', draft.description, { maxLength: 500, rows: 3, placeholder: t('这个伙伴擅长什么，与你如何协作？') }, 'textarea')]);
             const picker = el('div', { class: 'pi-profile-avatar-panel', hidden: true });
             const avatarButton = button({ label: t('更换头像'), variant: 'ghost', attrs: { id: 'pi-profile-avatar-picker', 'aria-expanded': 'false' }, onClick: () => { picker.hidden = !picker.hidden; avatarButton.setAttribute('aria-expanded', String(!picker.hidden)); } });
             avatarButton.className = 'pi-id-avatar is-xl'; avatarButton.setAttribute('aria-label', t('更换头像')); avatarButton.replaceChildren(...avatar(draft).childNodes);
@@ -234,8 +234,8 @@
             } else picker.append(el('p', { class: 'pi-id-help', text: t('保存身份后可上传图片头像。') }));
             const switches = el('div', {}, [
                 U.switchRow({ name: 'enabled', label: t('启用身份'), description: t('允许新建或重新打开的线程使用此身份'), checked: draft.enabled }).row,
-                U.switchRow({ name: 'memoryEnabled', label: t('长期记忆'), description: t('让助手读取并积累 USER / MEMORY 里的内容'), info: t('开启后，助手每轮对话前会读取此身份的 USER.md 与 MEMORY.md，并可以把新的事实写进去。关闭后已有内容保留，USER 仍可手动编辑。'), checked: draft.memory.enabled }).row,
-                U.switchRow({ name: 'learnedEnabled', label: t('已学习技能'), description: t('让助手使用此身份积累的技能'), info: t('已学习技能是此身份在协作中沉淀的可复用做法。关闭后仍会保留技能，你可以继续查看和管理。'), checked: draft.skills.learnedEnabled }).row]);
+                U.switchRow({ name: 'memoryEnabled', label: t('长期记忆'), description: t('让伙伴读取并积累 USER / MEMORY 里的内容'), info: t('开启后，伙伴每轮对话前会读取此身份的 USER.md 与 MEMORY.md，并可以把新的事实写进去。关闭后已有内容保留，USER 仍可手动编辑。'), checked: draft.memory.enabled }).row,
+                U.switchRow({ name: 'learnedEnabled', label: t('已学习技能'), description: t('让伙伴使用此身份积累的技能'), info: t('已学习技能是此身份在协作中沉淀的可复用做法。关闭后仍会保留技能，你可以继续查看和管理。'), checked: draft.skills.learnedEnabled }).row]);
             const textarea = el('textarea', { id: 'pi-profile-soul-text', name: 'soul', class: 'pi-id-editor-text', value: draft.soul, spellcheck: 'false', 'aria-label': t('行为说明'), hidden: soulPreview });
             const preview = el('div', { class: 'pi-id-editor-preview', hidden: !soulPreview }); U.markdown(preview, draft.soul);
             const toggle = () => U.segmented({ label: t('编辑器'), value: soulPreview ? 'preview' : 'edit', items: [{ id: 'edit', label: t('编辑'), icon: 'pen' }, { id: 'preview', label: t('预览'), icon: 'eye' }], onChange: next => { soulPreview = next === 'preview'; textarea.hidden = soulPreview; preview.hidden = !soulPreview; U.markdown(preview, draft.soul); segment.replaceChildren(toggle()); } });
@@ -250,9 +250,9 @@
             saveBar = U.createSaveBar({ onSave: () => void saveProfile(), onDiscard: async () => { if (await guard()) renderPersona(); }, saveLabel: t(draft.id ? '保存身份' : '创建身份'), hint: t('保存后，新建或重新打开的线程会使用新设置') });
             const form = el('form', { id: 'pi-profile-form', class: 'pi-profile-form', novalidate: '', on: { submit: event => { event.preventDefault(); void saveProfile(); }, input: event => updateField(event.target), change: event => updateField(event.target) } }, [
                 el('div', { class: 'pi-id-grid-2' }, [card({ title: t('基本信息'), icon: 'id-badge' }, [el('div', { class: 'pi-profile-basics' }, [avatarButton, basicFields]), picker]), card({ title: t('能力'), icon: 'sliders' }, [switches])]),
-                card({ title: t('个性与行为'), icon: 'feather' }, [editor, el('p', { class: 'pi-id-help pi-profile-soul-help', text: t('描述助手的角色、语气和协作原则，支持 Markdown。') })]),
+                card({ title: t('个性与行为'), icon: 'feather' }, [editor, el('p', { class: 'pi-id-help pi-profile-soul-help', text: t('描述伙伴的角色、语气和协作原则，支持 Markdown。') })]),
                 el('details', { class: 'pi-id-card pi-profile-advanced' }, [el('summary', { text: t('高级设置') }), el('div', { class: 'pi-id-grid-2' }, [field('长期记忆 · MEMORY', 'memoryCharLimit', draft.memory.memoryCharLimit ?? 16000, { type: 'number', min: 256, max: 65536 }), field('关于你 · USER', 'userCharLimit', draft.memory.userCharLimit ?? 8000, { type: 'number', min: 256, max: 32768 })]), el('p', { class: 'pi-id-help', text: t('缩小上限不会删除已有内容') })])]);
-            personaRoot.replaceChildren(el('div', { class: 'pi-id-page-head' }, [el('div', {}, [el('h3', { text: t('设定') }), el('p', { text: t('让助手按你的方式协作。') })])]), el('div', { id: 'pi-profile-persona-notice' }), form, saveBar.element);
+            personaRoot.replaceChildren(el('div', { class: 'pi-id-page-head' }, [el('div', {}, [el('h3', { text: t('设定') }), el('p', { text: t('让伙伴按你的方式协作。') })])]), el('div', { id: 'pi-profile-persona-notice' }), form, saveBar.element);
             renderPersonaNotice(); renderProposal(); syncSave();
         }
         function updateField(input) {
@@ -338,7 +338,7 @@
             const proposals = (learningData?.proposals || []).filter(p => !p.status || ['pending', 'proposed', 'ready'].includes(p.status));
             const memoryOn = profile.memory?.enabled, skillsOn = profile.skills?.learnedEnabled !== false;
             const stats = el('div', { class: 'pi-id-stats' }, [
-                stat({ icon: 'brain', label: t('记忆'), value: memoryOn ? U.number(counts?.memory?.total) : t('未启用'), detail: counts ? t('关于你 {0} · 长期 {1} · 项目 {2}', U.number(counts.memory?.user), U.number(counts.memory?.memory), U.number(counts.memory?.project)) : t('助手跨对话记住的信息'), tone: memoryOn ? 'accent' : 'off', onClick: () => void openSection(memoryOn ? 'memory' : 'persona') }),
+                stat({ icon: 'brain', label: t('记忆'), value: memoryOn ? U.number(counts?.memory?.total) : t('未启用'), detail: counts ? t('关于你 {0} · 长期 {1} · 项目 {2}', U.number(counts.memory?.user), U.number(counts.memory?.memory), U.number(counts.memory?.project)) : t('伙伴跨对话记住的信息'), tone: memoryOn ? 'accent' : 'off', onClick: () => void openSection(memoryOn ? 'memory' : 'persona') }),
                 stat({ icon: 'toolbox', label: t('技能'), value: skillsOn ? U.number(counts?.skill?.active) : t('未启用'), badge: pending ? t('{0} 待审', U.number(pending)) : undefined, detail: t('审核后才会启用。'), tone: skillsOn ? 'blue' : 'off', onClick: () => void openSection(skillsOn ? 'skills' : 'persona', { drafts: pending > 0 }) }),
                 stat({ icon: 'seedling', label: t('后台学习'), value: health ? t(healthShort[health.state] || '不可用') : '—', detail: health?.today ? t('今日 {0} / {1} 次', U.number(health.today.runs), U.number(health.today.maxRuns)) : t('对话之后整理记忆与技能草稿'), tone: healthTone[health?.state] || 'off', onClick: () => void openSection('learning') })]);
             const attention = el('div', { class: 'pi-id-attention' });
@@ -365,7 +365,7 @@
             const operations = { create: ['新增', 'plus', 'green'], update: ['更新', 'pen', 'blue'], delete: ['删除', 'trash-can', 'danger'], restore: ['恢复', 'rotate-left', 'green'], undo: ['撤销', 'arrow-rotate-left', 'neutral'], consolidate: ['整理合并', 'object-group', 'violet'], enable: ['启用', 'toggle-on', 'green'], disable: ['停用', 'toggle-off', 'neutral'] };
             for (const receipt of receipts.slice(0, receiptLimit)) {
                 const [label, name, tone] = operations[receipt.operation] || ['更新', 'pen', 'blue'];
-                const origin = t(receipt.origin === 'learning' ? '后台学习' : receipt.origin === 'agent' ? '助手' : '手动');
+                const origin = t(receipt.origin === 'learning' ? '后台学习' : receipt.origin === 'agent' ? '伙伴' : '手动');
                 timeline.append(el('li', {}, [el('span', { class: 'pi-id-timeline-icon', dataset: { tone } }, [icon(name)]), el('div', { class: 'pi-id-timeline-copy' }, [
                     el('button', { type: 'button', class: 'pi-profile-receipt', on: { click: () => revealKnowledge(selected, receipt.itemId, receipt.kind, receipt.source?.sessionId || receipt.sessionId) } }, [el('strong', { text: t(receipt.kind === 'skill' ? ({ create: '新增技能', update: '更新技能', delete: '删除技能', restore: '恢复技能' }[receipt.operation] || label) : ({ create: '新增记忆', update: '更新记忆', delete: '删除记忆', restore: '恢复记忆' }[receipt.operation] || label)) }), receipt.preview ? ` “${receipt.preview}”` : '']),
                     el('small', {}, [origin, ' · ', U.time(receipt.at || receipt.createdAt)])])]));
@@ -568,7 +568,7 @@
             document.querySelectorAll('[data-manage-route="profiles"]').forEach(item => { item.hidden = !enabled; });
             if (!enabled && wasEnabled) {
                 ++epoch; ++openEpoch; ++overviewEpoch; ++proposalEpoch; call(knowledge, 'close'); call(learning, 'close'); snapshot = null; renderHeader();
-                ui.toast(t('此服务暂不支持助手身份，未保存草稿仍保留。'), { tone: 'warning' }); syncSave();
+                ui.toast(t('此服务暂不支持伙伴身份，未保存草稿仍保留。'), { tone: 'warning' }); syncSave();
                 $('pi-session-profile').hidden = true; $('pi-meta-profile-row').hidden = true;
             }
             if (enabled && !wasEnabled && visible) open(openOptions);

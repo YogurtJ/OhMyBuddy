@@ -303,7 +303,7 @@
             const input = el('textarea'); input.rows = 3; input.required = true; input.placeholder = t('例如：回答数学题时先给结论，再给推导。');
             input.value = draft; input.maxLength = snapshot?.capabilities?.maxContentLength || 65536; input.oninput = () => { draft = input.value; }; label.append(input); form.append(label);
             const foot = el('div', undefined, 'pi-chat-knowledge-form-foot');
-            foot.append(el('small', t('手动纠错属于当前助手范围，不会伪造聊天来源；仅经服务端核实的线程回执在此显示。'), 'pi-chat-knowledge-footnote'));
+            foot.append(el('small', t('手动纠错属于当前伙伴范围，不会伪造聊天来源；仅经服务端核实的线程回执在此显示。'), 'pi-chat-knowledge-footnote'));
             const save = el('button', t('保存纠错'), 'pi-ck-button pi-ck-primary'); save.type = 'submit';
             save.disabled = busy || !!uncertain || !writable('create');
             if (uncertain && !busy) foot.append(button(t('刷新回执核对'), () => void refresh()));
