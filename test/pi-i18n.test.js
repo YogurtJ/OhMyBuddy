@@ -188,6 +188,11 @@ test('all catalogs, numeric placeholders and static/source bindings are complete
     for (const name of fs.readdirSync(path.join(root, 'public')).filter(n => n.endsWith('.js') && n !== 'pi-i18n-catalog.js')) {
         const source = fs.readFileSync(path.join(root, 'public', name), 'utf8');
         for (const match of source.matchAll(/translateUi\(("(?:[^"\\]|\\.)*")/g)) assert.ok(sources.has(JSON.parse(match[1])), `${name}: missing ${match[1]}`);
+        // Single-quoted literals too: they reach English pages untranslated just the same.
+        for (const match of source.matchAll(/translateUi\('((?:[^'\\\n]|\\.)*)'/g)) {
+            const text = JSON.parse(`"${match[1].replace(/\\'/g, "'").replace(/"/g, '\\"')}"`);
+            if (/[\u4e00-\u9fff]/.test(text)) assert.ok(sources.has(text), `${name}: missing '${match[1]}'`);
+        }
     }
 });
 

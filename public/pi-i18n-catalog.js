@@ -11642,5 +11642,15 @@
         ["移到回收站的话题会出现在这里。", "Topics you move to the trash appear here."],
         ["{0} 段聊天", "{0} chat sessions", "{0} chat session"]
     );
+    rows.push(
+        ["草稿线程已变化，请重新预约", "The draft's thread changed. Schedule it again."],
+        ["会话不属于当前项目，请重新选择", "This thread is not in the current project. Choose it again."],
+        ["未确认", "Unconfirmed"],
+        ["图片暂时无法读取", "The image can't be loaded right now"],
+        ["选择目录", "Choose folder"],
+        ["已发送", "Sent"],
+        ["已结束", "Ended"],
+        ["一次最多添加 8 个原件附件", "You can add up to 8 original-file attachments at a time"]
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

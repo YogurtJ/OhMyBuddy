@@ -566,7 +566,9 @@
             this.creatingTopic = true; this.renderPane();
             const post = revision => this.api(`/api/pi/bots/${encodeURIComponent(profileId)}/windows`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ expectedRevision: revision, groupId: window.PiBotTopicManager?.selectedGroup(profileId) || null })
+                // The server's default title is Chinese; send the interface-language one it also recognises as a default.
+                body: JSON.stringify({ expectedRevision: revision, title: globalThis.PiI18n?.locale === 'en' ? 'New topic' : '新话题',
+                    groupId: window.PiBotTopicManager?.selectedGroup(profileId) || null })
             });
             try {
                 let result;

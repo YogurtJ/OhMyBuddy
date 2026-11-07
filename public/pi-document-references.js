@@ -39,8 +39,9 @@
     }
     function validateCount(text) {
         const refs = split(text).filter(part => part.reference).map(part => part.reference);
-        if (refs.length > 8) throw new Error('一次最多添加 8 个原件附件');
-        if (refs.filter(ref => !['file', 'image'].includes(ref.format)).length > 5) throw new Error('一次最多添加 5 个文档附件');
+        const t = text => globalThis.PiI18n?.t ? globalThis.PiI18n.t(text) : text;
+        if (refs.length > 8) throw new Error(t('一次最多添加 8 个原件附件'));
+        if (refs.filter(ref => !['file', 'image'].includes(ref.format)).length > 5) throw new Error(t('一次最多添加 5 个文档附件'));
     }
     const api = { valid, marker, split, references, validateCount };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;

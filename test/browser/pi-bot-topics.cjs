@@ -138,9 +138,9 @@ const REV = letter => letter.repeat(64);
                 await page.waitForFunction(id => decodeURIComponent(location.hash).includes(`windowId=${id}`), T3);
                 assert.equal(await page.locator('#pi-session-pane.open').count(), 0, 'the phone drawer closes when opening the new topic');
                 assert.deepEqual(bodies.slice(0, 3).map(([, body]) => body), [
-                    { expectedRevision: REV('a'), groupId: null },
-                    { expectedRevision: REV('a'), groupId: null },
-                    { expectedRevision: REV('b'), groupId: null }]);
+                    { expectedRevision: REV('a'), title: '新话题', groupId: null },
+                    { expectedRevision: REV('a'), title: '新话题', groupId: null },
+                    { expectedRevision: REV('b'), title: '新话题', groupId: null }]);
                 await page.locator('.pi-bot-empty h2').filter({ hasText: '新话题' }).waitFor();
                 assert.match(await page.locator('.pi-bot-empty p').textContent(), /想聊什么都可以直接说/);
                 await page.waitForFunction(() => document.querySelector('#pi-bot-header .pi-bot-who-topic')?.textContent === '新话题');
