@@ -1,6 +1,6 @@
 {
   "name": "ohmybuddy",
-  "version": "1.12.1",
+  "version": "1.12.2",
   "description": "Self-hosted AI buddy that remembers you: personal AI agent with visible long-term memory, WeChat access and a full Pi coding-agent workspace for any browser",
   "main": "server.js",
   "private": true,
