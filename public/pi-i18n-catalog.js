@@ -11664,5 +11664,16 @@
         ["已结束", "Ended"],
         ["一次最多添加 8 个原件附件", "You can add up to 8 original-file attachments at a time"]
     );
+    rows.push(
+        ["和工作台 Agent 一样完全放手，直接执行不拦截", "Unrestricted like the workspace Agent; runs directly without tool-layer gates"],
+        ["读写任意文件", "Read and write any file"],
+        ["运行任何命令和脚本", "Run any command and script"],
+        ["安装依赖与管理服务", "Install dependencies and manage services"],
+        ["建议新建话题", "Propose a new topic"],
+        ["现在的做事方式是“放手”：和工作台 Agent 一样完全放手，直接执行不设工具层拦截。", "My way of working is now “Hands-off”: unrestricted like the workspace Agent, running directly without tool-layer approval cards."],
+        ["现在的做事方式是“稳妥”：几乎所有事我直接办好，只有少数危险操作会先问你。", "My way of working is now “Careful”: I get almost everything done directly and ask you first only about a few dangerous actions."],
+        ["“放手”与工作台 Agent 一样不做工具层拦截；“稳妥”只认得上面列出的常见高风险操作，藏在复杂脚本里的不一定认得出。", "“Hands-off” applies no tool-layer gate, just like the workspace Agent; “Careful” recognizes only the common high-risk actions listed above, so ones hidden in complex scripts may not be caught."],
+        ["“稳妥”和“每次都问”下不会列出全部环境变量。", "It never lists all environment variables in “Careful” or “Ask every time” mode."]
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

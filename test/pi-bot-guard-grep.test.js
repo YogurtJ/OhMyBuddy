@@ -155,6 +155,7 @@ test('verified Bot SDK registration overrides native grep; ordinary Pi sessions 
     t.after(() => profiles.dispose());
     const bots = new BotService({ store, profiles, supervisor: { on() {}, off() {} } });
     const created = await bots.create({ expectedRevision: (await profiles.state()).revision });
+    await bots.update(created.bot.id, { expectedRevision: (await profiles.state()).revision, changes: { bot: { permissions: { preset: 'balanced' } } } });
     const { session: native } = await bots.resolve(created.bot.id, created.window.id), manager = sdk.SessionManager.open(native.path);
     const context = await bots.windowContext(manager, { cwd: native.cwd, sessionId: native.id, sessionPath: native.path });
     fs.writeFileSync(path.join(native.cwd, 'auth.json'), protectedMarker);

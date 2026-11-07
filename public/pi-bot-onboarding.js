@@ -28,8 +28,8 @@
     const FINE_POINTER = '(hover: hover) and (pointer: fine)';
     const matches = query => Boolean(globalThis.matchMedia?.(query).matches);
     const WORK = {
-        free: () => translateUi("现在的做事方式是“放手”：几乎所有事我直接办好，只有少数危险操作会先问你。"),
-        balanced: () => translateUi("现在的做事方式是“稳妥”：运行命令、改工作目录以外的文件之前，会弹出确认等你允许。"),
+        free: () => translateUi("现在的做事方式是“放手”：和工作台 Agent 一样完全放手，直接执行不设工具层拦截。"),
+        balanced: () => translateUi("现在的做事方式是“稳妥”：几乎所有事我直接办好，只有少数危险操作会先问你。"),
         ask: () => translateUi("现在的做事方式是“每次都问”：除了看和回答，每一步动手前都会弹出确认。")
     };
 

@@ -44,47 +44,49 @@ function detailFor(kind, toolName, input) {
 function approvalFor({ permissions, preset = permissions?.preset, toolName, input, cwd, agentDir, annotations }) {
     if (!PRESETS.includes(preset)) { preset = 'ask'; permissions = undefined; }
     if (typeof toolName !== 'string') return { block: true, reason: BLOCKED.protected };
+    // Hands-off ('free') is unrestricted like the workspace Pi Agent: no tool-layer gate.
+    if (preset === 'free') return null;
     const ask = (kind, remember = false) => {
         const rule = remember ? ruleFor({ toolName, input, cwd, agentDir }) : null;
         if (matchesRule(permissions?.rules, rule, agentDir)) return null;
         return { kind, detail: detailFor(kind, toolName, input), ...(rule ? { rule } : {}) };
     };
-    // Reading tools check path access: credentials ask once in Hands-off and are refused in careful
-    // modes; OhMyBuddy/Pi state paths run in Hands-off and ask once in careful modes.
+    // Reading tools check path access: credentials ask once in Careful ('balanced') and are refused
+    // in Ask-every-time ('ask'); OhMyBuddy/Pi state paths run in Careful and ask once in Ask-every-time.
     const fileRead = ['read', 'grep', 'find', 'ls'].includes(toolName);
     if (!WRITES.has(toolName) && (fileRead || typeof input?.path === 'string')) {
         const access = pathAccess(input?.path ?? (toolName === 'read' ? null : cwd), cwd, agentDir);
         const selectors = fileRead ? [input?.glob, input?.pattern].filter(value => typeof value === 'string') : [];
         if (access === 'invalid') return { block: true, reason: BLOCKED.protected };
         if (access === 'credential' || selectors.some(credentialName))
-            return preset === 'free' ? ask('action') : { block: true, reason: BLOCKED.protected };
-        if ((access === 'state' || selectors.some(privateStateName)) && preset !== 'free')
+            return preset === 'balanced' ? ask('action') : { block: true, reason: BLOCKED.protected };
+        if ((access === 'state' || selectors.some(privateStateName)) && preset !== 'balanced')
             return ask('action');
     }
     if (SELF_ASKING.has(toolName)) return null;
     // A check-in the Bot sets for itself is one message, governed by the user's proactive settings
     // (on/off, quiet hours, daily limit) and cancellable in settings, so it does not ask each time.
-    if (toolName === 'bot_schedule') return preset === 'free' || input?.action === 'list' || input?.action === 'create' && input?.proactive === true ? null : ask('schedule');
+    if (toolName === 'bot_schedule') return preset === 'balanced' || input?.action === 'list' || input?.action === 'create' && input?.proactive === true ? null : ask('schedule');
     if (COMMANDS.has(toolName)) {
         const command = classifyCommand({ toolName, input, cwd, agentDir });
         if (command.status === 'blocked') return { block: true, reason: BLOCKED.protected };
-        if (command.status === 'credential') return preset === 'free' ? ask('command') : { block: true, reason: BLOCKED.protected };
-        // Hands-off is full access: everything runs except credentials and the short list of dangerous commands.
-        if (preset === 'free') return freeModeAsks({ toolName, input }) || annotations?.destructiveHint === true ? ask('command') : null;
+        if (command.status === 'credential') return preset === 'balanced' ? ask('command') : { block: true, reason: BLOCKED.protected };
+        // Careful ('balanced') runs ordinary commands and state paths directly; only the short list of dangerous commands asks.
+        if (preset === 'balanced') return freeModeAsks({ toolName, input }) || annotations?.destructiveHint === true ? ask('command') : null;
         if (command.status === 'state') return ask('command');
         return ask('command', command.status === 'safe' && annotations?.destructiveHint !== true);
     }
-    if (DELEGATES.has(toolName)) return preset === 'free' ? null : ask('delegate');
+    if (DELEGATES.has(toolName)) return preset === 'balanced' ? null : ask('delegate');
     if (WRITES.has(toolName)) {
         const operation = fileOperation({ input, cwd, agentDir });
         if (operation.status === 'blocked') return { block: true, reason: BLOCKED.protected };
         const outside = !insideWorkspace(cwd, input?.path);
         const kind = outside ? 'outside' : 'write';
-        if (operation.status === 'credential') return preset === 'free' ? ask(kind) : { block: true, reason: BLOCKED.protected };
-        // Hands-off asks only for credentials, OhMyBuddy's own runtime, autostart/scheduler locations and directories.
-        if (preset === 'free') return operation.critical || annotations?.destructiveHint === true ? ask(kind) : null;
+        if (operation.status === 'credential') return preset === 'balanced' ? ask(kind) : { block: true, reason: BLOCKED.protected };
+        // Careful ('balanced') asks only for credentials, OhMyBuddy's own runtime, autostart/scheduler locations and directories.
+        if (preset === 'balanced') return operation.critical || annotations?.destructiveHint === true ? ask(kind) : null;
         if (operation.status === 'state' || operation.status === 'risk' || annotations?.destructiveHint === true) return ask(kind);
-        return outside ? ask('outside', true) : preset === 'ask' ? ask('write', true) : null;
+        return outside ? ask('outside', true) : ask('write', true);
     }
     if (annotations?.destructiveHint === true) return ask('action');
     if (preset !== 'ask') return null;

@@ -22,11 +22,11 @@ test('owner permission patches add, replace and revoke exact grants without chan
     assert.deepEqual(settings.readBot({ bot }).permissions, bot.permissions);
     assert.deepEqual(settings.applyBotPatch(bot, { job: 'routine' }).permissions, bot.permissions);
     const rule = ruleFor({ toolName: 'bash', input: { command: 'pwd' }, cwd, agentDir });
-    const patched = settings.applyBotPatch(bot, { permissions: { preset: 'balanced', rules: [unknown, invalidOld, rule] } });
-    assert.deepEqual(patched.permissions, { preset: 'balanced', future: { preserved: true }, rules: [unknown, invalidOld, rule] });
+    const patched = settings.applyBotPatch(bot, { permissions: { preset: 'ask', rules: [unknown, invalidOld, rule] } });
+    assert.deepEqual(patched.permissions, { preset: 'ask', future: { preserved: true }, rules: [unknown, invalidOld, rule] });
     assert.equal(approvalFor({ permissions: patched.permissions, toolName: 'bash', input: { command: 'pwd' }, cwd, agentDir }), null);
     const revoked = settings.applyBotPatch(patched, { permissions: { rules: [unknown, invalidOld] } });
-    assert.equal(revoked.permissions.preset, 'balanced');
+    assert.equal(revoked.permissions.preset, 'ask');
     assert.deepEqual(revoked.permissions.future, { preserved: true });
     assert.equal(approvalFor({ permissions: revoked.permissions, toolName: 'bash', input: { command: 'pwd' }, cwd, agentDir }).kind, 'command');
     assert.deepEqual(settings.defaultBot({ workspace: cwd }).permissions, { preset: 'free', rules: [] });

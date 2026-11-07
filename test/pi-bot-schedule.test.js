@@ -225,7 +225,7 @@ test('the verified Bot tool returns schedule details, reuses approval values, an
     const f = await fixture(t), w = await workerTool(t, f);
     const tool = w.tools.get('bot_schedule'); assert.ok(tool);
     assert.equal(Object.hasOwn(tool.parameters.properties, 'expectedRevision'), false, 'revision is not model input');
-    await f.bots.update(f.profileId, { expectedRevision: (await f.store.profiles.state()).revision, changes: { bot: { permissions: { preset: 'balanced' } } } });
+    await f.bots.update(f.profileId, { expectedRevision: (await f.store.profiles.state()).revision, changes: { bot: { permissions: { preset: 'ask' } } } });
     const params = { action: 'create', title: 'Read', message: 'Read with me', repeat: '0  19 * * *' };
     const event = { toolName: 'bot_schedule', toolCallId: 'tool-create', input: params };
     assert.equal(await w.handlers.get('tool_call')(event, w.ctx), undefined);

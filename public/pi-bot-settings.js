@@ -7,7 +7,23 @@
     const item = (key, label) => Object.freeze({ key, label });
     const STYLES = [
         {
-            id: 'free', level: 3, name: () => translateUi("放手"), line: () => translateUi("大多数事直接办，少数高风险操作先问你"),
+            id: 'free', level: 3, name: () => translateUi("放手"), line: () => translateUi("和工作台 Agent 一样完全放手，直接执行不拦截"),
+            direct: [
+                item('files', () => translateUi("读写任意文件")),
+                item('commands', () => translateUi("运行任何命令和脚本")),
+                item('install', () => translateUi("安装依赖与管理服务")),
+                item('web', () => translateUi("上网查资料")),
+                item('memory-schedule', () => translateUi("记忆和 OhMyBuddy 定时任务")),
+                item('delegate', () => translateUi("交给其他助手")),
+                item('state', () => translateUi("读写 OhMyBuddy 的设置和记录"))
+            ],
+            asks: [
+                item('topic', () => translateUi("建议新建话题"))
+            ],
+            refused: []
+        },
+        {
+            id: 'balanced', level: 2, name: () => translateUi("稳妥"), line: () => translateUi("大多数事直接办，少数高风险操作先问你"),
             direct: [
                 item('files', () => translateUi("读写文件")),
                 item('commands', () => translateUi("运行命令和脚本")),
@@ -29,24 +45,6 @@
                 item('runtime', () => translateUi("OhMyBuddy 正在运行的程序目录"))
             ],
             refused: []
-        },
-        {
-            id: 'balanced', level: 2, name: () => translateUi("稳妥"), line: () => translateUi("工作目录里直接做，运行命令前先问你"),
-            direct: [
-                item('read', () => translateUi("读文件")),
-                item('web', () => translateUi("上网查资料")),
-                item('memory', () => translateUi("记忆")),
-                item('workspace', () => translateUi("在工作目录里写文件")),
-                item('media', () => translateUi("图片与语音"))
-            ],
-            asks: [
-                item('commands', () => translateUi("运行任何命令")),
-                item('outside', () => translateUi("写工作目录以外的文件")),
-                item('delegate', () => translateUi("交给其他助手")),
-                item('schedule', () => translateUi("设定或取消 OhMyBuddy 定时任务")),
-                item('state', () => translateUi("读写 OhMyBuddy 的设置和记录"))
-            ],
-            refused: [item('credentials', () => translateUi("密码和密钥文件"))]
         },
         {
             id: 'ask', level: 1, name: () => translateUi("每次都问"), line: () => translateUi("除了看和回答，每一步都先问你"),
@@ -660,9 +658,9 @@
             const boundary = disclosure('is-boundary', 'fa-circle-info', el('strong', null, translateUi("安全边界")), translateUi("这是工具层的检查，不是系统沙箱"));
             const bullets = el('ul', 'pi-bot-sheet-bullets');
             for (const text of [translateUi("允许执行的命令以 OhMyBuddy 服务的权限运行，不会被隔离。"),
-                translateUi("“放手”只认得上面列出的常见高风险操作，藏在复杂脚本里的不一定认得出。"),
+                translateUi("“放手”与工作台 Agent 一样不做工具层拦截；“稳妥”只认得上面列出的常见高风险操作，藏在复杂脚本里的不一定认得出。"),
                 translateUi("对外发消息、明显花钱：靠 {0} 按指令先问你和对应功能自己的确认，工具层不一定识别得出。", bot.name),
-                translateUi("任何方式下都不会列出全部环境变量。")]) bullets.append(el('li', null, text));
+                translateUi("“稳妥”和“每次都问”下不会列出全部环境变量。")]) bullets.append(el('li', null, text));
             boundary.content.append(bullets);
             remember(boundary.details, 'boundary');
             // Grants kept from approval cards ("always allow"): shown exactly, revocable here, never added here.

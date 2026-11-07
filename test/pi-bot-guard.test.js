@@ -46,14 +46,18 @@ test('outside writes are recognised through URLs, spaces, symlinks and hard link
         assert.equal(insideWorkspace(workspace, target), false, JSON.stringify(target));
 });
 
-test('careful presets decide which steps ask first', () => {
-    assert.equal(ask('free', 'bash', { command: 'rm -rf x' }).kind, 'command');
+test('presets decide which steps ask first', () => {
+    assert.equal(ask('free', 'bash', { command: 'rm -rf x' }), null);
+    assert.equal(ask('balanced', 'bash', { command: 'rm -rf x' }).kind, 'command');
     assert.equal(ask(undefined, 'bash', { command: 'ls' }).kind, 'command');
-    assert.equal(ask('balanced', 'bash', { command: 'ls' }).rule.value, 'ls');
-    assert.equal(ask('balanced', 'powershell', { command: 'Get-ChildItem' }).rule.value, 'Get-ChildItem');
-    assert.deepEqual(ask('balanced', 'agent_thread', { message: 'Do it' }), { kind: 'delegate', detail: 'Do it' });
-    assert.equal(ask('balanced', 'write', { path: 'link/a.md' }).kind, 'outside');
-    assert.equal(ask('balanced', 'write', { path: pathToFileURL(path.join(outside, 'note.md')).href }).kind, 'outside');
+    assert.equal(ask('balanced', 'bash', { command: 'ls' }), null);
+    assert.equal(ask('ask', 'bash', { command: 'ls' }).rule.value, 'ls');
+    assert.equal(ask('ask', 'powershell', { command: 'Get-ChildItem' }).rule.value, 'Get-ChildItem');
+    assert.equal(ask('balanced', 'agent_thread', { message: 'Do it' }), null);
+    assert.deepEqual(ask('ask', 'agent_thread', { message: 'Do it' }), { kind: 'delegate', detail: 'Do it' });
+    assert.equal(ask('balanced', 'write', { path: 'link/a.md' }), null);
+    assert.equal(ask('ask', 'write', { path: 'link/a.md' }).kind, 'outside');
+    assert.equal(ask('ask', 'write', { path: pathToFileURL(path.join(outside, 'note.md')).href }).kind, 'outside');
     assert.equal(ask('balanced', 'edit', { path: 'plan.md' }), null);
     for (const tool of ['memory_add', 'deliver_files', 'get_attachment', 'mcp_tool']) assert.equal(ask('balanced', tool, { content: 'x' }), null, tool);
     assert.deepEqual(ask('balanced', 'mcp_tool', {}, { destructiveHint: true }), { kind: 'action', detail: 'mcp_tool' });
@@ -63,10 +67,10 @@ test('careful presets decide which steps ask first', () => {
     assert.equal(ask('ask', 'mcp_reader', {}, { readOnlyHint: true }), null);
     for (const tool of ['read', 'grep', 'web_search', 'memory_search', 'bot_setup_propose', 'ask_user_question', 'codemode'])
         assert.equal(ask('ask', tool, tool === 'read' ? { path: 'plan.md' } : {}), null, tool);
-    assert.equal(ask('balanced', 'bash', { command: 'echo x; '.repeat(400) }).detail.length, 2001, 'long details are clipped');
+    assert.equal(ask('ask', 'bash', { command: 'echo x; '.repeat(400) }).detail.length, 2001, 'long details are clipped');
 });
 
-test('bot_schedule is reading for list and asks for create and cancel in careful presets', () => {
+test('bot_schedule is reading for list, runs in free and balanced, and asks for create and cancel in ask mode', () => {
     const create = { action: 'create', title: '吃晚饭', once: '2026-10-26 19:00', timeZone: 'Asia/Shanghai' };
     const cancel = { action: 'cancel', id: 'task-id', approvalJob: { title: '工作日简报',
         schedule: { kind: 'cron', expression: '0 9 * * 1-5', timeZone: 'Asia/Shanghai' } } };
@@ -74,7 +78,7 @@ test('bot_schedule is reading for list and asks for create and cancel in careful
         assert.equal(ask(preset, 'bot_schedule', { action: 'list' }), null);
         for (const [input, detail] of [[create, 'Create: 吃晚饭\n2026-10-26 19:00 (Asia/Shanghai)'],
             [cancel, 'Cancel: 工作日简报\n0 9 * * 1-5 (Asia/Shanghai)']]) {
-            assert.deepEqual(ask(preset, 'bot_schedule', input, { readOnlyHint: true }), preset === 'free' ? null : { kind: 'schedule', detail });
+            assert.deepEqual(ask(preset, 'bot_schedule', input, { readOnlyHint: true }), preset !== 'ask' ? null : { kind: 'schedule', detail });
         }
     }
     assert.deepEqual(ask('ask', 'bot_schedule', { ...cancel, approvalJob: { title: '晚饭',

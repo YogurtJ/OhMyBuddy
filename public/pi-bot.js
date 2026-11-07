@@ -1057,8 +1057,8 @@
     // as Bot settings (pi-bot-settings.js, whose lists the guard test checks).
     const workLine = (id, fallback) => () => globalThis.PiBotWorkStyles?.get(id)?.line() || fallback();
     const WORK_STYLES = [
-        ['free', () => translateUi("放手"), workLine('free', () => translateUi("大多数事直接办，少数高风险操作先问你"))],
-        ['balanced', () => translateUi("稳妥"), workLine('balanced', () => translateUi("工作目录里直接做，运行命令前先问你"))],
+        ['free', () => translateUi("放手"), workLine('free', () => translateUi("和工作台 Agent 一样完全放手，直接执行不拦截"))],
+        ['balanced', () => translateUi("稳妥"), workLine('balanced', () => translateUi("大多数事直接办，少数高风险操作先问你"))],
         ['ask', () => translateUi("每次都问"), workLine('ask', () => translateUi("除了看和回答，每一步都先问你"))]
     ];
     const workRank = value => WORK_STYLES.findIndex(([key]) => key === value);

@@ -58,10 +58,12 @@ const PROBES = {
     outside: [write(path.join(outside, 'new.txt')), edit(path.join(outside, 'other.txt'))],
     schedule: [schedule('create'), schedule('cancel')],
     write: [write(path.join(cwd, 'new.txt')), edit(path.join(cwd, 'notes.txt'))],
-    other: [{ toolName: 'media_generate', input: { modelId: 'image', parameters: {} } }, { toolName: 'some_new_tool', input: {} }]
+    other: [{ toolName: 'media_generate', input: { modelId: 'image', parameters: {} } }, { toolName: 'some_new_tool', input: {} }],
+    topic: [{ toolName: 'bot_topic_propose', input: { title: '学习计划' } }]
 };
 
-const decide = (preset, probe) => approvalFor({ permissions: { preset, rules: [] }, cwd, agentDir, ...probe });
+// bot_topic_propose asks inside its own execute handler in every preset (see bot-topic-tool.ts).
+const decide = (preset, probe) => probe.toolName === 'bot_topic_propose' ? { kind: 'topic' } : approvalFor({ permissions: { preset, rules: [] }, cwd, agentDir, ...probe });
 const describe = probe => `${probe.toolName} ${JSON.stringify(probe.input)}`;
 
 test('the three ways of working are listed from most freedom to most careful', () => {

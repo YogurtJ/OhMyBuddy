@@ -54,7 +54,7 @@ export function registerBotSchedule(pi: ExtensionAPI, verified: (ctx: any) => bo
             if (!verified(ctx)) throw new Error('Scheduling is unavailable in this conversation');
             const input = normalizeScheduleInput(event.input);
             prepared.set(event.toolCallId, { input });
-            if (input.action !== 'cancel' || preset === 'free' || !ctx.hasUI || scheduledRunActive(ctx.sessionManager)) return { input };
+            if (input.action !== 'cancel' || preset === 'free' || preset === 'balanced' || !ctx.hasUI || scheduledRunActive(ctx.sessionManager)) return { input };
             const result = await request('list', {}, signal);
             if (/^[a-f0-9]{24}$/.test(input.id)) {
                 // The Bot's own check-in is cancelled the way it was set, without asking; a reminder of a

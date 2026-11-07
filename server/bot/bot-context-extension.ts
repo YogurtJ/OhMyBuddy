@@ -257,7 +257,7 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
             const grep = createGrepToolDefinition(context.cwd);
             pi.registerTool({ ...grep,
                 description: `${grep.description} In Bot conversations, searches only descriptor-verified UTF-8 text files; protected files and aliases are excluded. Bounded searches report incomplete results; context is limited to 20 lines and limit to 1000.`,
-                execute: createBotGrepExecutor(verified, getAgentDir) });
+                execute: createBotGrepExecutor(verified, getAgentDir, (toolCtx: any) => botPreset(context, toolCtx.sessionManager, toolCtx.cwd, getAgentDir())) });
             grepRegistered = true;
             schedule = registerBotSchedule(pi, verified, scheduledRunActive);
             registerBotTopic(pi, verified, scheduledRunActive);

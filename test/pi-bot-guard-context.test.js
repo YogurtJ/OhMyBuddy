@@ -38,13 +38,13 @@ test('managed Bot gate rereads rules on every call, refuses protected steps befo
     let serial = 0;
     const call = (toolName, input) => handlers.get('tool_call')({ toolName, input, toolCallId: `call-${serial++}` }, ctx);
     const update = async permissions => bots.update(id, { expectedRevision: (await profiles.state()).revision, changes: { bot: { permissions } } });
-    await update({ preset: 'balanced' });
+    await update({ preset: 'ask' });
     assert.equal(await call('bash', { command: 'pwd' }), undefined);
     assert.equal(asked.length, 1); assert.equal(asked[0].rule.value, 'pwd');
     const rule = asked[0].rule;
     await update({ rules: [rule] });
     assert.deepEqual((await botPermissions(context, manager, session.cwd, agentDir)).rules, [rule]);
-    assert.equal(await botPreset(context, manager, session.cwd, agentDir), 'balanced');
+    assert.equal(await botPreset(context, manager, session.cwd, agentDir), 'ask');
     assert.equal(await call('bash', { command: 'pwd' }), undefined);
     assert.equal(asked.length, 1, 'freshly persisted rule is used without a worker restart');
     await update({ rules: [] });
@@ -55,25 +55,26 @@ test('managed Bot gate rereads rules on every call, refuses protected steps befo
     assert.deepEqual(await call('bash', { command: 'pwd' }), { block: true, reason: BLOCKED.not_approved }, 'only native Boolean true authorizes execution');
     answer = true;
     const beforeProtected = asked.length;
-    for (const preset of ['balanced', 'ask']) {
-        await update({ preset });
-        for (const [tool, input] of [['read', { path: '.env' }], ['bash', { command: 'cat auth.json' }], ['powershell', { command: 'Get-Content .env' }]])
-            assert.deepEqual(await call(tool, input), { block: true, reason: BLOCKED.protected });
-        assert.equal(await call('bot_topic_propose', { title: 'A topic' }), undefined);
-    }
-    assert.equal(asked.length, beforeProtected, 'credential paths in careful modes never reach confirmation UI');
+    await update({ preset: 'ask' });
+    for (const [tool, input] of [['read', { path: '.env' }], ['bash', { command: 'cat auth.json' }], ['powershell', { command: 'Get-Content .env' }]])
+        assert.deepEqual(await call(tool, input), { block: true, reason: BLOCKED.protected });
+    assert.equal(await call('bot_topic_propose', { title: 'A topic' }), undefined);
+    assert.equal(asked.length, beforeProtected, 'credential paths in ask mode never reach confirmation UI');
+    assert.equal(await call('write', { path: path.join(agentDir, 'settings.json') }), undefined);
+    assert.equal(asked.length, beforeProtected + 1, 'state paths ask once in ask mode');
+    assert.equal(asked.at(-1).rule, undefined);
     await update({ preset: 'balanced' });
     assert.equal(await call('write', { path: path.join(agentDir, 'settings.json') }), undefined);
-    assert.equal(asked.length, beforeProtected + 1, 'state paths ask once in careful modes');
-    assert.equal(asked.at(-1).rule, undefined);
-    await update({ preset: 'free' });
-    assert.equal(await call('write', { path: path.join(agentDir, 'settings.json') }), undefined);
-    assert.equal(asked.length, beforeProtected + 1, 'state paths run without asking in free mode');
+    assert.equal(asked.length, beforeProtected + 1, 'state paths run without asking in balanced mode');
     assert.equal(await call('read', { path: '.env' }), undefined);
-    assert.equal(asked.length, beforeProtected + 2, 'credentials ask once in free mode');
+    assert.equal(asked.length, beforeProtected + 2, 'credentials ask once in balanced mode');
     assert.equal(asked.at(-1).rule, undefined);
-    const afterAsked = asked.length;
     await update({ preset: 'free' });
+    for (const [tool, input] of [['write', { path: path.join(agentDir, 'settings.json') }], ['read', { path: '.env' }], ['bash', { command: 'rm -rf notes' }]])
+        assert.equal(await call(tool, input), undefined);
+    assert.equal(asked.length, beforeProtected + 2, 'free mode runs directly without asking');
+    const afterAsked = asked.length;
+    await update({ preset: 'balanced' });
     ctx.hasUI = false;
     assert.deepEqual(await call('bash', { command: 'rm -rf notes' }), { block: true, reason: BLOCKED.unattended });
     ctx.hasUI = true;
@@ -84,7 +85,7 @@ test('managed Bot gate rereads rules on every call, refuses protected steps befo
     const broken = path.join(root, 'broken'); fs.mkdirSync(path.join(broken, 'pivane-profiles', 'profiles.json'), { recursive: true });
     assert.deepEqual(await botPermissions(context, manager, session.cwd, broken, async () => {}), { preset: 'ask', rules: [] });
     assert.equal(await botPermissions(context, { getSessionId: () => 'foreign' }, session.cwd, agentDir), null);
-    await update({ preset: 'balanced', rules: [rule] });
+    await update({ preset: 'ask', rules: [rule] });
     agentRoot = broken;
     answer = false;
     assert.deepEqual(await call('bash', { command: 'pwd' }), { block: true, reason: BLOCKED.not_approved });

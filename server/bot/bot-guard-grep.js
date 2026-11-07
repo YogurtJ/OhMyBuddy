@@ -44,19 +44,21 @@ function validateInput(input) {
         || input.context !== undefined && (!Number.isSafeInteger(input.context) || input.context < 0 || input.context > 20)
         || input.limit !== undefined && (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 1000)) throw unavailable();
 }
-async function botGrep(input, { cwd, agentDir, signal }) {
+async function botGrep(input, { cwd, agentDir, preset, signal }) {
     validateInput(input);
     const deadline = Date.now() + GREP_LIMITS.milliseconds;
     const requested = resolvePiPath(input.path || '.', cwd);
+    const unrestricted = preset === 'free';
     const rootAccess = pathAccess(requested, cwd, agentDir, resolveShellPath);
-    if (rootAccess === 'invalid' || rootAccess === 'credential') throw denied();
-    const allowState = rootAccess === 'state';
+    if (rootAccess === 'invalid' || (!unrestricted && rootAccess === 'credential')) throw denied();
+    const allowState = unrestricted || preset === 'balanced' || rootAccess === 'state';
+    const allowCredential = unrestricted || (preset === 'balanced' && rootAccess === 'credential');
     const root = await fs.promises.realpath(requested), stat = await fs.promises.stat(root);
     if (!stat.isDirectory() && !stat.isFile()) throw denied();
     const directory = stat.isDirectory();
     const check = actual => {
         const access = pathAccess(actual, cwd, agentDir, resolveShellPath);
-        if (!(directory ? within(root, actual) : actual === root) || access === 'invalid' || access === 'credential' || (!allowState && access === 'state')) throw denied();
+        if (!(directory ? within(root, actual) : actual === root) || access === 'invalid' || (!allowCredential && access === 'credential') || (!allowState && access === 'state')) throw denied();
     };
     const localRg = path.join(agentDir, 'bin', process.platform === 'win32' ? 'rg.exe' : 'rg');
     const executable = fs.existsSync(localRg) ? localRg : 'rg';
@@ -136,13 +138,16 @@ async function botGrep(input, { cwd, agentDir, signal }) {
             ...(matchCount >= limit ? { matchLimitReached: limit } : {}), ...(linesTruncated ? { linesTruncated: true } : {}) } };
 }
 
-function createBotGrepExecutor(verified, getAgentDir) {
+function createBotGrepExecutor(verified, getAgentDir, getPreset) {
     let running = false;
     return async (_id, input, signal, _update, ctx) => {
         if (!verified(ctx)) throw new Error('Managed Bot grep is unavailable in this conversation.');
         if (running) throw new Error('Another managed Bot grep is still running.');
         running = true;
-        try { return await botGrep(input, { cwd: ctx.cwd, agentDir: getAgentDir(), signal }); }
+        try {
+            const preset = typeof getPreset === 'function' ? await getPreset(ctx) : undefined;
+            return await botGrep(input, { cwd: ctx.cwd, agentDir: getAgentDir(), preset, signal });
+        }
         catch { throw unavailable(); }
         finally { running = false; }
     };

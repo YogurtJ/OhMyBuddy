@@ -29,34 +29,44 @@ test.after(() => fs.rmSync(root, { recursive: true, force: true }));
 const check = (preset, toolName, input, rules = [], annotations) => approvalFor({ permissions: { preset, rules }, cwd, agentDir, toolName, input, annotations });
 const classify = (command, toolName = 'bash') => classifyCommand({ toolName, input: { command }, cwd, agentDir }).status;
 
-test('free is full access: ordinary, opaque and unrecognised commands run; only the short danger list asks', () => {
+test('free is unrestricted like the workspace Pi Agent; balanced runs ordinary and opaque commands and asks on the short danger list', () => {
     const runs = ['node script.js', "python -c 'print(1)'", 'npm test', 'npm install lodash', 'pip install x', 'cp a b', 'mv a b', 'sed -i s/a/b/ notes.txt',
         'curl https://example.invalid', "ssh host 'rm -rf /tmp/x'", 'scp a host:b', 'docker run --rm img', 'docker restart example', 'echo ok; date', 'rm notes.txt',
         'git commit -m x', 'git branch -d old', 'export FOO=1 && npm test', 'env FOO=1 node x.js', 'set -e', 'chmod 755 x', 'rg "rm -rf" .',
         'git log --grep=push', 'systemctl status example', 'crontab -l', `touch ${outside}/new.txt`, 'cat $(echo notes.txt)'];
-    for (const command of runs) assert.equal(check('free', 'bash', { command }), null, command);
+    for (const command of runs) {
+        assert.equal(check('free', 'bash', { command }), null, command);
+        assert.equal(check('balanced', 'bash', { command }), null, command);
+    }
     assert.equal(check('free', 'powershell', { command: 'Remove-Item notes.txt' }), null);
+    assert.equal(check('balanced', 'powershell', { command: 'Remove-Item notes.txt' }), null);
     const asks = ['sudo ls', 'rm -rf notes', 'rm -r -f notes', 'find . -name x -delete', "bash -c 'cd x && rm -rf y'", 'ls | xargs rm -rf', 'timeout 5 rm -rf x',
         'shutdown now', 'kill 123', 'pkill -f server.js', 'systemctl --user restart pivane', 'git push origin main', 'git reset --hard', 'git clean -fd',
         'git branch -D old', 'npm publish', 'gh release create v1', 'crontab -e', 'cat x > .pivane-runtime/state.json', 'mkfs.ext4 disk.img', 'ls && rm -rf notes'];
     for (const command of asks) {
-        const decision = check('free', 'bash', { command });
+        assert.equal(check('free', 'bash', { command }), null, `free allows ${command}`);
+        const decision = check('balanced', 'bash', { command });
         assert.equal(decision?.kind, 'command', command);
         assert.equal(decision.rule, undefined, command);
     }
-    assert.equal(check('free', 'powershell', { command: 'Remove-Item -Recurse notes' }).kind, 'command');
-    assert.equal(check('free', 'bash', { command: 'ls' }, [], { destructiveHint: true }).kind, 'command');
-    for (const command of ['env', 'printenv', 'export', 'export -p', 'set', 'env | grep KEY', "bash -c 'env'"])
-        assert.deepEqual(check('free', 'bash', { command }), { block: true, reason: BLOCKED.protected }, command);
+    assert.equal(check('free', 'powershell', { command: 'Remove-Item -Recurse notes' }), null);
+    assert.equal(check('balanced', 'powershell', { command: 'Remove-Item -Recurse notes' }).kind, 'command');
+    assert.equal(check('free', 'bash', { command: 'ls' }, [], { destructiveHint: true }), null);
+    assert.equal(check('balanced', 'bash', { command: 'ls' }, [], { destructiveHint: true }).kind, 'command');
+    for (const command of ['env', 'printenv', 'export', 'export -p', 'set', 'env | grep KEY', "bash -c 'env'"]) {
+        assert.equal(check('free', 'bash', { command }), null, `free allows ${command}`);
+        assert.deepEqual(check('balanced', 'bash', { command }), { block: true, reason: BLOCKED.protected }, command);
+    }
 });
 
-test('balanced classification still recognises understood commands and asks before danger or opaque shell syntax', () => {
+test('ask classification still recognises understood commands and asks before danger or opaque shell syntax', () => {
     for (const command of ['pwd', 'date', "date '+%Y-%m-%d %H:%M:%S %:z %u'", 'date -u "+%Y-%m-%dT%H:%M:%SZ"', "date -d 'next friday' '+%F'", 'date --date="tomorrow" +%F', 'cal', 'cal 2026', 'ls -la', 'cat "notes.txt"', "cat 'notes.txt'", 'cat no\\ tes.txt', 'echo "hello; world"', 'printf "%s" "hi"',
         'git status --short', 'git diff --no-ext-diff --no-textconv --stat', 'git diff --no-ext-diff --no-textconv', 'git show -s HEAD', 'fd notes', 'tree -L 2', 'uniq -c notes.txt', 'git log -n 5 --oneline', 'rg -n pattern notes.txt',
         'find . -maxdepth 2 -name notes.txt', 'ls | head -n 5', 'echo ok && pwd', 'cd .. && ls -la', 'mkdir -p notes/new', 'touch notes/new.txt']) {
         assert.equal(classify(command), 'safe', command);
         assert.equal(check('free', 'bash', { command }), null, command);
-        assert.ok(check('balanced', 'bash', { command }).rule, command);
+        assert.equal(check('balanced', 'bash', { command }), null, command);
+        assert.ok(check('ask', 'bash', { command }).rule, command);
     }
     const risky = ['rm -rf notes', 'sudo ls', 'systemctl restart example', 'kill 123', 'chmod 777 notes', 'git push origin main', 'git reset --hard',
         'curl https://example.invalid', 'gh release create v1', 'npm publish', 'docker restart example', 'cp notes.txt ../outside/note.txt',
@@ -67,17 +77,18 @@ test('balanced classification still recognises understood commands and asks befo
         'timeout 2 date', 'X=1 date', 'date -s "2026-01-01"', 'date --set="2026-01-01"', 'date -f notes.txt', 'date -r 1700000000', 'fd -x sh -c id', 'fd -tfx id', 'tree -o out.txt', 'uniq notes.txt out.txt', 'rg -z pattern', 'rg --search-zip pattern', 'git diff', 'git log -p', 'git show HEAD', 'LS', 'ls.exe', './script.sh', '/tmp/ls', 'cat "unterminated', 'git -c core.pager=x status', 'git status --help', 'git log --no-ext-diff --no-textconv --help',
         'git log --no-ext-diff --no-textconv --output=notes.txt', 'find . -exec echo {} \\;'];
     for (const command of [...risky, ...opaque]) {
-        const decision = check('balanced', 'bash', { command });
+        const decision = check('ask', 'bash', { command });
         assert.equal(decision.kind, 'command', command);
         assert.equal(decision.rule, undefined, command);
         assert.notEqual(classify(command), 'safe', command);
     }
     assert.equal(classify('Get-Date', 'powershell'), 'safe');
     assert.equal(check('free', 'powershell', { command: 'Get-Content "notes.txt"' }), null);
+    assert.equal(check('balanced', 'powershell', { command: 'Get-Content "notes.txt"' }), null);
     for (const command of ['Remove-Item -Recurse notes', 'Restart-Service Example', 'Invoke-WebRequest https://example.invalid',
         'Get-Date; Get-Location', '& "script.ps1"', 'powershell -EncodedCommand AAAA', 'Get-Content $file', 'Get-Content @files', 'Get-Content notes.txt,other.txt', '/usr/bin/get-date', 'Get-Content Function:foo']) {
-        assert.equal(check('balanced', 'powershell', { command }).kind, 'command', command);
-        assert.equal(check('balanced', 'powershell', { command }).rule, undefined, command);
+        assert.equal(check('ask', 'powershell', { command }).kind, 'command', command);
+        assert.equal(check('ask', 'powershell', { command }).rule, undefined, command);
     }
 });
 
@@ -91,15 +102,21 @@ test('credentials, private state paths and unverified aliases follow preset poli
         for (const target of invalidTargets) {
             for (const toolName of ['read', 'write', 'edit', 'grep', 'find', 'ls', 'custom_reader']) {
                 const decision = check(preset, toolName, { path: target }, [{ v: 9, allow: '*' }], { readOnlyHint: true });
-                assert.deepEqual(decision, { block: true, reason: BLOCKED.protected }, `${preset} ${toolName} ${target}`);
-                assert.ok(!decision.reason.includes(target), 'refusal does not echo a private path');
+                if (preset === 'free') {
+                    assert.equal(decision, null, `free does not gate ${toolName} ${target}`);
+                } else {
+                    assert.deepEqual(decision, { block: true, reason: BLOCKED.protected }, `${preset} ${toolName} ${target}`);
+                    assert.ok(!decision.reason.includes(target), 'refusal does not echo a private path');
+                }
             }
         }
         for (const target of credentials) {
             for (const toolName of ['read', 'write', 'edit', 'grep', 'find', 'ls', 'custom_reader']) {
                 const decision = check(preset, toolName, { path: target }, [{ v: 9, allow: '*' }], { readOnlyHint: true });
                 if (preset === 'free') {
-                    assert.ok(decision?.kind, `free asks once for credential ${toolName} ${target}`);
+                    assert.equal(decision, null, `free allows credential ${toolName} ${target}`);
+                } else if (preset === 'balanced') {
+                    assert.ok(decision?.kind, `balanced asks once for credential ${toolName} ${target}`);
                     assert.equal(decision.rule, undefined, `credential ${target} cannot become a persistent grant`);
                 } else {
                     assert.deepEqual(decision, { block: true, reason: BLOCKED.protected }, `${preset} ${toolName} ${target}`);
@@ -110,39 +127,45 @@ test('credentials, private state paths and unverified aliases follow preset poli
         for (const target of states) {
             for (const toolName of ['read', 'write', 'edit', 'grep', 'find', 'ls', 'custom_reader']) {
                 const decision = check(preset, toolName, { path: target }, [{ v: 9, allow: '*' }], { readOnlyHint: true });
-                if (preset === 'free') {
-                    assert.equal(decision, null, `free allows state path ${toolName} ${target}`);
+                if (preset === 'free' || preset === 'balanced') {
+                    assert.equal(decision, null, `${preset} allows state path ${toolName} ${target}`);
                 } else {
                     assert.ok(decision?.kind, `${preset} asks once for state path ${toolName} ${target}`);
                     assert.equal(decision.rule, undefined, `state path ${target} cannot become a persistent grant`);
                 }
             }
         }
-        for (const command of ['printenv', 'env', 'cat /proc/self/environ', 'cat hard.txt'])
-            assert.equal(check(preset, 'bash', { command }).block, true, `${preset} ${command}`);
-        assert.equal(check(preset, 'powershell', { command: 'Get-ChildItem Env:' }).block, true, `${preset} Get-ChildItem Env:`);
+        for (const command of ['printenv', 'env', 'cat /proc/self/environ', 'cat hard.txt']) {
+            if (preset === 'free') assert.equal(check(preset, 'bash', { command }), null, `free ${command}`);
+            else assert.equal(check(preset, 'bash', { command }).block, true, `${preset} ${command}`);
+        }
+        if (preset === 'free') assert.equal(check(preset, 'powershell', { command: 'Get-ChildItem Env:' }), null);
+        else assert.equal(check(preset, 'powershell', { command: 'Get-ChildItem Env:' }).block, true, `${preset} Get-ChildItem Env:`);
         for (const command of ['cat .env', 'cat .env*', 'cat /etc/shadow', 'cat ".e"\'nv\'', 'cat .e\\nv', 'cat .e\\\nnv', 'echo ok; cat auth.json',
             'cat "$HOME/.ssh/id_rsa"', 'cat ${HOME}/.env', 'cat < .env', 'cat $(echo .env)', "python -c 'open(\".env\").read()'", "eval 'cat .env'",
             'echo "$API_TOKEN"', 'git show --no-ext-diff --no-textconv HEAD:.env']) {
             const decision = check(preset, 'bash', { command });
-            if (preset === 'free') { assert.equal(decision?.kind, 'command', `free asks for ${command}`); assert.equal(decision.rule, undefined); }
+            if (preset === 'free') assert.equal(decision, null, `free allows ${command}`);
+            else if (preset === 'balanced') { assert.equal(decision?.kind, 'command', `balanced asks for ${command}`); assert.equal(decision.rule, undefined); }
             else assert.equal(decision.block, true, `${preset} ${command}`);
         }
         for (const command of ['Get-Content .env', 'Write-Output $env:API_TOKEN', 'Get-Content Variable:API_TOKEN']) {
             const decision = check(preset, 'powershell', { command });
-            if (preset === 'free') { assert.equal(decision?.kind, 'command', `free asks for ${command}`); assert.equal(decision.rule, undefined); }
+            if (preset === 'free') assert.equal(decision, null, `free allows ${command}`);
+            else if (preset === 'balanced') { assert.equal(decision?.kind, 'command', `balanced asks for ${command}`); assert.equal(decision.rule, undefined); }
             else assert.equal(decision.block, true, `${preset} ${command}`);
         }
-        assert.equal(check(preset, 'powershell', { command: 'Get-Content hard.txt' }).block, true, `${preset} hardlink`);
+        if (preset === 'free') assert.equal(check(preset, 'powershell', { command: 'Get-Content hard.txt' }), null);
+        else assert.equal(check(preset, 'powershell', { command: 'Get-Content hard.txt' }).block, true, `${preset} hardlink`);
         for (const command of ['cat private-alias/private.txt', "cat '@private/private.txt'", "cat 'private\u00a0alias/private.txt'", 'cat innocent.txt',
             "python -c 'open(\"innocent.txt\").read()'", `cat '${agentDir}/private.txt'`, `cat ${pathToFileURL(path.join(agentDir, 'private.txt')).href}`]) {
             const decision = check(preset, 'bash', { command });
-            if (preset === 'free') assert.equal(decision, null, `free allows state command ${command}`);
+            if (preset === 'free' || preset === 'balanced') assert.equal(decision, null, `${preset} allows state command ${command}`);
             else { assert.equal(decision?.kind, 'command', `${preset} asks for state command ${command}`); assert.equal(decision.rule, undefined); }
         }
         for (const command of ['Get-Content private-alias/private.txt', 'Get-Content private-alias\\private.txt', "Get-Content 'pri''vate/private.txt'"]) {
             const decision = check(preset, 'powershell', { command });
-            if (preset === 'free') assert.equal(decision, null, `free allows state command ${command}`);
+            if (preset === 'free' || preset === 'balanced') assert.equal(decision, null, `${preset} allows state command ${command}`);
             else { assert.equal(decision?.kind, 'command', `${preset} asks for state command ${command}`); assert.equal(decision.rule, undefined); }
         }
     }
@@ -167,7 +190,8 @@ test('Darwin canonical system aliases retain system and autostart policy', () =>
 test('file grants are canonical, exact and bound to tool and working directory', () => {
     const input = { path: 'escape/new.txt', content: 'synthetic' };
     assert.equal(check('free', 'write', input), null, 'free allows ordinary file writes outside the Bot workspace');
-    const approval = check('balanced', 'write', input), rule = approval.rule;
+    assert.equal(check('balanced', 'write', input), null, 'balanced allows ordinary file writes outside the Bot workspace');
+    const approval = check('ask', 'write', input), rule = approval.rule;
     assert.equal(approval.kind, 'outside');
     assert.equal(rule.value, path.join(outside, 'new.txt'));
     assert.deepEqual(normalizeRule(rule), rule);
@@ -186,21 +210,25 @@ test('file grants are canonical, exact and bound to tool and working directory',
     assert.equal(check('ask', 'write', { path: 'notes.txt' }, [ordinary]).block, true, 'retargeted credential paths are blocked');
     fs.unlinkSync(path.join(cwd, 'notes.txt')); fs.writeFileSync(path.join(cwd, 'notes.txt'), 'synthetic note');
     for (const target of [systemFile, '.git/config', '.bashrc', '.config/systemd/test.service']) {
-        const decision = check('balanced', 'write', { path: target });
+        const decision = check('ask', 'write', { path: target });
         assert.ok(decision);
         assert.equal(decision.rule, undefined, target);
     }
-    // Hands-off writes system and startup files directly; only OhMyBuddy's runtime, autostart and scheduler locations ask.
-    for (const target of ['.git/config', '.bashrc', '.zprofile']) assert.equal(check('free', 'write', { path: target }), null, target);
+    // Careful ('balanced') writes system and startup files directly; only OhMyBuddy's runtime, autostart and scheduler locations ask.
+    for (const target of ['.git/config', '.bashrc', '.zprofile']) {
+        assert.equal(check('free', 'write', { path: target }), null, target);
+        assert.equal(check('balanced', 'write', { path: target }), null, target);
+    }
     for (const target of ['.config/systemd/test.service', '.config/autostart/x.desktop', 'Library/LaunchAgents/x.plist', '.pivane-runtime/state.json']) {
-        const decision = check('free', 'write', { path: target });
+        assert.equal(check('free', 'write', { path: target }), null, target);
+        const decision = check('balanced', 'write', { path: target });
         assert.ok(decision?.kind, target);
         assert.equal(decision.rule, undefined, target);
     }
 });
 
 test('command grants never override risk, unknown classification, private paths or destructive metadata', () => {
-    const rule = check('balanced', 'bash', { command: 'ls -la' }).rule;
+    const rule = check('ask', 'bash', { command: 'ls -la' }).rule;
     assert.equal(check('ask', 'bash', { command: 'ls -la' }, [rule]), null);
     assert.equal(check('ask', 'bash', { command: 'ls  -la' }, [rule]).kind, 'command', 'command bytes must match');
     assert.equal(check('ask', 'powershell', { command: 'ls -la' }, [rule]).kind, 'command');
@@ -215,20 +243,21 @@ test('command grants never override risk, unknown classification, private paths 
     assert.equal(check('unknown', 'bash', { command: 'date' }).kind, 'command');
     assert.equal(check('unknown', 'bash', { command: 'ls -la' }, [rule]).kind, 'command');
     assert.equal(check('ask', 'grep', { path: '.', glob: '.env*', pattern: 'anything' }).block, true);
-    assert.equal(check('free', 'subagent', { task: 'routine' }), null);
-    for (const preset of ['balanced', 'ask']) assert.equal(check(preset, 'subagent', { task: 'routine' }).kind, 'delegate');
+    for (const preset of ['free', 'balanced']) assert.equal(check(preset, 'subagent', { task: 'routine' }), null);
+    assert.equal(check('ask', 'subagent', { task: 'routine' }).kind, 'delegate');
     for (const tool of ['bot_setup_propose', 'bot_topic_propose', 'codemode', 'ask_user_question', 'read_document'])
         assert.equal(check('ask', tool, {}), null, tool);
     assert.equal(check('balanced', 'memory_add', { content: 'remember' }), null);
     assert.equal(check('ask', 'window_note', { text: 'remember' }).kind, 'action');
 });
 
-test('NB-02 PowerShell quoted wildcard file selectors are refused and cannot become grants', () => {
+test('NB-02 PowerShell quoted wildcard file selectors are refused in careful/ask modes and cannot become grants', () => {
     for (const command of ["Get-Content 'auth.*'", "Get-Content '*'", 'Get-Content "auth?json"',
         "Get-Content 'auth[.]json'", "Get-Content '[a]uth.json'", "Get-Content -Path '*.json'", "Get-Content 'safe.*'",
         "Get-ChildItem '*'", "Get-Item '?'", "Get-Content -LiteralPath '*' -Force", 'Get-Content -LiteralPath safe[1].txt']) {
-        for (const preset of ['free', 'balanced', 'ask']) {
-            const input = { command }, forged = { v: 1, id: 'old-ps-rule', tool: 'powershell', value: command, cwd };
+        const input = { command }, forged = { v: 1, id: 'old-ps-rule', tool: 'powershell', value: command, cwd };
+        assert.equal(check('free', 'powershell', input, [forged]), null, command);
+        for (const preset of ['balanced', 'ask']) {
             const decision = check(preset, 'powershell', input, [forged]);
             assert.deepEqual(decision, { block: true, reason: BLOCKED.protected }, command);
             assert.equal(ruleFor({ toolName: 'powershell', input, cwd, agentDir }), null);
@@ -238,7 +267,8 @@ test('NB-02 PowerShell quoted wildcard file selectors are refused and cannot bec
     fs.writeFileSync(path.join(cwd, 'safe[1].txt'), 'synthetic literal');
     for (const command of ["Get-Content 'notes.txt'", "Get-Content -LiteralPath 'safe[1].txt'", 'Write-Output "*"']) {
         assert.equal(check('free', 'powershell', { command }), null, command);
-        assert.ok(check('balanced', 'powershell', { command }).rule, command);
+        assert.equal(check('balanced', 'powershell', { command }), null, command);
+        assert.ok(check('ask', 'powershell', { command }).rule, command);
     }
 });
 
