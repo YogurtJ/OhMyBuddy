@@ -18,7 +18,8 @@ async function handleSlash(job, slash, run) {
             v.bindings = v.bindings.filter(b => !(b.accountId === job.accountId && b.peerId === job.peerId));
             const target = { cwd: session.cwd, sessionId: session.id };
             v.bindings.push({ id: newBindingId, accountId: job.accountId, peerId: job.peerId, ...target,
-                name: session.name || session.id, replyMode: binding.replyMode || 'all', ...boundary });
+                name: session.name || session.id, replyMode: binding.replyMode || 'all',
+                ...(binding.startupNotice !== undefined ? { startupNotice: binding.startupNotice } : {}), ...boundary });
             const index = v.jobs.findIndex(j => j.id === job.id);
             for (const [i, current] of v.jobs.entries()) {
                 if (current.id === job.id || i > index && current.status === 'queued' && current.kind !== 'cron'

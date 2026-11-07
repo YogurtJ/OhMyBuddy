@@ -35,6 +35,7 @@ class ChannelStore {
             || value.bindings.some(b => !b || !id(b.id) || !id(b.accountId) || !id(b.peerId) || !id(b.sessionId)
                 || typeof b.cwd !== 'string' || !path.isAbsolute(b.cwd) || b.cwd.length > 4096
                 || b.replyMode !== undefined && !['all', 'wechat'].includes(b.replyMode)
+                || b.startupNotice !== undefined && typeof b.startupNotice !== 'boolean'
                 || b.boundAt !== undefined && (!Number.isFinite(b.boundAt) || b.boundAt < 0)
                 || b.excludedTurnId != null && !/^[a-f0-9]{64}$/.test(b.excludedTurnId)
                 || !require('./bot-channel').validBotBinding(b))
@@ -46,11 +47,13 @@ class ChannelStore {
                 || j.bot !== undefined && (!j.bot || typeof j.bot !== 'object' || !/^[a-f0-9-]{36}$/.test(j.bot.profileId || '')
                     || !(j.bot.windowId === null || /^[a-f0-9-]{36}$/.test(j.bot.windowId || '')))
                 || j.commandSubmitted !== undefined && typeof j.commandSubmitted !== 'boolean'
+                || j.startupNotice !== undefined && typeof j.startupNotice !== 'boolean'
                 || j.deliveryIssues !== undefined && (!Array.isArray(j.deliveryIssues) || j.deliveryIssues.length > 20
                     || j.deliveryIssues.some(i => !i || typeof i.name !== 'string' || i.name.length > 120 || typeof i.reason !== 'string' || i.reason.length > 64)))
             || value.peers.some(p => !p || !id(p.accountId) || !id(p.peerId) || typeof p.contextToken !== 'string' || p.contextToken.length > 8192
                 || p.typingTicket !== undefined && (typeof p.typingTicket !== 'string' || p.typingTicket.length > 4096)
                 || p.contextExpiredAt !== undefined && (!Number.isFinite(p.contextExpiredAt) || p.contextExpiredAt < 0)
+                || p.lastStartupNoticeAt !== undefined && (!Number.isFinite(p.lastStartupNoticeAt) || p.lastStartupNoticeAt < 0)
                 || p.resumeCwd !== undefined && (typeof p.resumeCwd !== 'string' || !path.isAbsolute(p.resumeCwd) || p.resumeCwd.length > 4096)
                 || p.resumeListedAt !== undefined && (!Number.isFinite(p.resumeListedAt) || p.resumeListedAt < 0)
                 || p.resumeCandidates !== undefined && (!Array.isArray(p.resumeCandidates) || p.resumeCandidates.length > 20 || p.resumeCandidates.some(c => !id(c)))))

@@ -41,6 +41,12 @@ function failure(service, job, error) {
                 const peer = v.peers.find(p => p.accountId === job.accountId && p.peerId === job.peerId);
                 if (peer && peer.contextToken === error.expiredContext) peer.contextExpiredAt = Date.now();
             });
+            if (current.startupNotice) {
+                // Startup notices are ephemeral: skip silently instead of sending a stale greeting later.
+                service.updateJob(job.id, { status: 'cancelled', reason: 'reply-context-expired', sendStarted: false,
+                    directReply: undefined, deliveryError: undefined, platformCode: error.platformCode });
+                return;
+            }
         }
         const attempts = (current.contextAttempts || 0) + 1;
         if (error.reason === 'reply-context-expired' && attempts < 3) {
@@ -49,6 +55,11 @@ function failure(service, job, error) {
                 deliveryError: undefined, platformCode: error.platformCode });
             return;
         }
+    }
+    if (current.startupNotice && error instanceof ChannelDeliveryError && error.reason === 'reply-context-missing') {
+        service.updateJob(job.id, { status: 'cancelled', reason: 'reply-context-missing', sendStarted: false,
+            directReply: undefined, deliveryError: undefined });
+        return;
     }
     service.updateJob(job.id, { status: error instanceof ChannelDeliveryError ? (current.sentChunks || current.sentMedia ? 'partial' : 'failed') : 'uncertain',
         reason: error instanceof ChannelDeliveryError ? error.reason : 'delivery-unconfirmed',

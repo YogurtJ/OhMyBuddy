@@ -45,11 +45,12 @@ async function bindBot(service, account, input) {
         service.healthy();
         service.db.change(v => {
             const previous = v.bindings.find(b => b.accountId === account.id && b.peerId === input.peerId);
+            const startupNotice = input.startupNotice ?? previous?.startupNotice ?? true;
             const bots = [...new Set([...(previous?.bots || []), bot.profileId])];
             if (bots.length > MAX_BOTS) throw fail(`一个微信聊天最多连接 ${MAX_BOTS} 个 Buddy`);
             v.bindings = v.bindings.filter(b => !(b.accountId === account.id && b.peerId === input.peerId));
             v.bindings.push({ id: randomUUID(), accountId: account.id, peerId: input.peerId, cwd: session.cwd, sessionId: session.id,
-                name: target.name, replyMode: input.replyMode ?? 'all', ...boundary, bot, bots });
+                name: target.name, replyMode: input.replyMode ?? 'all', startupNotice, ...boundary, bot, bots });
         }, { config: true, revision: input.expectedRevision });
     }, { bot });
 }

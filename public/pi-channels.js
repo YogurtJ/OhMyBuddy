@@ -87,13 +87,16 @@
         const accounts = el('div', null, 'channel-accounts');
         const lowerGrid = el('div', null, 'channel-lower-grid');
         const binding = el('section', null, 'channel-card channel-binding-card');
-        const accountSelect = el('select'), peer = el('select'), project = el('select'), session = el('select'), replyMode = el('select');
+        const accountSelect = el('select'), peer = el('select'), project = el('select'), session = el('select'), replyMode = el('select'), startupNotice = el('select');
         for (const [value, caption] of [['all', t('接收该线程的全部最终结果', 'All final results from this thread')], ['wechat', t('仅回复微信发起的消息', 'Only replies to WeChat messages')]]) {
             const option = el('option', caption); option.value = value; replyMode.append(option);
         }
+        for (const [value, caption] of [['on', t('服务启动后发送微信提示（默认）', 'Send WeChat notice after startup (default)')], ['off', t('不发送启动提示', 'Do not send startup notice')]]) {
+            const option = el('option', caption); option.value = value; startupNotice.append(option);
+        }
         const bindButton = button(t('绑定线程', 'Bind thread'), () => write('bind', isBotTarget(project.value)
-            ? { accountId: accountSelect.value, peerId: peer.value, botProfileId: project.value.slice(BOT_PREFIX.length), replyMode: replyMode.value }
-            : { accountId: accountSelect.value, peerId: peer.value, cwd: project.value, replyMode: replyMode.value,
+            ? { accountId: accountSelect.value, peerId: peer.value, botProfileId: project.value.slice(BOT_PREFIX.length), replyMode: replyMode.value, startupNotice: startupNotice.value !== 'off' }
+            : { accountId: accountSelect.value, peerId: peer.value, cwd: project.value, replyMode: replyMode.value, startupNotice: startupNotice.value !== 'off',
                 ...(session.value === '__new__' ? { newSession: true } : { sessionId: session.value }) }), 'primary');
         const bindLabel = el('span', t('绑定线程', 'Bind thread')); bindButton.replaceChildren(bindLabel);
         bindButton.prepend(icon('fa-link'));
@@ -104,7 +107,8 @@
             label(t('微信用户', 'WeChat user'), peer),
             label(t('项目或伙伴', 'Project or Buddy'), project),
             sessionField,
-            label(t('接收方式', 'Receive'), replyMode)
+            label(t('接收方式', 'Receive'), replyMode),
+            label(t('启动提示', 'Startup notice'), startupNotice)
         );
         const bindHint = el('span', '', 'channel-bind-hint');
         const bindFooter = el('div', null, 'channel-bind-footer');
@@ -180,15 +184,19 @@
             } catch { if (valid(n)) setStatus(t('无法读取线程，请刷新。', 'Unable to read threads. Refresh to check.'), 'error'); }
         }
         project.addEventListener('change', () => { target = null; void loadSessions(); });
-        accountSelect.addEventListener('change', () => { updatePeers(); controls(); });
-        peer.addEventListener('change', () => { updatePeers(); controls(); });
+        accountSelect.addEventListener('change', () => { updatePeers(true); controls(); });
+        peer.addEventListener('change', () => { updatePeers(true); controls(); });
         // Only saved allowed users can be bound; the server rejects anyone else.
-        function updatePeers() {
+        function updatePeers(syncBinding = false) {
             const account = snapshot?.accounts.find(a => a.id === accountSelect.value);
             const users = account?.allowedUsers || [];
             const chosen = users.includes(peer.value) ? peer.value : account?.userId && users.includes(account.userId) ? account.userId : users[0];
             updateSelect(peer, users.map(id => [id, id === account?.userId ? `${id} · ${t('扫码用户', 'scanner')}` : id]), chosen);
             const bound = snapshot?.bindings.find(b => b.accountId === accountSelect.value && b.peerId === peer.value);
+            if (syncBinding && bound) {
+                replyMode.value = bound.replyMode || 'all';
+                startupNotice.value = bound.startupNotice === false ? 'off' : 'on';
+            }
             const boundName = bound?.bot ? (botNames.get(bound.bot.profileId) || bound.name) : bound?.name || bound?.sessionId;
             bindHint.textContent = !snapshot?.accounts.length ? t('先扫码连接微信账号。', 'Connect a WeChat account first.')
                 : !users.length ? t('先在账号卡片里添加允许的微信用户并保存。', 'Add and save an allowed WeChat user on the account card first.')
@@ -491,15 +499,20 @@
                         route.append(el('span', b.peerId, 'channel-binding-peer'), icon('fa-arrow-right-long'), el('strong', b.bot ? `${botName(b.bot.profileId)}${b.bot.main ? '' : t(' · 话题', ' · topic')}` : b.name || b.sessionId));
                         if (b.bot) row.dataset.botBinding = b.bot.profileId;
                         const others = (b.bots || []).filter(id => id !== b.bot?.profileId);
+                        const startupText = b.startupNotice === false ? t('关闭启动提示', 'Startup notice off') : t('开启启动提示', 'Startup notice on');
+                        const toggleLabel = b.startupNotice === false ? t('开启启动提示', 'Enable startup notice') : t('关闭启动提示', 'Disable startup notice');
                         info.append(route, el('small', b.bot ? (others.length ? t(`伙伴聊天 · 也连着 ${others.map(botName).join('、')}`, `Buddy chat · also connected: ${others.map(botName).join(', ')}`) : t('伙伴聊天', 'Buddy chat')) : b.cwd),
                             el('small', b.replyMode === 'wechat' ? t('仅微信问答', 'WeChat replies only')
-                                : b.bot ? t('接收它的全部回复、提醒和主动消息', 'All its replies, reminders and messages it starts') : t('接收全部最终结果 · 定时任务默认跟随', 'All final results · scheduled tasks follow by default')));
+                                : b.bot ? t('接收它的全部回复、提醒和主动消息', 'All its replies, reminders and messages it starts') : t('接收全部最终结果 · 定时任务默认跟随', 'All final results · scheduled tasks follow by default')),
+                            el('small', startupText));
                         const actions = el('div', null, 'channel-binding-actions');
                         if (b.bot) {
                             const openBot = button(t('打开伙伴', 'Open Buddy'), () => window.PiWorkspaceRoute?.navigate('bot', { profileId: b.bot.profileId }));
                             openBot.dataset.channelReadOnly = 'true'; openBot.prepend(icon('fa-arrow-up-right-from-square')); actions.append(openBot);
-                            actions.append(menu(b.peerId, [...(b.bots || []).map(id => ({ label: t(`断开 ${botName(id)}`, `Disconnect ${botName(id)}`), icon: 'fa-link-slash', variant: 'danger',
-                                action: () => write('unbind-bot', { accountId: b.accountId, peerId: b.peerId, botProfileId: id, botName: botName(id) }) })),
+                            actions.append(menu(b.peerId, [
+                                { label: toggleLabel, icon: 'fa-bell', action: () => write('startup-notice', { bindingId: b.id, startupNotice: b.startupNotice === false }) },
+                                ...(b.bots || []).map(id => ({ label: t(`断开 ${botName(id)}`, `Disconnect ${botName(id)}`), icon: 'fa-link-slash', variant: 'danger',
+                                    action: () => write('unbind-bot', { accountId: b.accountId, peerId: b.peerId, botProfileId: id, botName: botName(id) }) })),
                                 { label: t('解除绑定', 'Unbind'), icon: 'fa-xmark', variant: 'danger', action: () => write('unbind', { accountId: b.accountId, peerId: b.peerId }) }]));
                             row.append(info, actions); bindingList.append(row); continue;
                         }
@@ -509,7 +522,7 @@
                         }
                         actions.append(button(t('接收设置', 'Receive settings'), () => {
                             accountSelect.value = b.accountId; updatePeers(); peer.value = b.peerId; updatePeers();
-                            project.value = b.cwd; replyMode.value = b.replyMode || 'all'; void loadSessions(b.sessionId); focusBinding();
+                            project.value = b.cwd; replyMode.value = b.replyMode || 'all'; startupNotice.value = b.startupNotice === false ? 'off' : 'on'; void loadSessions(b.sessionId); focusBinding();
                         }));
                         actions.append(button(t('解除绑定', 'Unbind'), () => write('unbind', { accountId: b.accountId, peerId: b.peerId }), 'danger'));
                         row.append(info, actions);
@@ -585,10 +598,14 @@
                     'execution-not-started': t('任务尚未执行，请检查线程是否可用后在微信重发。', 'The task did not start. Check the thread and resend from WeChat.'),
                     'reply-context-missing': job.status === 'ready'
                         ? t('尚未建立微信回复上下文。在微信发任意一条消息后自动发送，无需到网页放行。', 'No WeChat reply context yet. Send any WeChat message and this is delivered automatically; no manual release is needed.')
-                        : t('缺少微信回复上下文，本条未送达且不再补发；结果保留在线程中。', 'No WeChat reply context; this was not delivered and will not be resent. The result remains in its thread.'),
+                        : job.startupNotice
+                            ? t('缺少微信回复上下文，本次启动提示已静默跳过。', 'No WeChat reply context; this startup notice was silently skipped.')
+                            : t('缺少微信回复上下文，本条未送达且不再补发；结果保留在线程中。', 'No WeChat reply context; this was not delivered and will not be resent. The result remains in its thread.'),
                     'reply-context-expired': job.status === 'ready'
                         ? t('微信长时间未互动，暂不接受主动发送。在微信发任意一条消息后自动补发，无需到网页放行。', 'WeChat paused delivery after a long idle period. Send any WeChat message and this is delivered automatically; no manual release is needed.')
-                        : t('微信回复上下文已过期且未及时恢复，本条未送达且不再补发；结果保留在线程中。', 'WeChat reply context expired and was not renewed in time; this was not delivered and will not be resent. The result remains in its thread.')
+                        : job.startupNotice
+                            ? t('微信长时间未互动，本次启动提示已静默跳过，不会延后补发。', 'WeChat was idle; this startup notice was silently skipped and will not be sent later.')
+                            : t('微信回复上下文已过期且未及时恢复，本条未送达且不再补发；结果保留在线程中。', 'WeChat reply context expired and was not renewed in time; this was not delivered and will not be resent. The result remains in its thread.')
                 };
                 const displayReason = deliveryUnconfirmed ? 'delivery-unconfirmed' : job.reason;
                 if (displayReason && (deliveryReasons[displayReason] || reasons()[displayReason])) row.append(el('p', deliveryReasons[displayReason] || reasons()[displayReason], 'channel-job-reason'));

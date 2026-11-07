@@ -5,6 +5,7 @@ const { ChannelStore, pending, blocksFollowing, waitingForContext } = require('.
 // A result waiting for WeChat to accept this chat again is delivered after the next inbound
 // message, but not a day later: an older one stays readable in its thread.
 const CONTEXT_WAIT_MS = 24 * 60 * 60 * 1000;
+const STARTUP_NOTICE_COOLDOWN_MS = 60 * 1000;
 const { WeixinComponent } = require('./weixin-component');
 const { WeixinAdapter, createTransport, validId } = require('./weixin-adapter');
 const { outcome } = require('./runtime');
@@ -45,6 +46,7 @@ class ChannelsService {
         this.deliverables = new DeliverableStore(store);
         this.mutating = false; this.operations = new Set(); this.pollers = new Map(); this.runs = new Map(); this.connections = new Map();
         this.stopping = false; this.stopController = new AbortController(); this.login = null; this.loginFlight = null; this.error = null;
+        this.startupAccounts = new Set(); this.reconciling = null;
         this.initializing = true;
         this.onThreadResult = event => {
             try { this.admitThreadResult(event); }
@@ -59,8 +61,9 @@ class ChannelsService {
         this.component = this.componentFactory?.(this.directory) || new WeixinComponent(this.directory);
         if (this.db.value.accounts.some(a => a.enabled)) {
             this.db.claim();
+            this.startupAccounts = new Set(this.db.value.accounts.filter(a => a.enabled).map(a => a.id));
             try { await this.ensureAdapter(); this.start(); }
-            catch { this.componentError = '微信组件无法加载，请先停用连接，再卸载并重新安装组件。'; }
+            catch { this.startupAccounts.clear(); this.componentError = '微信组件无法加载，请先停用连接，再卸载并重新安装组件。'; }
         }
     }
     get busy() { return this.initializing || this.mutating || Boolean(this.login && Date.now() < this.login.expiresAt) || Boolean(this.loginFlight) || this.operations.size > 0 || this.runs.size > 0; }
@@ -73,7 +76,7 @@ class ChannelsService {
     start() {
         if (!this.timer) {
             this.timer = setInterval(() => { void this.pump(); }, 1000); this.timer.unref?.();
-            void this.track(botChannel.reconcile(this)).catch(() => {});
+            this.reconciling = this.track(botChannel.reconcile(this)).catch(() => {}).finally(() => { this.reconciling = null; });
         }
         for (const account of this.db.value.accounts) if (account.enabled && !this.pollers.has(account.id)) this.startPoll(account.id);
     }
@@ -85,11 +88,11 @@ class ChannelsService {
         catch { component = { installed: true, broken: true, error: '微信组件校验失败，请先停用连接，再卸载并重新安装。' }; }
         if (this.componentError) component.error = this.componentError;
         return { revision: this.db?.value.revision, error: this.error, busy: this.mutating, component,
-            accounts: (this.db?.value.accounts || []).map(({ id, userId, enabled, allowedUsers }) => ({ id, userId, enabled, allowedUsers, connection: this.connections.get(id) || (enabled ? 'starting' : 'disabled') })),
+            accounts: (this.db?.value.accounts || []).map(({ id, userId, enabled, allowedUsers }) => ({ id, userId, enabled, allowedUsers, connection: this.connections?.get(id) || (enabled ? 'starting' : 'disabled') })),
             bindings: this.db?.value.bindings || [], peers: (this.db?.value.peers || []).map(({ accountId, peerId, lastSeenAt }) => ({ accountId, peerId, lastSeenAt })),
             jobs: (this.db?.value.jobs || []).slice(-60).reverse().map(job => {
-                const { id, accountId, peerId, target, status, reason, at, sentChunks, sentMedia, waiting, sendStarted, kind, deliveryIssues, deliveryError, platformCode, retryCount, nextAttemptAt } = job;
-                return { id, accountId, peerId, target, status, reason, at, sentChunks, sentMedia, waiting, kind, deliveryIssues,
+                const { id, accountId, peerId, target, status, reason, at, sentChunks, sentMedia, waiting, sendStarted, kind, startupNotice, deliveryIssues, deliveryError, platformCode, retryCount, nextAttemptAt } = job;
+                return { id, accountId, peerId, target, status, reason, at, sentChunks, sentMedia, waiting, kind, ...(startupNotice ? { startupNotice: true } : {}), deliveryIssues,
                     deliveryError, platformCode, retryCount, nextAttemptAt, blocksFollowing: blocksFollowing(job),
                     canRecover: status === 'uncertain' && !sendStarted && kind !== 'slash' };
             }),
@@ -102,7 +105,7 @@ class ChannelsService {
         await this.ready; this.healthy();
         if (this.mutating) throw fail('渠道配置正在处理，请刷新核对', 409);
         if (!input || input.confirmed !== true || typeof input.action !== 'string' || input.expectedRevision !== this.db.value.revision) throw fail('配置已变化或操作未确认，请刷新核对', 409);
-        const fields = ['action', 'confirmed', 'expectedRevision', 'accountId', 'enabled', 'allowedUsers', 'peerId', 'cwd', 'sessionId', 'newSession', 'replyMode', 'jobId', 'loginId', 'code', 'botProfileId'];
+        const fields = ['action', 'confirmed', 'expectedRevision', 'accountId', 'enabled', 'allowedUsers', 'peerId', 'cwd', 'sessionId', 'newSession', 'replyMode', 'startupNotice', 'bindingId', 'jobId', 'loginId', 'code', 'botProfileId'];
         if (Object.keys(input).some(key => !fields.includes(key))) throw fail('未知渠道参数');
         this.mutating = true;
         try {
@@ -140,6 +143,7 @@ class ChannelsService {
                 const account = this.db.value.accounts.find(a => a.id === input.accountId);
                 if (!account || !validId(input.peerId) || !account.allowedUsers.includes(input.peerId)) throw fail('请先将此微信用户加入允许列表');
                 if (!['all', 'wechat'].includes(input.replyMode ?? 'all')) throw fail('无效的微信接收方式');
+                if (input.startupNotice !== undefined && typeof input.startupNotice !== 'boolean') throw fail('无效的启动提示设置');
                 if (this.db.value.bindings.length >= 200) throw fail('绑定数量超过限制');
                 this.assertPeerIdle(account.id, input.peerId);
                 if (input.botProfileId !== undefined) { await botChannel.bindBot(this, account, input); return { ...await this.snapshot(), busy: false }; }
@@ -150,11 +154,23 @@ class ChannelsService {
                 await this.withBindingTarget(cwd, session.id, (target, boundary) => {
                     this.healthy();
                     this.db.change(v => {
+                        const previous = v.bindings.find(b => b.accountId === account.id && b.peerId === input.peerId);
+                        const startupNotice = input.startupNotice ?? previous?.startupNotice ?? true;
                         v.bindings = v.bindings.filter(b => !(b.accountId === account.id && b.peerId === input.peerId));
                         v.bindings.push({ id: randomUUID(), accountId: account.id, peerId: input.peerId, cwd: target.cwd, sessionId: target.id,
-                            name: target.name || '微信对话', replyMode: input.replyMode ?? 'all', ...boundary });
+                            name: target.name || '微信对话', replyMode: input.replyMode ?? 'all', startupNotice, ...boundary });
                     }, { config: true, revision: input.expectedRevision });
                 });
+            } else if (action === 'startup-notice') {
+                const binding = this.db.value.bindings.find(b => b.id === input.bindingId);
+                if (!binding || typeof input.startupNotice !== 'boolean') throw fail('微信绑定或启动提示设置无效');
+                this.db.change(v => {
+                    const current = v.bindings.find(b => b.id === binding.id);
+                    if (current) current.startupNotice = input.startupNotice;
+                    for (const j of v.jobs) if (j.startupNotice && j.bindingId === binding.id && j.status === 'ready' && !input.startupNotice) {
+                        j.status = 'cancelled'; j.reason = 'notification-revoked'; delete j.directReply;
+                    }
+                }, { config: true, revision: input.expectedRevision });
             } else if (action === 'unbind-bot') {
                 await botChannel.unbindBot(this, input);
             } else if (action === 'unbind') {
@@ -249,7 +265,17 @@ class ChannelsService {
                 if (!account?.enabled) return;
                 if (this.isSuspended() || this.mutating) { await delay(500, undefined, { signal: controller.signal }); continue; }
                 try {
-                    if (!announced) { await this.adapter.notify(account, true); announced = true; }
+                    if (!announced) {
+                        await this.adapter.notify(account, true);
+                        announced = true;
+                        if (this.startupAccounts?.delete(accountId)) {
+                            await this.reconciling;
+                            if (!controller.signal.aborted && !this.stopping && !this.isSuspended()) {
+                                try { this.admitStartupNotices(accountId); void this.pump(); }
+                                catch { this.error = '渠道消息记录保存失败，已停止接收与投递，请核对数据文件。'; return; }
+                            }
+                        }
+                    }
                     const result = await this.adapter.poll(account, controller.signal);
                     if (controller.signal.aborted || this.stopping || this.isSuspended()) continue;
                     try { this.receive(accountId, result); }
@@ -270,6 +296,32 @@ class ChannelsService {
         poller.controller.abort(); await poller.promise.catch(() => {});
         const account = this.db.value.accounts.find(a => a.id === id);
         if (account && this.adapter && !this.stopping) await this.adapter.notify(account, false).catch(() => {});
+    }
+    admitStartupNotices(accountId, now = Date.now()) {
+        if (!this.db?.owner || this.error || this.stopping || this.isSuspended()) return;
+        this.db.change(v => {
+            const account = v.accounts.find(a => a.id === accountId);
+            if (!account?.enabled) return;
+            for (const binding of v.bindings) {
+                if (binding.accountId !== accountId || binding.startupNotice === false || !account.allowedUsers.includes(binding.peerId)) continue;
+                const peer = v.peers.find(p => p.accountId === accountId && p.peerId === binding.peerId);
+                // Silently skip when there is no active WeChat reply context or within the restart cooldown.
+                if (!peer?.contextToken || peer.contextExpiredAt) continue;
+                if (Number.isFinite(peer.lastStartupNoticeAt) && now - peer.lastStartupNoticeAt < STARTUP_NOTICE_COOLDOWN_MS) continue;
+                if (v.jobs.some(j => j.startupNotice && j.accountId === accountId && j.peerId === binding.peerId && pending(j))) continue;
+                peer.lastStartupNoticeAt = now;
+                const targetLabel = binding.bot ? `${binding.name || '伙伴'}${binding.bot.main ? '' : ' · 话题'}` : binding.name || binding.sessionId;
+                v.jobs.push({
+                    id: digest(['weixin-startup', this.db.owner.nonce, binding.id, now]),
+                    kind: 'notice', startupNotice: true, accountId, peerId: binding.peerId,
+                    target: { cwd: binding.cwd, sessionId: binding.sessionId }, bindingId: binding.id,
+                    ...(binding.bot ? { bot: { profileId: binding.bot.profileId, windowId: binding.bot.windowId } } : {}),
+                    status: 'ready', reason: null, at: now,
+                    directReply: `🟢 OhMyBuddy 已启动并恢复微信连接（当前连接：${targetLabel}）。`
+                });
+            }
+            this.trimJobs(v);
+        });
     }
     receive(accountId, response) {
         const current = this.db.value.accounts.find(a => a.id === accountId);
@@ -432,9 +484,18 @@ class ChannelsService {
                 this.updateJob(job.id, { status: 'cancelled', reason: 'notification-revoked', directReply: undefined, deliverables: undefined, mediaPlans: undefined }); continue;
             }
             if (job.status === 'ready') {
+                if (job.startupNotice && this.bindingFor(job)?.startupNotice === false) {
+                    this.updateJob(job.id, { status: 'cancelled', reason: 'notification-revoked', directReply: undefined });
+                    continue;
+                }
                 const peer = this.db.value.peers.find(p => p.accountId === job.accountId && p.peerId === job.peerId);
                 const wait = !peer?.contextToken ? 'reply-context-missing' : peer.contextExpiredAt ? 'reply-context-expired' : null;
                 if (wait) {
+                    if (job.startupNotice) {
+                        // Startup notices are ephemeral: skip silently instead of waiting for a future message.
+                        this.updateJob(job.id, { status: 'cancelled', reason: wait, directReply: undefined });
+                        continue;
+                    }
                     // Never sent: WeChat refused it or no context exists. It stays out of the way of the chat.
                     if (Date.now() - (job.at || 0) > CONTEXT_WAIT_MS) this.updateJob(job.id, { status: 'failed', reason: wait, directReply: undefined, deliverables: undefined, mediaPlans: undefined });
                     else if (job.reason !== wait) this.updateJob(job.id, { reason: wait });
@@ -786,4 +847,4 @@ function mountChannels(router, service) {
         catch (error) { res.status(error.status || 400).json({ error: error.status ? error.message : '操作失败或结果待核对，请刷新状态；不会自动重试。' }); }
     });
 }
-module.exports = { ChannelsService, mountChannels, digest, parseSlash };
+module.exports = { ChannelsService, mountChannels, digest, parseSlash, STARTUP_NOTICE_COOLDOWN_MS };

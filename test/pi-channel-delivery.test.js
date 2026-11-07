@@ -6,7 +6,7 @@ const path = require('node:path');
 const { setTimeout: delay } = require('node:timers/promises');
 const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-channel-delivery-')));
 process.env.PI_CODING_AGENT_DIR = path.join(root, 'agent'); process.env.PI_PROJECT_ROOTS = root; process.env.PI_OFFLINE = '1';
-const { ChannelsService } = require('../server/channels/service');
+const { ChannelsService, STARTUP_NOTICE_COOLDOWN_MS } = require('../server/channels/service');
 const { ChannelStore, blocksFollowing, UNRESOLVED_HOLD_MS } = require('../server/channels/store');
 const { ChannelDeliveryError } = require('../server/channels/delivery-errors');
 const { WeixinAdapter, createTransport, BASE } = require('../server/channels/weixin-adapter');
@@ -347,4 +347,48 @@ test('sendmessage ret -2 is classified as an expired reply context without expos
         buffer: async () => Buffer.from(JSON.stringify({ ret: -2, errmsg: 'private' })) }));
     await assert.rejects(createTransport(new AbortController().signal)(BASE + '/ilink/bot/sendmessage'),
         e => e instanceof ChannelDeliveryError && e.reason === 'reply-context-expired' && e.platformCode === -2 && !e.retryable && !e.message.includes('private'));
+});
+
+test('startup notice is enabled by default, never touches native sessions, respects cooldown and silently skips expired contexts', async t => {
+    const { s, db, sends } = fixture(t);
+    db.change(v => { v.bindings[0].name = 'Nova'; });
+    let sessionReads = 0;
+    const origRead = s.store.withSessionRead;
+    s.store.withSessionRead = async (...args) => { sessionReads++; return origRead(...args); };
+    s.admitStartupNotices('bot', 100000);
+    assert.equal(db.value.jobs.length, 1);
+    assert.equal(db.value.jobs[0].kind, 'notice');
+    assert.equal(db.value.jobs[0].startupNotice, true);
+    s.admitStartupNotices('bot', 100000 + STARTUP_NOTICE_COOLDOWN_MS - 1);
+    assert.equal(db.value.jobs.length, 1, 'cooldown prevents duplicate startup notices');
+    s.pump(); await drain(s);
+    assert.equal(db.value.jobs[0].status, 'delivered');
+    assert.equal(sends.length, 1);
+    assert.match(sends[0], /OhMyBuddy 已启动并恢复微信连接（当前连接：Nova）/);
+    assert.equal(sessionReads, 1, 'only the read-only binding guard runs; no session write or worker turn occurs');
+
+    // When WeChat rejects the startup notice with ret=-2 (expired reply context), it is silently cancelled rather than queued for later.
+    s.adapter.send = async () => { throw new ChannelDeliveryError('reply-context-expired', false, -2); };
+    s.admitStartupNotices('bot', 100000 + STARTUP_NOTICE_COOLDOWN_MS + 1);
+    assert.equal(db.value.jobs.length, 2);
+    s.pump(); await drain(s);
+    const skipped = db.value.jobs[1];
+    assert.equal(skipped.status, 'cancelled');
+    assert.equal(skipped.reason, 'reply-context-expired');
+    assert.equal(skipped.directReply, undefined);
+    assert.ok(db.value.peers[0].contextExpiredAt, 'expired peer context is still recorded');
+
+    // While peer context is known expired or missing, admitStartupNotices does not even enqueue a job.
+    s.admitStartupNotices('bot', 100000 + STARTUP_NOTICE_COOLDOWN_MS * 3);
+    assert.equal(db.value.jobs.length, 2);
+
+    // Turning startupNotice off via action cancels any pending startup notice and suppresses future ones.
+    db.change(v => { delete v.peers[0].contextExpiredAt; });
+    s.admitStartupNotices('bot', 100000 + STARTUP_NOTICE_COOLDOWN_MS * 5);
+    assert.equal(db.value.jobs.at(-1).status, 'ready');
+    await s.action({ action: 'startup-notice', bindingId: 'binding', startupNotice: false, confirmed: true, expectedRevision: db.value.revision });
+    assert.equal(db.value.bindings[0].startupNotice, false);
+    assert.equal(db.value.jobs.at(-1).status, 'cancelled');
+    s.admitStartupNotices('bot', 100000 + STARTUP_NOTICE_COOLDOWN_MS * 7);
+    assert.equal(db.value.jobs.length, 3);
 });

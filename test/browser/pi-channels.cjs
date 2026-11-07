@@ -172,7 +172,8 @@ const server = http.createServer((req, res) => {
                     { id: 'blocked-execution', status: 'uncertain', at: Date.now(), blocksFollowing: true, canRecover: true },
                     { id: 'expired-login', status: 'failed', at: Date.now(), reason: 'wechat-login-expired', blocksFollowing: false, platformCode: -14 },
                     { id: 'retrying-delivery', status: 'sending', at: Date.now(), reason: 'delivery-retrying', blocksFollowing: false },
-                    { id: 'context-wait', status: 'ready', kind: 'cron', at: Date.now(), reason: 'reply-context-expired', blocksFollowing: false, platformCode: -2 }
+                    { id: 'context-wait', status: 'ready', kind: 'cron', at: Date.now(), reason: 'reply-context-expired', blocksFollowing: false, platformCode: -2 },
+                    { id: 'startup-skipped', status: 'cancelled', kind: 'notice', startupNotice: true, at: Date.now(), reason: 'reply-context-expired', blocksFollowing: false, platformCode: -2 }
                 ];
             });
             await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
@@ -190,8 +191,11 @@ const server = http.createServer((req, res) => {
             assert.equal(await contextWait.getByRole('button', { name: 'Mark reviewed' }).count(), 1, 'review stays optional for an undelivered result');
             assert.match(await page.locator('[data-job-id="blocked-execution"]').innerText(), /at most 5 minutes/);
             await page.locator('[data-job-filter="attention"]').click();
-            assert.equal(await page.locator('.channel-job').count(), 4);
+            assert.equal(await page.locator('.channel-job').count(), 4, 'silently skipped startup notices do not count as issues');
             await page.locator('[data-job-filter="all"]').click();
+            await page.getByRole('button', { name: 'Next', exact: true }).click();
+            assert.match(await page.locator('[data-job-id="startup-skipped"]').innerText(), /silently skipped and will not be sent later/);
+            await page.getByRole('button', { name: 'Previous', exact: true }).click();
             const deliveryOverflow = await page.evaluate(() => [...document.querySelectorAll('.channel-job,.channel-job-reason')].some(n => n.getBoundingClientRect().right > innerWidth + 1));
             assert.equal(deliveryOverflow, false);
             // Bot chats (M4-4): Bots are targets in the project select; a Bot binding names the Bot and offers per-Bot disconnects.
@@ -218,6 +222,10 @@ const server = http.createServer((req, res) => {
                 bot: { profileId: fox, windowId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', main: true }, bots: [other, fox] }]; }, { fox, other });
             await page.getByRole('button', { name: 'Refresh status', exact: true }).click();
             await botRow.waitFor();
+            await botRow.locator('.channel-menu summary').click();
+            await botRow.getByRole('button', { name: 'Disable startup notice' }).click();
+            await page.waitForFunction(() => writes.at(-1)?.action === 'startup-notice');
+            assert.deepEqual(await page.evaluate(() => [writes.at(-1).bindingId, writes.at(-1).startupNotice]), ['bb', false]);
             await botRow.locator('.channel-menu summary').click();
             await botRow.getByRole('button', { name: 'Disconnect Owl' }).click();
             await page.waitForFunction(() => writes.at(-1)?.action === 'unbind-bot');
