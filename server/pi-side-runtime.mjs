@@ -31,6 +31,7 @@ try {
     const disk = nativeSettings.getGlobalSettings();
     await networkTransport.initializeSdkNetwork(nativeSettings.getHttpIdleTimeoutMs());
     const settingsManager = SettingsManager.inMemory({
+        ...(builtinTools.length ? { defaultTools: builtinTools } : {}),
         compaction: disk.compaction, retry: disk.retry, transport: disk.transport, thinkingBudgets: disk.thinkingBudgets, images: disk.images,
         packages: [], extensions: [], skills: [], prompts: [], themes: [], enableInstallTelemetry: false,
     });
@@ -48,7 +49,7 @@ try {
         const model = services.modelRuntime.getModel(seed.provider, seed.modelId);
         if (!model) throw new Error(`Side model is not registered: ${seed.provider}/${seed.modelId}`);
         const result = await createAgentSessionFromServices({ services, sessionManager: imageContext.imageSessionManager(sessionManager, agentDir), sessionStartEvent, model,
-            thinkingLevel: seed.thinkingLevel, ...(builtinTools.length ? { tools: builtinTools.map(name => `+${name}`) } : { noTools: 'all' }) });
+            thinkingLevel: seed.thinkingLevel, ...(builtinTools.length ? {} : { noTools: 'all' }) });
         installImageCompatibility(result.session, { agentDir, emit: record => writeRawStdout(JSON.stringify(record) + '\n') });
         const active = result.session.agent.state.tools.map(tool => tool.name).sort();
         if (result.session.sessionFile || builtinTools.length && !gateLoaded || JSON.stringify(active) !== JSON.stringify(expectedTools)) throw new Error('Side isolation check failed');
