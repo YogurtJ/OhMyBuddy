@@ -1,14 +1,301 @@
-.browser-panel { min-width: 0; }
-.browser-panel > p { color: var(--text-secondary); line-height: 1.6; }
-.browser-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 14px 0; min-width: 0; }
-.browser-choice { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; }
-.browser-choice input { width: 18px; height: 18px; }
-.browser-controls button { min-height: 40px; max-width: 100%; white-space: normal; }
-.browser-note { font-size: 13px; }
-.browser-feedback, .browser-summary { overflow-wrap: anywhere; }
-.browser-summary { font-weight: 600; }
-@media (max-width: 600px) {
-    .browser-controls { gap: 8px; }
-    .browser-controls button { flex: 1 1 130px; }
-    .browser-choice { flex: 1 1 100%; }
+/* Browser assistant: page header, health summary, run settings, program actions and guidance. */
+.browser-panel {
+    --browser-line: var(--line);
+    --browser-line-strong: var(--line-strong);
+    --browser-surface: var(--surface-2);
+    --browser-surface-2: var(--surface-3);
+    --browser-accent: var(--accent);
+    --browser-soft: var(--green-soft);
+    --browser-muted: var(--text-muted);
+    --browser-text: var(--text-main);
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.browser-panel.active {
+    display: grid;
+    align-content: start;
+    gap: 16px;
+}
+.browser-panel * { box-sizing: border-box; min-width: 0; }
+.browser-panel [hidden] { display: none !important; }
+.browser-panel h3,
+.browser-panel h4,
+.browser-panel p { margin: 0; overflow-wrap: anywhere; }
+.browser-panel h4 { font-size: .95rem; font-weight: 660; line-height: 1.4; }
+
+.browser-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 0; }
+.browser-header-icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 42px;
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    background: var(--green-soft);
+    color: var(--accent);
+    font-size: 19px;
+}
+.browser-header-copy { flex: 1 1 auto; min-width: 0; }
+.browser-header h3 { font-size: 1rem; line-height: 1.5; font-weight: 670; }
+.browser-header-copy p { max-width: 660px; margin-top: 6px; color: var(--browser-muted); font-size: .78rem; line-height: 1.65; }
+.browser-header-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.browser-header .browser-refresh {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 38px;
+    padding: 8px 13px;
+    border-radius: 9px;
+    font-size: .8rem;
+}
+.browser-panel .browser-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 38px;
+    padding: 8px 14px;
+    border-radius: 9px;
+    font-size: .8rem;
+    font-weight: 560;
+    white-space: normal;
+}
+.browser-panel .browser-button-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 38px;
+    padding: 8px 16px;
+    border-radius: 9px;
+    font-size: .8rem;
+    font-weight: 620;
+}
+.browser-panel .browser-button i,
+.browser-panel .browser-button-primary i { font-size: .82em; }
+.browser-panel .browser-button:hover:not(:disabled) { border-color: var(--browser-accent); background: var(--browser-soft); }
+.browser-panel .browser-button-primary:disabled { border-color: var(--browser-line); background: var(--browser-surface-2); color: var(--browser-muted); opacity: 1; }
+.browser-panel :is(button, input, select, textarea):focus-visible { outline: 2px solid var(--browser-accent); outline-offset: 2px; }
+
+.browser-feedback {
+    padding: 10px 14px;
+    border: 1px solid var(--browser-line);
+    border-left: 3px solid var(--browser-accent);
+    border-radius: 10px;
+    background: var(--browser-soft);
+    color: var(--browser-text);
+    font-size: .8rem;
+    line-height: 1.6;
+}
+.browser-feedback:empty { display: none; }
+.browser-feedback[data-tone="error"] {
+    border-left-color: var(--danger);
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+.browser-feedback[data-tone="success"] {
+    border-left-color: var(--success);
+    background: var(--success-soft);
+}
+
+/* Health summary: state first, then the three things a person checks before using it. */
+.browser-card {
+    display: grid;
+    align-content: start;
+    gap: 16px;
+    padding: 18px 20px;
+    border: 1px solid var(--browser-line);
+    border-radius: 14px;
+    background: var(--browser-surface);
+}
+.browser-status-card {
+    gap: 14px;
+    border-left: 3px solid var(--browser-line-strong);
+    transition: border-color 160ms ease;
+}
+.browser-status-card[data-tone="on"] { border-left-color: var(--success); }
+.browser-status-card[data-tone="warn"] { border-left-color: var(--amber); }
+.browser-status-card[data-tone="busy"] { border-left-color: var(--browser-accent); }
+.browser-status-card[data-tone="off"] { border-left-color: var(--browser-line-strong); }
+.browser-status-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.browser-status-dot {
+    flex: 0 0 9px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--browser-muted);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--browser-muted) 14%, transparent);
+}
+.browser-status-card[data-tone="on"] .browser-status-dot { background: var(--success); box-shadow: 0 0 0 4px color-mix(in srgb, var(--success) 16%, transparent); }
+.browser-status-card[data-tone="warn"] .browser-status-dot { background: var(--amber); box-shadow: 0 0 0 4px color-mix(in srgb, var(--amber) 16%, transparent); }
+.browser-status-card[data-tone="busy"] .browser-status-dot { background: var(--browser-accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--browser-accent) 16%, transparent); }
+.browser-status-card[data-tone="loading"] .browser-status-dot { animation: browser-pulse 1.2s ease-in-out infinite; }
+@keyframes browser-pulse { 50% { opacity: .35; } }
+.browser-summary { font-size: .95rem; font-weight: 660; line-height: 1.45; }
+.browser-version {
+    margin-inline-start: auto;
+    padding: 3px 10px;
+    border: 1px solid var(--browser-line);
+    border-radius: 999px;
+    background: var(--browser-surface-2);
+    color: var(--browser-muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: .7rem;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+.browser-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+    gap: 10px;
+}
+.browser-metric {
+    display: grid;
+    gap: 3px;
+    padding: 11px 13px;
+    border: 1px solid var(--browser-line);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--browser-surface-2) 70%, transparent);
+}
+.browser-metric-label { color: var(--browser-muted); font-size: .72rem; line-height: 1.4; }
+.browser-metric-value { color: var(--browser-text); font-size: .86rem; font-weight: 620; line-height: 1.4; }
+
+/* Settings and program actions sit side by side when there is room. */
+.browser-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr);
+    gap: 16px;
+    align-items: start;
+}
+.browser-card-head { display: grid; grid-template-columns: 38px minmax(0, 1fr); align-items: start; gap: 12px; }
+.browser-card-icon {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: var(--browser-soft);
+    color: var(--browser-accent);
+    font-size: .95rem;
+}
+.browser-card-copy { display: grid; gap: 3px; }
+.browser-card-copy p { color: var(--browser-muted); font-size: .78rem; line-height: 1.6; }
+
+.browser-choices { display: grid; gap: 8px; }
+.browser-choice {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 11px 13px;
+    border: 1px solid var(--browser-line);
+    border-radius: 11px;
+    background: color-mix(in srgb, var(--browser-surface-2) 62%, transparent);
+    cursor: pointer;
+    transition: border-color 140ms ease, background 140ms ease;
+}
+.browser-choice:hover { border-color: var(--browser-line-strong); }
+.browser-choice:has(input:disabled) { cursor: default; opacity: .72; }
+.browser-choice-copy { display: grid; gap: 3px; }
+.browser-choice-copy strong { font-size: .84rem; font-weight: 620; line-height: 1.4; }
+.browser-choice-copy small { color: var(--browser-muted); font-size: .74rem; line-height: 1.55; }
+.browser-choice input {
+    appearance: none;
+    flex: 0 0 40px;
+    width: 40px;
+    height: 22px;
+    margin: 0;
+    border: 1px solid var(--browser-line-strong);
+    border-radius: 999px;
+    background: var(--browser-surface-2);
+    position: relative;
+    cursor: pointer;
+    transition: background 140ms ease, border-color 140ms ease;
+}
+.browser-choice input::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--browser-muted);
+    transition: left 140ms ease, background 140ms ease;
+}
+.browser-choice input:checked { border-color: var(--primary); background: var(--primary); }
+.browser-choice input:checked::after { left: 20px; background: var(--primary-contrast); }
+.browser-choice input:disabled { cursor: default; opacity: .6; }
+
+.browser-card-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    padding-top: 12px;
+    border-top: 1px solid var(--browser-line);
+}
+.browser-save-note { margin-inline-end: auto; color: var(--browser-muted); font-size: .74rem; line-height: 1.5; }
+.browser-save-note:empty { display: none; }
+
+.browser-program-card { align-content: start; }
+.browser-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.browser-controls .browser-button { flex: 1 1 130px; }
+.browser-note { color: var(--browser-muted); font-size: .75rem; line-height: 1.65; }
+
+/* Guidance is reference material, so it stays quiet and scannable below the settings. */
+.browser-guide { gap: 12px; }
+.browser-guide h4 { color: var(--browser-text); }
+.browser-guide-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+    gap: 10px;
+}
+.browser-guide-item {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr);
+    align-items: start;
+    gap: 9px;
+    padding: 12px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--browser-surface-2) 58%, transparent);
+}
+.browser-guide-icon {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    background: var(--browser-soft);
+    color: var(--browser-accent);
+    font-size: .74rem;
+}
+.browser-guide-item strong { display: block; font-size: .79rem; font-weight: 620; line-height: 1.45; }
+.browser-guide-item p { margin-top: 3px; color: var(--browser-muted); font-size: .73rem; line-height: 1.65; }
+
+@media (max-width: 900px) {
+    .browser-layout { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 680px) {
+    .browser-panel { gap: 14px; }
+    .browser-card { padding: 16px; }
+    .browser-header { flex-wrap: wrap; }
+    .browser-header-icon { flex-basis: 34px; width: 34px; height: 38px; font-size: 16px; }
+    .browser-header-copy { flex-basis: calc(100% - 46px); }
+    .browser-header-actions { flex: 1 1 100%; justify-content: flex-end; }
+    .browser-header .browser-refresh { min-height: 40px; }
+    .browser-version { margin-inline-start: 0; }
+    .browser-metrics { grid-template-columns: minmax(0, 1fr); }
+    .browser-controls .browser-button { flex: 1 1 100%; min-height: 42px; }
+    .browser-card-foot { justify-content: stretch; }
+    .browser-card-foot .browser-button-primary { flex: 1 1 100%; min-height: 42px; }
+    .browser-choice { min-height: 52px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .browser-status-card[data-tone="loading"] .browser-status-dot { animation: none; }
+    .browser-choice,
+    .browser-choice input,
+    .browser-choice input::after { transition: none; }
 }

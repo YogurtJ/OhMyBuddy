@@ -80,14 +80,13 @@ async function run(browser, base, width, locale, noProject = false) {
     } else await page.locator('#workspace-extensions-toggle').click();
     await page.locator('.extensions-view').waitFor({ state: 'visible' });
     assert.equal(await page.locator('#extensions-learned').count(), 0, 'learned skills belong to assistant profiles');
-    assert.equal(await page.locator('.extensions-card').count(), 8);
+    assert.equal(await page.locator('.extensions-card').count(), 7);
     assert.equal(await page.locator('#extension-pivane-weixin [data-installation="optional"]').count(), 1, 'messaging connectors use their dedicated optional installation flow');
     await page.locator('#extension-pi-subagents [data-installation="installed"]').waitFor();
     assert.match(await page.locator('#extension-pi-subagents [data-installation]').textContent(), /OhMyBuddy/);
     assert.equal(await page.locator('#extension-pi-subagents .extensions-version').textContent(), 'v0.74.0', 'bundled components show their version');
     assert.equal(await page.locator('#extension-pi-web-access [data-installation="installed"]').count(), 1);
     assert.equal(await page.locator('#extension-pi-web-access .extensions-version').textContent(), 'v1.0.4', 'installed packages show the installed version');
-    assert.equal(await page.locator('#extension-pi-native-mcp .extensions-version').textContent(), 'Pi 1.3.0');
     assert.equal(await page.locator('#extension-pi-web-access .extensions-update').isVisible(), false, 'updates appear only after an explicit check');
     updates = { checkedAt: new Date().toISOString(), offline: false, available: [{ source: 'git:github.com/nicobailon/pi-web-access@v1.0', scope: 'user' }] };
     channelState = { component: { installed: true, version: '2.4.10' }, accounts: [{ id: 'bot', userId: 'owner', enabled: true, allowedUsers: ['owner'], connection: 'connected' }] };
@@ -102,7 +101,7 @@ async function run(browser, base, width, locale, noProject = false) {
     await page.locator('[data-extension-filter="installed"]').click();
     assert.ok((await page.locator('.extensions-card').evaluateAll(cards => cards.map(c => c.dataset.installation))).every(state => ['installed', 'configured'].includes(state)));
     await page.locator('[data-extension-filter="installed"]').click();
-    assert.equal(await page.locator('.extensions-card').count(), 8, 'pressing an active status filter clears it');
+    assert.equal(await page.locator('.extensions-card').count(), 7, 'pressing an active status filter clears it');
     updates = null; channelState = { component: { installed: false }, accounts: [] };
     await page.locator('#extensions-refresh').click();
     await page.locator('#extension-pivane-weixin [data-installation="optional"]').waitFor();
@@ -137,7 +136,7 @@ async function run(browser, base, width, locale, noProject = false) {
         await page.locator('#extension-ppt-master [data-installation="unknown"]').waitFor();
         projectTrusted = true;
         await page.locator('#extensions-refresh').click();
-        await page.locator('#extension-pi-native-mcp [data-installation="installed"]').waitFor();
+        await page.locator('#extension-pi-subagents [data-installation="installed"]').waitFor();
         pptSkill = [{ id: 'ppt-master', scope: 'project', enabled: true }];
         await page.locator('#extensions-refresh').click();
         await page.locator('#extension-ppt-master [data-installation="installed"]').waitFor();
@@ -147,9 +146,9 @@ async function run(browser, base, width, locale, noProject = false) {
         for (let i = 0; !releaseInventory && i < 100; i++) await new Promise(resolve => setTimeout(resolve, 10));
         assert.ok(releaseInventory);
         await page.locator('#extensions-scope').selectOption('global');
-        await page.locator('#extension-pi-native-mcp [data-installation="installed"]').waitFor();
+        await page.locator('#extension-pi-subagents [data-installation="installed"]').waitFor();
         releaseInventory(); await new Promise(resolve => setTimeout(resolve, 100));
-        assert.equal(await page.locator('#extension-pi-native-mcp [data-installation="installed"]').count(), 1, 'native built-in stays available in global scope');
+        assert.equal(await page.locator('#extension-pi-subagents [data-installation="installed"]').count(), 1, 'a late project-scope response cannot replace the global inventory');
         projectTrusted = false;
     }
     assert.equal(await page.locator('#extensions-nav [data-extensions-tab]').count(), 5);
@@ -192,7 +191,7 @@ async function run(browser, base, width, locale, noProject = false) {
     await page.locator('#workspace-settings-close').click();
     if (!noProject) assert.equal(await page.locator('#pi-input').inputValue(), 'Discovery draft');
     await page.locator('.extensions-explore-choices button').first().click();
-    assert.equal(await page.locator('.extensions-card').count(), 8, 'home shortcuts clear stale search');
+    assert.equal(await page.locator('.extensions-card').count(), 7, 'home shortcuts clear stale search');
     await page.locator('#extensions-nav [data-extensions-tab="installed"]').click();
     await page.locator('#native-installed .native-assistant-entry').waitFor({ state: 'visible' });
     await page.locator('#workspace-settings-close').click();
@@ -326,7 +325,7 @@ async function run(browser, base, width, locale, noProject = false) {
     await page.waitForFunction(() => document.getElementById('pi-extension-assistant-add')?.hidden === true);
     await page.evaluate(() => window.dispatchEvent(new CustomEvent('workspace:open-settings', { detail: { tab: 'extensions' } })));
     await page.locator('.extensions-card').first().waitFor();
-    assert.equal(await page.locator('.extensions-card').count(), 8);
+    assert.equal(await page.locator('.extensions-card').count(), 7);
     assert.equal(await page.locator('[data-extension-configure]:enabled').count(), 0);
     assert.equal(await page.locator('#extensions-assistant-unavailable').isVisible(), true);
     assert.deepEqual(errors, []);
