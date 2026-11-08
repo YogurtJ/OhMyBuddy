@@ -6,13 +6,13 @@
 
 后续完整包制作与发布前验收聚焦 macOS ARM64（Apple Silicon）、Windows x64 和 glibc Linux x64；暂停为新版本制作、验收和承诺更新 Linux ARM64 完整包。下方各版本的 ARM64 结果保留其历史适用范围，不自动转为后续版本的支持证明；源码兼容与实际分发范围分别记录。具体流程见[发布准备](development/RELEASING.md#后续发布平台)。
 
-## 1.12.2：候选已验证（待公开发布）
+## 1.12.2：已正式发布
 
-[1.12.2 说明](releases/1.12.2.md)。冻结源码 `eb22a0215d66004b04a4e9ebb6cd68a5045b78a2`，源码归档 SHA256 `55a4602eba6625ca9f53f89a66676ef0873de868ce2e1fa9f5187c7f1553ccdf`（10,261,712 字节、2,031 个清单文件）。本版在 1.12.1（`f035b44919f36fcf5d1621d67706d1a6513f74ef`）基础上合入伙伴身份术语统一、浏览器设置页改版与发现页去重、伙伴做事方式三档重构、侧聊临时附件上传与自动释放（含 Windows 无 Git Bash 环境下有工具侧聊的工具列表修正）、微信启动提示与回复恢复改进及英文界面补齐。Pi 1.5.0、生产依赖锁定图、原生组件、会话 JSONL 与 v2 费用账本结构保持不变。
+2026-11-08 已[正式发布](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.12.2)并设为 Latest，八份发行附件匿名完整回下载摘要一致。冻结源码 `eb22a0215d66004b04a4e9ebb6cd68a5045b78a2`，源码归档 SHA256 `55a4602eba6625ca9f53f89a66676ef0873de868ce2e1fa9f5187c7f1553ccdf`（10,261,712 字节、2,031 个清单文件）。[验收 JSON](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.12.2/ohmybuddy-1.12.2.validation.json)、[验收说明](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.12.2/ohmybuddy-1.12.2.validation.md)及[校验和](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.12.2/SHA256SUMS-1.12.2.txt)记录准确包、原失败和复用；发布后补记不改冻结标签与归档。
 
 macOS ARM64 和 Linux x64（UID1002）各执行 21 个受影响 Node 文件共 172 项通过；Windows Medium 首轮 149 项通过、5 项失败（3 个符号链接夹具文件因 Limited 令牌无权限报 EPERM，2 项有工具侧聊用例因 `+name` 工具修饰符保留默认 `bash` 在无 Git Bash 时退出），修正 `server/pi-side-runtime.mjs`（`eb22a02`）后三端补验 3 个侧聊文件 13/13 通过，Windows 另在 High 令牌下补验 3 个符号链接文件 21/21 通过（重叠项不相加，原失败保留）。三平台各 13 个相关 Chromium 脚本通过（页面错误 0）；语法 889、公开文档 94、生产依赖审计 0 漏洞，macOS 独立源码探针校验 269 项 HTTP 静态资源字节与正常停机通过。未重跑全量 Node 或浏览器，未受影响范围复用 1.12.1 / 1.12.0 基线。
 
-三平台从同一冻结源码构建完整平台包（认证载荷文件数：macOS 22,112、Linux 22,116、Windows 31,793），完成清单及 SDK/RPC/原生组件探针；macOS 只读挂载 DMG 校验一致；macOS 与 Linux 新装、私有运行时 HTTP、正常停机和配置重接入通过；Windows 实际 Medium RID8192 非管理员令牌下 EXE 完成 `--prepare-only` 安装准备，不注册或启动永久系统服务。三端各从正式 1.12.1 完整包经私有回环 HTTPS 与实际发行公钥单次更新到 1.12.2（`executeCount=1`），会话／媒体、停机备份和原路径恢复（macOS 13、Linux 13、Windows 14 文件）通过，页面错误 0；Linux 与 Windows 同时验证外置图片字节保持。macOS DMG 未公证，Windows EXE 未系统代码签名；真实付费供应商/OAuth、微信、实体手机、Safari/Firefox 和其他架构不由合成验收代替。候选已完成三端验收，尚未公开发布或切换本机运行实例。
+三平台从同一冻结源码构建完整平台包（认证载荷文件数：macOS 22,112、Linux 22,116、Windows 31,793），完成清单及 SDK/RPC/原生组件探针；macOS 只读挂载 DMG 校验一致；macOS 与 Linux 新装、私有运行时 HTTP、正常停机和配置重接入通过；Windows 实际 Medium RID8192 非管理员令牌下 EXE 完成 `--prepare-only` 安装准备，不注册或启动永久系统服务。三端各从正式 1.12.1 完整包经私有回环 HTTPS 与实际发行公钥单次更新到 1.12.2（`executeCount=1`），会话／媒体、停机备份和原路径恢复（macOS 13、Linux 13、Windows 14 文件）通过，页面错误 0；Linux 与 Windows 同时验证外置图片字节保持。公开 DMG／EXE 在 HTTPS 443 完整回下载摘要一致；stable／preview 在 443 和 8443 的签名、版本、来源及 no-store 核验通过，下载页在 1440／393／320px 无页面错误或横向溢出。macOS DMG 未公证，Windows EXE 未系统代码签名；真实付费供应商/OAuth、微信、实体手机、Safari/Firefox 和其他架构不由合成验收代替。
 
 ## 1.12.1：已正式发布
 

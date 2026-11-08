@@ -13,9 +13,9 @@
 
 本目录随源码更新，可能包含尚未公开发布的功能；源码版本看 [package.json](../package.json)，实际能力看运行实例。正式公开版本、下载、校验和准确验收摘要以 [GitHub Releases](https://github.com/YogurtJ/OhMyBuddy/releases) 为准。公开发布不自动切换已有实例；升级前按[安装与恢复](INSTALL_RECOVERY.md)保存草稿、停机备份并保留数据路径。完整变化见 [CHANGELOG](../CHANGELOG.md)。
 
-[1.12.2 版本说明](releases/1.12.2.md)涵盖伙伴身份术语统一、浏览器设置页改版、伙伴做事方式重构、侧聊临时附件及微信启动提示与回复恢复改进（候选验证中，公开状态以 Releases 为准）。
+[1.12.2 版本说明](releases/1.12.2.md)涵盖伙伴身份术语统一、浏览器设置页改版、伙伴做事方式重构、侧聊临时附件及微信启动提示与回复恢复改进。当前正式版 [OhMyBuddy 1.12.2](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.12.2) 于 2026-11-08 发布并设为 Latest，八份发行附件匿名完整回下载摘要一致。三端实际执行、基线复用和限制见[平台验证范围](RELEASE_INSTALL_VALIDATION.md)。
 
-[1.12.1 版本说明](releases/1.12.1.md)涵盖自定义服务商一步接入与模型探测、伙伴话题界面改版及工作台用户消息气泡样式优化。当前正式版 [OhMyBuddy 1.12.1](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.12.1) 于 2026-11-04 发布并设为 Latest，八份发行附件匿名完整回下载摘要一致。三端实际执行、基线复用和限制见[平台验证范围](RELEASE_INSTALL_VALIDATION.md)。
+[1.12.1 版本说明](releases/1.12.1.md)涵盖自定义服务商一步接入与模型探测、伙伴话题界面改版及工作台用户消息气泡样式优化。上一正式版 [OhMyBuddy 1.12.1](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.12.1) 于 2026-11-04 发布，八份发行附件匿名完整回下载摘要一致。三端实际执行、基线复用和限制见[平台验证范围](RELEASE_INSTALL_VALIDATION.md)。
 
 [1.12.0 版本说明](releases/1.12.0.md)涵盖 Pi 1.5、官方 Playwright MCP、任务与项目导航、存储布局、定时任务及流式渲染改进。上一正式版 [OhMyBuddy 1.12.0](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.12.0) 于 2026-11-04 发布，八份源码发行附件匿名回下载摘要一致。[完整安装包](https://download.bitcosmos.cn/)提供 macOS ARM64、Windows x64 和 glibc Linux x64，stable／preview 签名频道同步；新 Linux ARM64 包暂停，历史附件仍保留。准确包、原失败、补验、复用及本次真实 HTTPS 更新结果见[平台验证范围](RELEASE_INSTALL_VALIDATION.md)。
 
