@@ -82,6 +82,31 @@ const { WorkspaceAccessService } = require('../../server/workspace-access-servic
                 assert.equal(await page.locator('.pi-standalone-group .pi-session-item').count(), 2);
                 assert.equal(await page.locator('.pi-project-group').count(), 0, 'independent directories must not appear as individual projects');
                 await page.screenshot({ path: path.join(os.tmpdir(), `omb-tasks-projects-${width}.png`) });
+                if (width === 1440) {
+                    const secondItem = page.locator(`.pi-standalone-group .pi-session-item[data-cwd=${JSON.stringify(second)}]`);
+                    await secondItem.hover();
+                    await secondItem.locator('[data-action="menu"]').click();
+                    await page.getByRole('menuitem', { name: '删除线程' }).click();
+                    const deleteDialog = page.locator('.pi-session-delete-dialog');
+                    await deleteDialog.waitFor({ state: 'visible' });
+                    await page.waitForFunction(() => document.querySelector('.pi-session-delete-dialog .pi-delete-description')?.textContent.includes('此任务工作文件夹为空，删除后将自动清理。'));
+                    assert.equal(await deleteDialog.locator('.pi-delete-workspace-option').isHidden(), true);
+                    await deleteDialog.locator('.pi-delete-confirm').click();
+                    await page.waitForFunction(() => document.querySelector('.pi-session-delete-dialog')?.classList.contains('is-complete'));
+                    assert.match(await deleteDialog.locator('.pi-delete-description').textContent(), /空的任务工作文件夹已自动清理/);
+                    assert.equal(fs.existsSync(second), false);
+                    await deleteDialog.locator('[data-close]').nth(1).click();
+
+                    const firstItem = page.locator(`.pi-standalone-group .pi-session-item[data-cwd=${JSON.stringify(first)}]`);
+                    await firstItem.hover();
+                    await firstItem.locator('[data-action="menu"]').click();
+                    await page.getByRole('menuitem', { name: '删除线程' }).click();
+                    await deleteDialog.waitFor({ state: 'visible' });
+                    await page.waitForFunction(() => !document.querySelector('.pi-session-delete-dialog .pi-delete-workspace-option')?.hidden);
+                    assert.equal(await deleteDialog.locator('.pi-delete-workspace-checkbox').isChecked(), false);
+                    assert.match(await deleteDialog.locator('.pi-delete-workspace-option').textContent(), /含 1 项文件/);
+                    await deleteDialog.locator('[data-close]').first().click();
+                }
                 if (width <= 680) await page.locator('#pi-toggle-sessions').click();
                 await openPicker();
                 assert.equal(await page.locator('#pi-start-standalone, #pi-project-locations').count(), 0);

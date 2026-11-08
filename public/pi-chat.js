@@ -2414,41 +2414,67 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     let sessionDeleteDialog = null;
-    function forgetDeletedSession(session, cwd) {
+    function forgetDeletedSession(session, cwd, { workspaceRemoved = false } = {}) {
         const key = JSON.stringify([cwd, session.id]);
         state.deletedSessions.add(key);
         sideChat.forget(key);
         state.composerDrafts.delete(key); state.uncertainDrafts.delete(key);
         state.recentlyOpened.delete(activityKey(cwd, session.id));
         if (localStorage.getItem(`pi.web.session:${cwd}`) === session.id) localStorage.removeItem(`pi.web.session:${cwd}`);
+        const nextSessions = (state.projectSessions.get(cwd) || []).filter(item => item.id !== session.id);
+        invalidateSessionList(cwd);
+        if (workspaceRemoved) {
+            state.projectSessions.delete(cwd);
+            state.projects = state.projects.filter(item => item.cwd !== cwd);
+            localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(readStoredArray(RECENT_PROJECTS_KEY).filter(item => item?.cwd !== cwd)));
+            if (localStorage.getItem('pi.web.cwd') === cwd) localStorage.removeItem('pi.web.cwd');
+        } else {
+            state.projectSessions.set(cwd, nextSessions);
+            const project = state.projects.find(item => item.cwd === cwd);
+            if (project) project.sessionCount = nextSessions.length;
+        }
         if (state.cwd === cwd && state.session?.id === session.id) {
             disconnectSocket(true);
             state.session = null;
             state.composerSessionKey = null;
             elements.input.value = ''; clearAttachments();
-            clearSessionView(); workflows.update();
-            setConnection('idle', translateUi("选择会话开始工作"));
-            if (window.PiWorkspaceRoute?.current().tab === 'chat') window.PiWorkspaceRoute.navigate('chat', { cwd });
+            if (workspaceRemoved) {
+                state.cwd = '';
+                state.sessions = [];
+                window.PiAgentProfilesUI?.projectChanged();
+                nativeContext.sync();
+                elements.projectName.textContent = translateUi("工作台");
+                elements.projectPath.textContent = '';
+                elements.projectInput.value = '';
+                clearSessionView(); workflows.update();
+                setConnection('idle', translateUi("等待会话"));
+                if (window.PiWorkspaceRoute?.current().tab === 'chat') window.PiWorkspaceRoute.navigate('chat', {});
+            } else {
+                state.sessions = nextSessions;
+                clearSessionView(); workflows.update();
+                setConnection('idle', translateUi("选择会话开始工作"));
+                if (window.PiWorkspaceRoute?.current().tab === 'chat') window.PiWorkspaceRoute.navigate('chat', { cwd });
+            }
+        } else if (state.cwd === cwd) {
+            state.sessions = nextSessions;
         }
-        const nextSessions = (state.projectSessions.get(cwd) || []).filter(item => item.id !== session.id);
-        invalidateSessionList(cwd);
-        state.projectSessions.set(cwd, nextSessions);
-        if (state.cwd === cwd) state.sessions = nextSessions;
-        const project = state.projects.find(item => item.cwd === cwd);
-        if (project) project.sessionCount = nextSessions.length;
         renderProjects(); renderSessions();
     }
 
     async function deleteOneSession(session = state.session, cwd = session?.cwd || state.cwd) {
         if (!session || session.ephemeral || !cwd || sessionDeleteDialog) return;
+        const isStandalone = Boolean(session.standalone || state.projects.find(project => project.cwd === cwd)?.standalone);
         const dialog = document.createElement('dialog');
         sessionDeleteDialog = dialog;
         dialog.className = 'pi-workflow-dialog pi-session-delete-dialog';
         dialog.setAttribute('aria-labelledby', 'pi-session-delete-title');
-        dialog.innerHTML = `<div class="pi-request-heading"><h3 id="pi-session-delete-title">${translateUi('删除线程')}</h3><button type="button" class="icon-btn subtle" data-close aria-label="${translateUi('关闭')}"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div><p class="pi-delete-name"></p><p class="pi-delete-description"></p><p class="pi-action-status" role="status" hidden></p><p class="pi-workflow-error" role="alert" hidden></p><div class="pi-request-actions"><button type="button" class="pi-request-cancel" data-close>${translateUi('取消')}</button><button type="button" class="primary-btn pi-delete-confirm">${translateUi('删除线程')}</button></div>`;
+        dialog.innerHTML = `<div class="pi-request-heading"><h3 id="pi-session-delete-title">${translateUi('删除线程')}</h3><button type="button" class="icon-btn subtle" data-close aria-label="${translateUi('关闭')}"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div><p class="pi-delete-name"></p><p class="pi-delete-description"></p><label class="pi-workflow-check pi-delete-workspace-option" hidden><input type="checkbox" class="pi-delete-workspace-checkbox"><span></span></label><p class="pi-action-status" role="status" hidden></p><p class="pi-workflow-error" role="alert" hidden></p><div class="pi-request-actions"><button type="button" class="pi-request-cancel" data-close>${translateUi('取消')}</button><button type="button" class="primary-btn pi-delete-confirm">${translateUi('删除线程')}</button></div>`;
         dialog.querySelector('.pi-delete-name').textContent = getSessionTitle(session);
         const description = dialog.querySelector('.pi-delete-description');
         description.textContent = translateUi('会先停止此线程的运行并取消待发送消息，再尝试移入回收站；回收站不可用时将永久删除。项目文件不受影响。') + ' ' + translateUi('已保存到成果库的文件不会删除；待保存的交付请先保存。');
+        const workspaceOption = dialog.querySelector('.pi-delete-workspace-option');
+        const workspaceCheckbox = dialog.querySelector('.pi-delete-workspace-checkbox');
+        const workspaceLabel = workspaceOption.querySelector('span');
         const submit = dialog.querySelector('.pi-delete-confirm');
         const status = dialog.querySelector('[role="status"]');
         const errorBox = dialog.querySelector('[role="alert"]');
@@ -2461,14 +2487,21 @@ document.addEventListener('DOMContentLoaded', () => {
             if (pending) return;
             pending = true; errorBox.hidden = true;
             closeButtons.forEach(button => { button.disabled = true; });
+            workspaceCheckbox.disabled = true;
             const finish = window.PiActionFeedback.begin(submit, translateUi('正在删除…'));
             status.hidden = false; status.textContent = translateUi('正在停止运行并删除线程，请稍候…');
             if (state.cwd === cwd && state.session?.id === session.id) disconnectSocket(true);
+            const trashWorkspace = !workspaceOption.hidden && workspaceCheckbox.checked;
             try {
-                const result = await apiFetch(`/api/pi/sessions/${encodeURIComponent(session.id)}?cwd=${encodeURIComponent(cwd)}`, { method: 'DELETE', signal: AbortSignal.timeout(150000) });
-                forgetDeletedSession(session, cwd);
+                const query = `cwd=${encodeURIComponent(cwd)}${trashWorkspace ? '&trashWorkspace=true' : ''}`;
+                const result = await apiFetch(`/api/pi/sessions/${encodeURIComponent(session.id)}?${query}`, { method: 'DELETE', signal: AbortSignal.timeout(150000) });
+                forgetDeletedSession(session, cwd, { workspaceRemoved: ['removed-empty', 'trashed'].includes(result?.workspaceDisposition) });
+                workspaceOption.hidden = true;
                 dialog.querySelector('h3').textContent = translateUi('线程已删除');
                 description.textContent = result?.trashed === true ? translateUi('会话已移入回收站') : result?.trashed === false ? translateUi('会话已永久删除') : translateUi('会话已删除');
+                if (result?.workspaceDisposition === 'removed-empty') description.textContent += '；' + translateUi('空的任务工作文件夹已自动清理');
+                else if (result?.workspaceDisposition === 'trashed') description.textContent += '；' + translateUi('任务工作文件夹已移入回收站');
+                else if (result?.workspaceCleanupWarning) description.textContent += '；' + translateUi(result.workspaceCleanupWarning);
                 if (result?.queueRecoveryWarning) description.textContent += '；' + translateUi(result.queueRecoveryWarning);
                 if (result?.imageCleanupWarning) description.textContent += '；' + translateUi(result.imageCleanupWarning);
                 else if (result?.imageDeletionId) description.textContent += '；' + translateUi(result.trashed ? '图片恢复保护已保留，其他会话共享的图片不会删除。' : '图片已登记待核对，可在附件管理中检查并回收无引用图片。');
@@ -2483,29 +2516,47 @@ document.addEventListener('DOMContentLoaded', () => {
                         const sessions = await loadSessions(cwd);
                         if (state.cwd === cwd && state.session?.id === session.id) {
                             if (sessions.some(item => item.id === session.id)) void connectSocket(session).catch(() => {});
-                            else { forgetDeletedSession(session, cwd); submit.hidden = true; }
+                            else { forgetDeletedSession(session, cwd); submit.hidden = true; workspaceOption.hidden = true; }
                         }
                     } catch { /* Keep the result unconfirmed; do not enter a reconnect loop. */ }
                 }
             } finally {
                 pending = false; finish(); status.hidden = true;
+                workspaceCheckbox.disabled = false;
                 closeButtons.forEach(button => { button.disabled = false; });
                 closeButtons[1].focus();
             }
         });
         document.body.appendChild(dialog); dialog.showModal(); closeButtons[1].focus();
+        const checks = [];
+        if (isStandalone) {
+            checks.push(apiFetch(`/api/pi/sessions/${encodeURIComponent(session.id)}/workspace-cleanup?cwd=${encodeURIComponent(cwd)}`, { signal: AbortSignal.timeout(8000) }).then(info => {
+                if (sessionDeleteDialog !== dialog || !dialog.isConnected || !info?.standalone) return;
+                if (info.shared) {
+                    description.append(document.createTextNode(' ' + translateUi('此任务工作文件夹仍有其他线程共用，文件夹将保留。')));
+                } else if (info.fileCount > 0) {
+                    workspaceLabel.textContent = translateUi('同时将此任务的工作文件夹移入回收站（含 {0} 项文件，回收站不可用时保留原文件夹）', info.fileCount);
+                    workspaceOption.hidden = false;
+                } else if (info.fileCount === 0 && !info.unavailable) {
+                    description.append(document.createTextNode(' ' + translateUi('此任务工作文件夹为空，删除后将自动清理。')));
+                }
+            }).catch(() => {}));
+        }
         if (state.scheduledTasks) {
-            submit.disabled = true;
-            try {
-                const snapshot = await apiFetch('/api/pi/cron', { signal: AbortSignal.timeout(8000) });
+            checks.push(apiFetch('/api/pi/cron', { signal: AbortSignal.timeout(8000) }).then(snapshot => {
                 if (sessionDeleteDialog !== dialog || !dialog.isConnected) return;
                 const homes = new Set(snapshot.homes.filter(home => home.cwd === cwd && home.sessionId === session.id).map(home => home.profileId));
                 const affected = snapshot.jobs.filter(job => job.target.kind === 'thread' ? job.target.cwd === cwd && job.target.sessionId === session.id : homes.has(job.target.profileId));
                 if (affected.length) description.append(document.createTextNode(' ' + translateUi('同时暂停 {0} 个定时任务：{1}', affected.length, affected.map(job => job.name).slice(0, 5).join('、'))));
                 if (homes.size) description.append(document.createTextNode(' ' + translateUi('此线程也是身份的主线程；删除后需重新指定，不会自动重建。')));
-            } catch {
+            }).catch(() => {
                 if (dialog.isConnected) description.append(document.createTextNode(' ' + translateUi('关联的定时任务会暂停，主线程引用需重新指定。')));
-            } finally { if (dialog.isConnected && !pending) submit.disabled = false; }
+            }));
+        }
+        if (checks.length) {
+            submit.disabled = true;
+            await Promise.allSettled(checks);
+            if (dialog.isConnected && !pending) submit.disabled = false;
         }
     }
 
@@ -3727,7 +3778,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 elements.input.disabled = true; elements.sendButton.disabled = true;
                 break;
             case 'gateway_session_deleted': {
-                forgetDeletedSession({ id: event.sessionId }, event.cwd);
+                forgetDeletedSession({ id: event.sessionId }, event.cwd, { workspaceRemoved: ['removed-empty', 'trashed'].includes(event.workspaceDisposition) });
                 toast(event.trashed === true ? translateUi('会话已移入回收站') : event.trashed === false ? translateUi('会话已永久删除') : translateUi('会话已删除'), 'success');
                 break;
             }

@@ -705,8 +705,20 @@ function createPiAgentGateway(options = {}) {
     supervisor.on('sessionRemoval', event => {
         for (const listener of sessionRemovalListeners) listener(event);
     });
+    router.get('/sessions/:id/workspace-cleanup', async (req, res) => {
+        res.set('Cache-Control', 'no-store');
+        try {
+            res.json(await store.inspectStandaloneWorkspace(req.query.cwd, req.params.id));
+        } catch (error) {
+            res.status(400).json({ error: error.message });
+        }
+    });
+
     router.delete('/sessions/:id', async (req, res) => {
         try {
+            if (req.query.trashWorkspace !== undefined && !['true', 'false', '1', '0'].includes(String(req.query.trashWorkspace)))
+                throw new Error('trashWorkspace must be a boolean');
+            const trashWorkspace = req.query.trashWorkspace === 'true' || req.query.trashWorkspace === '1';
             const session = await store.getSession(req.query.cwd, req.params.id);
             await channels.ready;
             channels.assertUnbound(session.cwd, session.id);
@@ -718,7 +730,7 @@ function createPiAgentGateway(options = {}) {
                 try {
                     await supervisor.stopSession(session.path);
                     await usage.preserveSession(session.path);
-                    const result = await store.deleteSession(req.query.cwd, req.params.id);
+                    const result = await store.deleteSession(req.query.cwd, req.params.id, { trashWorkspace });
                     try { await supervisor.forgetDeletedSession(session.path); }
                     catch { result.queueRecoveryWarning = '会话已移除，但排队内容清理未完成，请核对恢复记录'; }
                     await cron.removing(session);
@@ -800,7 +812,8 @@ function createPiAgentGateway(options = {}) {
             windowRotationListeners.add(windowRotation);
             const sessionRemoval = event => {
                 if (event.path !== workerSessionPath) return;
-                if (event.deleted) safeSend(socket, { type: 'gateway_session_deleted', cwd: event.cwd, sessionId: event.id, trashed: event.result.trashed },
+                if (event.deleted) safeSend(socket, { type: 'gateway_session_deleted', cwd: event.cwd, sessionId: event.id,
+                    trashed: event.result.trashed, workspaceDisposition: event.result.workspaceDisposition },
                     { code: 4004, reason: 'Session deleted' });
                 socket.close(event.deleted ? 4004 : 1012, event.deleted ? 'Session deleted' : 'Session deletion failed');
             };

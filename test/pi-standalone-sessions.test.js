@@ -58,9 +58,60 @@ test('standalone HTTP creation allocates independent persistent native sessions 
     assert.equal((await reopened.listSessions(second.cwd)).some(session => session.id === first.id), false);
     const locations = await reopened.listDirectories(root);
     assert.ok(locations.locations.every(location => reopened.resolveProject(location.path) === location.path));
-    assert.equal((await call('DELETE', '/sessions/' + first.id + '?cwd=' + encodeURIComponent(first.cwd))).status, 200);
+    assert.deepEqual((await call('GET', '/sessions/' + first.id + '/workspace-cleanup?cwd=' + encodeURIComponent(first.cwd))).data,
+        { standalone: true, shared: false, fileCount: 1 });
+    assert.deepEqual((await call('GET', '/sessions/' + second.id + '/workspace-cleanup?cwd=' + encodeURIComponent(second.cwd))).data,
+        { standalone: true, shared: false, fileCount: 0 });
+    assert.equal((await call('DELETE', '/sessions/' + first.id + '?cwd=' + encodeURIComponent(first.cwd) + '&trashWorkspace=invalid')).status, 400);
+    const deletedFirst = await call('DELETE', '/sessions/' + first.id + '?cwd=' + encodeURIComponent(first.cwd));
+    assert.equal(deletedFirst.status, 200);
+    assert.equal(deletedFirst.data.workspaceDisposition, 'retained');
     assert.equal(fs.readFileSync(path.join(first.cwd, 'result.txt'), 'utf8'), 'retained output');
     assert.equal((await reopened.getSession(second.cwd, second.id)).id, second.id);
+    const deletedSecond = await call('DELETE', '/sessions/' + second.id + '?cwd=' + encodeURIComponent(second.cwd));
+    assert.equal(deletedSecond.status, 200);
+    assert.equal(deletedSecond.data.workspaceDisposition, 'removed-empty');
+    assert.equal(fs.existsSync(second.cwd), false, 'empty unshared standalone workspace is automatically removed');
+});
+
+test('standalone workspace cleanup respects shared sessions and optional trash disposition', async () => {
+    const store = new PiSessionStore();
+    const sharedPrimary = await store.createStandaloneSession('Shared primary');
+    const sharedSecondary = await store.createSession(sharedPrimary.cwd, 'Shared secondary');
+    assert.deepEqual(await store.inspectStandaloneWorkspace(sharedPrimary.cwd, sharedPrimary.id),
+        { standalone: true, shared: true, fileCount: 0 });
+    const removedPrimary = await store.deleteSession(sharedPrimary.cwd, sharedPrimary.id);
+    assert.equal(removedPrimary.workspaceDisposition, 'shared');
+    assert.equal(fs.existsSync(sharedPrimary.cwd), true);
+    const removedSecondary = await store.deleteSession(sharedPrimary.cwd, sharedSecondary.id);
+    assert.equal(removedSecondary.workspaceDisposition, 'removed-empty');
+    assert.equal(fs.existsSync(sharedPrimary.cwd), false);
+
+    const withFiles = await store.createStandaloneSession('With files');
+    fs.writeFileSync(path.join(withFiles.cwd, 'artifact.txt'), 'important');
+    const trashDir = path.join(root, 'synthetic-trash');
+    fs.mkdirSync(trashDir, { recursive: true });
+    const trashedResult = await store.deleteSession(withFiles.cwd, withFiles.id, {
+        trashWorkspace: true,
+        trashFile: async target => {
+            fs.renameSync(target, path.join(trashDir, path.basename(target)));
+        }
+    });
+    assert.equal(trashedResult.trashed, true);
+    assert.equal(trashedResult.workspaceDisposition, 'trashed');
+    assert.equal(fs.existsSync(withFiles.cwd), false);
+    assert.equal(fs.readFileSync(path.join(trashDir, path.basename(withFiles.cwd), 'artifact.txt'), 'utf8'), 'important');
+
+    const trashUnavailable = await store.createStandaloneSession('Trash unavailable');
+    fs.writeFileSync(path.join(trashUnavailable.cwd, 'keep.txt'), 'never rm -rf');
+    const fallbackResult = await store.deleteSession(trashUnavailable.cwd, trashUnavailable.id, {
+        trashWorkspace: true,
+        trashFile: async () => { throw new Error('trash unavailable'); }
+    });
+    assert.equal(fallbackResult.trashed, false);
+    assert.equal(fallbackResult.workspaceDisposition, 'retained');
+    assert.match(fallbackResult.workspaceCleanupWarning, /已原位保留/);
+    assert.equal(fs.readFileSync(path.join(trashUnavailable.cwd, 'keep.txt'), 'utf8'), 'never rm -rf');
 });
 
 test('standalone allocation respects roots and refuses redirected managed directories outside scope', async () => {

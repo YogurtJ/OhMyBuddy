@@ -11699,5 +11699,13 @@
         ["你纠正伙伴或说“以后都这样”时，立即记下来。", "Remember your corrections and requests for the Buddy to do things a certain way from now on."],
         ["手动纠错属于当前伙伴范围，不会伪造聊天来源；仅经服务端核实的线程回执在此显示。", "Manual corrections belong to this Buddy identity and do not claim chat provenance. Only server-verified thread receipts appear here."]
     );
+    rows.push(
+        ["此任务工作文件夹仍有其他线程共用，文件夹将保留。", "This task’s working folder is still shared with other threads and will be kept."],
+        ["同时将此任务的工作文件夹移入回收站（含 {0} 项文件，回收站不可用时保留原文件夹）", "Also move this task’s working folder to trash ({0} items; kept if trash is unavailable)", "Also move this task’s working folder to trash ({0} item; kept if trash is unavailable)"],
+        ["此任务工作文件夹为空，删除后将自动清理。", "This task’s working folder is empty and will be cleaned up automatically."],
+        ["空的任务工作文件夹已自动清理", "Empty task working folder was cleaned up automatically"],
+        ["任务工作文件夹已移入回收站", "Task working folder moved to trash"],
+        ["工作文件夹未能移入回收站，已原位保留", "Task working folder could not be moved to trash and was kept in place"]
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

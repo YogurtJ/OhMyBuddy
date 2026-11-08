@@ -529,7 +529,48 @@ class PiSessionStore {
         });
     }
 
-    async deleteSession(cwdInput, id, { trashFile = file => execFileAsync('gio', ['trash', file], { timeout: 10000 }) } = {}) {
+    async inspectStandaloneWorkspace(cwdInput, id) {
+        const session = await this.getSession(cwdInput, id);
+        if (!session.standalone || !this.isStandaloneProject(session.cwd)) return { standalone: false };
+        const { SessionManager } = await getSdk();
+        const sessions = await this._nativeSessionMetadata(session.cwd, SessionManager);
+        if (sessions.some(item => item.id !== session.id)) return { standalone: true, shared: true, fileCount: 0 };
+        let entries;
+        try {
+            const stat = fs.lstatSync(session.cwd);
+            if (!stat.isDirectory() || stat.isSymbolicLink() || fs.realpathSync.native(session.cwd) !== session.cwd)
+                return { standalone: true, shared: false, fileCount: 0, unavailable: true };
+            entries = fs.readdirSync(session.cwd);
+        } catch {
+            return { standalone: true, shared: false, fileCount: 0 };
+        }
+        return { standalone: true, shared: false, fileCount: entries.length };
+    }
+
+    async _cleanupStandaloneWorkspace(session, { trashWorkspace = false, trashFile } = {}) {
+        if (!session.standalone || !this.isStandaloneProject(session.cwd)) return null;
+        try {
+            const { SessionManager } = await getSdk();
+            const remaining = await this._nativeSessionMetadata(session.cwd, SessionManager);
+            if (remaining.some(item => item.id !== session.id)) return 'shared';
+            const stat = fs.lstatSync(session.cwd);
+            if (!stat.isDirectory() || stat.isSymbolicLink() || fs.realpathSync.native(session.cwd) !== session.cwd) return 'retained';
+            const entries = fs.readdirSync(session.cwd);
+            if (entries.length === 0) {
+                fs.rmdirSync(session.cwd);
+                return 'removed-empty';
+            }
+            if (!trashWorkspace) return 'retained';
+            await trashFile(session.cwd);
+            try { fs.lstatSync(session.cwd); return 'retained'; }
+            catch (error) { if (error.code !== 'ENOENT') return 'retained'; return 'trashed'; }
+        } catch (error) {
+            if (error?.code === 'ENOENT') return null;
+            return 'retained';
+        }
+    }
+
+    async deleteSession(cwdInput, id, { trashWorkspace = false, trashFile = file => execFileAsync('gio', ['trash', file], { timeout: 10000 }) } = {}) {
         const session = await this.getSession(cwdInput, id);
         const lifecycle = new (require('./pi-session-image-lifecycle').SessionImageLifecycle)();
         const imageDeletionId = lifecycle.prepareSession(session);
@@ -543,11 +584,19 @@ class PiSessionStore {
             const result = { id, trashed, ...(imageDeletionId ? { imageDeletionId, imageRetention: trashed ? 'trash-protected' : 'pending-reference-check' } : {}) };
             try { lifecycle.finish(imageDeletionId, trashed ? 'trashed' : 'deleted'); }
             catch { result.imageCleanupWarning = '会话已移除，图片删除记录待核对；相关图片继续保留'; }
+            const workspaceDisposition = await this._cleanupStandaloneWorkspace(session, { trashWorkspace: trashWorkspace === true, trashFile });
+            if (workspaceDisposition) result.workspaceDisposition = workspaceDisposition;
+            if (trashWorkspace === true && workspaceDisposition === 'retained') {
+                result.workspaceCleanupWarning = '工作文件夹未能移入回收站，已原位保留';
+            }
             return result;
         } catch (error) {
             lifecycle.cancelSession(imageDeletionId);
             throw error;
-        } finally { this.sessionLists.delete(session.cwd); }
+        } finally {
+            this.sessionLists.delete(session.cwd);
+            this.sessionListCache.delete(session.cwd);
+        }
     }
 
     _serializeSession(session, agentProfile = null, profileAuthoring = null) {
