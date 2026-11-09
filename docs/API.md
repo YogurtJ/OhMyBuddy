@@ -599,7 +599,7 @@ Body：
 { "cwd": "/workspace/demo", "name": "optional", "profileId": "optional identity ID or null" }
 ```
 
-`GET /status.standaloneSessions=true` 时也可提交 `{ "standalone": true, "name": "optional", "profileId": null }`，不传 cwd。服务在统一外部工作根（默认 `~/OhMyBuddy Workspaces`，由 `OHMYBUDDY_WORKSPACES_DIR` 覆盖）下的 `tasks/<UUID>/` 创建独立工作目录，再按相同原生路径创建 session；每次提交都创建不同目录，不自动重放不确定请求。`standalone` 必须为 boolean，true 与非空 cwd 同传返回 400。真实路径解析后拒绝工作目录跳转到程序、仓库、受管版本或内部私有数据，仍受系统权限与项目范围限制；读取状态或项目列表不创建工作目录。会话对象增加 `standalone:boolean`，从规范 cwd 位置派生，不新增聊天存储或更改原生格式。删除会话不删除其工作文件。旧 `OhMyBuddy/Tasks` cwd 继续识别；工作根必须在项目允许范围内，并拒绝源码、Git checkout、安装／受管版本和内部私有数据重叠，不再回退到第一个项目根。布局与兼容范围见[存储布局](STORAGE_LAYOUT.md)。
+`GET /status.standaloneSessions=true` 时也可提交 `{ "standalone": true, "name": "optional", "profileId": null }`，不传 cwd。服务在统一外部工作根（默认 `~/OhMyBuddy Workspaces`，由 `OHMYBUDDY_WORKSPACES_DIR` 覆盖）下的 `tasks/<UUID>/` 创建独立工作目录，再按相同原生路径创建 session；每次提交都创建不同目录，不自动重放不确定请求。`standalone` 必须为 boolean，true 与非空 cwd 同传返回 400。真实路径解析后拒绝工作目录跳转到程序、仓库、受管版本或内部私有数据，仍受系统权限与项目范围限制；读取状态或项目列表不创建工作目录。会话对象增加 `standalone:boolean`，从规范 cwd 位置派生，不新增聊天存储或更改原生格式。删除任务会话时的空目录清理与可选回收站处理见下方删除接口。旧 `OhMyBuddy/Tasks` cwd 继续识别；工作根必须在项目允许范围内，并拒绝源码、Git checkout、安装／受管版本和内部私有数据重叠，不再回退到第一个项目根。布局与兼容范围见[存储布局](STORAGE_LAYOUT.md)。
 
 创建立即可见的原生空 Pi session，返回单个 session object。HTTP 201。`profileId` 为已启用身份（含 Bot）的 ID 时新会话使用该身份（普通线程，不是 Bot 窗口）；为 null 时无身份；省略时沿用项目默认身份（旧客户端兼容）。
 
@@ -627,6 +627,10 @@ POST `/sessions/:id/title` 接受 `{cwd}`，使用请求开始时冻结的标题
 
 `/activity` 另返回 `titleGenerations`（全服务未结束请求数）、`titleRevision`（进程代次与变更计数），`runtimes[].titleGenerating` 表示标题请求。标题生成不表示主任务 busy，但部署与回收必须考虑此活动。成功保存广播 `gateway_session_named {cwd,sessionId,name}`；其他页面据全局修订刷新线程列表。摘录、预算、延迟/失败、手动保护与持久化详见[会话工作流](SESSION_WORKFLOWS.md#自动标题与重新生成)。
 
+### `GET /sessions/:id/workspace-cleanup?cwd=<absolute-path>`
+
+只读检查指定原生会话的独立任务工作目录，沿用会话查找、鉴权与项目范围校验，响应 `Cache-Control: no-store`。普通项目返回 `{standalone:false}`；任务返回 `{standalone:true,shared:boolean,fileCount:number,unavailable?:true}`。`shared=true` 时保留目录且 `fileCount` 为 0；否则 `fileCount` 为目录直接子项数（包括子目录与隐藏项，不是递归文件数）。此响应用于删除确认窗口，执行时重新核对共用会话与目录状态。失败返回 HTTP 400。
+
 ### `DELETE /sessions/:id?cwd=<absolute-path>`
 
 先预占 Supervisor 的会话删除互斥，等待此文件已有启动流程，在 worker 的独占区内取消预约、释放侧聊、停止 worker，完成用量保留检查后删除。未打开的会话不为删除启动 worker；删除期间禁止重连或其他请求创建新 worker。重复删除请求返回错误，不重复执行。服务全局停机会等待删除结束。成功：
@@ -635,9 +639,11 @@ POST `/sessions/:id/title` 接受 `{cwd}`，使用请求开始时冻结的标题
 { "id": "01...", "trashed": true }
 ```
 
-`trashed=false` 表示 `gio trash` 失败后永久删除。失败返回 HTTP 400；失败前已经停止的 worker 或已取消的预约不会自动恢复，请核对实际状态。
+`trashed=false` 表示 `gio trash` 失败后永久删除会话记录文件。可选 query `trashWorkspace=true|1|false|0`，省略表示保留非空任务工作目录；其他值返回 HTTP 400。原生会话删除成功后，独立任务目录若仍有其他会话共用则保留；无共用会话且为空时仅用 `rmdir` 移除；非空目录仅在 `trashWorkspace=true|1` 时尝试移入系统回收站，失败保留，不递归硬删。普通项目目录不参与清理。
 
-已订阅的浏览器先收到 `gateway_session_removing`，仅表示删除进行中；只有文件操作成功才发送 `gateway_session_deleted {cwd,sessionId,trashed}` 并以 close code `4004` 关闭连接。失败用 `1012` 关闭，客户端可重连。删除成功不得当作 runtime 重启反复重连。旧后端缺少 `trashed` 时，界面只报告“已删除”，不推断是否进入回收站。
+删除响应可附 `workspaceDisposition:"shared"|"removed-empty"|"retained"|"trashed"`；已选择回收站但目录保留时另附 `workspaceCleanupWarning`。目录清理失败不冒充会话删除失败，也不自动重放回收站请求。会话删除失败返回 HTTP 400；失败前已经停止的 worker 或已取消的预约不会自动恢复，请核对实际状态。
+
+已订阅的浏览器先收到 `gateway_session_removing`，仅表示删除进行中；只有文件操作成功才发送 `gateway_session_deleted {cwd,sessionId,trashed,workspaceDisposition?}` 并以 close code `4004` 关闭连接。失败用 `1012` 关闭，客户端可重连。删除成功不得当作 runtime 重启反复重连。旧后端缺少 `trashed` 时，界面只报告“已删除”，不推断是否进入回收站。
 
 ### 会话工作流 REST
 
