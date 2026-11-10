@@ -15,9 +15,12 @@
     const icon = name => { const i = el('i', `fa-solid ${name}`); i.setAttribute('aria-hidden', 'true'); return i; };
     const button = (className, label) => { const b = el('button', className); b.type = 'button'; if (label) { b.title = label; b.setAttribute('aria-label', label); } return b; };
 
-    function face(bot, size = 'md') {
+    function face(bot, size = 'md', greet = false) {
         const profile = ['preset', 'composed', 'image'].includes(bot?.avatar?.kind) ? bot : { ...bot, avatar: NEW_BOT_FACE };
-        if (window.PiAvatar) return window.PiAvatar.render(profile, `pi-bot-face is-${size}`);
+        if (window.PiAvatar) {
+            const node = window.PiAvatar.render(profile, `pi-bot-face is-${size}`);
+            return greet ? window.PiAvatar.greet?.(node) || node : node;
+        }
         const node = el('span', `pi-bot-face is-${size}`);
         node.setAttribute('aria-hidden', 'true');
         if (profile?.avatar?.kind === 'image' && profile.id) {
@@ -978,7 +981,7 @@
             if (!this.loaded) return null;
             if (!this.bots.length) {
                 root.classList.add('is-welcome');
-                root.append(face({ avatar: NEW_BOT_FACE }, 'xl'));
+                root.append(face({ avatar: NEW_BOT_FACE }, 'xl', true));
                 root.append(el('h2', null, translateUi("认识你的伙伴")));
                 root.append(el('p', null, translateUi("一个一直在的私人助理：记得你说过的话，帮你查、记、写、提醒。先花两三分钟互相认识一下。")));
                 if (globalThis.PiBotOnboarding?.dataNotice) root.append(globalThis.PiBotOnboarding.dataNotice(null));
@@ -1035,11 +1038,11 @@
             }
             if (window?.kind === 'topic') {
                 // A fresh topic says what it is for.
-                root.append(face(bot, 'xl'), el('h2', null, window.emoji ? `${window.emoji} ${window.title}` : window.title));
+                root.append(face(bot, 'xl', true), el('h2', null, window.emoji ? `${window.emoji} ${window.title}` : window.title));
                 root.append(el('p', null, window.focus ? translateUi("这个话题专心聊：{0}", window.focus) : translateUi("想聊什么都可以直接说。")));
                 return root;
             }
-            root.append(face(bot, 'xl'), el('h2', null, bot.name));
+            root.append(face(bot, 'xl', true), el('h2', null, bot.name));
             root.append(el('p', null, ['skipped', 'done'].includes(bot.bot?.onboarding?.phase)
                 ? translateUi("想聊什么都可以直接说。") : translateUi("我们接着刚才的认识聊吧，直接说就好。")));
             return root;

@@ -205,6 +205,12 @@ const NEW_FACE = { kind: 'preset', id: 'pivane-pebble' };
                 await page.evaluate(() => window.dispatchEvent(new CustomEvent('workspace:models-changed')));
                 await page.locator('.pi-bot-empty [data-bot-action="create"]').waitFor({ timeout: 8000 });
                 assert.equal(await page.locator('.pi-bot-empty.is-welcome .pi-bot-face .pi-preset-svg[data-preset="pivane-pebble"]').count(), 1, 'the welcome shows the face a new Bot starts with');
+                const welcomeFace = page.locator('.pi-bot-empty .pi-bot-face');
+                assert.equal(await welcomeFace.getAttribute('data-avatar-state'), 'greeting');
+                assert.equal(await welcomeFace.getAttribute('data-avatar-live'), 'true');
+                assert.deepEqual(await welcomeFace.evaluate(node => { const box = node.getBoundingClientRect(); return [box.width, box.height]; }), [120, 120]);
+                await page.waitForFunction(() => document.querySelector('.pi-bot-empty .pi-bot-face')?.dataset.avatarState === 'idle');
+                assert.equal(await welcomeFace.getAttribute('data-avatar-live'), 'true', 'the welcome keeps blinking after its wave');
                 for (const selector of ['#pi-project-button', '.pi-runtime-controls', '#pi-connection-banner', '#pi-session-list'])
                     assert.equal(await page.locator(selector).isVisible(), false, `${selector} hidden in Bot mode`);
                 assert.equal(await page.locator('.pi-start').count(), 0, 'the Pi Agent start page never shows');

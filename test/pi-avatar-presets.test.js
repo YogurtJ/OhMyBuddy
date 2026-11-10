@@ -63,6 +63,73 @@ test('composed avatars persist through Bot edits, profile runtime and missing-pa
     assert.equal(await f.revision(), before);
 });
 
+test('version 1 presets resolve complete anchors and shaded palettes without changing stored recipes', () => {
+    assert.equal(catalog.shapes.length, 10);
+    assert.equal(catalog.palettes.filter(item => !item.legacy).length, 19);
+    assert.equal(catalog.eyes.length, 8);
+    assert.equal(catalog.mouths.length, 6);
+    assert.equal(catalog.decorations.length, 13);
+    for (const item of catalog.presets) {
+        assert.ok(catalog.knownComposition(item.recipe), item.id);
+        assert.deepEqual(catalog.toComposition(preset(item.id)), item.recipe);
+        assert.deepEqual(Object.keys(item.recipe).sort(), ['kind', 'version', ...catalog.fields].sort());
+        assert.equal(item.recipe.version, 1);
+    }
+    const point = (value, length, label) => {
+        assert.ok(Array.isArray(value), label);
+        assert.equal(value.length, length, label);
+        assert.ok(value.every(Number.isFinite), label);
+    };
+    for (const shape of catalog.shapes) {
+        point(shape.face, 3, `${shape.id}.face`);
+        point(shape.crown, 2, `${shape.id}.crown`);
+        point(shape.wide, 2, `${shape.id}.wide`);
+        point(shape.shine, 3, `${shape.id}.shine`);
+        assert.ok(Number.isFinite(shape.base), shape.id);
+        assert.ok(shape.squash > 0, shape.id);
+        assert.equal(shape.ears.length, 2, shape.id);
+        shape.ears.forEach(value => point(value, 3, `${shape.id}.ears`));
+        assert.equal(shape.arms.length, 2, shape.id);
+        shape.arms.forEach(value => point(value, 2, `${shape.id}.arms`));
+        if (shape.id === 'ghost') assert.equal(shape.feet, null);
+        else point(shape.feet, 2, `${shape.id}.feet`);
+        assert.equal(Object.hasOwn(shape, 'top'), false);
+    }
+    for (const palette of catalog.palettes) {
+        assert.match(palette.deep, /^#[a-f0-9]{6}$/);
+        assert.match(palette.darkDeep, /^#[a-f0-9]{6}$/);
+    }
+});
+
+test('decorations accept their supported shapes and reject incompatible new combinations', () => {
+    const all = catalog.shapes.map(shape => shape.id);
+    const expected = {
+        none: all, blush: all, halo: all, glasses: all,
+        sprout: ['pebble', 'bean', 'tile', 'puff', 'egg', 'ghost', 'onigiri', 'mochi'],
+        antenna: ['pebble', 'tile', 'capsule', 'egg', 'ghost', 'mochi'],
+        ...Object.fromEntries(['cat', 'bear', 'bunny', 'bow', 'flower', 'crown'].map(id => [id, all.filter(shape => shape !== 'drop')])),
+        headphones: all.filter(shape => !['drop', 'onigiri'].includes(shape))
+    };
+    for (const [decoration, shapes] of Object.entries(expected)) for (const shape of all) {
+        const value = { ...catalog.find('ohmybuddy-sunny').recipe, shape, decoration };
+        assert.equal(catalog.compatible(value), shapes.includes(shape), `${shape}/${decoration}`);
+        assert.equal(Boolean(catalog.knownComposition(value)), shapes.includes(shape), `${shape}/${decoration}`);
+    }
+});
+
+test('random combinations include a mouth while an explicitly locked mouth stays unchanged', () => {
+    for (const item of catalog.presets) for (let seed = 0; seed < 30; seed++) {
+        const value = catalog.randomize(preset(item.id), [], String(seed));
+        assert.ok(catalog.knownComposition(value), item.id);
+        assert.notEqual(value.mouth, 'none', item.id);
+        assert.equal(catalog.part('palette', value.palette).legacy, undefined, item.id);
+        const locked = catalog.randomize(preset(item.id), ['mouth', 'decoration'], String(seed));
+        assert.equal(locked.mouth, item.recipe.mouth, item.id);
+        assert.equal(locked.decoration, item.recipe.decoration, item.id);
+        assert.ok(catalog.knownComposition(locked), item.id);
+    }
+});
+
 test('combination resolution is stable and randomization respects locks and compatibility', () => {
     const current = catalog.find('ohmybuddy-sprout').recipe;
     assert.ok(Object.isFrozen(current));

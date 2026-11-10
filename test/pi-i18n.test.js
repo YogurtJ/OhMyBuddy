@@ -47,6 +47,19 @@ test('translation preserves interpolated values and unknown text without recursi
     assert.equal(api.t('未知的用户正文'), '未知的用户正文');
     assert.equal(runtime({ saved: 'zh-CN' }).api.t('预览 {0}', '$&'), '预览 $&');
 });
+test('avatar part names, preset names and editor controls have English translations', () => {
+    const { api, rows } = runtime();
+    const catalog = require('../public/pi-avatar-presets');
+    const names = [...catalog.presets, ...Object.values(catalog.groups).flat()].map(item => item.name);
+    const source = fs.readFileSync(path.join(root, 'public/pi-avatar.js'), 'utf8');
+    const literals = [...source.matchAll(/\bt\('([^']+)'/g)].map(match => match[1]);
+    const keys = new Set(rows.map(row => row[0]));
+    for (const text of [...names, ...literals, '自己搭', '干活', '等你', '招呼', '思考', '完成', '失败', '睡觉']) {
+        assert.ok(keys.has(text), `missing avatar translation: ${text}`);
+        assert.doesNotMatch(api.t(text), /[\u4e00-\u9fff]/, text);
+    }
+    assert.equal(api.t('{0}（这个形状戴不了）', api.t('小芽')), 'Sprout (not compatible with this shape)');
+});
 test('counted UI labels use English singular only for one and preserve Chinese and values', () => {
     const { api } = runtime();
     const chinese = runtime({ saved: 'zh-CN' }).api;

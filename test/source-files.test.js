@@ -58,7 +58,8 @@ test('release inventory includes its own discovery and checking tools and exclud
         'server/pi-update-installer.js', 'server/browser/launch.js', 'test/source-files.test.js', 'pi-packages/media-workbench/skills/media-workbench/SKILL.md',
         'scripts/build-mermaid.cjs', 'scripts/mermaid-build/package.json', 'scripts/mermaid-build/package-lock.json',
         'public/vendor/mermaid-11.17.2-dompurify-3.4.17.min.js',
-        'public/pi-avatar-presets.js', 'public/bot-avatars/pebble.svg', 'public/bot-avatars/bean.svg', 'public/bot-avatars/tile.svg']) assert.ok(files.includes(file), file);
+        'scripts/build-avatar-assets.cjs', 'public/pi-avatar-presets.js', 'public/bot-avatars/pebble.svg', 'public/bot-avatars/bean.svg', 'public/bot-avatars/tile.svg',
+        ...require('../public/pi-avatar-presets').presets.map(preset => `public/${preset.asset}`)]) assert.ok(files.includes(file), file);
     assert.equal(new Set(files).size, files.length);
     assert.equal(files.some(file => /^(?:backups|docs\/local|\.pivane-runtime|node_modules)\//.test(file)), false);
     assert.equal(files.some(file => /^public\/(?:images|audio|videos|downloads|legacy-workspace)\//.test(file)), false);
@@ -67,10 +68,10 @@ test('release inventory includes its own discovery and checking tools and exclud
 });
 
 
-test('built-in SVG sources contain only the catalog geometry, solid colors and two fixed eyes', () => {
+test('built-in SVG sources preserve original prototypes and allow only the internal avatar clip reference', () => {
     const { presets, validId } = require('../public/pi-avatar-presets');
     assert.deepEqual(presets.slice(0, 3).map(preset => preset.id), ['pivane-pebble', 'pivane-bean', 'pivane-tile']);
-    assert.equal(presets.length, 12);
+    assert.equal(presets.length, 24);
     assert.equal(new Set(presets.map(preset => preset.asset)).size, presets.length);
     for (const preset of presets) {
         assert.equal(validId(preset.id), true);
@@ -81,7 +82,12 @@ test('built-in SVG sources contain only the catalog geometry, solid colors and t
         if (preset.id.startsWith('pivane-')) assert.equal(svg.trim(), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="OhMyBuddy ${preset.name}"><title>OhMyBuddy ${preset.name} · 极简原型</title><path fill="${preset.body}" d="${preset.path}"/><g fill="${preset.eyes}"><rect x="61" y="63" width="8" height="19" rx="4"/><rect x="91" y="63" width="8" height="19" rx="4"/></g></svg>`, preset.asset);
         else {
             assert.ok(svg.includes(`d="${preset.path}"`));
-            assert.doesNotMatch(svg, /<script|<foreignObject|<image|\son[a-z]+=|href=|url\(/i);
+            assert.doesNotMatch(svg, /<script|<foreignObject|<image|\son[a-z]+\s*=|href\s*=/i);
+            assert.deepEqual(svg.match(/\bid="[^"]*"/g), ['id="avatar-clip"'], preset.asset);
+            assert.equal((svg.match(/<clipPath\b/g) || []).length, 1, preset.asset);
+            assert.match(svg, /<clipPath id="avatar-clip">/);
+            assert.match(svg, /clip-path="url\(#avatar-clip\)"/);
+            assert.doesNotMatch(svg.replaceAll('url(#avatar-clip)', ''), /url\(/i);
             assert.match(svg, /viewBox="0 0 160 160"/);
         }
     }
