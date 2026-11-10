@@ -1,11 +1,14 @@
 const assert = require('node:assert/strict');
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const { chromium, webkit } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const engine = process.env.PI_MERMAID_TEST_WEBKIT === '1' ? 'WebKit' : 'Chromium';
 const base = process.env.PI_MERMAID_TEST_URL || 'http://127.0.0.1:3001';
 const cwd = '/srv/mermaid-fixture', session = { id: 'mermaid-fixture', cwd, name: 'Mermaid 测试' };
 const fence = source => '```mermaid\n' + source + '\n```';
 const diagrams = ['flowchart LR\n A[网页] --> B[网关] --> C[Pi 会话]', 'sequenceDiagram\n participant A as 网页\n participant B as 服务\n A->>B: 请求\n B-->>A: 回复', 'stateDiagram-v2\n [*] --> Idle\n Idle --> Running\n Running --> Idle'];
 (async () => {
-    const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
+    const browser = engine === 'WebKit'
+        ? await webkit.launch({ executablePath: process.env.WEBKIT_PATH, headless: true })
+        : await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
     try {
         for (const width of [1440, 393, 320]) {
             const context = await browser.newContext({ locale: 'zh-CN', viewport: { width, height: 950 }, isMobile: width < 900, hasTouch: width < 900 });
@@ -45,7 +48,15 @@ const diagrams = ['flowchart LR\n A[网页] --> B[网关] --> C[Pi 会话]', 'se
             }
             await page.locator('.pi-mermaid-source summary').first().click();
             assert.equal(await page.locator('.pi-mermaid-source code').first().textContent(), diagrams[0] + '\n');
-            await page.screenshot({ path: `/tmp/pi-mermaid-${width}.png` });
+            const worker = page.locator('.pi-mermaid-worker');
+            assert.equal(await worker.getAttribute('sandbox'), 'allow-scripts');
+            const srcdoc = await worker.getAttribute('srcdoc');
+            assert.match(srcdoc, /script-src 'nonce-[a-f0-9]{48}'/);
+            assert.ok(!srcdoc.includes('__PI_MERMAID_NONCE__'));
+            const renderer = page.frames().find(frame => frame.parentFrame());
+            assert.equal(await renderer.evaluate(() => { try { void parent.document; return false; } catch { return true; } }), true, 'sandbox still blocks parent DOM access');
+            assert.match(await renderer.evaluate(() => document.querySelector('meta[http-equiv="Content-Security-Policy"]').content), /connect-src 'none'/);
+            await page.screenshot({ path: `/tmp/pi-mermaid-${engine}-${width}.png` });
             // Streaming fences stay as code until the closing fence arrives.
             socket.send(JSON.stringify({ type: 'message_start', message: { role: 'assistant', content: [], timestamp: 2222 } }));
             const partial = '```mermaid\nflowchart LR\n X --> Y';
@@ -55,8 +66,16 @@ const diagrams = ['flowchart LR\n A[网页] --> B[网关] --> C[Pi 会话]', 'se
             assert.equal(await page.locator('.streaming .pi-mermaid').count(), 0);
             delta('\n```');
             await page.waitForSelector('.streaming .pi-mermaid[data-state="ready"]');
+            await page.evaluate(() => {
+                const figure = document.querySelector('.streaming .pi-mermaid');
+                figure.querySelector('details').open = true;
+                window.__stableMermaid = [figure, figure.querySelector('img'), figure.querySelector('code')];
+            });
             delta('\n\n图后的正文继续输出。');
-            await page.waitForSelector('.streaming .pi-mermaid[data-state="ready"]');
+            await page.waitForFunction(() => document.querySelector('.streaming').textContent.includes('图后的正文继续输出。'));
+            assert.equal(await page.evaluate(() => __stableMermaid.every(node => node.isConnected)
+                && __stableMermaid[0].querySelector('details').open
+                && __stableMermaid[0].dataset.state === 'ready'), true, 'streaming preserves the image, source and open details');
             const completed = { role: 'assistant', timestamp: 2222, content: [{ type: 'text', text: partial + '\n```\n\n图后的正文继续输出。' }] };
             messages = [...messages, { ...completed, content: [{ type: 'text', text: completed.content[0].text + '\n\n权威快照已恢复。' }] }];
             socket.send(JSON.stringify({ type: 'message_end', message: completed }));
@@ -71,10 +90,34 @@ const diagrams = ['flowchart LR\n A[网页] --> B[网关] --> C[Pi 会话]', 'se
             await page.waitForFunction(() => [...document.querySelectorAll('.mermaid-bad .pi-mermaid')].length === 4 && [...document.querySelectorAll('.mermaid-bad .pi-mermaid')].every(e => e.dataset.state));
             assert.equal(await page.locator('.mermaid-bad .pi-mermaid[data-state="error"]').count() >= 3, true);
             assert.equal(await page.locator('.pi-mermaid iframe, .pi-mermaid svg, .pi-mermaid script').count(), 0);
+            // Failed diagrams must also remain stable while the reply grows.
+            await page.evaluate(() => {
+                const host = document.createElement('div'); host.className = 'pi-markdown mermaid-live';
+                document.querySelector('#pi-transcript-content').append(host);
+                window.__failedSource = '```mermaid\nnot-a-diagram\n```\n\nTail';
+                PiFileViewer.renderStreamingMarkdown(host, __failedSource);
+            });
+            await page.waitForSelector('.mermaid-live .pi-mermaid[data-state="error"]');
+            const stableFailure = await page.evaluate(async () => {
+                const host = document.querySelector('.mermaid-live'), figure = host.querySelector('.pi-mermaid');
+                const code = figure.querySelector('code'), details = figure.querySelector('details');
+                details.open = false;
+                for (let index = 0; index < 5; index++) {
+                    PiFileViewer.renderStreamingMarkdown(host, __failedSource + index);
+                    await new Promise(resolve => requestAnimationFrame(resolve));
+                    if (!figure.isConnected || !code.isConnected || details.open || figure.dataset.state !== 'error') return false;
+                }
+                // A corrected diagram must invalidate the failed result.
+                PiFileViewer.renderStreamingMarkdown(host, '```mermaid\nflowchart LR\n C[修正] --> D[完成]\n```');
+                return !figure.isConnected;
+            });
+            assert.equal(stableFailure, true, 'streaming retains failures and source corrections replace them');
+            await page.waitForSelector('.mermaid-live .pi-mermaid[data-state="ready"]');
+            await page.locator('.mermaid-live').evaluate(node => node.remove());
             // Remove queued work; late results must not revive removed content.
             await page.evaluate(() => document.querySelectorAll('.mermaid-bad').forEach(e => e.remove()));
             assert.deepEqual(errors, []); assert.deepEqual(unexpected, []);
-            console.log(`Mermaid ${width}: passed`); await context.close();
+            console.log(`Mermaid ${engine} ${width}: rendering, streaming identity, errors, isolation and width passed`); await context.close();
         }
     } finally { await browser.close(); }
 })().catch(e => { console.error(e); process.exitCode = 1; });

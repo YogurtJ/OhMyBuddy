@@ -15,19 +15,31 @@
     function renderer() {
         if (ready) return ready;
         ready = new Promise((resolve, reject) => {
-            frame = document.createElement('iframe');
-            frame.className = 'pi-mermaid-worker';
-            frame.setAttribute('sandbox', 'allow-scripts');
-            frame.setAttribute('aria-hidden', 'true'); frame.tabIndex = -1;
+            const worker = document.createElement('iframe'); frame = worker;
+            worker.className = 'pi-mermaid-worker';
+            worker.setAttribute('sandbox', 'allow-scripts');
+            worker.setAttribute('aria-hidden', 'true'); worker.tabIndex = -1;
+            const controller = new AbortController();
+            const fail = error => {
+                clearTimeout(timer); window.removeEventListener('message', listener);
+                controller.abort(); if (frame === worker) resetFrame(); reject(error);
+            };
             const listener = event => {
-                if (event.source !== frame?.contentWindow || event.data?.type !== 'pi-mermaid-ready') return;
+                if (event.source !== worker.contentWindow || event.data?.type !== 'pi-mermaid-ready') return;
                 clearTimeout(timer); window.removeEventListener('message', listener); resolve();
             };
-            const timer = setTimeout(() => {
-                window.removeEventListener('message', listener); resetFrame(); reject(new Error('load'));
-            }, 15000);
+            const timer = setTimeout(() => fail(new Error('load')), 15000);
             window.addEventListener('message', listener);
-            frame.src = '/pi-mermaid-frame.html'; document.body.append(frame);
+            // WebKit treats 'self' as the opaque sandbox origin. A fresh nonce
+            // authorizes only our two scripts while keeping same-origin access off.
+            void fetch('/pi-mermaid-frame.html', { signal: controller.signal })
+                .then(response => { if (!response.ok) throw new Error('load'); return response.text(); })
+                .then(template => {
+                    if (frame !== worker) return;
+                    const nonce = [...crypto.getRandomValues(new Uint8Array(24))].map(value => value.toString(16).padStart(2, '0')).join('');
+                    worker.srcdoc = template.replaceAll('__PI_MERMAID_NONCE__', nonce);
+                    document.body.append(worker);
+                }).catch(fail);
         });
         return ready;
     }

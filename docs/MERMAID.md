@@ -12,13 +12,13 @@ flowchart LR
 
 支持 Mermaid 11.17.2 的常规流程图、时序图、状态图、类图等语法。图表按可用宽度缩小，保持原始比例；浅色主题（晴空、薄荷、燕麦、石墨）使用明亮配色，夜间使用深色配色。每张图下方可以展开和复制源码，回复末尾复制仍返回原始 Markdown。
 
-流式输出在代码围栏闭合后才绘图；未闭合的代码仍显示源码。语法错误、超过限额或资源加载失败时显示提示和完整源码，不影响普通消息、发送或工具结果。只渲染 Markdown 代码块，不执行工具输出中的文字。
+流式输出在代码围栏闭合后才绘图；未闭合的代码仍显示源码。后续正文持续输出时，未变化的图表、绘制失败提示和源码展开状态保持稳定；修改图表源码时重新绘制。语法错误、超过限额或资源加载失败时显示提示和完整源码，不影响普通消息、发送或工具结果。只渲染 Markdown 代码块，不执行工具输出中的文字。
 
 ## 展示与隔离
 
-- `public/pi-file-viewer.js` 的共用 Marked renderer 识别完整 Mermaid 围栏；原有 DOMPurify HTML 清理保留。
+- `public/pi-file-viewer.js` 的共用 Marked renderer 识别完整 Mermaid 围栏，用稳定外层节点保留异步绘图结果；原有 DOMPurify HTML 清理保留。
 - `public/pi-mermaid.js` 只观察 Markdown DOM，串行绘制并丢弃已移除节点的迟到结果。至多缓存16份/约200万字符的布局，只有页面内存，不写会话或浏览器存储。
-- Mermaid 在 `sandbox=allow-scripts` 的独立 iframe 内运行，无 allow-same-origin、表单、弹窗或顶层导航权限。框架 CSP 禁止连接、外部图片、字体及额外框架，脚本仅从本机静态文件加载。
+- Mermaid 在 `sandbox=allow-scripts` 的独立 iframe 内运行，无 allow-same-origin、表单、弹窗或顶层导航权限。主页面读取本机框架模板，每次创建框架时注入随机 CSP nonce，经 `srcdoc` 仅授权两份本机脚本，兼容 Safari/WebKit 的不透明源沙箱。框架 CSP 继续禁止连接、外部图片、字体及额外框架。
 - 固定 strict 模式、禁用 HTML 标签布局；不接受 `%%{init...}%%` 等配置指令或 YAML frontmatter。图表不是任意 HTML 或配置执行入口。
 - 返回的 SVG 再经 DOMPurify SVG profile 清理，去掉链接、外部图片、foreignObject 等，作为 Blob 图片展示。没有可点击图中链接或回调；不把 SVG 样式嵌入工作台 DOM。Blob 在图片解码后释放。
 - 每图源码最多20000字符、最多200条边；资源加载15秒、单图绘制10秒超时后回退源码。超时不能中断浏览器主线程上的所有底层计算，复杂图仍应适当拆分。

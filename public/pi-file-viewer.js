@@ -31,7 +31,9 @@
             if (/^mermaid\s*$/i.test(token.lang || '')) {
                 const opening = /^ {0,3}(`{3,}|~{3,})[^\n]*\n/.exec(token.raw || '');
                 const closed = opening && new RegExp(`\\n {0,3}${opening[1][0]}{${opening[1].length},}\\s*$`).test(token.raw);
-                return originalCode.call(this, { ...token, lang: closed ? 'mermaid' : 'mermaid-pending' });
+                // Keep an undecorated outer node stable when the asynchronous
+                // renderer moves the <pre> into a figure during streaming.
+                return `<div class="pi-mermaid-block">${originalCode.call(this, { ...token, lang: closed ? 'mermaid' : 'mermaid-pending' })}</div>\n`;
             }
             return originalCode.call(this, token);
         };
