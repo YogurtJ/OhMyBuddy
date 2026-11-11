@@ -121,7 +121,9 @@ async function run(browser, base, width) {
         });
         for (let i = 0; i < 20; i++) send({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: `part ${i} ✓\n` } });
         await page.waitForFunction(() => document.querySelector('.streaming .pi-markdown')?.textContent.includes('part 19'));
-        await page.waitForTimeout(80);
+        // DOM text can be visible before the transcript's scheduled renderer frame.
+        // Wait for that work to settle before measuring its bounded refresh count.
+        await page.waitForFunction(() => fixtureRegionReads > 0 && fixtureView.frame === null && fixtureView.pendingNodes.size === 0);
         const streamedRegions = await page.evaluate(() => fixtureRegionReads);
         assert.ok(streamedRegions > 0 && streamedRegions <= 40, `bounded work across twenty deltas, observed ${streamedRegions}`);
         const historyEnumerations = await page.evaluate(() => {

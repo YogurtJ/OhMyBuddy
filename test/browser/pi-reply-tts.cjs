@@ -138,9 +138,11 @@ async function run(browser, viewport, theme) {
     assert.equal(await page.locator('#pi-reply-tts-bar').isHidden(), true);
     // A slow review can be abandoned before any execution.
     holdReview = new Promise(resolve => { release = resolve; });
-    await page.evaluate(() => { window.PiReplyTts.speak({ key: 'slow-review', text: '慢校验。' }); });
+    await page.evaluate(() => { window.slowReview = window.PiReplyTts.speak({ key: 'slow-review', text: '慢校验。' }); });
     await page.waitForTimeout(100); await page.locator('#pi-reply-tts-bar-close').click();
-    const count = executeCount; release(); holdReview = null; await page.waitForTimeout(100); assert.equal(executeCount, count);
+    const count = executeCount; release(); holdReview = null;
+    await page.evaluate(() => window.slowReview);
+    assert.equal(executeCount, count, 'the abandoned review settles without submitting execution');
     // Existing registry defaults work without requiring a separately saved preset.
     saved = false;
     await page.evaluate(() => window.PiReplyTts.speak({ key: 'registry', text: '现有默认模型。' }));

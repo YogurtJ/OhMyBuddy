@@ -184,7 +184,15 @@ async function run(browser, viewport, theme, fullContext = true, retention = ful
         assert.equal(await page.locator('#pi-side-input').inputValue(), '分栏布局草稿');
         await page.locator('#pi-side-input').fill('');
         await divider.focus(); await page.keyboard.press('End');
-        await page.waitForTimeout(100);
+        // Resizing refits both panes through ResizeObserver + requestAnimationFrame.
+        // A Node-side delay does not establish that the renderer finished those writes.
+        await page.waitForFunction(() => {
+            const main = document.querySelector('.pi-transcript-shell').getBoundingClientRect();
+            const side = document.querySelector('#pi-inspector').getBoundingClientRect();
+            const split = document.querySelector('#pi-inspector-split');
+            return Math.abs(side.width - Number(split.getAttribute('aria-valuenow'))) < 1
+                && main.right <= side.left + 1 && main.width >= 359;
+        }, null, { timeout: 5000 });
         const bounds = await page.evaluate(() => {
             const main = document.querySelector('.pi-transcript-shell').getBoundingClientRect();
             const side = document.querySelector('#pi-inspector').getBoundingClientRect();
@@ -198,7 +206,7 @@ async function run(browser, viewport, theme, fullContext = true, retention = ful
         });
         assert.ok(bounds.mainWidth >= 359, 'resizing reserves a readable main conversation');
         assert.equal(await page.locator('.pi-workbench').evaluate(node => node.classList.contains('pi-inspector-overlay')), false, 'desktop side chat fits beside the conversation: ' + JSON.stringify(bounds));
-        assert.ok(bounds.mainRight <= bounds.sideLeft + 1, 'side chat does not cover the main conversation');
+        assert.ok(bounds.mainRight <= bounds.sideLeft + 1, 'side chat does not cover the main conversation: ' + JSON.stringify(bounds));
         assert.equal(await page.locator('.pi-transcript-shell').evaluate(node => node.inert), false, 'both desktop conversations stay interactive');
         assert.deepEqual(bounds.overflow, [], 'narrow main transcript and composer must not overflow');
         await page.locator('#pi-close-inspector').click();

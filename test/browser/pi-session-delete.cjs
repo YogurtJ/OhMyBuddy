@@ -73,6 +73,14 @@ const model = { provider: 'fixture', id: 'fixture', name: 'Fixture', input: ['te
             await dialog.getByRole('alert').waitFor(); assert.equal(deleted, false);
             assert.match(await dialog.getByRole('alert').textContent(), /删除未确认/);
             assert.equal(await page.locator('#pi-input').inputValue(), 'draft to delete');
+            assert.equal(await dialog.locator('.pi-delete-confirm').isVisible(), false, 'an unconfirmed deletion cannot be replayed from its dialog');
+            assert.equal(deleteCount, 1, 'refresh and reconnect do not replay deletion');
+            await dialog.locator('.pi-request-cancel').click();
+            await page.waitForFunction(() => !document.querySelector('#pi-input').disabled);
+            await page.locator('#pi-current-thread-menu').click();
+            await page.locator('.pi-thread-menu:not(.hidden)').getByRole('menuitem', { name: '删除线程', exact: true }).click();
+            await dialog.waitFor();
+            assert.equal(deleteCount, 1, 'a fresh confirmation still requires a fresh user click');
             failDelete = false;
             await dialog.locator('.pi-delete-confirm').click();
             while (!releaseDelete) await new Promise(resolve => setTimeout(resolve, 10));
