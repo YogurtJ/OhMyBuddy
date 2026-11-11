@@ -4,7 +4,14 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { rehearsalRoot, rehearsalEnvironment } = require('./release/guard.cjs');
+const { rehearsalRoot, rehearsalEnvironment, loopbackProxy } = require('./release/guard.cjs');
+test('native update trials restrict their explicit HTTPS proxy to loopback origins', () => {
+    assert.equal(loopbackProxy('http://127.0.0.1:12345'), 'http://127.0.0.1:12345/');
+    assert.equal(loopbackProxy('http://[::1]:12345/'), 'http://[::1]:12345/');
+    for (const value of ['https://127.0.0.1:12345', 'http://localhost:12345', 'http://example.invalid:12345',
+        'http://user:pass@127.0.0.1:12345', 'http://127.0.0.1', 'http://127.0.0.1:12345/path',
+        'http://127.0.0.1:12345/?x=1', 'http://127.0.0.1:12345/#x']) assert.throws(() => loopbackProxy(value));
+});
 test('release acceptance only accepts its marked temporary directory and exact demo project', t => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-release-'));
     const original = process.env.PI_RELEASE_RUN_ID;

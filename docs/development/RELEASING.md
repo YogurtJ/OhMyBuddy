@@ -69,6 +69,8 @@ Linux 交付带 `Install.sh` 的 tar.gz；Windows 交付可双击 exe，更新�
 node scripts/package-platform.cjs --inputs /private/build-inputs.json --version VERSION --work /private/new-build --output /private/new-output
 ```
 
+两种原生更新演练均可显式传 `--https-proxy http://127.0.0.1:PORT/`（也接受 `[::1]`），只给本次合成子服务设置 HTTPS 代理。配合私有 CONNECT 转发和 `--tls-ca`，可保留正式旧包固定的公网来源、TLS 主机名与实际发行公钥，在回环 HTTPS 源验收新包；不改系统 DNS、信任库或公开频道，不关闭 TLS 校验。代理参数拒绝外网地址、用户凭据、路径与查询。
+
 平台更新演练使用 `test/release/platform-bundle-update.cjs`，显式传入准确 payload、独立新 output、目标版本和本机 Playwright/浏览器路径。通过生成 runner 的 stop-request 触发统一正常停机，Windows 不用强杀冒充 SIGTERM。除原生会话、媒体和配置外，核对外置图片对象字节与恢复。普通用户安装和 Windows Limited token、后台服务、系统首次安全确认分列，不由编译成功或 SSH 管理员 token 代替。各发行结果绑定真实包摘要；明确复用和本次实机执行范围。
 
 ## 候选包

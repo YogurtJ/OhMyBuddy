@@ -47,7 +47,7 @@ function stopRpcProcess(child, timeoutMs = DEFAULT_SHUTDOWN_TIMEOUT) {
 }
 async function shutdownRpcProcesses() {
     rpcShuttingDown = true;
-    await Promise.all([...rpcProcesses].map(stopRpcProcess));
+    await Promise.all([...rpcProcesses].map(child => stopRpcProcess(child)));
 }
 
 function resolvePiCli() {

@@ -19,7 +19,7 @@ Bring your own models: Claude, GPT, Gemini, DeepSeek, Qwen, Kimi and more. Your 
 
 [Download](https://github.com/YogurtJ/OhMyBuddy/releases/latest) · [Install](docs/en/INSTALL.md) · [User guide](docs/en/USER_GUIDE.md) · [Changelog](CHANGELOG.md) · [Report an issue](https://github.com/YogurtJ/OhMyBuddy/issues/new/choose) · [Discussions](https://github.com/YogurtJ/OhMyBuddy/discussions)
 
-<img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/hero-en.webp" alt="OhMyBuddy, a self-hosted AI assistant, on the desktop: a Buddy remembers that you are vegetarian and a dinner booking you promised, with receipts for About you and What I’m keeping in mind" width="100%">
+<img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/hero-en.webp" alt="OhMyBuddy’s shared Buddy notebook on desktop, with a Friday dinner commitment and its original quotation; synthetic demo data" width="100%">
 
 </div>
 
@@ -54,7 +54,7 @@ It has two sides that share the same runtime, models and tools:
 
 ### Buddies: personal assistants that remember you
 
-<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/buddy-en.gif" alt="Telling a Buddy something once: it notes that you are vegetarian and a dinner booking you promised, receipts appear under the reply, and its notebook opens with the new note and the words it came from" width="100%"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/buddy-en.gif" alt="Checking a dinner plan in the shared Buddy notebook, opening its original quotation, and viewing information saved from another topic; synthetic demo data" width="100%"></p>
 
 - Give a Buddy a name, a personality and a working folder. Choose an avatar preset, combine its shape, colors and expression, or upload a picture. An optional two-to-three-minute interview covers how it should address you, what it helps with and how it should work.
 - Each Buddy has one ongoing main chat and up to 100 topics. Organize topics into groups, search them and move several at once. Deleted topics go to a recoverable trash. Every chat has its own notebook, "What I'm keeping in mind", while topics share the Buddy's memory and skills.
@@ -63,7 +63,7 @@ It has two sides that share the same runtime, models and tools:
 - Run several Buddies side by side, each with separate memory. A new Buddy can copy the "About you" notes you select from another Buddy.
 - Proactive messages and background learning have their own switches and budgets in the Buddy settings. See the [Buddy guide](docs/en/BUDDY.md).
 
-<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/buddy-organize-en.webp" alt="Buddy settings with twelve avatar presets, beside topic groups and a bulk move to Study plans; synthetic demo data" width="100%"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/buddy-organize-en.webp" alt="Buddy settings with twenty-four avatar presets, state previews and the Customize tab; synthetic demo data" width="100%"></p>
 
 ### Workspace: projects, threads and tools
 

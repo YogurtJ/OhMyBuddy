@@ -33,4 +33,13 @@ function rehearsalEnvironment(root, env) {
         assert.ok(state.isFile() && !state.isSymbolicLink(), 'isolated queue must be a regular file');
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
 }
-module.exports = { rehearsalRoot, rehearsalEnvironment };
+// Route only the isolated trial service through an explicit loopback CONNECT proxy.
+// This preserves the formal payload's pinned public URL, TLS host and release key.
+function loopbackProxy(value) {
+    const proxy = new URL(value);
+    assert.ok(proxy.protocol === 'http:' && ['127.0.0.1', '[::1]'].includes(proxy.hostname) && proxy.port
+        && !proxy.username && !proxy.password && proxy.pathname === '/' && !proxy.search && !proxy.hash,
+        'Native trial proxy must be an explicit loopback HTTP origin');
+    return proxy.href;
+}
+module.exports = { rehearsalRoot, rehearsalEnvironment, loopbackProxy };

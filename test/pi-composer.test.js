@@ -103,7 +103,7 @@ test('actual Pi RPC reloads templates without session navigation; expands native
     assert.equal(fs.readFileSync(session.path, 'utf8'), original, 'reload must not write a parallel history or navigate the session');
     assert.equal(requests.length, 0, 'resource reload does not call a model');
     assert.ok(events.some(e => e.type === 'gateway_commands'));
-    await call('prompt', { message: `/native-review 'src/button click.js' 'a'"'"'b "中文" $1'` });
+    await call('prompt', { message: String.raw`/native-review 'src/button click.js' "a'b \"中文\" $1"` });
     await waitFor(() => events.some(e => e.type === 'agent_settled'));
     const user = (await call('get_messages')).messages.find(m => m.role === 'user');
     const text = typeof user.content === 'string' ? user.content : user.content.filter(c => c.type === 'text').map(c => c.text).join('\n');

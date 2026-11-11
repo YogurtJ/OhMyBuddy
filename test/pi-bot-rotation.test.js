@@ -210,13 +210,27 @@ test('Bot window workers get a verified identity section that follows edits with
     if (!jitiPath) return;
     const file = path.join(__dirname, '../server/bot/bot-context-extension.ts');
     const { botSection, botPreset, registerBotContext, alignModel, BOT_SECTION } = await require(jitiPath).createJiti(file).import(file);
-    const prior = { context: process.env.PIVANE_BOT_CONTEXT, token: process.env.PI_WEB_NAVIGATION_TOKEN };
+    const prior = { context: process.env.PIVANE_BOT_CONTEXT, token: process.env.PI_WEB_NAVIGATION_TOKEN, origin: process.env.PI_WORKSPACE_INTERNAL_ORIGIN };
     t.after(() => {
-        for (const [key, name] of [['context', 'PIVANE_BOT_CONTEXT'], ['token', 'PI_WEB_NAVIGATION_TOKEN']])
+        for (const [key, name] of [['context', 'PIVANE_BOT_CONTEXT'], ['token', 'PI_WEB_NAVIGATION_TOKEN'], ['origin', 'PI_WORKSPACE_INTERNAL_ORIGIN']])
             if (prior[key] === undefined) delete process.env[name]; else process.env[name] = prior[key];
     });
     process.env.PIVANE_BOT_CONTEXT = JSON.stringify(context);
     process.env.PI_WEB_NAVIGATION_TOKEN = 'synthetic-navigation';
+    process.env.PI_WORKSPACE_INTERNAL_ORIGIN = 'http://127.0.0.1:1';
+    const notebookWorker = { cwd: session.cwd, sessionId: session.id, sessionPath: session.path,
+        loadedBot: { profileId: botId, windowId, generation: 0 } };
+    t.mock.method(globalThis, 'fetch', async (url, options) => {
+        assert.equal(url.origin, process.env.PI_WORKSPACE_INTERNAL_ORIGIN);
+        assert.equal(options.headers.Authorization, 'Bearer synthetic-navigation');
+        const input = JSON.parse(options.body);
+        const action = url.pathname.split('/').at(-1);
+        assert.ok(['read', 'snapshot', 'edit'].includes(action));
+        const value = action === 'read' ? await bots.notebooks.read(botId, input, notebookWorker)
+            : action === 'snapshot' ? await bots.notebooks.snapshot(botId, notebookWorker)
+                : await bots.notebooks.edit(botId, input, notebookWorker);
+        return Response.json(value);
+    });
     const handlers = new Map(), notices = [], calls = [];
     const models = { 'fixture/small': { provider: 'fixture', id: 'small', reasoning: true }, 'fixture/big': { provider: 'fixture', id: 'big', reasoning: true },
         'nokey/x': { provider: 'nokey', id: 'x' } };
@@ -299,21 +313,23 @@ test('Bot window workers get a verified identity section that follows edits with
     assert.equal(await call('write', { path: 'plan.md', content: 'x' }), undefined);
     assert.equal(await call('memory_add', { content: 'x' }), undefined);
     assert.deepEqual(asked, [], 'Careful: workspace writes and notes go ahead');
-    await call('write', { path: '../elsewhere.md', content: 'x' });
-    await call('bash', { command: 'date' });
-    await call('subagent', { task: 'Research flights' });
-    assert.deepEqual(asked.map(([, message]) => message.split('\n')[0]), ['outside', 'command', 'delegate']);
-    // Nobody can approve an unattended step: it is refused without asking.
+    assert.equal(await call('write', { path: '../elsewhere.md', content: 'x' }), undefined);
+    assert.equal(await call('bash', { command: 'date' }), undefined);
+    assert.equal(await call('subagent', { task: 'Research flights' }), undefined);
+    assert.deepEqual(asked, [], 'Careful permits ordinary outside writes, commands and delegation');
+    await call('bash', { command: 'rm -rf notes' });
+    assert.deepEqual(asked.map(([, message]) => message.split('\n')[0]), ['command'], 'destructive commands still ask');
+    // Nobody can approve an unattended destructive step: it is refused without asking.
     ctx.hasUI = false;
-    assert.match((await call('bash', { command: 'date' })).reason, /nobody can approve/);
+    assert.match((await call('bash', { command: 'rm -rf notes' })).reason, /nobody can approve/);
     ctx.hasUI = true;
     manager.appendCustomEntry('pivane-cron-run', { version: 1, runId: 'b'.repeat(64), sessionId: manager.getSessionId(), status: 'running', model: { provider: 'fixture', modelId: 'small' } });
-    assert.match((await call('bash', { command: 'date' })).reason, /scheduled or unattended run/);
+    assert.match((await call('bash', { command: 'rm -rf notes' })).reason, /scheduled or unattended run/);
     manager.appendCustomEntry('pivane-cron-run', { version: 1, runId: 'b'.repeat(64), sessionId: manager.getSessionId(), status: 'completed' });
-    assert.equal(asked.length, 3, 'unattended refusals never ask');
+    assert.equal(asked.length, 1, 'unattended refusals never ask');
     await bots.update(botId, { expectedRevision: (await profiles.state()).revision, changes: { bot: { permissions: { preset: 'free' } } } });
-    assert.equal(await call('bash', { command: 'date' }), undefined);
-    assert.equal(asked.length, 3, 'Hands-off stays guidance only');
+    assert.equal(await call('bash', { command: 'rm -rf notes' }), undefined);
+    assert.equal(asked.length, 1, 'Hands-off stays guidance only');
     // A nested call waiting for approval is cancelled with its parent tool, and its request retired.
     await bots.update(botId, { expectedRevision: (await profiles.state()).revision, changes: { bot: { permissions: { preset: 'balanced' } } } });
     let pendingSignal = null;
@@ -321,7 +337,7 @@ test('Bot window workers get a verified identity section that follows edits with
         pendingSignal = options.signal; asked.push([title, message, options.timeout, parseApprovalMessage(message).token]);
         options.signal.addEventListener('abort', () => resolve(false), { once: true });
     });
-    const waiting = handlers.get('tool_call')({ type: 'tool_call', toolCallId: 'parent-1/1', parentToolCallId: 'parent-1', toolName: 'bash', input: { command: 'pwd' } }, ctx);
+    const waiting = handlers.get('tool_call')({ type: 'tool_call', toolCallId: 'parent-1/1', parentToolCallId: 'parent-1', toolName: 'bash', input: { command: 'rm -rf notes' } }, ctx);
     for (let i = 0; i < 50 && !pendingSignal; i++) await new Promise(done => setTimeout(done, 10));
     handlers.get('tool_execution_end')({ type: 'tool_execution_end', toolCallId: 'other' });
     assert.equal(pendingSignal.aborted, false, 'another call ending does not cancel it');
@@ -375,9 +391,13 @@ test('Bot window workers get a verified identity section that follows edits with
     assert.equal(requests[0].options.maxTokens, 16000);
     assert.equal(compacted.compaction.firstKeptEntryId, kept.id);
     assert.equal(compacted.compaction.tokensBefore, 123);
-    assert.match(compacted.compaction.summary, /## What this chat is about\nGreetings[^]*## Notebook[^]*\[n1\] Keep saying hello[^]*- Next: say hello again/);
+    assert.match(compacted.compaction.summary, /## What this chat is about\nGreetings[^]*## Notebook[^]*one shared notebook[^]*- Next: say hello again/);
+    assert.doesNotMatch(compacted.compaction.summary, /Keep saying hello/, 'the summary points to the authoritative notebook instead of copying it');
     assert.deepEqual(compacted.compaction.details.pivaneBot.rejected, [{ op: 'add', id: null, reason: 'unknown entry' }], 'the kept tail cannot be cited');
-    assert.equal(compacted.compaction.details.pivaneBot.ledger.snapshot.items.length, 1);
+    assert.deepEqual(compacted.compaction.details.pivaneBot.notebook, { scope: 'buddy' });
+    assert.equal(compacted.compaction.details.pivaneBot.ledger, undefined);
+    const remembered = (await bots.notebooks.snapshot(botId)).state.items;
+    assert.deepEqual(remembered.map(item => [item.id, item.text, item.by]), [['b1', 'Keep saying hello', 'summary']]);
     assert.equal(compacted.compaction.usage.totalTokens, 12);
     reply = 'not json';
     const level = thinking; thinking = 'off';

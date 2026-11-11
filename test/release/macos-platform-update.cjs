@@ -13,7 +13,7 @@ const { readSafe, hashFileSafe } = require('../../server/pi-maintenance-files');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function main() {
     const args = process.argv.slice(2), values = {};
-    for (let i = 0; i < args.length; i += 2) { if (!['--payload', '--output', '--expected', '--playwright', '--resume', '--tls-ca'].includes(args[i]) || !args[i + 1] || values[args[i]]) throw Error('Invalid isolated macOS trial arguments'); values[args[i]] = args[i + 1]; }
+    for (let i = 0; i < args.length; i += 2) { if (!['--payload', '--output', '--expected', '--playwright', '--resume', '--tls-ca', '--https-proxy'].includes(args[i]) || !args[i + 1] || values[args[i]]) throw Error('Invalid isolated macOS trial arguments'); values[args[i]] = args[i + 1]; }
     if (process.platform !== 'darwin' || !['--payload', '--output', '--expected', '--playwright'].every(key => values[key])) throw Error('Use --payload --output NEW_DIR --expected VERSION --playwright MODULE on macOS');
     const output = path.resolve(values['--output']);
     if (values['--resume'] === 'true') assert.equal(readSafe(path.join(output, 'isolated-trial')).toString(), 'OhMyBuddy macOS platform update\n');
@@ -36,6 +36,7 @@ async function main() {
         assert.equal(new X509Certificate(readSafe(ca, 64 * 1024)).ca, true, 'Test TLS certificate must be a CA');
         env.NODE_EXTRA_CA_CERTS = ca;
     }
+    if (values['--https-proxy']) env.HTTPS_PROXY = require('./guard.cjs').loopbackProxy(values['--https-proxy']);
     await prepareInstallation({ source: fs.realpathSync.native(values['--payload']), root: installation, agentDir: agent, port, env, run: require('../../server/pi-update-installer').runNode });
     const initial = JSON.parse(readSafe(path.join(installation, 'package.json'))).version;
     const node = path.join(installation, 'runtime/bin/node'), logFile = fs.openSync(path.join(output, values['--resume'] ? 'service-resume.log' : 'service.log'), values['--resume'] ? 'a' : 'wx', 0o600);

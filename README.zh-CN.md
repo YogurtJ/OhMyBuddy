@@ -19,7 +19,7 @@
 
 [下载](https://github.com/YogurtJ/OhMyBuddy/releases/latest) · [安装](docs/INSTALL_RECOVERY.md) · [用户指南](docs/USER_GUIDE.md) · [变更记录](CHANGELOG.md) · [反馈问题](https://github.com/YogurtJ/OhMyBuddy/issues/new/choose) · [讨论区](https://github.com/YogurtJ/OhMyBuddy/discussions)
 
-<img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/hero-zh.webp" alt="自托管私人 AI 助理 OhMyBuddy 的电脑界面：伙伴记下你吃素和答应别人的订位，并附上“关于你”和“我记着的事”的回执" width="100%">
+<img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/hero-zh.webp" alt="OhMyBuddy 的伙伴统一记事本电脑界面：周五晚餐约定及原话出处，使用合成演示数据" width="100%">
 
 </div>
 
@@ -55,7 +55,7 @@ OhMyBuddy 是一个自托管的网页应用，把 Pi Coding Agent 变成随时�
 
 ### 伙伴：记得你的私人助理
 
-<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/buddy-zh.gif" alt="对伙伴说一次就记住：它记下你吃素和答应 Mia 的订位，回复下方出现回执，打开“我记着的事”能看到这条记录和原话出处" width="100%"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/buddy-zh.gif" alt="在伙伴统一记事本中查看晚餐计划、展开原话出处，再查看其他话题保存的资料；使用合成演示数据" width="100%"></p>
 
 - 给伙伴起名字、定性格和工作目录。头像可以选预设、组合轮廓配色和表情，也可以上传图片。可选的两三分钟“互相认识”会问清怎么称呼你、主要帮你做什么、该怎么做事，也可以跳过。
 - 每个伙伴有一个一直聊下去的主聊天和最多 100 个话题。话题可以分组、搜索和批量移动，删除后先进入可恢复的回收站。每个聊天都有自己的“我记着的事”；话题共用这个伙伴的记忆与技能。
@@ -64,7 +64,7 @@ OhMyBuddy 是一个自托管的网页应用，把 Pi Coding Agent 变成随时�
 - 可以同时有多个伙伴，记忆互不共享；新伙伴可以从其他伙伴勾选复制“关于你”。
 - 主动联系和后台学习在伙伴设置里各有开关和额度。详见 [伙伴模式](docs/BOT_MODE.md)。
 
-<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/buddy-organize-zh.webp" alt="伙伴设置里的十二款头像预设，以及按分组整理话题、选择后批量移入学习计划的界面；使用合成演示数据" width="100%"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/YogurtJ/OhMyBuddy/main/docs/assets/readme/buddy-organize-zh.webp" alt="伙伴设置里的二十四款头像预设、状态预览和“自己搭”入口；使用合成演示数据" width="100%"></p>
 
 ### 工作台：项目、线程与工具
 

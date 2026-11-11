@@ -97,11 +97,14 @@ test('RPC disposal is shared and waits for the actual exit after SIGKILL', async
     const child = new EventEmitter(), signals = [];
     Object.assign(child, { pid: 123, exitCode: null, signalCode: null, kill: signal => { signals.push(signal); return true; } });
     const rpc = new PiRpcClient({ cwd: process.cwd() }); rpc.child = child;
-    let finished = false; const stopping = rpc.dispose(); stopping.then(() => { finished = true; });
+    let finished = false; const stopping = rpc.dispose(); stopping.then(() => { finished = true; }, () => { finished = true; });
+    const failed = assert.rejects(stopping, error => error.code === 'RPC_SHUTDOWN_FORCED');
     assert.equal(rpc.dispose(), stopping); assert.deepEqual(signals, ['SIGTERM']);
-    t.mock.timers.tick(2500); await Promise.resolve();
+    t.mock.timers.tick(59999); await Promise.resolve();
+    assert.deepEqual(signals, ['SIGTERM'], 'normal cleanup gets the full default grace period');
+    t.mock.timers.tick(1); await Promise.resolve();
     assert.deepEqual(signals, ['SIGTERM', 'SIGKILL']); assert.equal(finished, false);
-    child.signalCode = 'SIGKILL'; child.emit('exit', null, 'SIGKILL'); await stopping; assert.equal(finished, true);
+    child.signalCode = 'SIGKILL'; child.emit('exit', null, 'SIGKILL'); await failed; assert.equal(finished, true);
 });
 
 test('offline restore verifies metadata, preserves post-update data and restores original native bytes', async t => {

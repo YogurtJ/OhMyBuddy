@@ -24,7 +24,10 @@ function acquireOwnerLock(filename) {
         // can still commit each update durably. SQLite uses OS file locks, which
         // are released even after SIGKILL or a reboot. Never unlink this file:
         // replacing its inode would let another process acquire a different lock.
-        db.exec('PRAGMA busy_timeout=0; PRAGMA journal_mode=DELETE; BEGIN EXCLUSIVE');
+        // Simultaneous first opens can briefly hold shared locks while SQLite
+        // reads the journal mode. Let those readers finish so both contenders
+        // do not fail before either owns the exclusive transaction.
+        db.exec('PRAGMA busy_timeout=1000; PRAGMA journal_mode=DELETE; BEGIN EXCLUSIVE');
         return db;
     } catch (error) {
         db.close();

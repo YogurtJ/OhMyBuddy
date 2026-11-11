@@ -26,6 +26,7 @@ function staleOwner(filename, owner) {
 }
 const childScript = `
     const { CronStore } = require(process.argv[1]);
+    if (process.argv[3] === 'notify-start') process.send({ starting: true });
     const store = new CronStore(process.argv[2]);
     for (const status of ['dispatching', 'running']) store.saveRun({
         id: status, jobId: 'job', status, scheduledAt: 1, job: { id: 'job', prompt: 'Keep this snapshot' },
@@ -36,8 +37,8 @@ const childScript = `
     });
     process.send({ owner: store.owner });
 `;
-async function startOwner(t, filename) {
-    const child = spawn(process.execPath, ['-e', childScript, require.resolve('../server/pi-cron-store'), filename], {
+async function startOwner(t, filename, onStarting = null) {
+    const child = spawn(process.execPath, ['-e', childScript, require.resolve('../server/pi-cron-store'), filename, ...(onStarting ? ['notify-start'] : [])], {
         cwd: path.dirname(filename), stdio: ['ignore', 'ignore', 'pipe', 'ipc']
     });
     let stderr = '';
@@ -50,7 +51,11 @@ async function startOwner(t, filename) {
     const message = await new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('Owner fixture timed out: ' + stderr)), 10000);
         child.once('error', reject);
-        child.once('message', message => { clearTimeout(timer); resolve(message); });
+        const messageReceived = message => {
+            if (message.starting) { onStarting(); return; }
+            child.off('message', messageReceived); clearTimeout(timer); resolve(message);
+        };
+        child.on('message', messageReceived);
         child.once('close', () => { clearTimeout(timer); reject(new Error('Owner fixture exited before ready: ' + stderr)); });
     });
     return { child, exited, owner: message.owner };
@@ -133,6 +138,20 @@ test('simultaneous first starts grant ownership to exactly one process', { timeo
         JSON.stringify(results.map(result => result.status === 'rejected' ? { error: result.reason.message } : { owner: true })));
     const rejected = results.find(result => result.status === 'rejected');
     assert.match(rejected.reason.message, /already has a scheduler owner/);
+});
+
+test('first startup waits for transient SQLite readers before acquiring exclusive ownership', { timeout: 20000 }, async t => {
+    const filename = fixture(t), reader = new DatabaseSync(filename + '.owner.sqlite');
+    reader.exec('CREATE TABLE fixture (n INTEGER); BEGIN; SELECT * FROM fixture');
+    let timer, released = false;
+    const release = () => { if (!released) { reader.exec('ROLLBACK'); released = true; } };
+    try {
+        const owner = await startOwner(t, filename, () => { timer = setTimeout(release, 100); });
+        assert.equal(released, true, 'the contender waits for the transient reader');
+        assert.throws(() => new CronStore(filename), /already has a scheduler owner/, 'a live owner is still exclusive');
+        owner.child.send('close'); assert.equal((await owner.exited).code, 0);
+        const reopened = new CronStore(filename); reopened.close();
+    } finally { clearTimeout(timer); release(); reader.close(); }
 });
 
 test('failed schema initialization and failed close both release the owner lock', t => {

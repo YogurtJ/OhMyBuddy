@@ -41,8 +41,12 @@ async function setup(t) {
     const { createPiAgentGateway } = require('../server/pi-agent-routes'), gateway = createPiAgentGateway({ deferredFilePath: process.env.PI_WEB_DEFERRED_FILE });
     const app = require('express')(); app.use(require('express').json()); gateway.mount(app);
     const server = http.createServer(app); gateway.attachWebSocket(server); server.listen(0, '127.0.0.1'); await once(server, 'listening');
-    const sockets = [];
-    t.after(async () => { for (const socket of sockets) socket.terminate(); await gateway.dispose(); server.closeAllConnections(); provider.closeAllConnections(); await Promise.all([new Promise(r => server.close(r)), new Promise(r => provider.close(r))]); });
+    const sockets = [], previousInternalOrigin = process.env.PI_WORKSPACE_INTERNAL_ORIGIN;
+    process.env.PI_WORKSPACE_INTERNAL_ORIGIN = `http://127.0.0.1:${server.address().port}`;
+    t.after(async () => {
+        try { for (const socket of sockets) socket.terminate(); await gateway.dispose(); server.closeAllConnections(); provider.closeAllConnections(); await Promise.all([new Promise(r => server.close(r)), new Promise(r => provider.close(r))]); }
+        finally { if (previousInternalOrigin === undefined) delete process.env.PI_WORKSPACE_INTERNAL_ORIGIN; else process.env.PI_WORKSPACE_INTERNAL_ORIGIN = previousInternalOrigin; }
+    });
     const base = `http://127.0.0.1:${server.address().port}/api/pi`;
     const rest = async (method, url, body) => {
         const response = await fetch(base + url, { method, headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' }, body: body && JSON.stringify(body) });
@@ -174,52 +178,48 @@ test('a scheduled task reopens a stale Bot main chat through the guarded restart
     assert.match(JSON.stringify(opened.messages), /Scheduled greeting fixture/);
 });
 
-test('notebook edits are written by the running worker, or with the file reserved when none runs', { timeout: 120000 }, async t => {
+test('shared notebook panel edits keep the live worker and never rewrite its chat ledger', { timeout: 120000 }, async t => {
     const { gateway, rest, connect, createBot } = await setup(t);
     const { botId, windowId, botWindow, session } = await createBot();
     const current = await session();
     const { SessionManager } = await import('@earendil-works/pi-coding-agent');
     const ledger = require('../server/bot/bot-ledger');
-    // Fixture notes, as a window_note result would leave them (no worker runs yet).
-    const manager = SessionManager.open(current.path);
-    const userEntry = manager.appendMessage({ role: 'user', content: '瓷砖定哑光灰，周五前给我报价', timestamp: Date.now() });
-    const { state } = ledger.prepareOps(ledger.emptyLedger(), [{ op: 'add', kind: 'decision', text: '瓷砖哑光灰' },
-        { op: 'add', kind: 'commitment', text: '周五前给报价', due: '2026-03-06' },
-        // Carried over from an earlier generation: only its kept quote can be shown.
-        { op: 'add', kind: 'ref', text: '物业电话 6123', source: { sessionId: 'earlier-generation', entryId: 'e9', role: 'toolResult', quote: '物业服务中心 6123' } }],
-        { at: new Date().toISOString(), by: 'bot', source: { sessionId: current.id, entryId: userEntry } });
-    manager.appendCustomEntry(ledger.LEDGER_ENTRY, { v: 1, snapshot: state });
-    const url = `/bots/${botId}/windows/${windowId}/notebook`;
+    const url = '/bots/' + botId + '/notebook';
+    const legacyUrl = '/bots/' + botId + '/windows/' + windowId + '/notebook';
+    const before = fs.readFileSync(current.path, 'utf8');
     let book = await rest('GET', url);
-    assert.equal(book.generation, 0);
-    assert.deepEqual(book.items.map(item => [item.id, item.kind, item.status]), [['n1', 'decision', 'active'], ['n2', 'commitment', 'active'], ['n3', 'ref', 'active']]);
-    assert.deepEqual(book.items[0].source, { role: 'user', text: '瓷砖定哑光灰，周五前给我报价' });
-    assert.deepEqual(book.items[2].source, { role: 'toolResult', text: '物业服务中心 6123' });
-    // No worker: appended with the file reserved.
-    book = await rest('POST', url, { expectedGeneration: 0, expectedVersion: book.version, ops: [{ op: 'status', id: 'n2', status: 'done' }] });
+    assert.equal(book.scope, 'buddy'); assert.deepEqual(book.items, []);
+    book = await rest('POST', url, { expectedVersion: book.version, ops: [
+        { op: 'add', kind: 'decision', text: '瓷砖哑光灰' },
+        { op: 'add', kind: 'commitment', text: '周五前给报价', due: '2026-03-06' },
+        { op: 'add', kind: 'ref', text: '物业电话 6123' }
+    ] });
+    assert.deepEqual(book.items.map(item => [item.id, item.kind, item.status]), [['b1', 'decision', 'active'], ['b2', 'commitment', 'active'], ['b3', 'ref', 'active']]);
+    book = await rest('POST', url, { expectedVersion: book.version, ops: [{ op: 'status', id: 'b2', status: 'done' }] });
     assert.equal(book.items[1].status, 'done');
-    assert.equal(gateway.supervisor.getActiveWorker(current.path), undefined, 'no worker was started for it');
-    // A running worker writes it itself and keeps running.
+    assert.equal(gateway.supervisor.getActiveWorker(current.path), undefined, 'panel edits start no worker');
+    assert.equal(fs.readFileSync(current.path, 'utf8'), before, 'the shared notebook is outside the conversation');
     const page = await connect();
     await page.call('open_session', { cwd: current.cwd, sessionId: current.id, token: TOKEN, botWindow });
     const worker = await deadline(() => gateway.supervisor.getActiveWorker(current.path)?.loadedBot && gateway.supervisor.getActiveWorker(current.path));
-    book = await rest('POST', url, { expectedGeneration: 0, expectedVersion: book.version, ops: [{ op: 'update', id: 'n1', text: '瓷砖改成浅灰' }, { op: 'delete', id: 'n2' }] });
-    assert.deepEqual(book.items.map(item => [item.id, item.text]), [['n1', '瓷砖改成浅灰'], ['n3', '物业电话 6123']], 'a deleted note leaves the panel');
+    const openBytes = fs.readFileSync(current.path, 'utf8');
+    book = await rest('POST', url, { expectedVersion: book.version, ops: [{ op: 'update', id: 'b1', text: '瓷砖改成浅灰' }, { op: 'delete', id: 'b2' }] });
+    assert.deepEqual(book.items.map(item => [item.id, item.text]), [['b1', '瓷砖改成浅灰'], ['b3', '物业电话 6123']]);
     assert.equal(gateway.supervisor.getActiveWorker(current.path), worker, 'the page keeps its runtime');
-    const written = SessionManager.open(current.path).getEntries().filter(entry => entry.customType === ledger.LEDGER_ENTRY && entry.data.ops);
-    assert.deepEqual(written.map(entry => entry.data.ops.map(op => `${op.by}:${op.op}:${op.id}`)), [['user:status:n2'], ['user:update:n1', 'user:delete:n2']]);
-    // Stale version, stale generation and invalid edits are refused without writing.
-    await assert.rejects(rest('POST', url, { expectedGeneration: 0, expectedVersion: '0000000000000000', ops: [{ op: 'status', id: 'n1', status: 'done' }] }),
+    assert.equal(fs.readFileSync(current.path, 'utf8'), openBytes, 'even live-worker edits do not append chat-local notes');
+    await assert.rejects(rest('POST', url, { expectedVersion: '0000000000000000', ops: [{ op: 'status', id: 'b1', status: 'done' }] }),
         error => error.status === 409 && error.code === 'NOTEBOOK_CHANGED');
-    await assert.rejects(rest('POST', url, { expectedGeneration: 3, expectedVersion: book.version, ops: [{ op: 'status', id: 'n1', status: 'done' }] }),
-        error => error.status === 409 && error.code === 'BOT_WINDOW_STALE');
-    await assert.rejects(rest('POST', url, { expectedGeneration: 0, expectedVersion: book.version, ops: [{ op: 'status', id: 'n9', status: 'done' }] }),
-        error => error.status === 400 && /No note n9/.test(error.message));
-    await assert.rejects(rest('POST', url, { expectedGeneration: 0, expectedVersion: book.version, ops: [{ op: 'add', kind: 'ref', text: 'x' }] }), /Invalid notebook edit/);
-    assert.equal(SessionManager.open(current.path).getEntries().filter(entry => entry.customType === ledger.LEDGER_ENTRY && entry.data.ops).length, 2);
-    // The model is told about the panel edits before its next run.
+    const legacy = await rest('GET', legacyUrl);
+    await assert.rejects(rest('POST', legacyUrl, { expectedGeneration: 0, expectedVersion: legacy.version, ops: [{ op: 'update', id: 'n1', text: '旧页面写入' }] }),
+        error => error.status === 409 && error.code === 'NOTEBOOK_MOVED');
+    await assert.rejects(rest('POST', url, { expectedVersion: book.version, ops: [{ op: 'status', id: 'b9', status: 'done' }] }),
+        error => error.status === 400 && /No note b9/.test(error.message));
+    await assert.rejects(rest('POST', url, { expectedVersion: book.version, ops: [{ op: 'add', kind: 'ref', text: '' }] }), error => error.status === 400);
+    assert.equal((await rest('GET', url)).version, book.version, 'rejected changes never advance the journal');
+    assert.equal(SessionManager.open(current.path).getEntries().filter(entry => entry.customType === ledger.LEDGER_ENTRY).length, 0);
     page.call('prompt', { message: 'hello' }).catch(() => {});
-    await deadline(() => SessionManager.open(current.path).getEntries().some(entry => entry.type === 'custom_message' && entry.customType === 'pivane-bot-notebook'));
-    const notice = SessionManager.open(current.path).getEntries().find(entry => entry.customType === 'pivane-bot-notebook');
-    assert.match(notice.content, /Notebook of this chat[^]*\[n1\] 瓷砖改成浅灰/, 'never shown before, so the whole notebook');
+    await deadline(() => SessionManager.open(current.path).getEntries().some(entry => entry.type === 'custom_message' && entry.customType === 'pivane-buddy-notebook-context'));
+    const notice = SessionManager.open(current.path).getEntries().find(entry => entry.customType === 'pivane-buddy-notebook-context');
+    assert.match(notice.content, /Current notebook of this Buddy[^]*\[b1\] \(decision, active\) 瓷砖改成浅灰/);
+    assert.doesNotMatch(notice.content, /\[b2\]/, 'deleted notes stay out of the next model context');
 });
