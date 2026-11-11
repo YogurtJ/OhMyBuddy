@@ -37,6 +37,9 @@ async function main() {
         env.NODE_EXTRA_CA_CERTS = ca;
     }
     if (values['--https-proxy']) env.HTTPS_PROXY = require('./guard.cjs').loopbackProxy(values['--https-proxy']);
+    // This standalone fixture's offline helpers must use the same private state
+    // root as its service, including after the service has stopped for restore.
+    Object.assign(process.env, env);
     await prepareInstallation({ source: fs.realpathSync.native(values['--payload']), root: installation, agentDir: agent, port, env, run: require('../../server/pi-update-installer').runNode });
     const initial = JSON.parse(readSafe(path.join(installation, 'package.json'))).version;
     const node = path.join(installation, 'runtime/bin/node'), logFile = fs.openSync(path.join(output, values['--resume'] ? 'service-resume.log' : 'service.log'), values['--resume'] ? 'a' : 'wx', 0o600);
