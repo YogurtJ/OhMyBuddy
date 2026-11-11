@@ -8,6 +8,7 @@
         let dialogEpoch = 0, trustContext, returnFocus, reading = false, readEpoch = 0, identity = '';
         let configEpoch = 0, configIdentity = '', configValue = null;
         const feedback = node('p', '', { id: 'pi-runtime-config-status', role: 'status' });
+        const cacheStatus = node('p', '', { id: 'pi-runtime-cache-status' }); cacheStatus.hidden = true;
         const checkConfig = button(translateUi("核对配置"), 'pi-runtime-config-check', () => void inspectConfiguration());
         const restartButton = button(translateUi("重新打开运行实例"), 'pi-runtime-restart', async () => {
             if (!configValue || context().busy || !context().connected) return;
@@ -16,7 +17,7 @@
             try { await restart(value); if (parent === key()) feedback.textContent = translateUi("已接受，正在重新打开；请等待连接恢复后核对配置。"); }
             catch (e) { if (parent === key()) feedback.textContent = e.message; }
         });
-        const configPanel = node('div', undefined, { class: 'native-runtime-config' }); configPanel.append(feedback, checkConfig, restartButton);
+        const configPanel = node('div', undefined, { class: 'native-runtime-config' }); configPanel.append(feedback, cacheStatus, checkConfig, restartButton);
         section.querySelector('.native-runtime-actions').before(configPanel);
         const trustBanner = node('div', undefined, { id: 'pi-project-resource-notice', class: 'pi-project-resource-notice' });
         trustBanner.hidden = true;
@@ -28,6 +29,13 @@
             try {
                 const value = await configuration(); if (n !== configEpoch || parent !== key() || !context().connected) return;
                 configValue = value;
+                const cache = value.cacheWarming;
+                cacheStatus.hidden = !cache;
+                if (cache) {
+                    const mode = { off: translateUi('关闭'), streaming: translateUi('仅运行中'), idle: translateUi('运行中与空闲（最长 30 分钟）') }[cache.mode] || cache.mode;
+                    const state = { inactive: translateUi('未运行'), scheduled: translateUi('等待下一次判断'), refreshing: translateUi('正在保温') }[cache.state] || cache.state;
+                    cacheStatus.textContent = translateUi('缓存保温：{0} · {1}。保温费用计入用量统计。', mode, state);
+                }
                 onConfiguration?.(value);
                 feedback.textContent = value.matchesSavedConfig === null ? translateUi("无法核对本实例的启动配置；可在空闲时重新打开实例后核对。") : value.matchesSavedConfig ? translateUi("配置文件与本实例启动时一致。资源文件内容修改后，可重新加载资源。") : translateUi("已保存的配置与当前实例不同。重新打开运行实例后应用；仅刷新网页不会生效。");
                 feedback.dataset.state = value.matchesSavedConfig === null ? 'unknown' : value.matchesSavedConfig ? 'current' : 'changed';
@@ -35,7 +43,7 @@
                 trustBanner.hidden = !(trust.requiresTrust && !value.actualProjectTrusted && trust.decision === null && trust.override === null && trust.defaultPolicy === 'ask');
                 restartButton.hidden = value.ephemeral;
                 restartButton.disabled = c.busy || Boolean(value.recoveries || value.drafts);
-            } catch (e) { if (n === configEpoch && parent === key()) { feedback.textContent = translateUi("配置状态暂时无法核对：") + e.message; feedback.dataset.state = 'unknown'; } }
+            } catch (e) { if (n === configEpoch && parent === key()) { feedback.textContent = translateUi("配置状态暂时无法核对：") + e.message; feedback.dataset.state = 'unknown'; cacheStatus.hidden = true; } }
             finally { if (n === configEpoch) checkConfig.disabled = false; }
         }
         window.addEventListener('pi:native-config-saved', event => {
@@ -148,7 +156,7 @@
                 readEpoch++; reading = false; content.replaceChildren(); section.open = false; identity = next;
             }
             if (configIdentity !== (c.connected ? next : '')) {
-                configEpoch++; configValue = null; configIdentity = c.connected ? next : ''; trustBanner.hidden = true; feedback.textContent = '';
+                configEpoch++; configValue = null; configIdentity = c.connected ? next : ''; trustBanner.hidden = true; feedback.textContent = ''; cacheStatus.hidden = true; cacheStatus.textContent = '';
                 if (c.connected && c.configurationSupported) void inspectConfiguration();
             }
             if (dialog.open && trustContext !== next) dialog.close();

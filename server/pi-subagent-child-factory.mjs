@@ -8,6 +8,7 @@ import { registerModelSpeed } from './pi-model-speed-extension.mjs';
 import { installImageCompatibility } from './pi-image-runtime.mjs';
 import sessionImages from './pi-session-images.js';
 import imageContext from './pi-session-image-context.js';
+import { cacheWarmingSettings, bindCacheWarmingSession } from './pi-cache-warming.js';
 import * as sdk from '@earendil-works/pi-coding-agent';
 import { createPlacementChildSessionFactory } from '../vendor/pi-subagents/src/runs/shared/child-session.js';
 import resources from './pi-bundled-resources.js';
@@ -71,8 +72,11 @@ export default function childFactory() {
         const policy = childPolicy;
         return { ...sdk, DefaultResourceLoader: ChildResourceLoader,
             createAgentSession: async options => {
-                const created = await sdk.createAgentSession({ ...options, sessionManager: imageContext.imageSessionManager(options.sessionManager, options.agentDir) });
+                const settingsManager = cacheWarmingSettings(options.settingsManager || sdk.SettingsManager.create(options.cwd, options.agentDir));
+                const created = await sdk.createAgentSession({ ...options, settingsManager, sessionManager: imageContext.imageSessionManager(options.sessionManager, options.agentDir) });
                 installImageCompatibility(created.session, { agentDir: options.agentDir });
+                bindCacheWarmingSession(created.session);
+                childPolicy?.runtimes.add(created.session.modelRuntime);
                 return created;
             },
             createMcpExtension: () => pi => {
@@ -93,10 +97,21 @@ export default function childFactory() {
             checkDisposal();
             await networkTransport.initializeSdkNetwork();
             checkDisposal();
-            const policy = { ...launch };
+            const policy = { ...launch, runtimes: new Set() };
             childPolicy = policy;
-            try { return await upstream.create(launch); }
-            finally { childPolicy = undefined; }
+            try {
+                const child = await upstream.create(launch), dispose = child.dispose.bind(child);
+                let closing;
+                child.dispose = () => closing ||= (async () => {
+                    await dispose();
+                    await Promise.all([...policy.runtimes].map(runtime => runtime.settleCredentialWrites()));
+                    policy.runtimes.clear();
+                })();
+                return child;
+            } catch (error) {
+                await Promise.all([...policy.runtimes].map(runtime => runtime.settleCredentialWrites()));
+                throw error;
+            } finally { childPolicy = undefined; }
         });
         creating = task; return task;
     }, dispose() { disposals += 1; return upstream.dispose(); } };

@@ -54,7 +54,7 @@ test('v1 ledger migration adds billing columns transactionally without changing 
     } finally { old.close(); }
     const migrated = new UsageLedger(f.input.ledgerPath);
     try {
-        assert.equal(migrated.db.prepare("SELECT value FROM meta WHERE key='schema'").get().value, '2');
+        assert.equal(migrated.db.prepare("SELECT value FROM meta WHERE key='schema'").get().value, '3');
         assert.deepEqual(migrated.db.prepare('SELECT * FROM facts').all(), facts);
         assert.deepEqual(migrated.report(f.input.filter, f.input.roots, {}).total, first.total);
     } finally { migrated.close(); }

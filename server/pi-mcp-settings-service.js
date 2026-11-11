@@ -20,7 +20,8 @@ let native;
 async function nativeApi() {
     if (!native) {
         const root = path.resolve(path.dirname(require('node:url').fileURLToPath((await import('./pi-native-mcp-control.mjs')).nativePiEntry())), '..');
-        native = import(pathToFileURL(path.join(root, 'dist/core/mcp-servers.js')).href);
+        native = Promise.all([import(pathToFileURL(path.join(root, 'dist/core/mcp-servers.js')).href),
+            import('@earendil-works/pi-mcp')]).then(([config, helpers]) => ({ ...config, mcpNamespace: helpers.mcpNamespace }));
     }
     return native;
 }

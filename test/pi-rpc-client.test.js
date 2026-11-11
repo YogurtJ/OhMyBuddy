@@ -117,3 +117,32 @@ test('Windows RPC disposal waits for asynchronous EOF cleanup and is not replaye
     assert.equal(child.exitCode, 0); assert.equal(child.signalCode, null);
     assert.equal(fs.readFileSync(marker, 'utf8'), 'disposed\n');
 });
+
+test('RPC EOF shutdown waits beyond the old grace period and shares one cleanup', async t => {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pi-rpc-grace-')));
+    const script = path.join(root, 'fixture.cjs'), marker = path.join(root, 'saved.txt');
+    fs.writeFileSync(script, `const fs=require('node:fs'),readline=require('node:readline');
+        readline.createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line);process.stdout.write(JSON.stringify({type:'response',id:m.id,success:true,data:{}})+'\\n');});
+        process.stdin.once('end',()=>setTimeout(()=>{fs.appendFileSync(${JSON.stringify(marker)},'saved');process.exit(0)},3100));
+        setInterval(()=>{},1000);`);
+    const before = process.env.PI_WEB_CLI; process.env.PI_WEB_CLI = script;
+    const client = new PiRpcClient({ cwd: root, noSession: true });
+    t.after(async () => { await client.dispose(); if (before === undefined) delete process.env.PI_WEB_CLI; else process.env.PI_WEB_CLI = before; fs.rmSync(root, { recursive: true, force: true }); });
+    await client.start(); const child = client.child;
+    const disposing = client.dispose(); assert.equal(client.dispose(), disposing);
+    await disposing;
+    assert.equal(child.exitCode, 0); assert.equal(child.signalCode, null);
+    assert.equal(fs.readFileSync(marker, 'utf8'), 'saved');
+});
+
+test('forced RPC termination reports failure only after the actual child exit', async t => {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pi-rpc-forced-')));
+    const script = path.join(root, 'fixture.cjs');
+    fs.writeFileSync(script, `require('node:readline').createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line);process.stdout.write(JSON.stringify({type:'response',id:m.id,success:true,data:{}})+'\\n');});setInterval(()=>{},1000);`);
+    const before = process.env.PI_WEB_CLI; process.env.PI_WEB_CLI = script;
+    const client = new PiRpcClient({ cwd: root, noSession: true, shutdownTimeoutMs: 80 });
+    t.after(async () => { await client.dispose().catch(() => {}); if (before === undefined) delete process.env.PI_WEB_CLI; else process.env.PI_WEB_CLI = before; fs.rmSync(root, { recursive: true, force: true }); });
+    await client.start(); const child = client.child;
+    await assert.rejects(client.dispose(), error => error.code === 'RPC_SHUTDOWN_FORCED');
+    assert.equal(child.signalCode, 'SIGKILL');
+});

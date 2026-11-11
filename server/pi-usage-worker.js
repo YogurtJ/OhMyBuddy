@@ -7,13 +7,15 @@ const { parentPort, workerData } = require('node:worker_threads');
 
 const LIMITS = { files: 2000, bytes: 512 * 1024 * 1024, fileBytes: 64 * 1024 * 1024,
     lineBytes: 8 * 1024 * 1024, entries: 250000, records: 100000, milliseconds: 20000 };
+const USAGE_PARSER_VERSION = 2;
 const fields = ['input', 'output', 'cacheRead', 'cacheWrite'];
 const within = (root, value) => value === root || value.startsWith(root.endsWith(path.sep) ? root : root + path.sep);
 const empty = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0, cost: 0,
-    providerReportedCost: 0, providerReportedRecords: 0,
+    providerReportedCost: 0, providerReportedRecords: 0, cacheWarmingCost: 0, cacheWarmingRecords: 0,
     records: 0, missingUsage: 0, missingCost: 0, zeroCost: 0 });
 function add(target, record) {
     target.records++;
+    if (record.kind === 'cache_warm') { target.cacheWarmingRecords++; if (record.usage) target.cacheWarmingCost += record.cost || 0; }
     if (!record.usage) { target.missingUsage++; return; }
     for (const field of fields) target[field] += record.usage[field];
     target.total += fields.reduce((sum, field) => sum + record.usage[field], 0);
@@ -33,13 +35,14 @@ function recordFromEntry(entry, dayOf, filter) {
     const assistant = entry.type === 'message' && entry.message?.role === 'assistant';
     const tool = entry.type === 'message' && entry.message?.role === 'toolResult' && entry.message.usage !== undefined;
     const summary = ['compaction', 'branch_summary'].includes(entry.type);
-    if (!assistant && !tool && !summary) return null;
+    const nativeUsage = entry.type === 'usage';
+    if (!assistant && !tool && !summary && !nativeUsage) return null;
     const timestamp = Date.parse(entry.timestamp);
     if (!Number.isFinite(timestamp)) return { invalidDate: true };
     const day = dayOf.format(timestamp);
     if (day < filter.from || day > filter.to) return null;
     if (typeof entry.id !== 'string' || entry.id.length > 128) throw new Error('id');
-    const raw = summary ? entry.usage : entry.message.usage;
+    const raw = summary || nativeUsage ? entry.usage : entry.message.usage;
     const usage = raw && fields.every(field => Number.isSafeInteger(raw[field]) && raw[field] >= 0 && raw[field] <= 1e9)
         ? Object.fromEntries(fields.map(field => [field, raw[field]])) : null;
     if (usage && raw.cacheWrite1h !== undefined) usage.cacheWrite1h = Number.isSafeInteger(raw.cacheWrite1h)
@@ -47,7 +50,9 @@ function recordFromEntry(entry, dayOf, filter) {
     const cost = typeof raw?.cost?.total === 'number' && Number.isFinite(raw.cost.total) && raw.cost.total >= 0 && raw.cost.total <= 1e9 ? raw.cost.total : null;
     // Native forks/imports preserve entry IDs and timestamps. Include payload to avoid ID collisions;
     // parentId may change on branch export. Never recurse into compaction.retainedTail as new usage.
-    const payload = assistant || tool ? entry.message : { summary: entry.summary, usage: entry.usage, type: entry.type };
+    const payload = assistant || tool ? entry.message : nativeUsage
+        ? { type: entry.type, kind: entry.kind, provider: entry.provider, model: entry.model, usage: entry.usage }
+        : { summary: entry.summary, usage: entry.usage, type: entry.type };
     const key = createHash('sha256').update(JSON.stringify(canonical([entry.id, entry.timestamp, payload]))).digest('hex');
     const safeName = value => typeof value === 'string' ? value.slice(0, 500) : '未知';
     const rawSpeed = assistant && entry.message.pivaneSpeed;
@@ -57,8 +62,10 @@ function recordFromEntry(entry, dayOf, filter) {
         costMultiplier: typeof rawSpeed.costMultiplier === 'number' && Number.isFinite(rawSpeed.costMultiplier) && rawSpeed.costMultiplier >= 0.5 && rawSpeed.costMultiplier <= 100 ? rawSpeed.costMultiplier : null,
         costBasis: ['reported-tier', 'requested-tier-estimate'].includes(rawSpeed.costBasis) ? rawSpeed.costBasis : null
     } : null;
-    return { key, timestamp, day, usage, cost, totalFromProvider: cost !== null && raw?.cost?.totalFromProvider === true, ...(speed ? { speed } : {}), provider: assistant ? safeName(entry.message.provider) : '工具与摘要',
-        model: assistant ? safeName(entry.message.responseModel || entry.message.model) : '工具与摘要（未归属模型）' };
+    return { key, timestamp, day, usage, cost, totalFromProvider: cost !== null && raw?.cost?.totalFromProvider === true, ...(speed ? { speed } : {}),
+        ...(nativeUsage ? { kind: safeName(entry.kind) } : {}),
+        provider: nativeUsage ? safeName(entry.provider) : assistant ? safeName(entry.message.provider) : '工具与摘要',
+        model: nativeUsage ? safeName(entry.model) : assistant ? safeName(entry.message.responseModel || entry.message.model) : '工具与摘要（未归属模型）' };
 }
 
 function scanUsage({ root, roots, filter, incremental, onlyFile }, limits = LIMITS) {
@@ -117,7 +124,7 @@ function scanUsage({ root, roots, filter, incremental, onlyFile }, limits = LIMI
             const checkpoint = incremental?.checkpoint?.(filename);
             // Even nanosecond timestamps can repeat for rapid same-size writes.
             // Reuse parsed facts only after proving the saved complete byte digest.
-            if (incremental?.cached(filename, signature) && checkpoint?.version === 1
+            if (incremental?.cached(filename, signature) && checkpoint?.version === USAGE_PARSER_VERSION
                 && checkpoint.offset === Number(stat.size) && /^[a-f0-9]{64}$/.test(checkpoint.digest)) {
                 let position = 0;
                 const digest = createHash('sha256');
@@ -140,7 +147,7 @@ function scanUsage({ root, roots, filter, incremental, onlyFile }, limits = LIMI
             let digest = createHash('sha256'), terminated = false;
             // An inode/size increase alone does not prove an append. Verify every byte
             // of the old prefix without decoding JSON before trusting the saved cursor.
-            if (checkpoint?.version === 1 && checkpoint.terminated && Number.isSafeInteger(checkpoint.offset)
+            if (checkpoint?.version === USAGE_PARSER_VERSION && checkpoint.terminated && Number.isSafeInteger(checkpoint.offset)
                 && checkpoint.offset > 0 && checkpoint.offset < size && /^[a-f0-9]{64}$/.test(checkpoint.digest)
                 && checkpoint.identity === JSON.stringify([actual, identity, String(stat.dev), String(stat.ino)])) {
                 while (position < checkpoint.offset) {
@@ -198,7 +205,7 @@ function scanUsage({ root, roots, filter, incremental, onlyFile }, limits = LIMI
                 || fs.realpathSync.native(header.cwd) !== data.cwd
                 || stat.size !== after.size || stat.mtimeMs !== after.mtimeMs || stat.ctimeMs !== after.ctimeMs || stat.mtimeNs !== after.mtimeNs || stat.ctimeNs !== after.ctimeNs
                 || fs.realpathSync.native(filename) !== actual || descriptorPathSync(fd) !== actual) throw new Error('changed');
-            data.checkpoint = { version: 1, offset: size, digest: digest.digest('hex'), terminated,
+            data.checkpoint = { version: USAGE_PARSER_VERSION, offset: size, digest: digest.digest('hex'), terminated,
                 identity: JSON.stringify([actual, identity, String(stat.dev), String(stat.ino)]),
                 header: { type: header.type, version: header.version, id: data.id, cwd: header.cwd,
                     timestamp: new Date(data.created).toISOString() }, name: data.name };
@@ -246,4 +253,4 @@ if (parentPort) {
         .then(value => parentPort.postMessage({ value }))
         .catch(() => parentPort.postMessage({ error: '用量账本读取或同步失败，请稍后刷新' }));
 }
-module.exports = { scanUsage, recordFromEntry, LIMITS, empty, fields, within };
+module.exports = { scanUsage, recordFromEntry, LIMITS, USAGE_PARSER_VERSION, empty, fields, within };

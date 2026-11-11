@@ -20,19 +20,19 @@
 
 新增入账仍严格校验 header.cwd 的 realpath、目录存在性、系统访问权限和当前项目根范围。已入账项目按当时验证的规范 cwd 保留；项目目录随后删除也不会丢失已入账数据，但查询仍按当前允许项目根筛选。
 
-累计所有分支的 assistant usage、明确上报 usage 的 toolResult，以及 compaction/branch_summary 的 usage；不递归计算 retainedTail。没有 usage 的普通工具结果不算额外模型消耗，摘要/assistant 缺少完整 usage 标明未知。失败或停止记录只要有用量也计入。总 Token 为 input + output + cacheRead + cacheWrite，与当前上下文占用独立。
+累计所有分支的 assistant usage、明确上报 usage 的 toolResult、compaction/branch_summary 的 usage，以及原生 `type:usage` 条目；`kind:cache_warm` 单列保温费用和次数，已包含在总 Token 与总费用中，不重复相加。不递归计算 retainedTail。没有 usage 的普通工具结果不算额外模型消耗，摘要/assistant 缺少完整 usage 标明未知。失败或停止记录只要有用量也计入。总 Token 为 input + output + cacheRead + cacheWrite，与当前上下文占用独立。
 
 以原生 entry.timestamp 和所选 IANA 时区分日，首尾日期均包含；无有效日期不推算。跨文件按 entry ID、timestamp 和规范化载荷的 SHA-256 去重，忽略 parentId。原生复制、分叉、导入保留这些字段时只计一次，不追随 parentSession 读取任意路径；手工修改 ID/时间/载荷不能可靠去重。
 
 首次批量入账按会话创建时间和路径排序确定归属，后续保留第一次入账的归属。删除原始会话不会将用量转给副本。会话明细包括已删除会话的显式名称或 ID，各归属小计可以加和到总量。
 
-模型按 assistant.provider 和 responseModel（缺省 model）归属；工具与摘要单列，不猜测模型。侧聊以独立会话身份归属（名称“侧聊”），同一内存条目的重复回传只入账一次；每笔仅保存用量/价格/时间/归属，不保存引用、问题、回复或工具参数。入账失败会在侧聊存活期间及关闭时重试；若账本持续不可用而内存会话终止，尚未成功入账的临时用量无法事后恢复。此功能启用前已结束的旧侧聊亦无法补录。普通临时会话、标题生成、媒体 planner、模型测试和其他未落盘请求仍不在本账本范围。标题生成窗口的一次请求用量展示不等于累计标题日志。
+模型按 assistant.provider 和 responseModel（缺省 model）归属；原生 usage 按条目自身 provider/model 归属；工具与摘要单列，不猜测模型。侧聊以独立会话身份归属（名称“侧聊”），同一内存条目的重复回传只入账一次；每笔仅保存用量/价格/时间/归属，不保存引用、问题、回复或工具参数。入账失败会在侧聊存活期间及关闭时重试；若账本持续不可用而内存会话终止，尚未成功入账的临时用量无法事后恢复。此功能启用前已结束的旧侧聊亦无法补录。普通临时会话、标题生成、媒体 planner、模型测试和其他未落盘请求仍不在本账本范围。标题生成窗口的一次请求用量展示不等于累计标题日志。
 
 ## 费用来源
 
 原生 `usage.cost.totalFromProvider=true` 表示总额由服务商报告。该标记随精简用量事实保存，主线程、工具／摘要和侧聊一致处理。实报零费用也是有效账单，不使用目录价补算；标记缺省或为 false 的费用按估算展示。分项 input/output/cache 的目录估算不冒充服务商账单明细。页面显示实报合计、笔数与剩余估算金额，各分组明细另列实报金额。
 
-旧 v1 账本通过同一 SQLite 事务追加两个来源汇总列并升级为 v2；旧事实、日汇总和累计费用原位保留，没有来源证据的旧记录仍按估算处理，不改写原生 JSONL。代码回退需匹配升级前的完整账本备份，不能把旧程序拒绝新 schema 当作空账本。
+账本通过同一 SQLite 事务追加缺失汇总列并升级为 v3：v1 增加服务商实报来源，v2 增加缓存保温金额与次数。旧事实、日汇总和累计费用原位保留，没有来源证据的旧记录仍按估算处理，不改写原生 JSONL。扫描器版本随费用识别规则更新，旧游标重新核对现存完整文件，补录原先跳过的 usage 条目；原有事实保留原指纹，不重复入账。已在补录前删除且无副本的保温记录无法恢复。代码回退需匹配升级前的完整账本备份，不能把旧程序拒绝新 schema 当作空账本。
 
 ## 模型加速档位
 
@@ -60,6 +60,7 @@
 - `total`、`daily`、`providers/models/projects/sessions` 保留 `input/output/cacheRead/cacheWrite/total/cost/records/missingUsage/missingCost/zeroCost`。
 - 各汇总增加 `recordedCost`（原始费用合计）、`estimatedRecords`（官方价补算笔数）、`unpricedRecords`（非零用量但仍无确认价格的笔数）。
 - 各汇总增加 `providerReportedCost`（服务商实报费用合计）与 `providerReportedRecords`（有完整用量及有效实报费用的笔数，含零值）；`cost-providerReportedCost` 为估算部分，`estimatedRecords` 仍仅表示本地官方价补算笔数。
+- 各汇总增加 `cacheWarmingCost` 与 `cacheWarmingRecords`，为已经包含在总量内的保温金额／次数；零费用仍保留次数，未知价格沿用缺失费用提示。
 - 增加 `weekly/monthly`，date 分别为周一日期或 YYYY-MM；只合计筛选内日期。
 - `coverage` 为本次同步的 `scannedFiles/cachedFiles/skippedFiles/excludedProjects/duplicates/invalidDates/limited/syncedAt`。cachedFiles 表示身份、修订和完整内容指纹均已核实；`cachedVerifiedBytes` 表示复用事实前的完整字节校验量。`appendedFiles` 表示仅解析后缀的文件数，`parsedBytes` 与 `verifiedBytes` 分别表示送入 JSONL 解析与仅做前缀校验的读取字节数（均含失败尝试）。duplicates 表示本次读取中已入账的指纹数，并非账本历史副本总数。
 - `partial` 在跳过文件、日期异常、达到限额或用量缺失时为 true；价格缺失另行显示。总数包括早先已保存的数据，不能将 partial 报告当作本次完整补录证明。

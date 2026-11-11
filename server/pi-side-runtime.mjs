@@ -5,6 +5,7 @@ import networkTransport from './workspace-network-transport.js';
 import { registerModelSpeed } from './pi-model-speed-extension.mjs';
 import { installImageCompatibility } from './pi-image-runtime.mjs';
 import imageContext from './pi-session-image-context.js';
+import { cacheWarmingMode, bindCacheWarmingSession } from './pi-cache-warming.js';
 import { writeRawStdout } from '../node_modules/@earendil-works/pi-coding-agent/dist/core/output-guard.js';
 import {
     createAgentSessionRuntime, createAgentSessionServices, createAgentSessionFromServices,
@@ -34,6 +35,7 @@ try {
         ...(builtinTools.length ? { defaultTools: builtinTools } : {}),
         compaction: disk.compaction, retry: disk.retry, transport: disk.transport, thinkingBudgets: disk.thinkingBudgets, images: disk.images,
         packages: [], extensions: [], skills: [], prompts: [], themes: [], enableInstallTelemetry: false,
+        cacheWarming: cacheWarmingMode(nativeSettings),
     });
     const sessionManager = SessionManager.inMemory(cwd, { id: seed.sessionId }, seed.entries);
     const createRuntime = async ({ cwd, sessionManager, sessionStartEvent }) => {
@@ -51,6 +53,7 @@ try {
         const result = await createAgentSessionFromServices({ services, sessionManager: imageContext.imageSessionManager(sessionManager, agentDir), sessionStartEvent, model,
             thinkingLevel: seed.thinkingLevel, ...(builtinTools.length ? {} : { noTools: 'all' }) });
         installImageCompatibility(result.session, { agentDir, emit: record => writeRawStdout(JSON.stringify(record) + '\n') });
+        bindCacheWarmingSession(result.session);
         const active = result.session.agent.state.tools.map(tool => tool.name).sort();
         if (result.session.sessionFile || builtinTools.length && !gateLoaded || JSON.stringify(active) !== JSON.stringify(expectedTools)) throw new Error('Side isolation check failed');
         return { ...result, services, diagnostics: services.diagnostics };
@@ -63,5 +66,5 @@ try {
     process.stderr.write('Side memory runtime could not initialize; check model registration and context configuration.\n');
     process.exitCode = 1;
 } finally {
-    runtime?.session.dispose();
+    await runtime?.dispose();
 }

@@ -5,6 +5,9 @@ const fs = require('fs');
 const path = require('path');
 
 const DEFAULT_REQUEST_TIMEOUT = 30000;
+// OAuth refreshes can rotate single-use tokens before their local write finishes.
+// Give Pi's orderly EOF shutdown time to abort tools and settle credential writes.
+const DEFAULT_SHUTDOWN_TIMEOUT = 60000;
 // Cold starts load Pi, its providers and every enabled extension. Windows file
 // scanning can make that take a minute or more, so the readiness window is
 // generous and configurable. The browser waits 180 s for an opened thread; the
@@ -21,15 +24,20 @@ function startupTimeoutMs(value = process.env.PI_WEB_STARTUP_TIMEOUT_MS) {
 const rpcProcesses = new Set();
 const stoppingProcesses = new WeakMap();
 let rpcShuttingDown = false;
-function stopRpcProcess(child) {
+function stopRpcProcess(child, timeoutMs = DEFAULT_SHUTDOWN_TIMEOUT) {
     if (!child || child.exitCode !== null || child.signalCode !== null || !child.pid) return Promise.resolve();
     if (stoppingProcesses.has(child)) return stoppingProcesses.get(child);
-    const stopping = new Promise(resolve => {
-        const timer = setTimeout(() => child.kill('SIGKILL'), 2500);
-        child.once('exit', () => { clearTimeout(timer); resolve(); });
-        // Windows SIGTERM terminates Node immediately. Pi's documented stdin
-        // EOF path awaits runtime disposal, including persistent MCP browsers.
-        if (process.platform === 'win32' && child.stdin?.writable) {
+    let forced = false;
+    const stopping = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => { forced = true; child.kill('SIGKILL'); }, timeoutMs);
+        child.once('exit', () => {
+            clearTimeout(timer);
+            if (forced) reject(Object.assign(new Error('Pi RPC cleanup timed out; process was forcibly terminated'), { code: 'RPC_SHUTDOWN_FORCED' }));
+            else resolve();
+        });
+        // EOF is Pi's public orderly shutdown on every platform. Windows SIGTERM
+        // terminates Node immediately; use it only if stdin cannot be closed.
+        if (child.stdin?.writable) {
             child.stdin.once('error', () => child.kill('SIGTERM'));
             child.stdin.end();
         } else child.kill('SIGTERM');
@@ -62,8 +70,9 @@ function resolvePiCli() {
 }
 
 class PiRpcClient extends EventEmitter {
-    constructor({ cwd, sessionPath, noSession = false, extraArgs = [], env = {}, projectApproval, sideSeed, startupTimeoutMs: startupLimit }) {
+    constructor({ cwd, sessionPath, noSession = false, extraArgs = [], env = {}, projectApproval, sideSeed, startupTimeoutMs: startupLimit, shutdownTimeoutMs = DEFAULT_SHUTDOWN_TIMEOUT }) {
         super();
+        this.shutdownTimeoutMs = Number.isFinite(shutdownTimeoutMs) && shutdownTimeoutMs > 0 ? shutdownTimeoutMs : DEFAULT_SHUTDOWN_TIMEOUT;
         this.startupTimeoutMs = Number.isFinite(startupLimit) && startupLimit > 0 ? startupLimit : startupTimeoutMs();
         this.cwd = cwd;
         this.sessionPath = sessionPath;
@@ -313,9 +322,9 @@ class PiRpcClient extends EventEmitter {
         this.disposed = true;
         const child = this.processChild || this.child;
         this.child = null;
-        this.disposal = stopRpcProcess(child);
+        this.disposal = stopRpcProcess(child, this.shutdownTimeoutMs);
         return this.disposal;
     }
 }
 
-module.exports = { PiRpcClient, resolvePiCli, shutdownRpcProcesses, startupTimeoutMs, DEFAULT_STARTUP_TIMEOUT, STARTUP_TIMEOUT_RANGE, STARTUP_TIMEOUT_MESSAGE };
+module.exports = { PiRpcClient, resolvePiCli, shutdownRpcProcesses, startupTimeoutMs, DEFAULT_STARTUP_TIMEOUT, DEFAULT_SHUTDOWN_TIMEOUT, STARTUP_TIMEOUT_RANGE, STARTUP_TIMEOUT_MESSAGE };

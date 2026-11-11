@@ -41,7 +41,7 @@ async function run(browser, viewport) {
    if(c.type==='get_messages')return reply(c,{messages});
    if(c.type==='get_session_stats')return reply(c,stats);
    if(c.type==='get_native_resources')return reply(c,{projectTrusted:false,contextFiles:[],skills:[],commands:[],tools:[],systemPrompt:{}});
-   if(c.type==='get_runtime_configuration')return reply(c,{runtimeId:control.runtimeId,revision:'revision',matchesSavedConfig:configMatch,actualProjectTrusted:false,trust:{requiresTrust:true,decision:null,override:null,defaultPolicy:'ask'},ephemeral:false,recoveries:0,drafts:control.drafts.length});
+   if(c.type==='get_runtime_configuration')return reply(c,{runtimeId:control.runtimeId,revision:'revision',matchesSavedConfig:configMatch,cacheWarming:{mode:'idle',state:'scheduled',nextWarmAt:Date.now()+60000},actualProjectTrusted:false,trust:{requiresTrust:true,decision:null,override:null,defaultPolicy:'ask'},ephemeral:false,recoveries:0,drafts:control.drafts.length});
    if(c.type==='restart_runtime') {configMatch=true; reply(c,{accepted:true}); return;}
    if(c.type==='ack_extension_draft') {if(rejectAck)return reply(c,null,'fixture acknowledgement failure'); control.drafts=[];control.revision++;return reply(c,control);}
    if(c.type==='search_history')return reply(c,{results:[],offset:0,pageSize:30,total:0,hasMore:false,revision:'h'});
@@ -84,6 +84,7 @@ async function run(browser, viewport) {
  assert.equal(requests.filter(r=>r.type==='prompt'||r.type==='navigate_history').length,0);
  await openInspector(page, 'details');await page.locator('#pi-loaded-resources > summary').click();
  await page.locator('#pi-runtime-config-check').click();await page.waitForFunction(()=>document.getElementById('pi-runtime-config-status').dataset.state==='changed');
+ assert.match(await page.locator('#pi-runtime-cache-status').textContent(),/缓存保温.*运行中与空闲.*等待下一次判断/);
  page.once('dialog',d=>d.accept());await page.locator('#pi-runtime-restart').click();await page.locator('#pi-runtime-config-check').click();await page.waitForFunction(()=>document.getElementById('pi-runtime-config-status').dataset.state==='current');
  for(const theme of ['daylight','mint','dark']) {
   await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);

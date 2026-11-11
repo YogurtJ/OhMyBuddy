@@ -3,11 +3,12 @@
     const $ = id => document.getElementById(id);
     const { node, button, select, label } = window.PiNativeUI;
     const scopes = [['global', translateUi("所有项目")], ['project', translateUi("当前项目")]];
+    const cacheNames = { off: translateUi('关闭'), streaming: translateUi('仅运行中'), idle: translateUi('运行中与空闲（最长 30 分钟）') };
     const groups = [
         ['messages', translateUi("消息与模型"), translateUi("消息投递方式、常用模型范围"), 'fa-comment-dots', k => ['steeringMode', 'followUpMode', 'enabledModels'].includes(k)],
         ['tools', translateUi("工具"), translateUi("默认启用的内置工具与项目继承"), 'fa-toolbox', k => k === 'defaultTools' || k.startsWith('codemode.')],
         ['trust', translateUi("项目信任"), translateUi("未决项目的全局默认策略"), 'fa-shield-halved', k => k === 'defaultProjectTrust'],
-        ['context', translateUi("上下文"), translateUi("自动压缩与保留内容"), 'fa-layer-group', k => k.startsWith('compaction.')],
+        ['context', translateUi("上下文"), translateUi("自动压缩与保留内容"), 'fa-layer-group', k => k.startsWith('compaction.') || k === 'cacheWarming'],
         ['images', translateUi("图片"), translateUi("自动缩放与图片输入"), 'fa-image', k => k.startsWith('images.')],
         ['connection', translateUi("连接与重试"), translateUi("连接方式、失败重试与超时"), 'fa-plug', k => k === 'transport' || k.startsWith('retry.') || k.endsWith('TimeoutMs')],
         ['privacy', translateUi("隐私与诊断"), translateUi("安装遥测与环境覆盖"), 'fa-shield-halved', k => k === 'enableInstallTelemetry'],
@@ -116,8 +117,8 @@
                         tool = toolField(spec, current, scope, scope === 'project' && !snapshot.trust.effective); field = tool.field;
                     } else if (spec.type === 'select' || spec.type === 'boolean') {
                         const names = { ask: translateUi("询问（Pi 默认）"), always: translateUi("默认信任"), never: translateUi("默认不信任"), all: translateUi("全部投递"), 'one-at-a-time': translateUi("逐条投递"), auto: translateUi("自动选择") };
-                        const choices = spec.choices?.map(v => [v, names[v] || v]) || [['true', translateUi("开启")], ['false', translateUi("关闭")]];
-                        field = select([['', scope === 'project' ? translateUi("继承全局") : translateUi("Pi 默认")], ...choices], saved === null ? '' : String(saved));
+                        const choices = spec.choices?.map(v => [v, (key === 'cacheWarming' ? cacheNames[v] : names[v]) || v]) || [['true', translateUi("开启")], ['false', translateUi("关闭")]];
+                        field = select([['', scope === 'project' ? translateUi("继承全局") : translateUi(spec.defaultLabel || "Pi 默认")], ...choices], saved === null ? '' : String(saved));
                     } else {
                         field = node(spec.type === 'lines' ? 'textarea' : 'input');
                         if (spec.type === 'number') { field.type = 'number'; field.min = spec.min; field.max = spec.max; field.step = 1; }
@@ -128,8 +129,8 @@
                     field.name = key; field.dataset.initial = JSON.stringify(saved); field.disabled = scope === 'project' && !snapshot.trust.effective;
                     const row = tool ? tool.wrapper : label(translateUi(spec.label), field);
                     if (spec.description) row.append(node('small', translateUi(spec.description)));
-                    const value = key === 'defaultProjectTrust' ? ({ ask: translateUi("询问"), always: translateUi("默认信任"), never: translateUi("默认不信任") }[current.value] || current.value) : spec.type === 'tools' ? current.value?.join('、') || translateUi("未启用任何内置工具") : typeof current.value === 'boolean' ? current.value ? translateUi("开启") : translateUi("关闭") : Array.isArray(current.value) ? current.value.join('、') || translateUi("未限定") : current.value ?? translateUi("默认");
-                    row.append(node('small', translateUi("当前配置：{0} · {1}", value, { project: translateUi("项目"), global: translateUi("全局"), default: translateUi("Pi 默认") }[current.source]))); grid.append(row);
+                    const value = key === 'cacheWarming' ? cacheNames[current.value] || current.value : key === 'defaultProjectTrust' ? ({ ask: translateUi("询问"), always: translateUi("默认信任"), never: translateUi("默认不信任") }[current.value] || current.value) : spec.type === 'tools' ? current.value?.join('、') || translateUi("未启用任何内置工具") : typeof current.value === 'boolean' ? current.value ? translateUi("开启") : translateUi("关闭") : Array.isArray(current.value) ? current.value.join('、') || translateUi("未限定") : current.value ?? translateUi("默认");
+                    row.append(node('small', translateUi("当前配置：{0} · {1}", value, { project: translateUi("项目"), global: translateUi("全局"), default: translateUi(key === 'cacheWarming' ? "OhMyBuddy 默认" : "Pi 默认") }[current.source]))); grid.append(row);
                 }
                 if (id === 'tools') {
                     grid.append(node('p', translateUi("设置模型初始工具选择；codemode / tool_search 需对应扩展已加载。此设置不连接 MCP 或扩大工具权限。扩展和自定义工具仍可启用；这不是只读或安全模式，也不控制手动 ! Shell。当前实际工具可在会话详情 → 当前加载的资源中查看。"), { class: 'native-setting-help' }));

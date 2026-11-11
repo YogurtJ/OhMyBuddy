@@ -39,11 +39,15 @@ Pi 1.3 审查新增：默认工具从 transcript 恢复与显式选择的优先�
 
 Pi 1.4 审查新增：Codemode FIFO 准入、按调用读取的容量覆盖、等待期限和迟到启动保护；恢复尝试与工具结果成对省略并保留原生 JSONL；压缩的分段自定义重点、先前 checkpoint 和模型输出预算；原生扩展默认工具与显式选择优先级。MCP 迁移只在解析时去除首个 UTF-8 BOM，私有备份保持原始字节。双向会话读取须在独立 fixture 上核对完整树、custom entries 和原文件不变，不通过正文替换实现兼容。
 
-Pi 1.5 审查新增：`before_agent_start` 的显式 `systemPromptOptions.selectedTools` 优先于活动工具；定时工具清理须同时更新两者，以便与后续扩展组合，同时保持其余工具选择与原生检查点。工具参数统一使用原生 pi-schema 校验与转换；TypeBox 和普通 MCP JSON Schema 均保留，权限钩子与执行接收同一份规范化参数，原生 toolCall 参数不被修改。TypeBox 的 Refine/BigInt/Undefined、codec 与自定义 Format 不参与工具参数验证，不在适配层另造校验器。主锁、独立记忆锁和安装校验包含 pi-schema；pi-subagents 与记忆包保持各自原版本。
+Pi 1.5 审查新增：`before_agent_start` 的显式 `systemPromptOptions.selectedTools` 优先于活动工具；定时工具清理须同时更新两者，以便与后续扩展组合，同时保持其余工具选择与原生检查点。工具参数统一使用原生 pi-schema 校验与转换；TypeBox 和普通 MCP JSON Schema 均保留，权限钩子与执行接收同一份规范化参数，原生 toolCall 参数不被修改。TypeBox 的 Refine、codec 与自定义 Format 不参与工具参数验证，不在适配层另造校验器。主锁、独立记忆锁和安装校验包含 pi-schema；pi-subagents 与记忆包保持各自原版本。
 
 图片兼容包装后的 stream 通过 `pi-runtime-stream.mjs` 重新登记同一 ModelRuntime 的身份，使压缩与分支摘要继续由 runtime 解析 OAuth，不将存储的订阅令牌作为显式 API key 传回。所用 `dist/core/agent-session.js` 的 markRuntimeStreamFunction 是内部导出，不是根 SDK 公共接口；入口核对包身份、审查版本和函数存在性，升级须复核。合成 OAuth 回归同时覆盖图片包装后的压缩和分支摘要。费用保留 `cost.totalFromProvider`，实报总额含零值不重算／重复乘倍率；MCP 注册方式由原生验证器决定，接口字段见 [API](../API.md)。
 
 模型高级 compat 控件直接投影 `@earendil-works/pi-ai/providers/compat-schema` 公开的 `CompatSchemasByApi[api]`，只开放布尔和字面量选项；复杂对象保留在原生配置，删除覆盖保留未知或其他 API 字段。
+
+Pi 1.5.2 审查新增：MCP 命名 `createMcpToolName`／`mcpNamespace` 改从 `@earendil-works/pi-mcp` 公共入口读取，配置仍用 Coding Agent 的完整验证器以保留 exposure、provider auth 和项目覆盖约束。主锁直接声明所用 pi-mcp，独立记忆锁及 recipe 哈希一起更新。主／侧／子 SDK 会话未保存 `cacheWarming` 时继续采用 `streaming`，显式全局 `off`／`idle` 沿用原生调度、经济性判断、取消及 `usage/cache_warm` 记录；没有第二套缓存计时器。状态通过当前 SessionManager 弱绑定按需读取，不把等待保温计时当成整轮忙碌。Pi 的 Anthropic message threads 与上下文变化／过期后的完整请求回退保持原生，保温请求不续接线程。新 compat 布尔／枚举字段仍从公开 schema 投影。BigInt／Undefined 改由原生 schema 转换，非有限 number 拒绝；权限与执行仍接收同一份规范化参数。
+
+受管 RPC 关闭优先发送 stdin EOF，最多等待 60 秒；强制终止只在实际退出后以 `RPC_SHUTDOWN_FORCED` 拒绝，不报告清理成功。运行宿主与侧聊 await 原生 runtime.dispose；子会话关闭及主服务设置 ModelRuntime 等待公开 `settleCredentialWrites()`。设置服务用弱引用跟踪 runtime，并在停机前拒绝新的创建、等待已受理创建及凭据写入，不保留第二份凭据。合成用例覆盖旋转 OAuth、EOF 清理、强制退出、threads 回退、缓存取消和费用补录；不代表真实服务商或其他系统实机验收。
 
 ## 原生 Codemode 与 SDK 启动适配
 

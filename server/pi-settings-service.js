@@ -202,6 +202,10 @@ function assertModelsFileState(file, expected) {
 class PiSettingsService {
     constructor(options = {}) {
         this.cwdFallback = options.cwd || process.cwd();
+        this.runtimeReferences = new Set();
+        this.runtimeFinalizer = new FinalizationRegistry(ref => this.runtimeReferences.delete(ref));
+        this.runtimeCreations = new Set();
+        this.stopping = false;
         this.loginService = new PiProviderLoginService(() => this.createModelRuntime(), { getDeviceId: async () => {
             const { SettingsManager, getAgentDir } = await getSdk();
             const settings = SettingsManager.create(this.cwdFallback, getAgentDir(), { projectTrusted: false });
@@ -225,13 +229,35 @@ class PiSettingsService {
         };
     }
 
-    async createModelRuntime() {
-        await require('./workspace-network-transport').initializeSdkNetwork();
-        const { ModelRuntime } = await getSdk();
-        return ModelRuntime.create({
-            allowModelNetwork: false,
-            signal: AbortSignal.timeout(30000)
-        });
+    createModelRuntime() {
+        if (this.stopping) return Promise.reject(new Error('Model settings service is shutting down'));
+        const creating = (async () => {
+            await require('./workspace-network-transport').initializeSdkNetwork();
+            const { ModelRuntime } = await getSdk();
+            const runtime = await ModelRuntime.create({ allowModelNetwork: false, signal: AbortSignal.timeout(30000) });
+            // Weak ownership retains no credentials or otherwise unused model catalogs.
+            const ref = new WeakRef(runtime);
+            this.runtimeReferences.add(ref); this.runtimeFinalizer.register(runtime, ref);
+            return runtime;
+        })();
+        this.runtimeCreations.add(creating);
+        void creating.then(() => this.runtimeCreations.delete(creating), () => this.runtimeCreations.delete(creating));
+        return creating;
+    }
+
+    dispose() {
+        if (this.disposal) return this.disposal;
+        this.stopping = true;
+        this.disposal = (async () => {
+            await this.loginService.dispose();
+            await Promise.allSettled([...this.runtimeCreations]);
+            const writes = [...this.runtimeReferences].flatMap(ref => { const runtime = ref.deref(); return runtime ? [runtime.settleCredentialWrites()] : []; });
+            const results = await Promise.allSettled(writes);
+            this.runtimeReferences.clear();
+            const failed = results.find(result => result.status === 'rejected');
+            if (failed) throw failed.reason;
+        })();
+        return this.disposal;
     }
 
     async getModelSnapshot() {

@@ -95,6 +95,7 @@ function defaultToolSelection(settings) {
 function settingsView(settings, cwd, agentDir) {
     return new Proxy(settings, { get(target, prop) {
         if (prop === 'getDefaultTools') return () => defaultToolSelection(target);
+        if (prop === 'getCacheWarmingMode') return () => require('./pi-cache-warming').cacheWarmingMode(target);
         if (prop === 'getGlobalSettings') return () => projectSettings(target.getGlobalSettings(), agentDir, { global: true });
         if (prop === 'getProjectSettings') return () => projectSettings(target.getProjectSettings(), path.join(cwd, '.pi'));
         const value = Reflect.get(target, prop); return typeof value === 'function' ? value.bind(target) : value;

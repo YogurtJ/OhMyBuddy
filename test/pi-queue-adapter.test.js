@@ -8,7 +8,7 @@ const { randomUUID } = require('node:crypto');
 // Use the actual public Agent queues: this checks the pinned SDK seam separately
 // from the end-to-end RPC transformations and native persistence assertions.
 async function fixture(t, { failFollowUpClear = false, rewriteAfterAppend, onEvent } = {}) {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-queue-adapter-'));
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'pi-queue-adapter-')));
     t.after(() => fs.rmSync(root, { recursive: true, force: true }));
     const { Agent } = await import('@earendil-works/pi-agent-core');
     const { SessionManager } = await import('@earendil-works/pi-coding-agent');

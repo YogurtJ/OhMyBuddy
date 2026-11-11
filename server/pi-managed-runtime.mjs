@@ -14,6 +14,7 @@ import { initializeNativeThemeValidation } from './pi-theme-validation.mjs';
 import { createAgentSessionWithSelectionPreflight } from './pi-model-selection-preflight.mjs';
 import { installImageCompatibility } from './pi-image-runtime.mjs';
 import imageContext from './pi-session-image-context.js';
+import { bindCacheWarmingSession } from './pi-cache-warming.js';
 
 let runtime;
 try {
@@ -63,6 +64,7 @@ try {
             tools: parsed.tools, excludeTools: parsed.excludeTools, noTools: parsed.noTools ? 'all' : parsed.noBuiltinTools ? 'builtin' : undefined });
         if (created.modelFallbackMessage) diagnostics.push({ type: 'warning', message: created.modelFallbackMessage });
         installImageCompatibility(created.session, { agentDir, emit: record => writeRawStdout(JSON.stringify(record) + '\n') });
+        bindCacheWarmingSession(created.session);
         installQueueAdapter(created.session, { token: process.env.PIVANE_QUEUE_TOKEN,
             sessionPath: parsed.noSession ? null : sessionManager.getSessionFile(), sessionId: sessionManager.getSessionId(),
             emit: record => writeRawStdout(JSON.stringify(record) + '\n') });

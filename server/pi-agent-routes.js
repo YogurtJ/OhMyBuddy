@@ -1107,7 +1107,7 @@ function createPiAgentGateway(options = {}) {
                         : await require('./profile-memory/learning-service').lastMemoryRead(source, profiles);
                     if (worker !== source || source.disposed) throw new Error('运行实例已变化，请重新核对配置');
                     safeSend(socket, { type: 'response', id: message.id, command: message.type, success: true, data: {
-                        actualProjectTrusted: actual.projectTrusted,
+                        actualProjectTrusted: actual.projectTrusted, cacheWarming: actual.cacheWarming ?? null,
                         runtimeId: source.controls.runtimeId, revision: saved.revision, matchesSavedConfig: source.configRevision == null ? null : source.configRevision === saved.revision,
                         trust: saved.trust, ephemeral: source.noSession,
                         agentProfile: { saved: savedProfile, savedProfileRevision,
@@ -1294,6 +1294,7 @@ function createPiAgentGateway(options = {}) {
         await Promise.all([stoppingBrowser, stoppingDirectoryPicker, stoppingChannels, stoppingFileRoots, stoppingDeferred, stoppingTitles, stoppingAuxiliaryModels, stoppingMoves, stoppingTranscription, stoppingDocuments]);
         await stoppingProactive;
         await cron.dispose();
+        await settingsService.dispose();
         store.taskWorkspaces.supervisor = null;
     }, browser, directoryPicker, store, supervisor, bots, channels, cron, deferred, sideChat, titles, auxiliaryModels, learning, knowledgeService, agentThreads, sessionMoves, transcription, documents, sessionImageStorage, artifacts };
 }

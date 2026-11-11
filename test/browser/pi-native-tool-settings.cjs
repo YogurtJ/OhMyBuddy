@@ -24,7 +24,7 @@ const server = http.createServer((req, res) => {
                 const custom = 'fixture_' + 'long'.repeat(100);
                 window.writes = []; window.conflict = false; window.trusted = true;
                 const values = { global: { defaultTools: [custom, '+codemode', '-bash', '+tool_search', '-codemode', '+codemode'] }, project: { defaultTools: ['-bash', '+codemode'] } };
-                const snapshot = () => ({ cwd: '/fixture', revision: 'r1', trust: { effective: window.trusted, override: null }, schema: fields, environment: {}, settings: Object.fromEntries(Object.entries(fields).map(([k, f]) => [k, { global: values.global[k] ?? null, project: values.project[k] ?? null, source: 'global', value: k === 'defaultTools' ? [custom, 'codemode', 'tool_search'] : f.type === 'select' ? f.choices[0] : f.type === 'number' ? 3000 : f.type === 'boolean' ? true : [] }])) });
+                const snapshot = () => ({ cwd: '/fixture', revision: 'r1', trust: { effective: window.trusted, override: null }, schema: fields, environment: {}, settings: Object.fromEntries(Object.entries(fields).map(([k, f]) => [k, { global: values.global[k] ?? null, project: values.project[k] ?? null, source: 'global', value: k === 'cacheWarming' ? values.global[k] ?? 'streaming' : k === 'defaultTools' ? [custom, 'codemode', 'tool_search'] : f.type === 'select' ? f.choices[0] : f.type === 'number' ? 3000 : f.type === 'boolean' ? true : [] }])) });
                 window.ui = PiNativeSettings.create({ currentCwd: () => '/fixture', apiFetch: async (url, options) => {
                     if (url === '/api/pi/status') return { nativeSettings: true };
                     if (options) { const data = JSON.parse(options.body); window.writes.push(data); if (window.conflict) throw Error('Controlled conflict'); Object.assign(values[data.scope], data.values); return { ok: true }; }
@@ -32,6 +32,14 @@ const server = http.createServer((req, res) => {
                 } });
                 return window.ui.open('native');
             }, { fields });
+            await page.locator('[data-group="context"] summary').click();
+            assert.equal(await page.locator('[name="cacheWarming"]').inputValue(), '');
+            assert.match(await page.locator('[name="cacheWarming"] option').first().textContent(), /OhMyBuddy 默认/);
+            await page.locator('[name="cacheWarming"]').selectOption('idle');
+            await page.locator('#native-settings-save').click();
+            await page.waitForFunction(() => window.writes.length === 1);
+            assert.deepEqual(await page.evaluate(() => window.writes[0].values), { cacheWarming: 'idle' });
+            await page.evaluate(() => { window.writes = []; });
             await page.locator('[data-group="tools"] summary').click();
             assert.equal(await page.locator('#native-tools-mode').inputValue(), 'entries');
             const original = await page.locator('#native-tools-entries').inputValue();
@@ -52,6 +60,7 @@ const server = http.createServer((req, res) => {
             await page.waitForFunction(() => window.writes.length === 3);
             assert.deepEqual(await page.evaluate(() => window.writes[2].values.defaultTools), []);
             await page.locator('#native-settings-scope').selectOption('project');
+            assert.equal(await page.locator('[name="cacheWarming"]').count(), 0);
             await page.locator('#native-tools-mode').selectOption('inherit');
             await page.locator('#native-settings-save').click();
             await page.waitForFunction(() => window.writes.length === 4);

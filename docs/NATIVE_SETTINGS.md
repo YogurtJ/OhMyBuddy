@@ -146,11 +146,13 @@ REST 复用工作台身份、Pi token、Origin 和 no-store，以及配置/登�
 
 GET 快照只投影允许字段，分别返回 global、project、配置有效值和来源。生效值与默认值由原生 SettingsManager getters 读取，不提供任意 JSON 文件编辑器。
 
-支持 defaultTools、codemode.mode/inlineBudget、仅全局的 defaultProjectTrust，以及 steeringMode/followUpMode、transport、compaction.enabled/reserveTokens/keepRecentTokens、retry.enabled/maxRetries/baseDelayMs/provider.timeoutMs/provider.maxRetryDelayMs、HTTP 流空闲超时、WebSocket 连接超时、图片自动缩放/阻止图片、enabledModels，以及仅全局的 enableInstallTelemetry。
+支持 defaultTools、codemode.mode/inlineBudget、仅全局的 defaultProjectTrust/cacheWarming，以及 steeringMode/followUpMode、transport、compaction.enabled/reserveTokens/keepRecentTokens、retry.enabled/maxRetries/baseDelayMs/provider.timeoutMs/provider.maxRetryDelayMs、HTTP 流空闲超时、WebSocket 连接超时、图片自动缩放/阻止图片、enabledModels，以及仅全局的 enableInstallTelemetry。
 
 压缩触发余量 `compaction.reserveTokens` 只用于自动压缩的触发阈值：当估算上下文超过“模型上下文窗口减去此余量”时触发。Pi 1.4 的摘要请求按模型的输出与上下文限制生成，不再用该余量限制摘要输出。已有保存值保留；`compaction.keepRecentTokens` 仍控制保留的近期内容。
 
-保存只提交修改的字段。null 移除当前范围覆盖；项目保存要求明确配置为可信。未知字段、非法枚举和范围拒绝。网页数值预算由响应 schema 提供：压缩触发余量/近期保留各 1024–1000000、Agent 重试 0–20、基础等待 100–600000ms、Provider 请求超时 1000–3600000ms、最大等待/HTTP idle 0–3600000ms、WS connect 0–600000ms。enabledModels 最多 200 项、每项 500 字符。没有改变 Pi 默认值。
+保存只提交修改的字段。null 移除当前范围覆盖；项目保存要求明确配置为可信。未知字段、非法枚举和范围拒绝。网页数值预算由响应 schema 提供：压缩触发余量/近期保留各 1024–1000000、Agent 重试 0–20、基础等待 100–600000ms、Provider 请求超时 1000–3600000ms、最大等待/HTTP idle 0–3600000ms、WS connect 0–600000ms。enabledModels 最多 200 项、每项 500 字符。除下述缓存保温默认策略外，其余字段沿用 Pi 默认值。
+
+`cacheWarming` 提供 `off`（关闭）、`streaming`（仅运行中）、`idle`（运行中与空闲，最长 30 分钟），仅允许全局保存。OhMyBuddy 在未配置时沿用升级前的 `streaming`；恢复默认删除本层字段，不写入其他配置。主聊天、侧聊与子 Agent 使用相同默认规则，保留已明确保存的选择。保温由 Pi 原生执行，仅在预期节省费用时发送额外计费请求；保存本身不调用模型。新运行实例生效，当前会话详情“核对配置”显示该实例当时的模式和保温状态；状态是按需快照。费用与次数计入[用量统计](USAGE.md)，空闲保温不是持续占用聊天回合的任务。
 
 配置修订涵盖 cwd、全局/项目 settings、trust 文件及启动 trust 覆盖。写入前比较，409 不自动覆盖。普通设置写入与原生 settings.json.lock 目录锁协作，保留未知 JSON，0600 备份和原子 rename；只管理原生位置，拒绝符号链接/非普通文件/损坏 JSON，单文件 1 MiB。文件内容不进入 API 错误或模型提示。
 
@@ -200,7 +202,7 @@ Skills 页复用上述 GET/PUT 资源接口，不新增禁用配置或改写 SKI
 
 独立 GET/PUT 使用原 models.json/settings.json 修订，不回传 apiKey、headers 或其他凭据。已声明的 custom model 修改对应项；内置或继承模型写 modelOverrides，保留未知字段和其他模型。
 
-- compat：按模型有效 API 从 Pi 公开 schema 投影布尔和字面量选项，返回原生说明和 choices，包括 Responses 的 supportsMidConvoEffort、additional tools 等能力；不接受当前 API 不支持的键，不开放嵌套 routing 或任意请求对象。thinkingFormat 等枚举以返回的 choices 为准。单项 null 删除覆盖；整个 compat=null 只清除当前 API 已投影的键，保留未知键和其他 API 字段。它仍是兼容 API，未提供网页编辑器。
+- compat：按模型有效 API 从 Pi 公开 schema 投影布尔和字面量选项，包含 `requiresToolsWithToolHistory`、`requiresNonNullAssistantContent`、`promptCacheKeyMode` 和 Anthropic `supportsMessageThreads`。官方 Anthropic 地址默认使用 message threads；第三方网关只有在能完整转发 thread 字段时才应开启。返回原生说明和 choices，包括 Responses 的 supportsMidConvoEffort、additional tools 等能力；不接受当前 API 不支持的键，不开放嵌套 routing 或任意请求对象。thinkingFormat 等枚举以返回的 choices 为准。单项 null 删除覆盖；整个 compat=null 只清除当前 API 已投影的键，保留未知键和其他 API 字段。它仍是兼容 API，未提供网页编辑器。
 - samplingParams：仅 temperature/top_p/top_k/min_p/presence_penalty/frequency_penalty/repetition_penalty/seed 的有界数字，不允许 messages/tools 等请求覆盖。仅原生支持的 OpenAI compatible APIs 开放；以模型实际 api 判断。
 - cost：input/output/cacheRead/cacheWrite 的每百万 token 美元费率，0–100000 的有限数。部分更新保留其他费率与既有 tiers；cost=null 明确恢复原生价格。阶梯价格本轮只保留和显示，未实现编辑。
 

@@ -63,6 +63,18 @@ test('malformed saved tool preferences fail closed without repair', async () => 
         }
     } finally { fs.writeFileSync(file, original); }
 });
+test('cache warming is global, explicit, revision-checked and defaults to streaming without a write', async () => {
+    const file = path.join(agent, 'settings.json'), before = fs.readFileSync(file);
+    let s = await snapshot();
+    assert.equal(s.schema.cacheWarming.globalOnly, true); assert.equal(s.settings.cacheWarming.value, 'streaming');
+    assert.equal(s.settings.cacheWarming.global, null); assert.deepEqual(fs.readFileSync(file), before);
+    await save({ cacheWarming: 'idle' }); s = await snapshot();
+    assert.equal(s.settings.cacheWarming.value, 'idle'); assert.equal(s.settings.cacheWarming.source, 'global');
+    for (const value of ['guess', true, 1]) await assert.rejects(save({ cacheWarming: value }), /设置值/);
+    for (const value of ['idle', null]) await assert.rejects(save({ cacheWarming: value }, 'project'), /不支持/);
+    await save({ cacheWarming: null }); assert.equal((await snapshot()).settings.cacheWarming.value, 'streaming');
+});
+
 test('external settings changes between context and write are rejected under the lock', async () => {
     const file = path.join(agent, 'settings.json'), original = fs.readFileSync(file);
     const originalContext = service.context.bind(service);

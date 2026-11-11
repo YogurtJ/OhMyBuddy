@@ -30,6 +30,8 @@ function handle(message) {
     reply({});
 }
 function attach() {
+    // A frozen command loop still supports Pi's public orderly EOF shutdown.
+    process.stdin.once('end', () => process.exit(0));
     let buffer = '';
     process.stdin.on('data', chunk => {
         buffer += chunk;

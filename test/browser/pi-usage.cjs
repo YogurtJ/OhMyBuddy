@@ -4,7 +4,7 @@ const base = process.env.PI_USAGE_TEST_URL || 'http://127.0.0.1:3123';
 const live = process.env.PI_USAGE_LIVE === '1';
 function fixture(query) {
     const total = { input: 10000, output: 2000, cacheRead: 30000, cacheWrite: 4000, total: 46000, cost: 1.234,
-        providerReportedCost: .4, providerReportedRecords: 2, records: 10, missingUsage: 0, missingCost: 1, zeroCost: 2, estimatedRecords: 7, unpricedRecords: 1 };
+        providerReportedCost: .4, providerReportedRecords: 2, cacheWarmingCost: .125, cacheWarmingRecords: 3, records: 10, missingUsage: 0, missingCost: 1, zeroCost: 2, estimatedRecords: 7, unpricedRecords: 1 };
     const daily = [];
     for (let d = Date.parse(query.get('from')); d <= Date.parse(query.get('to')); d += 86400000) daily.push({ ...total, date: new Date(d).toISOString().slice(0, 10) });
     return { ledger: true, weekly: [{ ...total, date: '2026-09-21' }], monthly: [{ ...total, date: '2026-09' }], from: query.get('from'), to: query.get('to'), timeZone: query.get('timeZone'), generatedAt: new Date().toISOString(), total, daily,
@@ -62,6 +62,7 @@ function fixture(query) {
             assert.ok(calls[0].includes('timeZone='));
             const panel = page.locator('#settings-usage-panel');
             assert.match(await panel.textContent(), /服务商实报 \$0\.400（2 条）；其余 \$0\.834/);
+            assert.match(await panel.textContent(), /其中缓存保温 \$0\.125（3 次），已包含在总费用中/);
             assert.ok((await panel.textContent()).includes('46,000')); assert.equal(await panel.locator('img').count(), 0);
             for (const theme of ['daylight', 'mint', 'night']) {
                 await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);

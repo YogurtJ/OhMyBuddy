@@ -29,6 +29,7 @@ import { registerBotContext, handleBotNotebook, prepareBotModel } from './bot/bo
 import { registerProfileMemory } from './profile-memory/extension.ts';
 import { registerProfileAuthoring } from './pi-profile-authoring-extension.ts';
 import { registerSubagentHost, subagentControl } from './pi-subagent-host.ts';
+import { cacheWarmingSnapshot } from './pi-cache-warming.js';
 import { requestRegisteredNativeMcpControl } from './pi-native-mcp-control.mjs';
 
 // Pi 0.86 stores prompt/tool checkpoints as native system messages in the
@@ -216,6 +217,7 @@ export default async function (pi: ExtensionAPI) {
                         return;
                     }
                     const data = {
+                        cacheWarming: cacheWarmingSnapshot(ctx.sessionManager),
                         cwd: ctx.cwd, sessionId: ctx.sessionManager.getSessionId(), projectTrusted: ctx.isProjectTrusted(),
                         contextFiles: files.map(f => ({ path: f.path })),
                         systemPrompt: { custom: Boolean(options.customPrompt), appended: Boolean(options.appendSystemPrompt) },

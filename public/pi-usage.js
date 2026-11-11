@@ -85,6 +85,7 @@ window.PiUsage = (() => {
                 const card = node('div'); card.append(node('span', label), node('strong', value)); cards.append(card);
             }
             result.append(cards);
+            if (total.cacheWarmingRecords !== undefined) result.append(node('p', translateUi('其中缓存保温 {0}（{1} 次），已包含在总费用中。', cost(total.cacheWarmingCost), number(total.cacheWarmingRecords)), 'pi-usage-muted'));
             result.append(node('p', translateUi("服务商实报 {0}（{1} 条）；其余 {2} 为目录价或档位估算。", cost(total.providerReportedCost), number(total.providerReportedRecords), cost(Math.max(0, total.cost - (total.providerReportedCost || 0)))), 'pi-usage-muted'));
             if (data.ledger) result.append(node('p', translateUi("已持久入账，删除会话后仍保留统计。{0} 条记录按官方目录价补算，{1} 条非零用量仍无可确认价格。", number(total.estimatedRecords), number(total.unpricedRecords)), 'pi-usage-muted'));
             result.append(node('p', translateUi("已去重 {0} 条副本记录 · {1} 条用量记录 · {2} 条缺少价格／费用，{3} 条记录费用为零。", number(c.duplicates), number(total.records), number(total.missingCost), number(total.zeroCost)), 'pi-usage-muted'));

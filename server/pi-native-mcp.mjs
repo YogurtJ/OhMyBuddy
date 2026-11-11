@@ -3,18 +3,18 @@
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { recordNativeMcpTools, readNativeSnapshot, configHash } from './pi-subagent-mcp-resolution.mjs';
+import { createMcpToolName, mcpNamespace } from '@earendil-works/pi-mcp';
 import * as sdk from '@earendil-works/pi-coding-agent';
 import { captureNativeMcpControl } from './pi-native-mcp-control.mjs';
 import { wrapCodemodeExtension } from './pi-codemode-policy.mjs';
 const piRoot = path.resolve(path.dirname(fileURLToPath(import.meta.resolve('@earendil-works/pi-coding-agent'))), '..');
 // Version-reviewed config/name helpers are not exported by the root SDK.
 const configApi = await import(pathToFileURL(path.join(piRoot, 'dist/extensions/mcp/config.js')).href);
-const toolsApi = await import(pathToFileURL(path.join(piRoot, 'dist/extensions/mcp/tools.js')).href);
 const serversApi = await import(pathToFileURL(path.join(piRoot, 'dist/core/mcp-servers.js')).href);
 const settingsApi = await import(pathToFileURL(path.join(piRoot, 'dist/core/settings-manager.js')).href);
 export const loadNativeMcpConfig = configApi.loadMcpConfig;
-export const nativeMcpNamespace = serversApi.mcpNamespace;
-export const nativeMcpToolName = toolsApi.createMcpToolName;
+export const nativeMcpNamespace = mcpNamespace;
+export const nativeMcpToolName = createMcpToolName;
 export const nativeBuiltins = ['llama.cpp', 'codemode', 'tool-search', 'mcp'];
 // Pi 1.1 keeps indirect MCP tools outside a non-MCP CLI allowlist. OhMyBuddy's
 // explicit lists remain strict: hide ungranted native tools at registration,

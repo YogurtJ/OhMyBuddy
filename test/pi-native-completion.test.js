@@ -80,6 +80,7 @@ test('native worker restores live output, drafts, config changes and safely repl
  worker._handleEvent({type:'extension_ui_request',method:'set_editor_text',id:'draft1',text:'suggestion'});
  const c = await connect(); assert.equal(c.snapshot.controls.drafts[0].text,'suggestion');
  const initial = await c.call('get_runtime_configuration'); assert.equal(initial.matchesSavedConfig,true);
+ assert.equal(initial.cacheWarming.mode,'streaming'); assert.ok(['inactive','scheduled','refreshing'].includes(initial.cacheWarming.state));
  await assert.rejects(c.call('restart_runtime',{runtimeId:initial.runtimeId,expectedRevision:initial.revision,confirmed:true}),/草稿/);
  await c.call('ack_extension_draft',{runtimeId:initial.runtimeId,draftId:'draft1'});
  const settings = JSON.parse(fs.readFileSync(path.join(agent,'settings.json'))); settings.steeringMode='all'; fs.writeFileSync(path.join(agent,'settings.json'),JSON.stringify(settings));

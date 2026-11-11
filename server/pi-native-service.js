@@ -6,7 +6,10 @@ const { getSdk } = require('./pi-session-store');
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 const get = (object, key) => key.split('.').reduce((value, part) => value?.[part], object);
+const cacheWarming = require('./pi-cache-warming');
 const schema = {
+    cacheWarming: { label: '提示缓存保温', description: '保温会发送额外模型请求并计费；仅在 Pi 预期节省费用时执行。默认仅运行中，空闲保温需明确开启，最长 30 分钟。',
+        type: 'select', choices: cacheWarming.MODES, globalOnly: true, defaultLabel: 'OhMyBuddy 默认（仅运行中）' },
     defaultTools: { label: '默认工具选择', type: 'tools' },
     'codemode.mode': { label: 'Codemode 工具呈现', type: 'select', choices: ['on', 'only'] },
     'codemode.inlineBudget': { label: 'Codemode 内联声明 Token 预算', type: 'number', min: 0, max: 1000000 },
@@ -123,7 +126,8 @@ class PiNativeService {
         const ctx = await this.context(cwd), s = ctx.settings, fields = nativeSchema(ctx.sdk, ctx.cwd);
         // Native files are not schema-validated by Pi. Do not silently repair malformed tool preferences.
         for (const data of [ctx.global, ctx.project]) {
-            for (const key of ['defaultTools', 'codemode.mode', 'codemode.inlineBudget']) {
+            for (const key of ['defaultTools', 'codemode.mode', 'codemode.inlineBudget', 'cacheWarming']) {
+                if (key === 'cacheWarming' && data === ctx.project) continue;
                 const value = get(data, key), field = fields[key];
                 if (value === undefined) continue;
                 if (field.type === 'tools' && !validToolEntries(value, field)
@@ -132,6 +136,7 @@ class PiNativeService {
             }
         }
         const values = {
+            cacheWarming: cacheWarming.cacheWarmingMode(s),
             defaultTools: require('./pi-bundled-resources').defaultToolSelection(s) ?? fields.defaultTools.defaults,
             defaultProjectTrust: s.getDefaultProjectTrust(),
             'codemode.mode': s.getSettings().codemode?.mode ?? 'on',

@@ -995,9 +995,13 @@ Shell仅空闲单项执行，期间消息/压缩/导航/重载及预约投递互
 
 ### 持久会话用量
 
+原生 `type:"usage"` 也计入统计；`kind:"cache_warm"` 按其 provider/model 归属。各汇总附带 `cacheWarmingCost/cacheWarmingRecords`，这两项已包含在总量，不再重复相加。账本 v3 事务追加保温汇总列；旧扫描游标重新核对现存文件以补录遗漏，原事实指纹和累计金额保留，原生 JSONL 不改写。
+
 `/api/pi/status.usageStats=true` 启用 `GET /api/pi/settings/usage?from=YYYY-MM-DD&to=YYYY-MM-DD&timeZone=Asia%2FShanghai`。日期包含两端，最多366天，时区缺省UTC；非法或未知参数400、其他筛选扫描中429、线程失败503，复用Origin/Bearer与no-store。返回 total/daily/weekly/monthly/providers/models/projects/sessions、generatedAt、coverage及partial，不含聊天正文。`usageLedger=true` 标记持久账本能力，响应带 `ledger:true`、`scope:'persistent-sessions-and-side-chats'`；各汇总增加 recordedCost/estimatedRecords/unpricedRecords，以及 providerReportedCost/providerReportedRecords（服务商实报金额／笔数，含零费用）；原生 cost.totalFromProvider 缺省或 false 按估算，实报零值不补算，cost 减去实报金额为估算部分。v1 账本事务追加来源列，保留旧事实与总额；coverage 增加 cachedFiles/syncedAt/appendedFiles/parsedBytes/verifiedBytes/cachedVerifiedBytes，区分已核实完整内容的文件、追加解析、前缀校验及缓存字节校验开销；所有读取共用原有预算，受限批次按持久扫描位置继续推进。新建 BTW 侧聊在内存原生边界之后的新用量单独入账，不继承主历史；此前已结束的侧聊及普通临时会话不补录。后台每 5 分钟同步，打开统计及删除前另行触发。事务保存精简用量事实与日汇总，删除会话前须确认入账。去重、官方目录价补算、周期与时区、15秒缓存及读取预算见 [USAGE.md](USAGE.md)。不创建RPC worker、不读客户端指定路径。
 
 ### Provider 和模型
+
+`GET /api/pi/settings/native` 的 schema 增加仅全局的 `cacheWarming: "off"|"streaming"|"idle"`；未保存时 OhMyBuddy 返回有效值 `streaming`，显式保存使用原生调度。项目提交（含 null）拒绝。`get_native_resources` 和 `get_runtime_configuration` 可带 `cacheWarming:{mode,state,reason?,nextWarmAt?,extensionOverride?}`；state 为 `inactive|scheduled|refreshing`，没有受管 SDK 绑定时为 null。状态按需读取，不包含请求正文或凭据，不触发保温。设置的修订、保存与运行实例生效规则见[原生配置](NATIVE_SETTINGS.md#原生设置)。
 
 | Method | Path | 用途 |
 |---|---|---|

@@ -7,7 +7,7 @@ const { execFileSync } = require('node:child_process');
 const { createRequire } = require('node:module');
 const { createHash } = require('node:crypto');
 const { REVIEWED_PI_VERSION: piVersion } = require('../server/pi-reviewed-host');
-const LOCK_SHA256 = '97bbb7ecd487517d2a438ad18173132831a79a3712c7ba192f6d58bf8cae6fde';
+const LOCK_SHA256 = '0b88244a9954f64d389b36319ab565bc73947b171eb1184143db10ab04126261';
 
 const manifest = {
     name: 'pivane-profile-memory-isolated', version: '1.0.0', private: true,

@@ -11819,5 +11819,17 @@
         ["所有事项中的搜索结果（{0}）", "Results across all notes ({0})"],
         ["所有事项中的搜索结果", "Results across all notes"]
     );
+    rows.push(
+        ["提示缓存保温", "Prompt cache warming"],
+        ["保温会发送额外模型请求并计费；仅在 Pi 预期节省费用时执行。默认仅运行中，空闲保温需明确开启，最长 30 分钟。", "Warming sends additional billable model requests only when Pi expects a saving. The default is during runs only; idle warming requires an explicit choice and lasts up to 30 minutes."],
+        ["OhMyBuddy 默认（仅运行中）", "OhMyBuddy default (during runs only)"],
+        ["OhMyBuddy 默认", "OhMyBuddy default"],
+        ["仅运行中", "During runs only"],
+        ["运行中与空闲（最长 30 分钟）", "During runs and idle (up to 30 minutes)"],
+        ["等待下一次判断", "Waiting for the next decision"],
+        ["正在保温", "Warming cache"],
+        ["缓存保温：{0} · {1}。保温费用计入用量统计。", "Cache warming: {0} · {1}. Warming costs are included in usage statistics."],
+        ["其中缓存保温 {0}（{1} 次），已包含在总费用中。", "Includes {0} for cache warming ({1} refreshes), already counted in the total cost."]
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

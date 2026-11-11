@@ -11,6 +11,8 @@ const zero = () => ({ ...empty(), recordedCost: 0, estimatedRecords: 0, unpriced
 const dayFormatter = zone => new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' });
 function valuesFor(row) {
     const value = zero(); value.records = 1;
+    value.cacheWarmingRecords = Number(row.kind === 'cache_warm');
+    value.cacheWarmingCost = value.cacheWarmingRecords && row.usage ? row.cost || 0 : 0;
     if (!row.usage) { value.missingUsage = 1; return value; }
     for (const field of ['input', 'output', 'cacheRead', 'cacheWrite']) value[field] = row.usage[field];
     value.total = value.input + value.output + value.cacheRead + value.cacheWrite;
@@ -53,16 +55,18 @@ class UsageLedger {
                     provider TEXT NOT NULL, model TEXT NOT NULL, ${metrics.map(key => `${key} REAL NOT NULL`).join(',')},
                     PRIMARY KEY(zone,day,owner,provider,model));`);
             const version = this.db.prepare("SELECT value FROM meta WHERE key='schema'").get();
-            if (version && !['1', '2'].includes(version.value)) throw new Error('Unsupported usage ledger version');
+            if (version && !['1', '2', '3'].includes(version.value)) throw new Error('Unsupported usage ledger version');
             const columns = new Set(this.db.prepare('PRAGMA table_info(daily)').all().map(row => row.name));
             const sourceColumns = ['providerReportedCost', 'providerReportedRecords'];
-            if (version?.value === '2' && sourceColumns.some(name => !columns.has(name))) throw new Error('Invalid usage ledger schema');
-            if (version?.value !== '2') this.transaction(() => {
-                // Additive v1 -> v2 migration. Old facts have no provider-billing
-                // evidence; retain every fact and total with the estimate default.
-                for (const name of sourceColumns) if (!columns.has(name))
+            const cacheColumns = ['cacheWarmingCost', 'cacheWarmingRecords'];
+            if (['2', '3'].includes(version?.value) && sourceColumns.some(name => !columns.has(name))
+                || version?.value === '3' && cacheColumns.some(name => !columns.has(name))) throw new Error('Invalid usage ledger schema');
+            if (version?.value !== '3') this.transaction(() => {
+                // Additive migration keeps every existing fact and aggregate. Old
+                // scan checkpoints are invalidated by the parser version instead.
+                for (const name of [...sourceColumns, ...cacheColumns]) if (!columns.has(name))
                     this.db.exec(`ALTER TABLE daily ADD COLUMN ${name} REAL NOT NULL DEFAULT 0`);
-                this.db.prepare("INSERT OR REPLACE INTO meta VALUES ('schema','2')").run();
+                this.db.prepare("INSERT OR REPLACE INTO meta VALUES ('schema','3')").run();
             });
             this.insertFact = this.db.prepare('INSERT OR IGNORE INTO facts VALUES (?,?,?,?,?,?)');
             this.upsertDay = this.db.prepare(`INSERT INTO daily (zone,day,owner,provider,model,${metrics.join(',')}) VALUES (${Array(5 + metrics.length).fill('?').join(',')})
@@ -105,7 +109,8 @@ class UsageLedger {
                 // Explicit allowlist: never copy text, tool arguments or the inherited context
                 // into the usage ledger even if a future caller sends extra fields.
                 const row = { key, timestamp: record.timestamp, usage: record.usage, provider: record.provider,
-                    model: record.model, totalFromProvider: record.totalFromProvider === true, originalCost: record.cost, cost: correction.cost, pricing: correction.pricing };
+                    model: record.model, ...(record.kind === 'cache_warm' ? { kind: 'cache_warm' } : {}),
+                    totalFromProvider: record.totalFromProvider === true, originalCost: record.cost, cost: correction.cost, pricing: correction.pricing };
                 if (!this.insertFact.run(row.key, row.timestamp, owner, row.provider, row.model, JSON.stringify(row)).changes) continue;
                 for (const [zone, formatter] of this.zones) this.saveDay(zone, formatter, owner, row);
                 inserted++;
