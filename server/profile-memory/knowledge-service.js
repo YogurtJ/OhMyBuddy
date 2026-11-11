@@ -221,11 +221,18 @@ function physical(root, data, bundle) {
         const { source, ...rest } = item;
         const file = safeFile(findSkillFile(root, projects, item.id));
         return { ...rest, revision: file?.revision, state: 'active',
-            ...(file?.text.length > MAX_CONTENT ? { readOnly: true } : {}) };
+            ...(file?.text.length > MAX_CONTENT || !NAME.test(item.name) || hash(fileFor(root, item)) !== item.id
+                ? { readOnly: true } : {}) };
     });
     const indexed = new Map([...memories, ...databaseItems, ...skills].map(item => [item.id, item]));
+    const managedSkills = new Set();
     for (const [id, record] of Object.entries(data.records)) {
         if (!HEX.test(id) || !['memory', 'skill'].includes(record.kind)) throw fail('Invalid knowledge record', 409);
+        if (record.kind === 'skill') {
+            const key = JSON.stringify([record.scope, record.projectKey || null, record.name]);
+            if (managedSkills.has(key)) throw fail('Ambiguous managed skill identity', 409);
+            managedSkills.add(key);
+        }
         if (record.state === 'active') {
             const candidates = [...indexed.values()].filter(item => !item.readOnly && item.kind === record.kind && item.scope === record.scope
                 && item.projectKey === record.projectKey
@@ -463,9 +470,13 @@ function checkTombstone(data, content) {
         && row.state === 'deleted' && compare.normalizeMemory(row.content) === normalized))
         throw fail('Deleted or replaced memory cannot be relearned without explicit restore', 409);
 }
-function availableSkill(root, item) {
-    const ownFile = skillPath(root, item);
-    if (safeFile(ownFile) && hash(ownFile) !== item.id) throw fail('Profile skill name already exists', 409);
+// Ledger IDs are durable journal identities, even when originally derived from
+// another host's path. Only the verified current file revision proves ownership;
+// create/restore/enable require an absent file, while updates retain their ID.
+function availableSkill(root, item, expected = null) {
+    const ownFile = skillPath(root, item), current = safeFile(ownFile);
+    if ((current?.revision ?? null) !== expected)
+        throw fail(current && expected === null ? 'Profile skill name already exists' : 'Skill changed', 409);
     const agent = path.dirname(path.dirname(path.dirname(root)));
     const installed = path.join(agent, 'skills', item.name);
     try { fs.lstatSync(installed); throw fail('Installed skill name is reserved', 409); }
@@ -473,7 +484,7 @@ function availableSkill(root, item) {
     return ownFile;
 }
 function writeSkill(root, item, text, expected) {
-    const file = availableSkill(root, item);
+    const file = availableSkill(root, item, expected);
     const parent = path.dirname(file), skills = path.dirname(parent);
     privateFiles.privateDirectory(skills);
     if (!safeDir(skills)) throw fail('Unsafe skill root', 409);
@@ -936,7 +947,9 @@ class ProfileKnowledgeService {
                 const folder = itemScope === 'project' ? projectDir(ctx.root, { scope: itemScope, projectKey }) : ctx.root;
                 if (input.kind === 'skill' && input.operation === 'create') {
                     const named = { kind: 'skill', scope: itemScope, projectKey, name };
-                    availableSkill(ctx.root, { ...named, id: hash(fileFor(ctx.root, named)) });
+                    if (items.some(row => row.kind === 'skill' && row.scope === itemScope
+                        && row.projectKey === projectKey && row.name === name)) fail('Profile skill name already exists', 409);
+                    availableSkill(ctx.root, named);
                 }
                 if (['create', 'update'].includes(input.operation)) {
                     const equivalent = input.kind === 'skill' ? compare.normalizeSkill : compare.normalizeMemory;
@@ -970,7 +983,8 @@ class ProfileKnowledgeService {
                     revision: hash(`${state}\0${content || ''}`), state, updatedAt: new Date().toISOString() };
                 if (input.kind === 'memory' && state === 'active') after.revision = hash(content);
                 if (input.kind === 'skill' && state === 'active') after.revision = hash(content);
-                if (input.kind === 'skill' && state === 'active') availableSkill(ctx.root, after);
+                if (input.kind === 'skill' && state === 'active')
+                    availableSkill(ctx.root, after, before?.state === 'active' ? before.revision : null);
                 const history = [...(data.records[id]?.history || [])];
                 const changed = { ...after, history };
                 const record = { ...receipt(input, id, before, after, input.kind === 'memory' ? 'ready' : 'not-applicable', provenance),

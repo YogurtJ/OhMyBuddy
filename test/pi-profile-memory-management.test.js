@@ -8,7 +8,7 @@ const path = require('node:path');
 const { mountProfileMemoryRoutes } = require('../server/profile-memory/management');
 
 test('management browsing is scoped, read-only, paginated and respects disabled profiles', async t => {
-    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-memory-management-'));
+    const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-memory-management-')));
     t.after(() => fs.rmSync(base, { recursive: true, force: true }));
     const data = path.join(require('../server/ohmybuddy-compat').dataFile(base, 'pivane-profiles'), 'data');
     const alphaId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';

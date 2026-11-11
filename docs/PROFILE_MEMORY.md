@@ -275,6 +275,19 @@ project IDs `project:<projectName>:<slug>` resolve by slug inside the verified c
 one active skill by `skill_id`, refuse ambiguous matches and unmanaged
 frontmatter, patch only a uniquely matching `##` section, and keep the
 `itemRevision` CAS between the located snapshot row and the service mutation.
+Managed skill IDs remain durable across relocation of the profile data root,
+even when their original value was derived from an old host's absolute path.
+The service binds an active record to the unique skill in its current canonical
+scope/name directory and verifies the file hash against the recorded revision;
+it never requires the journal ID to equal a hash of the current path. Updates
+verify that same file revision before publication; creation, restore and enable
+require the destination file to be absent. Same-name records in the same scope
+(including inactive/deleted records) require the existing-item operation rather
+than a new create. Ambiguous records, mismatched name/directory, external changes,
+installed-name collisions and symlinks remain protected. No ID rewriting or
+journal migration is needed: history, receipts and undo retain their references.
+This covers relocation of the profile root; project cwd hashes are not remapped
+without a separately verified project migration.
 Deterministic rejections (4xx: name collisions, invalid fields, revision
 conflicts) return a failed tool result (`details.success=false` with a readable
 error, plus `details.code` and `details.errorDetails` when the service gives a
