@@ -65,6 +65,7 @@ class PiSessionStore {
         this.sessionMetadata = new (require('./pi-session-metadata').SessionMetadataCache)();
         this.sessionRows = new WeakMap();
         this.sessionReads = new AsyncLocalStorage();
+        this.taskWorkspaces = new (require('./pi-task-workspaces').TaskWorkspaces)(this, getSdk);
         const defaults = process.platform === 'win32'
             ? Array.from({ length: 26 }, (_, index) => `${String.fromCharCode(65 + index)}:\\`)
             : ['/'];
@@ -385,7 +386,13 @@ class PiSessionStore {
         } finally { read.close(); }
     }
 
-    async createSession(cwdInput, name = '', { autoTitle = false, assistant = null, task = null, agentProfileId, inheritedProfileId,
+    createSession(cwdInput, name = '', options = {}) {
+        return this.withWorkspaceUse(cwdInput, () => this._createSession(cwdInput, name, options));
+    }
+
+    withWorkspaceUse(cwd, action) { return this.taskWorkspaces.use(cwd, action); }
+
+    async _createSession(cwdInput, name = '', { autoTitle = false, assistant = null, task = null, agentProfileId, inheritedProfileId,
         initializeSession } = {}) {
         if (initializeSession !== undefined && typeof initializeSession !== 'function') throw new Error('Session initializer must be a server function');
         const cwd = this.resolveProject(cwdInput);
@@ -436,7 +443,11 @@ class PiSessionStore {
         };
     }
 
-    async forkSession(session, snapshot, entryId, position = 'before') {
+    forkSession(session, snapshot, entryId, position = 'before') {
+        return this.withWorkspaceUse(session.cwd, () => this._forkSession(session, snapshot, entryId, position));
+    }
+
+    async _forkSession(session, snapshot, entryId, position = 'before') {
         if (!['before', 'at'].includes(position)) throw new Error('分叉位置无效');
         if (entryId !== undefined && (typeof entryId !== 'string' || !entryId)) throw new Error('分叉消息无效');
         const { SessionManager } = await getSdk();
@@ -529,52 +540,23 @@ class PiSessionStore {
         });
     }
 
-    async inspectStandaloneWorkspace(cwdInput, id) {
-        const session = await this.getSession(cwdInput, id);
-        if (!session.standalone || !this.isStandaloneProject(session.cwd)) return { standalone: false };
-        const { SessionManager } = await getSdk();
-        const sessions = await this._nativeSessionMetadata(session.cwd, SessionManager);
-        if (sessions.some(item => item.id !== session.id)) return { standalone: true, shared: true, fileCount: 0 };
-        let entries;
-        try {
-            const stat = fs.lstatSync(session.cwd);
-            if (!stat.isDirectory() || stat.isSymbolicLink() || fs.realpathSync.native(session.cwd) !== session.cwd)
-                return { standalone: true, shared: false, fileCount: 0, unavailable: true };
-            entries = fs.readdirSync(session.cwd);
-        } catch {
-            return { standalone: true, shared: false, fileCount: 0 };
-        }
-        return { standalone: true, shared: false, fileCount: entries.length };
+    inspectStandaloneWorkspace(cwdInput, id) {
+        return this.withWorkspaceUse(cwdInput, async () => this.taskWorkspaces.preview(await this.getSession(cwdInput, id)));
     }
 
-    async _cleanupStandaloneWorkspace(session, { trashWorkspace = false, trashFile } = {}) {
-        if (!session.standalone || !this.isStandaloneProject(session.cwd)) return null;
+    async deleteSession(cwdInput, id, options = {}) {
+        const workspace = options.workspacePreparation === undefined
+            ? this.taskWorkspaces.prepare(cwdInput, id, options) : options.workspacePreparation;
+        let session, lifecycle, imageDeletionId;
         try {
-            const { SessionManager } = await getSdk();
-            const remaining = await this._nativeSessionMetadata(session.cwd, SessionManager);
-            if (remaining.some(item => item.id !== session.id)) return 'shared';
-            const stat = fs.lstatSync(session.cwd);
-            if (!stat.isDirectory() || stat.isSymbolicLink() || fs.realpathSync.native(session.cwd) !== session.cwd) return 'retained';
-            const entries = fs.readdirSync(session.cwd);
-            if (entries.length === 0) {
-                fs.rmdirSync(session.cwd);
-                return 'removed-empty';
-            }
-            if (!trashWorkspace) return 'retained';
-            await trashFile(session.cwd);
-            try { fs.lstatSync(session.cwd); return 'retained'; }
-            catch (error) { if (error.code !== 'ENOENT') return 'retained'; return 'trashed'; }
-        } catch (error) {
-            if (error?.code === 'ENOENT') return null;
-            return 'retained';
-        }
-    }
-
-    async deleteSession(cwdInput, id, { trashWorkspace = false, trashFile = file => execFileAsync('gio', ['trash', file], { timeout: 10000 }) } = {}) {
-        const session = await this.getSession(cwdInput, id);
-        const lifecycle = new (require('./pi-session-image-lifecycle').SessionImageLifecycle)();
-        const imageDeletionId = lifecycle.prepareSession(session);
-        try {
+            session = await this.getSession(cwdInput, id);
+            if (workspace && (workspace.owner !== this.taskWorkspaces || workspace.cwd !== session.cwd || workspace.sessionId !== id))
+                throw new Error('Workspace deletion preparation does not match the session');
+            await this.taskWorkspaces.record(workspace, session);
+            lifecycle = new (require('./pi-session-image-lifecycle').SessionImageLifecycle)();
+            imageDeletionId = lifecycle.prepareSession(session);
+            const trashFile = options.trashFile || (file => execFileAsync('gio', ['trash', file], { timeout: 10000 }));
+            const trashDirectory = options.trashDirectory || options.trashFile || require('./pi-task-workspace-trash').trashTaskDirectory;
             let trashed = false;
             try { await trashFile(session.path); trashed = true; }
             catch { fs.unlinkSync(session.path); }
@@ -584,18 +566,15 @@ class PiSessionStore {
             const result = { id, trashed, ...(imageDeletionId ? { imageDeletionId, imageRetention: trashed ? 'trash-protected' : 'pending-reference-check' } : {}) };
             try { lifecycle.finish(imageDeletionId, trashed ? 'trashed' : 'deleted'); }
             catch { result.imageCleanupWarning = '会话已移除，图片删除记录待核对；相关图片继续保留'; }
-            const workspaceDisposition = await this._cleanupStandaloneWorkspace(session, { trashWorkspace: trashWorkspace === true, trashFile });
-            if (workspaceDisposition) result.workspaceDisposition = workspaceDisposition;
-            if (trashWorkspace === true && workspaceDisposition === 'retained') {
-                result.workspaceCleanupWarning = '工作文件夹未能移入回收站，已原位保留';
-            }
+            Object.assign(result, await this.taskWorkspaces.finish(workspace, session, trashDirectory));
             return result;
         } catch (error) {
-            lifecycle.cancelSession(imageDeletionId);
+            lifecycle?.cancelSession(imageDeletionId);
             throw error;
         } finally {
-            this.sessionLists.delete(session.cwd);
-            this.sessionListCache.delete(session.cwd);
+            // HTTP retains its reservation through cron/preferences updates and response.
+            if (options.workspacePreparation === undefined) workspace?.close();
+            if (session) { this.sessionLists.delete(session.cwd); this.sessionListCache.delete(session.cwd); }
         }
     }
 

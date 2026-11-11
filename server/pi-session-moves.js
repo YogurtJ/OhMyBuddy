@@ -217,7 +217,9 @@ class PiSessionMoves {
             return Promise.reject(fail('移动参数无效，请重新预览'));
         if (this.running || this.stopping) return Promise.reject(fail('已有线程移动进行中，请先核对结果'));
         this.running++;
-        this.flight = this.perform(cwd, id, input).finally(() => { this.running--; this.flight = null; });
+        const publish = () => this.perform(cwd, id, input);
+        const operation = this.store.withWorkspaceUse ? this.store.withWorkspaceUse([cwd, input.targetCwd], publish) : publish();
+        this.flight = operation.finally(() => { this.running--; this.flight = null; });
         return this.flight;
     }
     async perform(cwdInput, id, input) {

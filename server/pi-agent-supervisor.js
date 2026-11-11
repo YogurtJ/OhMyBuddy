@@ -1090,7 +1090,12 @@ class PiAgentSupervisor extends EventEmitter {
         return store.forgetDeletedSession(sessionPath);
     }
 
-    async getWorker({ cwd, sessionPath, sessionId }) {
+    getWorker(target) {
+        const start = () => this._getWorker(target);
+        return this.workspaceUse ? this.workspaceUse(target.cwd, start) : start();
+    }
+
+    async _getWorker({ cwd, sessionPath, sessionId }) {
         this.assertReferenceWritable();
         if (this.disposing) throw new Error('Pi supervisor is shutting down');
         if (this.removing.has(sessionPath)) throw new Error('Session is being deleted');
@@ -1162,7 +1167,12 @@ class PiAgentSupervisor extends EventEmitter {
         return this.restartWorker(worker);
     }
 
-    async createEphemeralWorker(cwd, options = {}) {
+    createEphemeralWorker(cwd, options = {}) {
+        const start = () => this._createEphemeralWorker(cwd, options);
+        return this.workspaceUse ? this.workspaceUse(cwd, start) : start();
+    }
+
+    async _createEphemeralWorker(cwd, options = {}) {
         this.assertReferenceWritable();
         if (this.disposing) throw new Error('Pi supervisor is shutting down');
         const worker = new AgentWorker({ startupTimeoutMs: this.startupTimeoutMs, ...options, referenceGuard: () => this.referenceGuard, queueStore: null, cwd, noSession: true });

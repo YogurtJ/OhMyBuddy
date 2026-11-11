@@ -224,7 +224,12 @@ class PiSessionTransfer {
         }
     }
 
-    async import(cwdInput, content, requestId) {
+    import(cwdInput, content, requestId) {
+        const publish = () => this._import(cwdInput, content, requestId);
+        return this.store.withWorkspaceUse ? this.store.withWorkspaceUse(cwdInput, publish) : publish();
+    }
+
+    async _import(cwdInput, content, requestId) {
         const cwd = this.store.resolveProject(cwdInput);
         if (!text(requestId) || !/^[a-zA-Z0-9-]{16,80}$/.test(requestId)) fail('导入请求 ID 无效');
         const entries = validateImport(content);

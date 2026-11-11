@@ -11752,7 +11752,27 @@
         ["此任务工作文件夹为空，删除后将自动清理。", "This task’s working folder is empty and will be cleaned up automatically."],
         ["空的任务工作文件夹已自动清理", "Empty task working folder was cleaned up automatically"],
         ["任务工作文件夹已移入回收站", "Task working folder moved to trash"],
-        ["工作文件夹未能移入回收站，已原位保留", "Task working folder could not be moved to trash and was kept in place"]
+        ["工作文件夹未能移入回收站，已原位保留", "Task working folder could not be moved to trash and was kept in place"],
+        ["此任务工作文件夹或子目录仍有其他线程使用，文件夹将保留。", "Another thread still uses this working folder or a subfolder. The folder will be kept."],
+        ["同时将此任务的工作文件夹移入回收站（含 {0} 项；失败时保留文件并提示恢复位置）", "Also move this task’s working folder to trash ({0} items; files are preserved with a recovery location on failure)", "Also move this task’s working folder to trash ({0} item; files are preserved with a recovery location on failure)"],
+        ["工作文件位置：{0}", "Working files: {0}"],
+        ["待核对位置：{0}", "Location to verify: {0}"],
+        ["任务恢复目录不能作为工作目录，请先核对并复制文件到普通目录", "Recovery folders cannot be used as working folders. Verify the files, then copy them to a normal folder"],
+        ["处理编号：{0}", "Operation ID: {0}"],
+        ["工作目录仍有文件操作，已保留", "Working folder kept because file operations are still in progress"],
+        ["无法完整核对工作目录引用，已保留", "Working folder kept because its references could not be fully checked"],
+        ["工作目录或子目录仍有其他会话使用，已保留", "Working folder kept because another session uses it or a subfolder"],
+        ["工作目录内容已变化，工作文件已保留", "Working files kept because the folder changed"],
+        ["当前平台无法安全移入回收站，工作文件已保留", "Working files kept because safe trash is unavailable on this platform"],
+        ["回收站未完成，工作文件保存在恢复目录", "Trash did not complete. Working files are preserved in the recovery folder"],
+        ["清理未完成，工作文件保存在恢复目录", "Cleanup did not complete. Working files are preserved in the recovery folder"],
+        ["回收站未移走工作文件，文件保存在恢复目录", "Trash did not move the working files. They are preserved in the recovery folder"],
+        ["工作目录回收结果不确定，请核对回收站和处理记录", "Working folder trash result is unconfirmed. Check the trash and operation record"],
+        ["工作目录清理未完成，原目录已保留", "Working folder cleanup did not complete. The original folder was kept"],
+        ["工作目录身份或处理结果已变化，请核对处理记录", "Working folder identity or outcome changed. Check the operation record"],
+        ["工作目录处理记录待核对，请保留相关文件", "The working folder operation record needs verification. Keep the related files"],
+        ["任务工作目录正在清理，请稍后再试", "The task working folder is being cleaned up. Try again later"],
+        ["工作目录已变化或缺少确认版本，请重新打开删除窗口", "The working folder changed or has no confirmed revision. Reopen the delete dialog"]
     );
     rows.push(
         ["{0} 的记事本", "{0}’s notebook"],

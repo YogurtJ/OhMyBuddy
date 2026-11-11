@@ -2685,6 +2685,7 @@ body.is-resizing * {
 .pi-delete-description { margin-top: 14px; color: var(--text-muted); font-size: 0.85rem; line-height: 1.7; }
 .pi-delete-confirm { background: var(--danger); }
 .pi-session-delete-dialog.is-complete h3 { color: var(--accent); }
+.pi-session-delete-dialog .pi-delete-description { overflow-wrap: anywhere; }
 .pi-workflow-row { display: flex; gap: 12px; align-items: flex-start; padding: 13px 0; border-bottom: 1px solid var(--line); }
 .pi-workflow-row > div:first-child { flex: 1; min-width: 0; }
 .pi-workflow-row strong { font-size: 0.8rem; }

@@ -74,6 +74,8 @@ function createPiAgentGateway(options = {}) {
     const access = options.accessService || new (require('./workspace-access-service').WorkspaceAccessService)();
     const supervisor = new PiAgentSupervisor();
     const store = new PiSessionStore();
+    supervisor.workspaceUse = store.withWorkspaceUse.bind(store);
+    store.taskWorkspaces.supervisor = supervisor;
     const profiles = new (require('./pi-profile-registry').PiProfileRegistry)(store);
     store.profiles = profiles;
     const profileMemory = new (require('./profile-memory/config').ProfileMemoryConfiguration)();
@@ -177,7 +179,7 @@ function createPiAgentGateway(options = {}) {
         return !browser.busy && !browser.running && !directoryPicker.busy && !channels.busy && !artifacts.busy && !fileRoots.jobs.size && documents.active === documentOperations && !documents.writing
             && !profiles.busy && !bots.notebooks.busy && !agentThreads.jobs.size && !agentThreads.catalogIndex.busy && !agentThreads.returns.busy && !agentThreads.messages.busy
             && !settingsService.mutating && !settingsService.loginService.busy && !nativeService.busy && !mcpSettingsService.busy
-            && !sessionTransfer.running && !sessionMoves.running && !auxiliaryModels.busy
+            && !sessionTransfer.running && !sessionMoves.running && !store.taskWorkspaces.busy && !auxiliaryModels.busy
             && !titles.jobs.size && !titles.savingModel && !transcription.active && !learning?.busy && !cron.busy && !deferred.running
             && !sideChat.connections.size && !sideChat.tickets.size && ![...sideChat.parents.values()].some(parent => parent.preparing)
             && !supervisor.queueStore?.operations && supervisor.isIdle()
@@ -587,7 +589,7 @@ function createPiAgentGateway(options = {}) {
 
     router.get('/activity', (req, res) => {
         res.set('Cache-Control', 'no-store');
-        res.json({ browserBusy: browser.busy, browserRunning: browser.running, directoryPickerBusy: directoryPicker.busy, channelBusy: channels.busy, cronBusy: cron.busy, agentThreadLaunches: agentThreads.jobs.size, agentTaskIndexing: agentThreads.catalogIndex.busy, agentTaskReturns: agentThreads.returns.busy, agentMessages: agentThreads.messages.busy, learningBusy: learning.busy, learningRuns: learning.active.size, archives: archives(), titleRevision: titles.revisionId, titleGenerations: titles.jobs.size, transcriptionActive: transcription.active, documentOperations: documents.active, artifactOperations: artifacts.jobs.size, runtimes: supervisor.getActivity(), profilesBusy: profiles.busy || bots.notebooks.busy, nativeSettingsBusy: nativeService.busy || settingsService.mutating || Boolean(titles.savingModel) || auxiliaryModels.busy, sessionTransfers: sessionTransfer.running, sessionMoves: sessionMoves.running, pinnedProjects: pinnedProjects(), hiddenProjects: hiddenProjects(), replyNotices: replyNotices(), deferred: deferred.summary() });
+        res.json({ browserBusy: browser.busy, browserRunning: browser.running, directoryPickerBusy: directoryPicker.busy, channelBusy: channels.busy, cronBusy: cron.busy, agentThreadLaunches: agentThreads.jobs.size, agentTaskIndexing: agentThreads.catalogIndex.busy, agentTaskReturns: agentThreads.returns.busy, agentMessages: agentThreads.messages.busy, learningBusy: learning.busy, learningRuns: learning.active.size, archives: archives(), titleRevision: titles.revisionId, titleGenerations: titles.jobs.size, transcriptionActive: transcription.active, documentOperations: documents.active, artifactOperations: artifacts.jobs.size, runtimes: supervisor.getActivity(), profilesBusy: profiles.busy || bots.notebooks.busy, nativeSettingsBusy: nativeService.busy || settingsService.mutating || Boolean(titles.savingModel) || auxiliaryModels.busy, sessionTransfers: sessionTransfer.running, sessionMoves: sessionMoves.running, taskWorkspacesBusy: store.taskWorkspaces.busy, pinnedProjects: pinnedProjects(), hiddenProjects: hiddenProjects(), replyNotices: replyNotices(), deferred: deferred.summary() });
     });
 
     router.patch('/projects/pin', (req, res) => {
@@ -711,15 +713,25 @@ function createPiAgentGateway(options = {}) {
         try {
             res.json(await store.inspectStandaloneWorkspace(req.query.cwd, req.params.id));
         } catch (error) {
-            res.status(400).json({ error: error.message });
+            res.status(error.status || 400).json({ error: error.message });
         }
     });
 
+    router.get('/workspace-cleanups/:requestId', async (req, res) => {
+        res.set('Cache-Control', 'no-store');
+        try { res.json(await store.taskWorkspaces.status(req.query.cwd, req.params.requestId)); }
+        catch (error) { res.status(error.code === 'ENOENT' ? 404 : error.status || 400).json({ error: error.message }); }
+    });
+
     router.delete('/sessions/:id', async (req, res) => {
+        let workspacePreparation;
         try {
-            if (req.query.trashWorkspace !== undefined && !['true', 'false', '1', '0'].includes(String(req.query.trashWorkspace)))
+            if (req.query.trashWorkspace !== undefined && (typeof req.query.trashWorkspace !== 'string' || !['true', 'false', '1', '0'].includes(req.query.trashWorkspace)))
                 throw new Error('trashWorkspace must be a boolean');
             const trashWorkspace = req.query.trashWorkspace === 'true' || req.query.trashWorkspace === '1';
+            workspacePreparation = store.taskWorkspaces.prepare(req.query.cwd, req.params.id, {
+                trashWorkspace, workspaceRevision: req.query.workspaceRevision, workspaceRequestId: req.query.workspaceRequestId
+            });
             const session = await store.getSession(req.query.cwd, req.params.id);
             await channels.ready;
             channels.assertUnbound(session.cwd, session.id);
@@ -731,7 +743,7 @@ function createPiAgentGateway(options = {}) {
                 try {
                     await supervisor.stopSession(session.path);
                     await usage.preserveSession(session.path);
-                    const result = await store.deleteSession(req.query.cwd, req.params.id, { trashWorkspace });
+                    const result = await store.deleteSession(req.query.cwd, req.params.id, { workspacePreparation });
                     try { await supervisor.forgetDeletedSession(session.path); }
                     catch { result.queueRecoveryWarning = '会话已移除，但排队内容清理未完成，请核对恢复记录'; }
                     await cron.removing(session);
@@ -745,8 +757,8 @@ function createPiAgentGateway(options = {}) {
             preferences.clearReplyNotice(session.cwd, session.id);
             res.json(deleted);
         } catch (error) {
-            res.status(400).json({ error: error.message });
-        }
+            res.status(error.status || 400).json({ error: error.message });
+        } finally { workspacePreparation?.close(); }
     });
 
     mountSessionWorkflows(router, { store, supervisor, deferred, preferences, assertDeferredSendable: session => bots.assertNativeSendable(session) });
@@ -756,6 +768,11 @@ function createPiAgentGateway(options = {}) {
         busy: () => Boolean(channels.busy || artifacts.busy || documents.active || agentThreads.jobs.size || agentThreads.messages.busy || agentThreads.returns.busy
             || titles.jobs.size || cron.busy || deferred.running || profiles.busy || sessionTransfer.running
             || [...sideChat.parents.values()].some(parent => parent.preparing)) });
+
+    store.taskWorkspaces.externalBusy = () => Boolean(profiles.busy || learning.busy || documents.active || artifacts.busy || fileRoots.jobs.size
+        || agentThreads.jobs.size || agentThreads.catalogIndex.busy || agentThreads.messages.busy || agentThreads.returns.busy
+        || titles.jobs.size || cron.busy || deferred.running || channels.busy || sessionTransfer.running || sessionMoves.running
+        || [...sideChat.parents.values()].some(parent => parent.preparing));
 
     require('./pi-transcription-service').mountTranscriptionRoutes(router, transcription, store);
     require('./routes/settings').mountSettingsRoutes(router, { settingsService, nativeService, auxiliaryModels, titles, preferences, usage, store });
@@ -1277,6 +1294,7 @@ function createPiAgentGateway(options = {}) {
         await Promise.all([stoppingBrowser, stoppingDirectoryPicker, stoppingChannels, stoppingFileRoots, stoppingDeferred, stoppingTitles, stoppingAuxiliaryModels, stoppingMoves, stoppingTranscription, stoppingDocuments]);
         await stoppingProactive;
         await cron.dispose();
+        store.taskWorkspaces.supervisor = null;
     }, browser, directoryPicker, store, supervisor, bots, channels, cron, deferred, sideChat, titles, auxiliaryModels, learning, knowledgeService, agentThreads, sessionMoves, transcription, documents, sessionImageStorage, artifacts };
 }
 

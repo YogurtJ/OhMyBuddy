@@ -468,6 +468,7 @@ HTTP 成功响应也是工具结果 `details.pivaneBotSchedule` 的值（工具 
 ```json
 {
   "runtimes": [{ "cwd": "/workspace/demo", "sessionId": "01...", "phase": "running", "busy": true }],
+  "taskWorkspacesBusy": false,
   "pinnedProjects": ["/workspace/demo"],
   "replyNotices": [{ "cwd": "/workspace/demo", "sessionId": "01...", "completionId": "uuid", "completedAt": "ISO timestamp" }]
 }
@@ -476,6 +477,8 @@ HTTP 成功响应也是工具结果 `details.pivaneBotSchedule` 的值（工具 
 `replyNotices` 项带 `quiet:true` 时是 Bot 主动发的消息在安静时段或超出推送上限时的回复：照常标为未读，但页面不弹提醒、不推送。
 
 `phase` 为 `running`、`tool`、`compacting`、`retrying`、`waiting`、`idle`、`error` 或 `stopped`。`busy` 包含压缩/重试/工具执行及等待确认。`agent_end` 不代表完整任务结束，必须等 `agent_settled`。失败/停止标记只在 worker 生命周期内保留，不是持久任务记录。临时 runtime 和外部终端运行实例不在摘要中；不存在某 ID 不代表外部终端空闲。
+
+`taskWorkspacesBusy` 表示服务内目录准入、引用检查或清理仍在进行，计入维护空闲检查。它不是回收结果凭据；异常结束的持久结果从 `/workspace-cleanups/:requestId` 核对，不能因 `false` 推断回收成功。
 
 页面可见时每 3 秒读取；失败显示未知。临时会话使用当前 WebSocket 本地状态。
 
@@ -634,7 +637,7 @@ POST `/sessions/:id/title` 接受 `{cwd}`，使用请求开始时冻结的标题
 
 ### `GET /sessions/:id/workspace-cleanup?cwd=<absolute-path>`
 
-只读检查指定原生会话的独立任务工作目录，沿用会话查找、鉴权与项目范围校验，响应 `Cache-Control: no-store`。普通项目返回 `{standalone:false}`；任务返回 `{standalone:true,shared:boolean,fileCount:number,unavailable?:true}`。`shared=true` 时保留目录且 `fileCount` 为 0；否则 `fileCount` 为目录直接子项数（包括子目录与隐藏项，不是递归文件数）。此响应用于删除确认窗口，执行时重新核对共用会话与目录状态。失败返回 HTTP 400。
+只读检查指定原生会话的独立任务工作目录，沿用会话查找、鉴权与项目范围校验，响应 `Cache-Control: no-store`。普通项目返回 `{standalone:false}`；任务返回 `{standalone:true,shared:boolean,fileCount:number,workspaceRevision:string,canTrash:boolean,unavailable?:true}`。`shared=true` 表示目录或子目录仍被其他原生会话／运行实例使用，此时保留目录且 `fileCount` 为 0；否则 `fileCount` 为目录直接子项数（包括子目录与隐藏项，不是递归文件数）。`workspaceRevision` 绑定实际目录及父目录的内核身份与目录修订，勾选回收站时必须原样提交。无法完整扫描、出现变化或超出预算时不提供回收站资格；运行平台缺少安全目录回收能力时 `canTrash=false`。失败返回 HTTP 400／409。
 
 ### `DELETE /sessions/:id?cwd=<absolute-path>`
 
@@ -644,9 +647,13 @@ POST `/sessions/:id/title` 接受 `{cwd}`，使用请求开始时冻结的标题
 { "id": "01...", "trashed": true }
 ```
 
-`trashed=false` 表示 `gio trash` 失败后永久删除会话记录文件。可选 query `trashWorkspace=true|1|false|0`，省略表示保留非空任务工作目录；其他值返回 HTTP 400。原生会话删除成功后，独立任务目录若仍有其他会话共用则保留；无共用会话且为空时仅用 `rmdir` 移除；非空目录仅在 `trashWorkspace=true|1` 时尝试移入系统回收站，失败保留，不递归硬删。普通项目目录不参与清理。
+`trashed=false` 表示 `gio trash` 失败后永久删除会话记录文件。可选 query `trashWorkspace=true|1|false|0`，省略表示保留非空任务工作目录；其他值返回 HTTP 400。网页无论是否勾选回收站，均附已有预览的 `workspaceRevision`；只要提供版本就必须匹配。勾选回收站必须有版本；缺少必需版本或目录被替换时在停止 worker／删除会话前返回 HTTP 409。未提供版本的普通删除请求从执行入口即绑定当前目录身份。任务删除可附 `workspaceRequestId`（16–80 位字母、数字、`_`、`-`），服务器持久保存独占意图和各阶段；已使用的编号不会再次执行。
 
-删除响应可附 `workspaceDisposition:"shared"|"removed-empty"|"retained"|"trashed"`；已选择回收站但目录保留时另附 `workspaceCleanupWarning`。目录清理失败不冒充会话删除失败，也不自动重放回收站请求。会话删除失败返回 HTTP 400；失败前已经停止的 worker 或已取消的预约不会自动恢复，请核对实际状态。
+任务目录清理与该目录及子目录中的新建、分叉、导入、移动、worker 启动协调；已有发布操作先于删除时保留目录，清理先进入时拒绝新的发布／启动。会话删除后核对整个当前 Pi 身份默认会话索引的原生会话和已登记运行实例，存在子目录引用、后台文件操作或不能证明扫描完整时保留。无引用的空目录先移入同文件系统私有暂存位置，再仅用 `rmdir` 移除；非空目录默认保留，只有明确勾选且身份复核成功才暂存后调用一次系统回收站。macOS 使用 NSFileManager，Linux 使用 `gio trash`；Windows 等没有已接入安全目录回收能力的平台保留非空文件夹。普通项目不参与目录清理。
+
+删除响应可附 `workspaceDisposition:"shared"|"removed-empty"|"retained"|"trashed"|"recovery"|"uncertain"`、`workspaceRequestId`、`workspaceRemoved` 和 `workspaceCleanupWarning`。`retained` 仅在核对原对象仍位于原路径时使用；`recovery` 表示已核对工作文件仍在 `workspaceRecoveryPath`，需从此位置恢复；`uncertain` 用于目录身份变化或命令超时／被信号终止等未知结果，即使暂存目录仍存在也不宣称操作已结束；可附 `workspaceStagingPath` 供核对，它不是已确认的文件保留位置。目录异常不递归硬删、不自动恢复到可能已被重新占用的旧路径，也不重放回收站请求。目录清理失败不冒充会话删除失败。会话删除失败返回 HTTP 400／409；失败前已经停止的 worker 或已取消的预约不会自动恢复，请核对实际状态。
+
+`GET /workspace-cleanups/:requestId?cwd=<original-absolute-path>` 受同一鉴权和项目范围约束，响应 `Cache-Control: no-store`。返回 `{id,state,sessionDeleted,result}`；`state` 为 `pending|checking|prepared|staged|trashing` 或上述目录结果，`result` 为目录处理结果或 `null`。原工作路径已移除仍可查询。非终态／缺失记录不证明操作未发生；仅作核对，不自动恢复、重试或执行清理。网页遇到删除响应丢失时只查询此记录，显示已确认结果或提示核对。操作元数据位于 Pi 身份目录的 `ohmybuddy-task-workspaces/<requestId>.json`（私有权限），包含原工作目录、对象身份、阶段和暂存路径，不复制会话正文。异常或重启后保留此记录及 `tasks/.ohmybuddy-cleanup-*/<任务 ID>`，人工核对身份与实际位置后，先复制所需文件到普通工作目录，不自动重放。暂存／恢复命名空间在执行中、异常结束及服务重启后均拒绝新建、分叉、导入、移动和运行启动，避免未确认的系统回收影响新会话。互斥在同一原生身份的 store 实例间共享，服务停机计入目录操作，只有完整停止后才解除运行登记。
 
 已订阅的浏览器先收到 `gateway_session_removing`，仅表示删除进行中；只有文件操作成功才发送 `gateway_session_deleted {cwd,sessionId,trashed,workspaceDisposition?}` 并以 close code `4004` 关闭连接。失败用 `1012` 关闭，客户端可重连。删除成功不得当作 runtime 重启反复重连。旧后端缺少 `trashed` 时，界面只报告“已删除”，不推断是否进入回收站。
 

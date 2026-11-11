@@ -2479,7 +2479,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const status = dialog.querySelector('[role="status"]');
         const errorBox = dialog.querySelector('[role="alert"]');
         const closeButtons = [...dialog.querySelectorAll('[data-close]')];
-        let pending = false;
+        let pending = false, workspaceRevision = null, workspaceRequestId = null;
+        const showDeleted = result => {
+            forgetDeletedSession(session, cwd, { workspaceRemoved: result?.workspaceRemoved === true || ['removed-empty', 'trashed'].includes(result?.workspaceDisposition) });
+            workspaceOption.hidden = true;
+            dialog.querySelector('h3').textContent = translateUi('线程已删除');
+            description.textContent = result?.trashed === true ? translateUi('会话已移入回收站') : result?.trashed === false ? translateUi('会话已永久删除') : translateUi('会话已删除');
+            if (result?.workspaceDisposition === 'removed-empty') description.textContent += '；' + translateUi('空的任务工作文件夹已自动清理');
+            else if (result?.workspaceDisposition === 'trashed') description.textContent += '；' + translateUi('任务工作文件夹已移入回收站');
+            if (result?.workspaceCleanupWarning) description.textContent += '；' + translateUi(result.workspaceCleanupWarning);
+            if (result?.workspaceRecoveryPath) description.textContent += '；' + translateUi('工作文件位置：{0}', result.workspaceRecoveryPath);
+            else if (result?.workspaceStagingPath) description.textContent += '；' + translateUi('待核对位置：{0}', result.workspaceStagingPath);
+            if (result?.workspaceDisposition === 'uncertain' && workspaceRequestId) description.textContent += '；' + translateUi('处理编号：{0}', workspaceRequestId);
+            if (result?.queueRecoveryWarning) description.textContent += '；' + translateUi(result.queueRecoveryWarning);
+            if (result?.imageCleanupWarning) description.textContent += '；' + translateUi(result.imageCleanupWarning);
+            else if (result?.imageDeletionId) description.textContent += '；' + translateUi(result.trashed ? '图片恢复保护已保留，其他会话共享的图片不会删除。' : '图片已登记待核对，可在附件管理中检查并回收无引用图片。');
+            dialog.classList.add('is-complete'); submit.hidden = true; closeButtons[1].textContent = translateUi('完成');
+        };
         const close = () => { if (!pending) { dialog.close(); dialog.remove(); sessionDeleteDialog = null; } };
         closeButtons.forEach(button => button.addEventListener('click', close));
         dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
@@ -2493,24 +2509,25 @@ document.addEventListener('DOMContentLoaded', () => {
             if (state.cwd === cwd && state.session?.id === session.id) disconnectSocket(true);
             const trashWorkspace = !workspaceOption.hidden && workspaceCheckbox.checked;
             try {
-                const query = `cwd=${encodeURIComponent(cwd)}${trashWorkspace ? '&trashWorkspace=true' : ''}`;
+                if (isStandalone && !workspaceRequestId) workspaceRequestId = 'workspace-' + Array.from(crypto.getRandomValues(new Uint8Array(16)), value => value.toString(16).padStart(2, '0')).join('');
+                const query = new URLSearchParams({ cwd, ...(workspaceRequestId ? { workspaceRequestId } : {}),
+                    ...(workspaceRevision ? { workspaceRevision } : {}), ...(trashWorkspace ? { trashWorkspace: 'true' } : {}) });
                 const result = await apiFetch(`/api/pi/sessions/${encodeURIComponent(session.id)}?${query}`, { method: 'DELETE', signal: AbortSignal.timeout(150000) });
-                forgetDeletedSession(session, cwd, { workspaceRemoved: ['removed-empty', 'trashed'].includes(result?.workspaceDisposition) });
-                workspaceOption.hidden = true;
-                dialog.querySelector('h3').textContent = translateUi('线程已删除');
-                description.textContent = result?.trashed === true ? translateUi('会话已移入回收站') : result?.trashed === false ? translateUi('会话已永久删除') : translateUi('会话已删除');
-                if (result?.workspaceDisposition === 'removed-empty') description.textContent += '；' + translateUi('空的任务工作文件夹已自动清理');
-                else if (result?.workspaceDisposition === 'trashed') description.textContent += '；' + translateUi('任务工作文件夹已移入回收站');
-                else if (result?.workspaceCleanupWarning) description.textContent += '；' + translateUi(result.workspaceCleanupWarning);
-                if (result?.queueRecoveryWarning) description.textContent += '；' + translateUi(result.queueRecoveryWarning);
-                if (result?.imageCleanupWarning) description.textContent += '；' + translateUi(result.imageCleanupWarning);
-                else if (result?.imageDeletionId) description.textContent += '；' + translateUi(result.trashed ? '图片恢复保护已保留，其他会话共享的图片不会删除。' : '图片已登记待核对，可在附件管理中检查并回收无引用图片。');
-                dialog.classList.add('is-complete');
-                submit.hidden = true;
-                closeButtons[1].textContent = translateUi('完成');
+                showDeleted(result);
             } catch (error) {
+                if (workspaceRequestId) {
+                    try {
+                        const snapshot = await apiFetch(`/api/pi/workspace-cleanups/${encodeURIComponent(workspaceRequestId)}?cwd=${encodeURIComponent(cwd)}`, { signal: AbortSignal.timeout(8000) });
+                        if (snapshot.sessionDeleted) {
+                            showDeleted(snapshot.result || { workspaceDisposition: 'uncertain', workspaceCleanupWarning: '工作目录回收结果不确定，请核对回收站和处理记录' });
+                            return;
+                        }
+                    } catch { /* Status reads never resubmit deletion or trash. */ }
+                }
+                submit.hidden = true; workspaceOption.hidden = true; closeButtons[1].textContent = translateUi('关闭');
                 errorBox.hidden = false;
                 errorBox.textContent = translateUi('删除未确认：{0}。请刷新线程列表核对结果后再试。', error.message);
+                if (workspaceRequestId) errorBox.textContent += ' ' + translateUi('处理编号：{0}', workspaceRequestId);
                 if (state.cwd === cwd && state.session?.id === session.id) {
                     try {
                         const sessions = await loadSessions(cwd);
@@ -2532,10 +2549,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isStandalone) {
             checks.push(apiFetch(`/api/pi/sessions/${encodeURIComponent(session.id)}/workspace-cleanup?cwd=${encodeURIComponent(cwd)}`, { signal: AbortSignal.timeout(8000) }).then(info => {
                 if (sessionDeleteDialog !== dialog || !dialog.isConnected || !info?.standalone) return;
+                workspaceRevision = typeof info.workspaceRevision === 'string' && /^[a-f0-9]{64}$/.test(info.workspaceRevision) ? info.workspaceRevision : null;
                 if (info.shared) {
-                    description.append(document.createTextNode(' ' + translateUi('此任务工作文件夹仍有其他线程共用，文件夹将保留。')));
-                } else if (info.fileCount > 0) {
-                    workspaceLabel.textContent = translateUi('同时将此任务的工作文件夹移入回收站（含 {0} 项文件，回收站不可用时保留原文件夹）', info.fileCount);
+                    description.append(document.createTextNode(' ' + translateUi('此任务工作文件夹或子目录仍有其他线程使用，文件夹将保留。')));
+                } else if (info.fileCount > 0 && info.canTrash && workspaceRevision) {
+                    workspaceLabel.textContent = translateUi('同时将此任务的工作文件夹移入回收站（含 {0} 项；失败时保留文件并提示恢复位置）', info.fileCount);
                     workspaceOption.hidden = false;
                 } else if (info.fileCount === 0 && !info.unavailable) {
                     description.append(document.createTextNode(' ' + translateUi('此任务工作文件夹为空，删除后将自动清理。')));

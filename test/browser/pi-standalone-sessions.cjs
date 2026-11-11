@@ -23,6 +23,10 @@ const { WorkspaceAccessService } = require('../../server/workspace-access-servic
             const pickerResults = [null, project];
             const gateway = createPiAgentGateway({ accessService: access, deferredFilePath: path.join(root, 'deferred.json'),
                 directoryPickerOptions: { command: () => ({ command: 'synthetic', args: [] }), run: async () => pickerResults.shift() } });
+            const nativeDelete = gateway.store.deleteSession.bind(gateway.store);
+            gateway.store.deleteSession = (cwd, id, options) => nativeDelete(cwd, id, { ...options,
+                trashFile: async file => fs.unlinkSync(file),
+                trashDirectory: async () => { throw Object.assign(new Error('synthetic missing trash executable'), { code: 'ENOENT' }); } });
             const app = require('express')(); app.use(require('express').json()); gateway.mount(app);
             for (const [route, directory] of [['marked', 'marked/lib'], ['dompurify', 'dompurify/dist'], ['highlight', '@highlightjs/cdn-assets']])
                 app.use('/vendor/' + route, require('express').static(path.join(repository, 'node_modules', directory)));
@@ -82,7 +86,7 @@ const { WorkspaceAccessService } = require('../../server/workspace-access-servic
                 assert.equal(await page.locator('.pi-standalone-group .pi-session-item').count(), 2);
                 assert.equal(await page.locator('.pi-project-group').count(), 0, 'independent directories must not appear as individual projects');
                 await page.screenshot({ path: path.join(os.tmpdir(), `omb-tasks-projects-${width}.png`) });
-                if (width === 1440) {
+                {
                     const secondItem = page.locator(`.pi-standalone-group .pi-session-item[data-cwd=${JSON.stringify(second)}]`);
                     await secondItem.hover();
                     await secondItem.locator('[data-action="menu"]').click();
@@ -102,10 +106,34 @@ const { WorkspaceAccessService } = require('../../server/workspace-access-servic
                     await firstItem.locator('[data-action="menu"]').click();
                     await page.getByRole('menuitem', { name: '删除线程' }).click();
                     await deleteDialog.waitFor({ state: 'visible' });
-                    await page.waitForFunction(() => !document.querySelector('.pi-session-delete-dialog .pi-delete-workspace-option')?.hidden);
-                    assert.equal(await deleteDialog.locator('.pi-delete-workspace-checkbox').isChecked(), false);
-                    assert.match(await deleteDialog.locator('.pi-delete-workspace-option').textContent(), /含 1 项文件/);
-                    await deleteDialog.locator('[data-close]').first().click();
+                    if (require('../../server/pi-task-workspace-trash').trashTaskDirectory.supported) {
+                        await page.waitForFunction(() => !document.querySelector('.pi-session-delete-dialog .pi-delete-workspace-option')?.hidden);
+                        assert.equal(await deleteDialog.locator('.pi-delete-workspace-checkbox').isChecked(), false);
+                        assert.match(await deleteDialog.locator('.pi-delete-workspace-option').textContent(), /含 1 项/);
+                        const match = `**/api/pi/sessions/${await firstItem.getAttribute('data-session-id')}?*`;
+                        let deletes = 0, cleanupRequestId;
+                        await page.route(match, async route => {
+                            deletes++; cleanupRequestId = new URL(route.request().url()).searchParams.get('workspaceRequestId');
+                            const response = await route.fetch(); assert.equal(response.status(), 200);
+                            await route.abort('failed'); // Lose the response after the one server execution.
+                        });
+                        await deleteDialog.locator('.pi-delete-workspace-checkbox').check();
+                        await deleteDialog.locator('.pi-delete-confirm').click();
+                        await page.waitForFunction(() => document.querySelector('.pi-session-delete-dialog')?.classList.contains('is-complete'));
+                        await page.unroute(match);
+                        assert.equal(deletes, 1, 'lost responses must query status without replaying DELETE');
+                        assert.match(await deleteDialog.locator('.pi-delete-description').textContent(), /恢复目录.*工作文件位置/);
+                        assert.equal(await deleteDialog.locator('[role=alert]').isHidden(), true);
+                        const recovered = await gateway.store.taskWorkspaces.status(first, cleanupRequestId);
+                        assert.equal(fs.readFileSync(path.join(recovered.result.workspaceRecoveryPath, 'retained.txt'), 'utf8'), 'persistent task output');
+                        assert.equal(fs.existsSync(first), false);
+                        for (const selector of ['.pi-session-delete-dialog', '.pi-delete-description']) {
+                            const bounds = await page.locator(selector).evaluate(element => ({ width: element.clientWidth, scroll: element.scrollWidth }));
+                            assert.ok(bounds.scroll <= bounds.width + 1, selector + JSON.stringify(bounds));
+                        }
+                        await page.screenshot({ path: path.join(os.tmpdir(), `omb-task-recovery-${width}.png`) });
+                    }
+                    await deleteDialog.locator('[data-close]').last().click();
                 }
                 if (width <= 680) await page.locator('#pi-toggle-sessions').click();
                 await openPicker();
