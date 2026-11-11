@@ -6,6 +6,10 @@
 
 后续完整包制作与发布前验收聚焦 macOS ARM64（Apple Silicon）、Windows x64 和 glibc Linux x64；暂停为新版本制作、验收和承诺更新 Linux ARM64 完整包。下方各版本的 ARM64 结果保留其历史适用范围，不自动转为后续版本的支持证明；源码兼容与实际分发范围分别记录。具体流程见[发布准备](development/RELEASING.md#后续发布平台)。
 
+## 1.13.0：发布准备
+
+Pi 1.5.2 与伙伴统一记事本、头像、Mermaid、任务目录加固已完成源码和本机启用。正在对准确候选建立 macOS ARM64、Windows x64、glibc Linux x64 的 Node／Chromium、安装、正式 1.12.2 升级、正常停机与原路径恢复证据。结果与包 SHA256 在包外验收记录中绑定；本节不表示三端已经通过，当前公开正式版仍为 1.12.2。Windows 普通令牌和需要权限的符号链接专项分别记录，真实付费供应商及系统首次安全确认不由合成验收代替。
+
 ## 1.12.2：已正式发布
 
 2026-11-08 已[正式发布](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.12.2)并设为 Latest，八份发行附件匿名完整回下载摘要一致。冻结源码 `eb22a0215d66004b04a4e9ebb6cd68a5045b78a2`，源码归档 SHA256 `55a4602eba6625ca9f53f89a66676ef0873de868ce2e1fa9f5187c7f1553ccdf`（10,261,712 字节、2,031 个清单文件）。[验收 JSON](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.12.2/ohmybuddy-1.12.2.validation.json)、[验收说明](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.12.2/ohmybuddy-1.12.2.validation.md)及[校验和](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.12.2/SHA256SUMS-1.12.2.txt)记录准确包、原失败和复用；发布后补记不改冻结标签与归档。
