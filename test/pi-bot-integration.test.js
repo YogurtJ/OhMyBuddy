@@ -30,7 +30,15 @@ test('channel speech keeps notebook, summary, learning and recall provenance acr
     const { WorkspaceAccessService } = require('../server/workspace-access-service');
     const gateway = require('../server/pi-agent-routes').createPiAgentGateway({ accessService: new WorkspaceAccessService({ envToken: () => 'synthetic' }),
         deferredFilePath: process.env.PI_WEB_DEFERRED_FILE });
-    t.after(async () => { await gateway.dispose(); provider.closeAllConnections(); await new Promise(resolve => provider.close(resolve)); });
+    const app = require('express')(); app.use(require('express').json()); gateway.mount(app);
+    const server = http.createServer(app); server.listen(0, '127.0.0.1'); await once(server, 'listening');
+    const previousOrigin = process.env.PI_WORKSPACE_INTERNAL_ORIGIN;
+    process.env.PI_WORKSPACE_INTERNAL_ORIGIN = `http://127.0.0.1:${server.address().port}`;
+    t.after(async () => {
+        await gateway.dispose(); provider.closeAllConnections(); server.closeAllConnections();
+        await Promise.all([new Promise(resolve => provider.close(resolve)), new Promise(resolve => server.close(resolve))]);
+        if (previousOrigin === undefined) delete process.env.PI_WORKSPACE_INTERNAL_ORIGIN; else process.env.PI_WORKSPACE_INTERNAL_ORIGIN = previousOrigin;
+    });
     const { bots, store, learning, knowledgeService } = gateway;
     const created = await bots.create({ expectedRevision: (await bots.profiles.state()).revision });
     const profileId = created.bot.id, windowId = created.window.id, source = (await bots.resolve(profileId, windowId)).session;
@@ -45,7 +53,7 @@ test('channel speech keeps notebook, summary, learning and recall provenance acr
     const input = manager.getBranch().find(entry => entry.customType === 'pivane-channel-message');
     assert.ok(input);
     const ledger = require('../server/bot/bot-ledger');
-    const note = ledger.replay(manager.getBranch()).items[0];
+    const note = (await bots.notebooks.snapshot(profileId)).state.items[0];
     assert.equal(note.source.entryId, input.id); assert.equal(note.source.role, 'user'); assert.equal(note.source.channel, 'weixin');
     assert.equal(note.source.messageId, messageId); assert.equal(note.source.quote, body);
     const context = await bots.profiles.context(manager, source.cwd);
@@ -54,7 +62,12 @@ test('channel speech keeps notebook, summary, learning and recall provenance acr
     // synthetic auxiliary completion. Enabling it does not send an unrelated chat turn.
     await learning.resumePromise; await learning.flushRegistrations();
     learning.preferences.writeDocument({ memoryModels: { 'memory-correction': { provider: 'fixture', modelId: 'text' } } });
-    let learningCalls = 0;
+    let learningCalls = 0, knowledgeCommitError = null;
+    const originalMutation = knowledgeService.mutateFromNative.bind(knowledgeService);
+    knowledgeService.mutateFromNative = async (...args) => {
+        try { return await originalMutation(...args); }
+        catch (error) { knowledgeCommitError = error.message; throw error; }
+    };
     const model = { provider: 'fixture', id: 'text', input: ['text'], maxTokens: 1000 };
     learning.createModelRuntime = async () => ({ getModel: () => model, getAvailable: async () => [model], completeSimple: async (_model, request) => {
         learningCalls++; assert.match(request.messages[0].content, /先列出已完成项/); assert.doesNotMatch(request.messages[0].content, /\/confirm|已绑定/);
@@ -64,12 +77,13 @@ test('channel speech keeps notebook, summary, learning and recall provenance acr
     await learning.save(profileId, { expectedRevision: (await learning.snapshot(profileId)).revision, changes: { enabled: true } });
     await learning.register({ cwd: source.cwd, sessionId: source.id, sessionPath: source.path });
     for (let n = 0; n < 200 && !(await learning.snapshot(profileId)).recentRuns.length; n++) await new Promise(resolve => setTimeout(resolve, 25));
-    assert.equal((await learning.snapshot(profileId)).recentRuns[0]?.status, 'completed');
+    assert.equal((await learning.snapshot(profileId)).recentRuns[0]?.status, 'completed', knowledgeCommitError || 'No completed learning run');
     assert.equal(learningCalls, 1);
     const knowledge = await knowledgeService.snapshot(profileId);
     assert.equal(knowledge.items[0].source.entryId, input.id); assert.equal(knowledge.receipts[0].source.sessionId, source.id);
     const compaction = require('../server/bot/bot-compaction');
-    const summary = await compaction.structuredCompaction({ branch: manager.getBranch(), projection: manager.buildSessionProjection().entries,
+    const summary = await compaction.structuredCompaction({ sharedNotebook: (await bots.notebooks.snapshot(profileId)).state,
+        branch: manager.getBranch(), projection: manager.buildSessionProjection().entries,
         firstKeptEntryId: input.id, includeKept: true, sessionId: source.id, model: { contextWindow: 32000 }, now: new Date().toISOString(), reason: 'manual',
         complete: async ({ text }) => {
             assert.match(text, /User: 记住以后汇报进度/); assert.doesNotMatch(text, /\/confirm|已绑定/);
@@ -100,7 +114,8 @@ test('channel speech keeps notebook, summary, learning and recall provenance acr
     const current = sdk.SessionManager.open(moved.session.path);
     const seed = current.getBranch().find(entry => entry.customType === 'pivane-bot-handoff');
     assert.equal(seed.details.tail.find(item => item.entryId === input.id).sessionId, source.id);
-    assert.equal(ledger.replay(current.getBranch()).items[0].source.entryId, input.id);
+    assert.equal((await bots.notebooks.snapshot(profileId)).state.items[0].source.entryId, input.id);
+    assert.equal(ledger.replay(current.getBranch()).items.length, 0, 'shared notebook is not copied into new chat generations');
     const { windowGenerations, recall, readAround } = require('../server/bot/bot-recall');
     const found = windowGenerations({ agentDir, context: { profileId, windowId, cwd: source.cwd }, current, pi: sdk });
     const hit = recall(found, '阻塞项').details.pivaneRecall.results.find(item => item.entryId === input.id);

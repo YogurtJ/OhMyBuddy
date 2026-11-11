@@ -175,7 +175,7 @@ function createPiAgentGateway(options = {}) {
     require('./pi-native-directory-picker').mountNativeDirectoryPicker(router, { store, picker: directoryPicker });
     function workbenchIdle(documentOperations = 0) {
         return !browser.busy && !browser.running && !directoryPicker.busy && !channels.busy && !artifacts.busy && !fileRoots.jobs.size && documents.active === documentOperations && !documents.writing
-            && !profiles.busy && !agentThreads.jobs.size && !agentThreads.catalogIndex.busy && !agentThreads.returns.busy && !agentThreads.messages.busy
+            && !profiles.busy && !bots.notebooks.busy && !agentThreads.jobs.size && !agentThreads.catalogIndex.busy && !agentThreads.returns.busy && !agentThreads.messages.busy
             && !settingsService.mutating && !settingsService.loginService.busy && !nativeService.busy && !mcpSettingsService.busy
             && !sessionTransfer.running && !sessionMoves.running && !auxiliaryModels.busy
             && !titles.jobs.size && !titles.savingModel && !transcription.active && !learning?.busy && !cron.busy && !deferred.running
@@ -292,6 +292,7 @@ function createPiAgentGateway(options = {}) {
     require('./pi-cron-service').mountCron(router, cron);
     bots.trashBlockers = require('./bot/bot-trash').createTrashBlockers({ cron, deferred, learning, store });
     require('./bot/bot-schedule').mountBotSchedule(router, { cron, bots, authenticate: req => agentThreads.authenticate(req) });
+    require('./bot/bot-buddy-notebook').mountNotebookWorkerRoutes(router, { bots, authenticate: req => agentThreads.authenticate(req) });
     bots.cron = cron;
     bots.assertWindowQuiescent = window => {
         const ids = new Set(window.generations.map(item => item.sessionId));
@@ -586,7 +587,7 @@ function createPiAgentGateway(options = {}) {
 
     router.get('/activity', (req, res) => {
         res.set('Cache-Control', 'no-store');
-        res.json({ browserBusy: browser.busy, browserRunning: browser.running, directoryPickerBusy: directoryPicker.busy, channelBusy: channels.busy, cronBusy: cron.busy, agentThreadLaunches: agentThreads.jobs.size, agentTaskIndexing: agentThreads.catalogIndex.busy, agentTaskReturns: agentThreads.returns.busy, agentMessages: agentThreads.messages.busy, learningBusy: learning.busy, learningRuns: learning.active.size, archives: archives(), titleRevision: titles.revisionId, titleGenerations: titles.jobs.size, transcriptionActive: transcription.active, documentOperations: documents.active, artifactOperations: artifacts.jobs.size, runtimes: supervisor.getActivity(), profilesBusy: profiles.busy, nativeSettingsBusy: nativeService.busy || settingsService.mutating || Boolean(titles.savingModel) || auxiliaryModels.busy, sessionTransfers: sessionTransfer.running, sessionMoves: sessionMoves.running, pinnedProjects: pinnedProjects(), hiddenProjects: hiddenProjects(), replyNotices: replyNotices(), deferred: deferred.summary() });
+        res.json({ browserBusy: browser.busy, browserRunning: browser.running, directoryPickerBusy: directoryPicker.busy, channelBusy: channels.busy, cronBusy: cron.busy, agentThreadLaunches: agentThreads.jobs.size, agentTaskIndexing: agentThreads.catalogIndex.busy, agentTaskReturns: agentThreads.returns.busy, agentMessages: agentThreads.messages.busy, learningBusy: learning.busy, learningRuns: learning.active.size, archives: archives(), titleRevision: titles.revisionId, titleGenerations: titles.jobs.size, transcriptionActive: transcription.active, documentOperations: documents.active, artifactOperations: artifacts.jobs.size, runtimes: supervisor.getActivity(), profilesBusy: profiles.busy || bots.notebooks.busy, nativeSettingsBusy: nativeService.busy || settingsService.mutating || Boolean(titles.savingModel) || auxiliaryModels.busy, sessionTransfers: sessionTransfer.running, sessionMoves: sessionMoves.running, pinnedProjects: pinnedProjects(), hiddenProjects: hiddenProjects(), replyNotices: replyNotices(), deferred: deferred.summary() });
     });
 
     router.patch('/projects/pin', (req, res) => {
@@ -1259,12 +1260,14 @@ function createPiAgentGateway(options = {}) {
         const stoppingDocuments = documents.dispose();
         cron.stopping = true;
         const stoppingProactive = proactive?.dispose();
+        const stoppingNotebooks = bots.notebooks.dispose();
         const stoppingDeferred = deferred.dispose();
         const stoppingMoves = sessionMoves.dispose();
         const stoppingThreads = agentThreads.dispose();
         const stoppingSide = sideChat.dispose();
         await stoppingArtifacts; // Finish native source reads before shutting down their workers.
         await stoppingSide; // Keep side workers alive until their in-memory usage is saved.
+        await stoppingNotebooks; // Drain accepted notebook changes while their source workers still exist.
         await supervisor.dispose();
         await learning.flushRegistrations();
         await learning.dispose();

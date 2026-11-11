@@ -26,7 +26,7 @@ export function registerBotTopic(pi: ExtensionAPI, verified: (ctx: any) => boole
     let pending = false;
     pi.registerTool({
         name: 'bot_topic_propose', label: 'Propose topic', executionMode: 'sequential',
-        description: 'Propose a separate topic chat for substantial focused work. The user must approve its title and optional focus/emoji. Creates a fresh chat with an independent notebook and this Bot’s shared profile memory. Copies no conversation. Does not switch the user’s chat. Unavailable during unattended runs. Say it was created only after success.',
+        description: 'Propose a separate topic chat for substantial focused work. The user must approve its title and optional focus/emoji. Creates a fresh chat sharing this Buddy’s notebook and profile memory. Copies no conversation. Does not switch the user’s chat. Unavailable during unattended runs. Say it was created only after success.',
         promptSnippet: 'Propose a focused topic chat for the user to confirm',
         parameters: Type.Object({ title: Type.String({ minLength: 1, maxLength: 80 }),
             focus: Type.Optional(Type.String({ maxLength: 500 })), emoji: Type.Optional(Type.String({ maxLength: 16 })) }, { additionalProperties: false }),

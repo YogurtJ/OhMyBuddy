@@ -118,7 +118,7 @@ function freshRotationSummary(branch) {
         const entry = branch[index];
         if (entry?.type === 'compaction') {
             const bot = entry.details?.pivaneBot;
-            return Boolean(bot && bot.ledger && bot.includedKept === true);
+            return Boolean(bot && (bot.ledger || bot.notebook?.scope === 'buddy') && bot.includedKept === true);
         }
         if (CONVERSATION.has(entry?.type)) return false;
     }

@@ -89,7 +89,7 @@ const view = item => ({ id: item.id, kind: item.kind, windowId: item.windowId, a
 
 // What the Bot is asked to do when a noted commitment falls due (model-facing).
 function duePrompt(note) {
-    return `A commitment in this chat's notebook is due now: [${note.id}] "${note.text}" (due ${note.due}).\n`
+    return `A commitment in your Buddy-wide notebook is due now: [${note.id}] "${note.text}" (due ${note.due}).\n`
         + 'Write one short, natural message about it in your usual voice. If it was the user\'s commitment, remind them gently and ask how it is going. '
         + 'If it was yours, say where it stands or ask whether they still want it. Do not start the work itself. '
         + 'If it was already settled in this conversation, finish with cron_silent instead.';
@@ -158,8 +158,10 @@ class BotProactive {
     // Follow-ups for the commitments with a due time in one chat's notebook, kept in step after
     // each reply and each notebook edit. A changed due time is a new follow-up; one already sent
     // is not sent again. Nothing new is added while proactive messages are off.
+    syncBuddyNotes(profileId) { return this.syncNotes(profileId, null); }
+
     syncNotes(profileId, windowId) {
-        const key = `${profileId}/${windowId}`;
+        const key = `${profileId}/${this.bots.notebooks ? 'buddy' : windowId}`;
         const previous = this.syncing.get(key) || Promise.resolve();
         const next = previous.catch(() => {}).then(() => this.syncNow(profileId, windowId));
         this.syncing.set(key, next);
@@ -169,10 +171,18 @@ class BotProactive {
         if (this.stopped) return { changed: 0 };
         const found = await this.bot(profileId);
         let notes = [];
+        const shared = Boolean(this.bots.notebooks);
+        const windows = (await this.bots.windows.read(profileId)).state.windows;
+        const main = windows.find(window => window.kind === 'main' && window.current);
+        const targetOf = note => windows.find(window => window.id === note.source?.windowId && window.current && !window.archivedAt && !window.trashedAt) || main;
         if (found?.notify.proactive) {
-            const window = (await this.bots.windows.read(profileId)).state.windows.find(item => item.id === windowId);
-            if (window?.current && !window.archivedAt && !window.trashedAt) notes = (await this.bots.notebook(profileId, windowId)).items
-                .filter(item => item.kind === 'commitment' && item.status === 'active' && item.due);
+            if (shared) notes = (await this.bots.notebooks.read(profileId)).items
+                .filter(item => item.kind === 'commitment' && item.status === 'active' && item.due && targetOf(item));
+            else {
+                const window = windows.find(item => item.id === windowId);
+                if (window?.current && !window.archivedAt && !window.trashedAt) notes = (await this.bots.notebook(profileId, windowId)).items
+                    .filter(item => item.kind === 'commitment' && item.status === 'active' && item.due);
+            }
         }
         const zone = zoneOf(found?.notify), now = this.now();
         // keep: every active commitment's follow-up, even one about to be sent (the next tick sends it);
@@ -181,22 +191,23 @@ class BotProactive {
         for (const note of notes) {
             const at = dueInstant(note.due, zone);
             if (at === null) continue;
-            const id = hash('due', windowId, note.id, at).slice(0, 24);
-            const item = { id, kind: 'due', windowId, noteId: note.id, due: note.due, at, title: note.text.slice(0, 120), text: duePrompt(note), state: 'pending', createdAt: now };
+            const target = shared ? targetOf(note).id : windowId;
+            const id = hash('due', shared ? note.legacy?.windowId || 'buddy' : windowId, shared ? note.legacy?.id || note.id : note.id, at).slice(0, 24);
+            const item = { id, kind: 'due', windowId: target, noteId: note.id, due: note.due, at, title: note.text.slice(0, 120), text: duePrompt(note), state: 'pending', createdAt: now };
             keep.set(id, item);
             if (at > now + 60000) wanted.set(id, item);
         }
-        if (!wanted.size && !(await this.read(profileId)).state.items.some(item => item.kind === 'due' && item.windowId === windowId && item.state === 'pending')) return { changed: 0 };
+        if (!wanted.size && !(await this.read(profileId)).state.items.some(item => item.kind === 'due' && (shared || item.windowId === windowId) && item.state === 'pending')) return { changed: 0 };
         const { changed } = await this.mutate(profileId, state => {
             let changed = 0;
             state.items = state.items.filter(item => {
-                if (item.kind !== 'due' || item.windowId !== windowId || item.state !== 'pending' || keep.has(item.id)) return true;
+                if (item.kind !== 'due' || !shared && item.windowId !== windowId || item.state !== 'pending' || keep.has(item.id)) return true;
                 changed++; return false;
             });
             for (const [id, item] of keep) {
                 const existing = state.items.find(entry => entry.id === id);
-                if (existing?.state === 'pending' && (existing.title !== item.title || existing.text !== item.text || existing.due !== item.due)) {
-                    Object.assign(existing, { title: item.title, text: item.text, due: item.due }); changed++;
+                if (existing?.state === 'pending' && (existing.title !== item.title || existing.text !== item.text || existing.due !== item.due || existing.windowId !== item.windowId)) {
+                    Object.assign(existing, { title: item.title, text: item.text, due: item.due, windowId: item.windowId, noteId: item.noteId }); changed++;
                 }
             }
             for (const [id, item] of wanted) {
@@ -295,6 +306,7 @@ class BotProactive {
 
     async tickBot(profileId) {
         const now = this.now(), found = await this.bot(profileId);
+        if (this.bots.notebooks) await this.syncBuddyNotes(profileId);
         const { state } = await this.read(profileId);
         const due = state.items.filter(item => live(item) && item.at <= now);
         if (due.length) {

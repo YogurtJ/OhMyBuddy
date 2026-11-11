@@ -48,7 +48,8 @@
             const what = text(args.text, 500) || text(args.id, 12);
             title = ({ add: t('记到“我记着的事” · {0}', what), update: t('改了记下的事 · {0}', what), done: t('标为完成 · {0}', what),
                 cancel: t('标为不需要了 · {0}', what), reopen: t('重新打开 · {0}', what) })[args.action] || t('记事本');
-        } else if (name === 'window_recall') title = text(args.query, 200) ? t('翻找之前的聊天 · {0}', args.query) : t('翻找之前的聊天');
+        } else if (name === 'buddy_notes') title = text(args.query, 200) ? t('查找记着的事 · {0}', args.query) : t('查看记着的事');
+        else if (name === 'window_recall') title = text(args.query, 200) ? t('翻找之前的聊天 · {0}', args.query) : t('翻找之前的聊天');
         else if (name === 'window_read') title = t('查看之前的聊天');
         else if (name === 'deliver_files') title = text(args.title, 160) ? t('交付文件 · {0}', args.title) : t('交付文件');
         else if (name === 'agent_message') {

@@ -7,7 +7,7 @@ const THREAD_STATE = 'pivane-thread-turn';
 const TERMINAL = new Set(['completed', 'stopped', 'error']);
 // A Bot's notebook and topic index join a starting run right after its prompt
 // (bot-context-extension.ts). They are hidden program context, never another input.
-const CONTEXT_NOTICES = new Set(['pivane-bot-notebook', 'pivane-bot-topic-index']);
+const CONTEXT_NOTICES = new Set(['pivane-bot-notebook', 'pivane-bot-topic-index', 'pivane-buddy-notebook-context']);
 const isContextNotice = entry => entry.type === 'custom_message' && CONTEXT_NOTICES.has(entry.customType) && entry.display === false;
 const SUBAGENT_RESULT_STATUSES = new Set(['completed', 'failed', 'paused', 'stopped']);
 

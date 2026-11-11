@@ -551,13 +551,23 @@
             }
         }
 
-        // What the Bot keeps in mind for the open chat (M2-5).
+        // The Buddy owns one notebook; a chat is only a source.
         openNotebook() {
-            const bot = this.bot(), current = this.current();
-            if (!bot || !current || !window.PiBotNotebook) return;
-            window.PiBotNotebook.open({ api: this.api, toast: this.toast, profileId: current.profileId, windowId: current.windowId,
+            const bot = this.bot();
+            if (!bot || !window.PiBotNotebook) return;
+            const profileId = bot.id;
+            window.PiBotNotebook.open({ api: this.api, toast: this.toast, profileId,
                 name: bot.name, face: size => face(bot, size),
-                onAbout: () => window.PiWorkspaceRoute?.navigate('profiles', { profileId: current.profileId, section: 'user' }) });
+                onChange: () => { if (this.profileId === profileId) this.refreshTopicIndex(); },
+                onSource: async source => {
+                    try {
+                        const latest = await this.api('/api/pi/bots?includeTrash=false');
+                        const target = latest.bots?.find(item => item.id === profileId)?.windows?.find(item => item.id === source.windowId);
+                        if (!target || target.trashedAt || target.archivedAt) { this.toast?.(translateUi('原聊天暂时无法打开，仍可在记事本查看出处。'), 'info'); return; }
+                        window.PiWorkspaceRoute?.navigate('bot', { profileId, windowId: target.id });
+                    } catch (error) { this.toast?.(error.message, 'error'); }
+                },
+                onAbout: () => window.PiWorkspaceRoute?.navigate('profiles', { profileId, section: 'user' }) });
         }
 
         // Create a fresh topic immediately on click, switch to it and focus the composer.
@@ -832,11 +842,12 @@
                 trash.addEventListener('click', () => this.manageTopics('trash')); list.append(trash);
                 const foot = el('footer', 'pi-bot-side-foot');
                 const notes = button('pi-bot-notes-link'); notes.dataset.botAction = 'notes';
-                notes.append(icon('fa-thumbtack'), el('span', null, translateUi("我记着的事")));
+                notes.append(icon('fa-book-open'), el('span', null, translateUi("我记着的事")));
+                const notebookNav = el('div', 'pi-bot-notebook-nav'); notebookNav.append(notes);
                 const settings = button('pi-bot-settings'); settings.dataset.botAction = 'settings';
                 settings.append(icon('fa-sliders'), el('span', null, translateUi("{0} 的设置", bot.name)));
-                foot.append(notes, settings);
-                side.append(head, list, foot);
+                foot.append(settings);
+                side.append(head, notebookNav, list, foot);
             } else if (!this.loaded) {
                 side.append(el('p', 'pi-bot-side-state', translateUi("正在读取…")));
             } else if (this.error) {

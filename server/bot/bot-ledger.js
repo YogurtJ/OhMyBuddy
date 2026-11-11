@@ -1,8 +1,8 @@
 'use strict';
 const { createHash } = require('node:crypto');
-// The window notebook ("我记着的事", D-028): decisions, commitments, open questions,
-// window preferences and key references of one Bot window. It lives only in the window's
-// native session entries and is recomputed by replaying the active branch:
+// Pure notebook engine for the Buddy-wide native journal and legacy window ledgers.
+// The shared journal owns b-ids; old window branches keep their n-ids for compatibility.
+// Both are rebuilt from Pi native entries. Legacy inputs include:
 //   - window_note tool results written before 2026-10-26: details.pivaneLedger = { v: 1, ops }
 //     (the tool now writes a custom entry, below, the moment it runs)
 //   - Bot compactions: details.pivaneBot.ledger = { ops, snapshot } (ops applied, then the full state)
@@ -25,16 +25,20 @@ const MAX_ITEMS = 1000;
 const MAX_TOMBSTONES = 1000;
 const HASH = /^[0-9a-f]{16}$/;
 const MAX_OPS = 64;
-const ID = /^n[1-9]\d{0,6}$/;
+const ID = /^[nb][1-9]\d{0,6}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?$/;
 
 const BAD_DUE = 'Invalid due date: use YYYY-MM-DD or YYYY-MM-DDTHH:MM with a UTC offset, or leave it out';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const fail = message => { throw Object.assign(new Error(message), { code: 'LEDGER_INVALID' }); };
 
-function emptyLedger() {
-    return { version: 1, nextSeq: 1, items: [] };
+function emptyLedger(scope) {
+    return { version: 1, nextSeq: 1, items: [], ...(scope === 'buddy' ? { scope } : {}) };
 }
+const itemLimit = state => state.scope === 'buddy' ? 10000 : MAX_ITEMS;
+const nextId = state => (state.scope === 'buddy' ? 'b' : 'n') + state.nextSeq;
+const subjectOf = value => value === undefined || value === null ? '' : typeof value === 'string' && value.trim().length <= 80
+    && !/[\x00-\x1f\x7f]/.test(value) ? value.trim() : null;
 
 function cleanText(value) {
     if (typeof value !== 'string') return null;
@@ -55,6 +59,10 @@ function validSource(value) {
     if (!object(value) || typeof value.sessionId !== 'string' || typeof value.entryId !== 'string'
         || value.sessionId.length > 80 || value.entryId.length > 80) return undefined;
     const source = { sessionId: value.sessionId, entryId: value.entryId };
+    if (value.windowId !== undefined) {
+        if (typeof value.windowId !== 'string' || !/^[a-f0-9-]{36}$/.test(value.windowId)) return undefined;
+        source.windowId = value.windowId;
+    }
     if (value.role !== undefined || value.quote !== undefined) {
         const quote = typeof value.quote === 'string' ? value.quote.replace(/\s+/g, ' ').trim() : '';
         if (!SOURCE_ROLES.includes(value.role) || !quote || quote.length > MAX_QUOTE) return undefined;
@@ -91,32 +99,36 @@ function validTime(value) {
 }
 
 function cloneItem(item) {
-    return { ...item, ...(item.source ? { source: { ...item.source, ...(item.source.origin ? { origin: { ...item.source.origin } } : {}) } } : {}) };
+    const source = value => ({ ...value, ...(value.origin ? { origin: { ...value.origin } } : {}) });
+    return { ...item, ...(item.source ? { source: source(item.source) } : {}), ...(item.lastSource ? { lastSource: source(item.lastSource) } : {}) };
 }
 
 function cloneLedger(state) {
-    return { version: 1, nextSeq: state.nextSeq, items: state.items.map(cloneItem) };
+    return { version: 1, nextSeq: state.nextSeq, items: state.items.map(cloneItem), ...(state.scope === 'buddy' ? { scope: 'buddy' } : {}) };
 }
 
 // Validates a snapshot as stored in a seed or compaction entry. Invalid -> null.
 function readSnapshot(value) {
     if (!object(value) || value.version !== 1 || !Number.isSafeInteger(value.nextSeq) || value.nextSeq < 1 || !Array.isArray(value.items)
-        || value.items.length > MAX_ITEMS + MAX_TOMBSTONES) return null;
+        || value.scope !== undefined && value.scope !== 'buddy'
+        || value.items.length > itemLimit(value) + MAX_TOMBSTONES) return null;
     const deleted = value.items.filter(item => item?.status === 'deleted').length;
-    if (deleted > MAX_TOMBSTONES || value.items.length - deleted > MAX_ITEMS) return null;
+    if (deleted > MAX_TOMBSTONES || value.items.length - deleted > itemLimit(value)) return null;
     const seen = new Set(), items = [];
     for (const raw of value.items) {
-        if (!object(raw) || !ID.test(raw.id) || seen.has(raw.id) || Number(raw.id.slice(1)) >= value.nextSeq) return null;
+        if (!object(raw) || !ID.test(raw.id) || !raw.id.startsWith(value.scope === 'buddy' ? 'b' : 'n') || seen.has(raw.id) || Number(raw.id.slice(1)) >= value.nextSeq) return null;
         const text = cleanText(raw.text), due = validDate(raw.due), source = validSource(raw.source);
         if (!KINDS.includes(raw.kind) || !STATUSES.includes(raw.status) || !ACTORS.includes(raw.by) || (text === null && raw.status !== 'deleted')
             || due === undefined || source === undefined || !validTime(raw.createdAt) || !validTime(raw.updatedAt)) return null;
         if (raw.supersedes !== undefined && raw.supersedes !== null && !ID.test(raw.supersedes)) return null;
         if (raw.hash !== undefined && (raw.status !== 'deleted' || !HASH.test(raw.hash))) return null;
+        if (raw.subject !== undefined && subjectOf(raw.subject) === null || raw.lastSource !== undefined && validSource(raw.lastSource) === undefined) return null;
         seen.add(raw.id);
         items.push({ id: raw.id, kind: raw.kind, text: raw.status === 'deleted' ? '' : text, status: raw.status, by: raw.by, due, source,
-            supersedes: raw.supersedes ?? null, createdAt: raw.createdAt, updatedAt: raw.updatedAt, ...(raw.hash ? { hash: raw.hash } : {}) });
+            supersedes: raw.supersedes ?? null, createdAt: raw.createdAt, updatedAt: raw.updatedAt, ...(raw.hash ? { hash: raw.hash } : {}),
+            ...(raw.subject !== undefined ? { subject: subjectOf(raw.subject) } : {}), ...(raw.lastSource ? { lastSource: validSource(raw.lastSource) } : {}) });
     }
-    return { version: 1, nextSeq: value.nextSeq, items };
+    return { version: 1, nextSeq: value.nextSeq, items, ...(value.scope === 'buddy' ? { scope: 'buddy' } : {}) };
 }
 
 // Normalizes one operation from any writer. Returns the operation or throws LEDGER_INVALID.
@@ -136,8 +148,10 @@ function normalizeOp(raw, state, { at, by, source = null } = {}) {
             if (!target || ['deleted', 'superseded'].includes(target.status)) fail(`No current note ${raw.supersedes} to replace; leave replaces out for a new note`);
             supersedes = target.id;
         }
-        if (state.items.filter(item => item.status !== 'deleted').length >= MAX_ITEMS) fail('The notebook is full');
-        return { op: 'add', id: 'n' + state.nextSeq, kind: raw.kind, text, due, supersedes, at: time, by, source: origin };
+        const subject = subjectOf(raw.subject); if (subject === null) fail('Subject must be at most 80 characters');
+        if (state.items.filter(item => item.status !== 'deleted').length >= itemLimit(state)) fail('The notebook is full');
+        return { op: 'add', id: nextId(state), kind: raw.kind, text, due, supersedes, at: time, by, source: origin,
+            ...(raw.subject !== undefined ? { subject } : {}) };
     }
     if (typeof raw.id !== 'string' || !ID.test(raw.id)) fail('A note id like n3 is required');
     const target = state.items.find(item => item.id === raw.id);
@@ -155,6 +169,7 @@ function normalizeOp(raw, state, { at, by, source = null } = {}) {
     if (raw.text !== undefined) { const text = cleanText(raw.text); if (!text) fail(`Note text must be 1-${MAX_TEXT} characters`); change.text = text; }
     if (raw.kind !== undefined) { if (!KINDS.includes(raw.kind)) fail('Unknown notebook kind'); change.kind = raw.kind; }
     if (raw.due !== undefined) { const due = validDate(raw.due); if (due === undefined) fail(BAD_DUE); change.due = due; }
+    if (raw.subject !== undefined) { const subject = subjectOf(raw.subject); if (subject === null) fail('Subject must be at most 80 characters'); change.subject = subject; }
     if (!Object.keys(change).length) fail('Nothing to update');
     if (Object.entries(change).every(([key, value]) => target[key] === value)) fail(`Note ${raw.id} already says that`);
     return { op: 'update', id: target.id, ...change, at: time, by, source: origin };
@@ -165,14 +180,15 @@ function normalizeOp(raw, state, { at, by, source = null } = {}) {
 function applyOp(state, op) {
     const next = cloneLedger(state);
     if (op.op === 'add') {
-        if (op.id !== 'n' + next.nextSeq) fail('Out-of-order notebook id');
+        if (op.id !== nextId(next)) fail('Out-of-order notebook id');
         next.nextSeq += 1;
         if (op.supersedes) {
             const old = next.items.find(item => item.id === op.supersedes);
-            if (old && !['deleted', 'superseded'].includes(old.status)) { old.status = 'superseded'; old.updatedAt = op.at; }
+            if (old && !['deleted', 'superseded'].includes(old.status)) { old.status = 'superseded'; old.updatedAt = op.at; if (op.source) old.lastSource = op.source; }
         }
         next.items.push({ id: op.id, kind: op.kind, text: op.text, status: 'active', by: op.by, due: op.due ?? null,
-            source: op.source ?? null, supersedes: op.supersedes ?? null, createdAt: op.at, updatedAt: op.at });
+            source: op.source ?? null, supersedes: op.supersedes ?? null, createdAt: op.at, updatedAt: op.at,
+            ...(op.subject !== undefined ? { subject: op.subject } : {}) });
         return next;
     }
     const item = next.items.find(entry => entry.id === op.id);
@@ -187,8 +203,9 @@ function applyOp(state, op) {
         }
         return next;
     }
+    if (op.source) item.lastSource = op.source;
     if (op.op === 'status') { item.status = op.status; item.updatedAt = op.at; return next; }
-    for (const key of ['text', 'kind', 'due']) if (op[key] !== undefined) item[key] = op[key];
+    for (const key of ['text', 'kind', 'due', 'subject']) if (op[key] !== undefined) item[key] = op[key];
     item.updatedAt = op.at;
     return next;
 }
@@ -321,7 +338,11 @@ function describeOp(op, state) {
 
 // Optimistic-concurrency token of a notebook state (panel edits name the version they saw).
 function ledgerVersion(state) {
-    return createHash('sha256').update(JSON.stringify({ nextSeq: state.nextSeq, items: state.items })).digest('hex').slice(0, 16);
+    // Versions describe values, independent of the order a source's fields were assembled.
+    const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object'
+        ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
+    return createHash('sha256').update(JSON.stringify(canonical({ nextSeq: state.nextSeq, items: state.items,
+        ...(state.scope === 'buddy' ? { scope: 'buddy' } : {}) }))).digest('hex').slice(0, 16);
 }
 
 module.exports = {

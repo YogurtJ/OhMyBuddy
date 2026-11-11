@@ -21,11 +21,12 @@ import { APPROVAL_TITLE, BLOCKED, PRESETS, approvalFor, approvalMessage, newToke
 import { createBotGrepExecutor } from './bot-guard-grep.js';
 import { registerBotChangeReceipts } from './bot-change-receipts.js';
 import { safeFile as readDocument } from '../profile-memory/management.js';
-import { registerNotebook, notebookNotice, editNotebook } from './bot-notebook.ts';
+import { editNotebook } from './bot-notebook.ts';
+import { registerBuddyNotebook, buddyNotebookContext, buddyNotebookRetirements, notebookRequest } from './bot-buddy-notebook-tool.ts';
 import { registerRecall } from './bot-recall-tools.ts';
 import { registerBotSchedule } from './bot-schedule-tool.ts';
-import { registerBotTopic, topicIndexNotice } from './bot-topic-tool.ts';
-import { topicIndexContext, topicIndexRetirements } from './bot-topic-context.js';
+import { registerBotTopic } from './bot-topic-tool.ts';
+import { topicIndexRetirements } from './bot-topic-context.js';
 import { structuredCompaction, summaryReasoning } from './bot-compaction.js';
 import { pruneDrafts, idleDelay, idleCompactionWanted, rotationReason } from './bot-maintenance.js';
 import { Type } from 'typebox';
@@ -247,6 +248,7 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
     let toolRegistered = false;
     let grepRegistered = false;
     let schedule: ReturnType<typeof registerBotSchedule> | undefined;
+    let notebook: ReturnType<typeof registerBuddyNotebook> | undefined;
     pi.on('session_start', async (_event, ctx: any) => {
         if (!managed(ctx)) return;
         const loaded = botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir());
@@ -261,7 +263,7 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
             grepRegistered = true;
             schedule = registerBotSchedule(pi, verified, scheduledRunActive);
             registerBotTopic(pi, verified, scheduledRunActive);
-            registerNotebook(pi, verified);
+            notebook = registerBuddyNotebook(pi, verified);
             registerRecall(pi, context, getAgentDir, verified);
         }
         const notify = notifier(ctx);
@@ -346,7 +348,9 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
         const keep = event.preparation?.settings?.keepRecentTokens;
         if (Number.isSafeInteger(keep) && keep >= 0) preparedKeep = { model: modelKey(model), tokens: keep };
         try {
+            const shared = await notebookRequest('snapshot', {}, event.signal);
             const result = await structuredCompaction({
+                sharedNotebook: shared.state, subject: botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir())?.window.title || '',
                 branch: event.branchEntries, projection: ctx.sessionManager.buildSessionProjection().entries,
                 firstKeptEntryId: event.preparation.firstKeptEntryId, previousSummary: event.preparation.previousSummary,
                 sessionId: ctx.sessionManager.getSessionId(), model, now: new Date().toISOString(), reason: event.reason, signal: event.signal,
@@ -361,6 +365,11 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
                     return { text: answer, usage: response.usage, stopReason: response.stopReason, errorMessage: response.errorMessage };
                 }
             });
+            if (result.notebookOps?.length) {
+                await notebookRequest('edit', { expectedVersion: shared.version, reconcile: true,
+                    toolCallId: `summary:${ctx.sessionManager.getLeafId()}`,
+                    ops: result.notebookOps.map((op: any) => ({ ...op, ...(op.op === 'add' ? { subject: op.subject ?? botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir())?.window.title ?? '' } : {}) })) }, event.signal);
+            }
             notifier(ctx)({ event: 'compacted', reason: event.reason, structured: true });
             return { compaction: { summary: result.summary, firstKeptEntryId: event.preparation.firstKeptEntryId,
                 tokensBefore: event.preparation.tokensBefore, details: result.details, usage: result.usage } };
@@ -373,8 +382,8 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
     const isBot = (ctx: any) => managed(ctx) && Boolean(botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir()));
     pi.on('context', (event: any, ctx: any) => {
         const loaded = managed(ctx) ? botSection(context, ctx.sessionManager, ctx.cwd, getAgentDir()) : null;
-        if (loaded?.window.kind !== 'main') return;
-        return { messages: topicIndexContext(event.messages, ctx.sessionManager.getBranch()) };
+        if (!loaded) return;
+        return { messages: buddyNotebookContext(event.messages, ctx.sessionManager.getBranch()) };
     });
     notebookEditor = (ctx: any, input: any) => {
         if (!isBot(ctx)) throw new Error('This chat has no notebook');
@@ -385,7 +394,7 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
     pi.on('agent_before_settle', (event: any, ctx: any) => {
         if (!isBot(ctx)) return;
         const projection = event.context?.contextEntries || [];
-        const drafts = [...topicIndexRetirements(projection),
+        const drafts = [...buddyNotebookRetirements(projection), ...topicIndexRetirements(projection),
             ...(event.outcome === 'completed' ? pruneDrafts(projection, ctx.getContextUsage(), {
                 branch: ctx.sessionManager.getBranch(), sessionId: ctx.sessionManager.getSessionId()
             }) : [])];
@@ -427,15 +436,8 @@ export function registerBotContext(pi: ExtensionAPI, getAgentDir: () => string) 
             if (loaded.soul.trim()) event.systemPromptOptions.sections.assistant_profile_soul = loaded.soul;
             else delete event.systemPromptOptions.sections.assistant_profile_soul;
         }
-        // The notebook is appended to the conversation (never the system prompt), so the cached prefix stays.
-        const notice = notebookNotice(ctx.sessionManager.getBranch(), new Date().toISOString());
-        if (loaded.window.kind === 'main') {
-            const index = await topicIndexNotice(ctx.sessionManager, ctx.signal);
-            // nextTurn joins this starting run after the hook; it never starts another run.
-            // Keep notebook provenance separate so retiring an index cannot erase its notes.
-            if (index && notice) pi.sendMessage(index, { deliverAs: 'nextTurn' });
-            else if (index) return { message: index };
-        }
+        // Each chat gets a bounded, fresh view of its Buddy's authoritative notebook.
+        const notice = await notebook?.notice(ctx.sessionManager, loaded.window.title || '', ctx.signal);
         if (notice) return { message: notice };
     });
 }

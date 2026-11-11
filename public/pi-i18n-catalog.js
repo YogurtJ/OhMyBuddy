@@ -10619,7 +10619,7 @@
         ["温柔耐心，慢慢解释，多鼓励。", "Be warm and patient, explain at an easy pace, and offer encouragement."],
         ["称呼、目标、习惯这类关于你的事，{0} 记在“关于你”里，每个聊天都用得上；这里只放这段聊天的事。", "{0} keeps your name, goals and habits in “About you” for every chat. This list holds notes for this chat."],
         ["自己输入一个表情", "Type an emoji"],
-        ["记到“我记着的事” · {0}", "Saved to chat notes · {0}"],
+        ["记到“我记着的事” · {0}", "Saved to notebook · {0}"],
         ["说话干脆利落，先给结论，少说客套话。", "Be direct and concise. Lead with the answer and skip formalities."],
         ["轻松幽默，偶尔开个玩笑，但正事不含糊。", "Keep things light and playful, with an occasional joke, while taking the work seriously."],
         ["选一个表情", "Choose an emoji"],
@@ -11753,6 +11753,51 @@
         ["空的任务工作文件夹已自动清理", "Empty task working folder was cleaned up automatically"],
         ["任务工作文件夹已移入回收站", "Task working folder moved to trash"],
         ["工作文件夹未能移入回收站，已原位保留", "Task working folder could not be moved to trash and was kept in place"]
+    );
+    rows.push(
+        ["{0} 的记事本", "{0}’s notebook"],
+        ["所有聊天里的重要约定，都在这里。", "Important agreements from every chat, together."],
+        ["事项分类", "Note categories"],
+        ["待跟进", "Follow up"],
+        ["约定与资料", "Reference"],
+        ["搜索事项、约定或关键词", "Search notes, agreements or keywords"],
+        ["搜索记事本", "Search notebook"],
+        ["相关事情", "Related work"],
+        ["记一件事", "Add a note"],
+        ["在任何聊天里，都能接着记、接着办。", "Pick things up in any chat."],
+        ["修改还没保存，再点一次将放弃修改。", "You have unsaved changes. Select again to discard them."],
+        ["已保存，所有聊天都会使用最新记录。", "Saved. Every chat will use the updated note."],
+        ["这条事项已被删除。你的文字仍保留，可另存为新事项。", "This note was deleted. Your text is kept so you can save it as a new note."],
+        ["写下想记住的事…", "What would you like to remember?"],
+        ["例如：论文修改、东京旅行", "For example: paper revisions, Tokyo trip"],
+        ["相关事情（可不填）", "Related work (optional)"],
+        ["截止日期（可不填）", "Due date (optional)"],
+        ["原聊天已移除", "Original chat removed"],
+        ["从 {0} 的记事本删除这条？所有聊天都将不再使用它。", "Delete this from {0}’s notebook? It will no longer be used in any chat."],
+        ["共 {0} 件", "{0} notes"],
+        ["没有找到相关事项", "No matching notes"],
+        ["暂时没有要跟进的事", "Nothing to follow up right now"],
+        ["完成的事，会收在这里", "Finished items will appear here"],
+        ["重要约定，慢慢积累", "A place for the things that matter"],
+        ["换个关键词，或清除筛选再看看。", "Try another keyword or clear the filters."],
+        ["和 {0} 聊天时说“记住这件事”，也可以直接在这里添加。", "Tell {0} to remember something in any chat, or add a note here."],
+        ["再显示 {0} 件", "Show {0} more"],
+        ["所有事情", "All work"],
+        ["{0} 在这里专注这件事，重要事项在所有聊天中共享。", "{0} focuses on this subject here, with important notes shared across chats."],
+        ["整个话题连同更早的聊天会进入回收站，可以恢复。记事本中的事项继续保留。", "The whole topic and its earlier chats move to trash and can be restored. Notebook items are kept."],
+        ["未保存的修改会放弃，完整聊天会保留在回收站，记事本中的事项不变。", "Unsaved edits will be discarded. All chats stay in trash, and notebook items are unchanged."],
+        ["完整聊天会保留在回收站，可以恢复。记事本中的事项不变。", "All chats stay in trash and can be restored. Notebook items are unchanged."],
+        ["将永久删除整个话题及全部更早的聊天，无法恢复。记事本中的事项和已保存的出处引文仍保留，可在“我记着的事”中单独删除。伙伴记忆、技能和文件或媒体仍在各自入口管理。", "This permanently deletes the topic and all earlier chats. Notebook items and saved source quotations are kept; delete them separately in the notebook. Manage Buddy memory, skills, files and media in their own sections."],
+        ["关于你的事记在“关于你”，重要约定记在“我记着的事”，所有聊天都能接着用，也能随时查看和修改。", "Personal details go to About you; important agreements go to my notebook. Both are available across chats and can be reviewed or edited any time."],
+        ["原聊天暂时无法打开，仍可在记事本查看出处。", "The original chat is unavailable. You can still review its source in the notebook."]
+    );
+    rows.push(
+        ["查找记着的事 · {0}", "Find remembered notes · {0}"],
+        ["查看记着的事", "Review remembered notes"]
+    );
+    rows.push(
+        ["所有事项中的搜索结果（{0}）", "Results across all notes ({0})"],
+        ["所有事项中的搜索结果", "Results across all notes"]
     );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

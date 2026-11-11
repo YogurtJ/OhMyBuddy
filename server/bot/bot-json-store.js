@@ -16,7 +16,7 @@ const fail = (message, status = 400) => { throw Object.assign(new Error(message)
 const stamp = stat => [stat.dev, stat.ino, stat.mode, stat.size, stat.mtimeNs, stat.ctimeNs].map(String).join(':');
 const revisionOf = raw => createHash('sha256').update(raw ?? '').digest('hex');
 
-function readJsonDocument(file, { maxBytes, validate, empty, label }) {
+function readJsonDocument(file, { maxBytes, validate, empty, label, parse = JSON.parse }) {
     const changed = () => fail(`${label} changed during read`, 409);
     let fd, existed = false;
     try {
@@ -34,7 +34,7 @@ function readJsonDocument(file, { maxBytes, validate, empty, label }) {
             || stamp(opened) !== stamp(fs.lstatSync(file, { bigint: true }))
             || descriptorPathSync(fd) !== file || !io.sameIdentityAtPath(file, identity)) changed();
         const raw = new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(0, size));
-        const state = JSON.parse(raw);
+        const state = parse(raw);
         if (!validate(state)) fail(`${label} is invalid`);
         return { raw, state };
     } catch (error) {
@@ -49,8 +49,8 @@ function readJsonDocument(file, { maxBytes, validate, empty, label }) {
 
 class PrivateJsonDocument {
     // root: an already safe, private directory; name: file name within it.
-    constructor({ root, name, maxBytes = 4 * 1024 * 1024, validate, empty, label }) {
-        Object.assign(this, { root, name, maxBytes, validate, empty, label });
+    constructor({ root, name, maxBytes = 4 * 1024 * 1024, validate, empty, label, parse = JSON.parse, serialize = state => JSON.stringify(state, null, 2) + '\n' }) {
+        Object.assign(this, { root, name, maxBytes, validate, empty, label, parse, serialize });
         this.file = path.join(root, name);
     }
 
@@ -86,7 +86,7 @@ class PrivateJsonDocument {
                 if (revisionOf(raw) !== expectedRevision) fail(`${this.label} changed; reload before saving`, 409);
                 const result = update(state);
                 if (!this.validate(state)) fail(`Invalid ${this.label}`);
-                const text = JSON.stringify(state, null, 2) + '\n';
+                const text = this.serialize(state);
                 if (Buffer.byteLength(text) > this.maxBytes) fail(`${this.label} is too large`);
                 const tmp = `${file}.${randomUUID()}.tmp`;
                 try {

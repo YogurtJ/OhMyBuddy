@@ -434,7 +434,7 @@ test('bot_topic_propose always uses one native topic confirmation, declines/unat
     assert.ok(w.notifications.some(value => value.pivaneBot?.event === 'approval-done'));
 });
 
-test('main open-items index is fresh, bounded, profile-isolated and says unknown for busy, unavailable and omitted topics', async t => {
+test('shared open-items projection is current and profile-isolated; legacy bounded readers still report unknown honestly', async t => {
     const f = await fixture(t), w = await workerTool(t, f), topic = (await f.topic()).window;
     const session = (await f.bots.resolve(f.profileId, topic.id)).session;
     await note(session, [{ op: 'add', kind: 'open', text: 'Pick a book' }, { op: 'add', kind: 'commitment', text: 'Finish by Friday', due: '2027-01-01' },
@@ -452,14 +452,16 @@ test('main open-items index is fresh, bounded, profile-isolated and says unknown
     assert.deepEqual(owner.data.topics, first.data.topics); assert.equal(owner.data.windowsRevision, await f.revision());
     assert.notEqual((await f.call('GET', ownerUrl, undefined, null)).status, 200);
     assert.notEqual((await f.call('GET', ownerUrl, undefined, w.worker.navigationToken)).status, 200, 'worker tokens cannot enter owner index routes');
-    await note(session, [{ op: 'status', id: 'n1', status: 'done' }]);
+    const shared = await f.bots.notebooks.read(f.profileId);
+    const picked = shared.items.find(item => item.text === 'Pick a book');
+    await f.bots.notebooks.edit(f.profileId, { expectedVersion: shared.version, ops: [{ op: 'status', id: picked.id, status: 'done' }] });
     assert.deepEqual((await call({})).data.topics[0].items.map(item => item.title), ['Finish by Friday']);
     // The actual before-run hook fetches the fresh projection, without another model request.
     const event = { systemPromptOptions: { sections: {} } };
     const notice = await w.handlers.get('before_agent_start')(event, w.ctx);
-    assert.match(notice.message.content, /Finish by Friday/); assert.doesNotMatch(notice.message.content, /Pick a book|secret/);
+    assert.match(notice.message.content, /Finish by Friday/); assert.match(notice.message.content, /open, done[^\n]*Pick a book/); assert.doesNotMatch(notice.message.content, /secret/);
     const busyWorker = f.workerFor(session, topic.id); busyWorker.promptPending = 1;
-    assert.equal((await call({})).data.topics[0].state, 'busy'); f.supervisor.workers.delete(session.path);
+    assert.equal((await call({})).data.topics[0].state, 'ready', 'chat work does not lock the shared notebook'); f.supervisor.workers.delete(session.path);
     const { state } = await f.bots.windows.read(f.profileId), pi = await import('@earendil-works/pi-coding-agent');
     const args = { windows: state.windows, profileId: f.profileId, cwd: f.main.cwd, directory: path.dirname(f.main.path), supervisor: f.supervisor, pi };
     const tiny = { topics: 1, items: 1, perTopic: 1, title: 10, fileBytes: 1, totalBytes: 1, ms: 1000 };
@@ -481,14 +483,14 @@ test('main open-items index is fresh, bounded, profile-isolated and says unknown
 });
 
 
-test('main index notices suppress unchanged native appends and split notebook provenance before retiring old snapshots', async t => {
+test('shared notebook notices suppress unchanged appends, retire older views and restore the current view after compaction', async t => {
     const f = await fixture(t), w = await workerTool(t, f);
     const { SessionManager } = await import('@earendil-works/pi-coding-agent');
-    const { TOPIC_INDEX_MESSAGE } = require('../server/bot/bot-topic-context');
+    const MESSAGE = 'pivane-buddy-notebook-context';
     const mainLedger = ledger.prepareOps(ledger.emptyLedger(), [{ op: 'add', kind: 'open', text: 'Keep this genuine notebook note' }],
         { at: new Date().toISOString(), by: 'bot' });
     w.manager.appendCustomEntry(ledger.LEDGER_ENTRY, { v: 1, snapshot: mainLedger.state });
-    const indexEntries = () => w.ctx.sessionManager.getBranch().filter(entry => entry.customType === TOPIC_INDEX_MESSAGE);
+    const indexEntries = () => w.ctx.sessionManager.getBranch().filter(entry => entry.customType === MESSAGE);
     const run = async () => {
         const result = await w.handlers.get('before_agent_start')({ systemPromptOptions: { sections: {} } }, w.ctx);
         w.ctx.sessionManager.appendMessage({ role: 'user', content: 'Synthetic main turn', timestamp: Date.now() });
@@ -501,35 +503,30 @@ test('main index notices suppress unchanged native appends and split notebook pr
         return { injected, model };
     };
     const first = await run();
-    assert.deepEqual(first.injected.map(message => message.customType), [TOPIC_INDEX_MESSAGE, 'pivane-bot-notebook']);
-    assert.doesNotMatch(first.injected[1].content, /Other topics of this Bot/);
-    for (let turn = 0; turn < 3; turn++) assert.equal((await run()).injected.length, 0, 'an unchanged empty index adds no native notice');
+    assert.deepEqual(first.injected.map(message => message.customType), [MESSAGE]);
+    assert.match(first.injected[0].content, /Keep this genuine notebook note/);
+    for (let turn = 0; turn < 3; turn++) assert.equal((await run()).injected.length, 0);
     assert.equal(indexEntries().length, 1);
-    const topic = (await f.topic()).window, session = (await f.bots.resolve(f.profileId, topic.id)).session;
-    await note(session, [{ op: 'add', kind: 'open', text: 'Fresh topic title' }]);
+    const topic = (await f.topic()).window;
+    const shared = await f.bots.notebooks.read(f.profileId);
+    await f.bots.notebooks.edit(f.profileId, { expectedVersion: shared.version, ops: [{ op: 'add', kind: 'open', text: 'Fresh shared item', subject: topic.title }] });
     const changed = await run();
-    assert.equal(indexEntries().length, 2, 'one native snapshot per actual change');
-    const visible = changed.model.filter(message => message.customType === TOPIC_INDEX_MESSAGE);
-    assert.equal(visible.length, 1); assert.match(visible[0].content, /Fresh topic title/);
-    assert.doesNotMatch(visible[0].content, /No other active topics/);
-    assert.match(changed.model.find(message => message.customType === 'pivane-bot-notebook').content, /Keep this genuine notebook note/);
-    assert.equal(w.ctx.sessionManager.buildSessionProjection().messages.filter(message => message.customType === TOPIC_INDEX_MESSAGE).length, 1);
+    assert.equal(indexEntries().length, 2);
+    const visible = changed.model.filter(message => message.customType === MESSAGE);
+    assert.equal(visible.length, 1); assert.match(visible[0].content, /Fresh shared item/);
+    assert.match(visible[0].content, /Keep this genuine notebook note/);
+    assert.equal(w.ctx.sessionManager.buildSessionProjection().messages.filter(message => message.customType === MESSAGE).length, 1);
     w.ctx.sessionManager = SessionManager.open(f.main.path);
-    assert.equal((await run()).injected.length, 0, 'reopening the native manager does not reset suppression');
+    assert.equal((await run()).injected.length, 0, 'reopening retains suppression');
     const kept = w.ctx.sessionManager.appendMessage({ role: 'user', content: 'Kept after compaction', timestamp: Date.now() });
-    w.ctx.sessionManager.appendCompaction(ledger.renderLedger(mainLedger.state), kept, 100,
-        { pivaneBot: { ledger: { snapshot: mainLedger.state } } }, true);
-    assert.equal(w.ctx.sessionManager.buildSessionProjection().messages.filter(message => message.customType === TOPIC_INDEX_MESSAGE).length, 0);
+    w.ctx.sessionManager.appendCompaction('Conversation summary; shared notes live separately', kept, 100,
+        { pivaneBot: { notebook: { scope: 'buddy' } } }, true);
+    assert.equal(w.ctx.sessionManager.buildSessionProjection().messages.filter(message => message.customType === MESSAGE).length, 0);
     const restored = w.handlers.get('context')({ messages: w.ctx.sessionManager.buildSessionContext().messages }, w.ctx).messages;
-    assert.match(restored.find(message => message.customType === TOPIC_INDEX_MESSAGE).content, /Fresh topic title/, 'request-local restoration uses the latest native snapshot');
-    assert.equal((await run()).injected.filter(message => message.customType === TOPIC_INDEX_MESSAGE).length, 1, 'a compacted-away index is refreshed from the service');
-    assert.equal(indexEntries().length, 3);
-    assert.equal((await run()).injected.length, 0);
+    assert.match(restored.find(message => message.customType === MESSAGE).content, /Fresh shared item/);
+    assert.equal((await run()).injected.length, 0, 'restoring the current view needs no repeated native append');
     await f.patch(topic.id, { archived: true });
-    const empty = await run();
-    assert.match(empty.model.find(message => message.customType === TOPIC_INDEX_MESSAGE).content, /No other active topics/);
-    assert.doesNotMatch(JSON.stringify(empty.model), /Fresh topic title/);
-    assert.equal((await run()).injected.length, 0, 'the new empty snapshot is also suppressed until it changes');
+    assert.match((await run()).model.find(message => message.customType === MESSAGE).content, /Fresh shared item/, 'archiving a chat keeps the Buddy item');
 });
 
 test('untitled topics learn title and focus from auto-naming and structured summaries without overwriting user edits', async t => {

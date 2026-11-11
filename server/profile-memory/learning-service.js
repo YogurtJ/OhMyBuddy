@@ -80,7 +80,7 @@ const preference = (value, phrases) => triggers.preference(value, phrases);
 // conversations are imported) is kept for reading and continuing, never learned
 // from. Any baseline on the branch counts, so a fork does not re-open old history.
 const LEARNING_BASELINE = 'pivane-learning-baseline';
-const CONTEXT_NOTICES = new Set(['pivane-bot-notebook', 'pivane-bot-topic-index']);
+const CONTEXT_NOTICES = new Set(['pivane-bot-notebook', 'pivane-bot-topic-index', 'pivane-buddy-notebook-context']);
 const pairs = (branch, sessionId) => {
     const inputs = nativeInputIndex(branch, sessionId);
     let result = [];

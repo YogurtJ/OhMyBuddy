@@ -176,8 +176,10 @@ function readSections(value) {
 }
 
 function notebookLines(state) {
-    const items = state.items.filter(item => item.status !== 'deleted');
-    const lines = items.length ? items.map(item => `[${item.id}] (${item.kind}, ${item.status}${item.due ? `, due ${item.due}` : ''}) ${item.text}`) : ['(empty)'];
+    const available = state.items.filter(item => item.status !== 'deleted');
+    const items = state.scope === 'buddy' ? available.slice(-80) : available;
+    const lines = items.length ? items.map(item => `[${item.id}] (${item.kind}, ${item.status}${item.subject ? `, subject ${JSON.stringify(item.subject)}` : ''}${item.due ? `, due ${item.due}` : ''}) ${item.text}`) : ['(empty)'];
+    if (items.length < available.length) lines.push(`${available.length - items.length} other Buddy items omitted. Do not infer their state from this selection.`);
     const deleted = state.items.filter(item => item.status === 'deleted' && item.source?.quote).slice(-MAX_DELETED_LINES);
     if (deleted.length) lines.push('Deleted by the user (do not add these again unless the user brings them up anew):',
         ...deleted.map(item => `- (${item.kind}) from: "${item.source.quote}"`));
@@ -188,19 +190,24 @@ const SYSTEM_PROMPT = 'You maintain the long-term memory of one chat between a u
     + 'Read the earlier memory, the notebook and the new part of the conversation, then answer with ONE JSON object and nothing else. '
     + 'Do not continue the conversation or answer questions in it.';
 
-function requestText({ earlier, nativeSummary, state, chunk, today }) {
+function requestText({ earlier, nativeSummary, state, chunk, today, subject = '' }) {
+    const exampleId = state.scope === 'buddy' ? 'b3' : 'n3';
     const parts = [];
     if (earlier) parts.push('<earlier_memory>\n' + JSON.stringify(earlier, null, 1) + '\n</earlier_memory>');
     if (nativeSummary) parts.push('<earlier_summary>\n' + clip(nativeSummary, 20000) + '\n</earlier_summary>');
     parts.push('<notebook>\n' + notebookLines(state) + '\n</notebook>');
+    if (state.scope === 'buddy') parts.push('This notebook belongs to the Buddy across all chats. Current work label: ' + JSON.stringify(subject)
+        + '. Only add information that needs to survive this conversation; omit temporary formatting requests and already-answered routine questions. '
+        + 'For additions, include subject using this label or an existing notebook subject when it is clearly the same work. '
+        + 'Different papers, trips or other work may have different requirements even when their note text is identical. Omit ambiguous updates.');
     parts.push('<conversation>\n' + chunk.map(serializeMessage).join('\n') + '\n</conversation>');
     parts.push(`Today is ${today}. Return this JSON object:
 {
   "notes": [
-    { "op": "done", "id": "n3", "entry": "e-id", "quote": "..." },
-    { "op": "cancel", "id": "n3", "entry": "e-id", "quote": "..." },
-    { "op": "update", "id": "n3", "text": "...", "due": "YYYY-MM-DD (optional)", "entry": "e-id", "quote": "..." },
-    { "op": "add", "kind": "decision|commitment|open|preference|ref", "text": "...", "due": "YYYY-MM-DD (optional)", "replaces": "n3 (optional)", "entry": "e-id", "quote": "..." }
+    { "op": "done", "id": "${exampleId}", "entry": "e-id", "quote": "..." },
+    { "op": "cancel", "id": "${exampleId}", "entry": "e-id", "quote": "..." },
+    { "op": "update", "id": "${exampleId}", "text": "...", "due": "YYYY-MM-DD (optional)", "entry": "e-id", "quote": "..." },
+    { "op": "add", "kind": "decision|commitment|open|preference|ref", "text": "...", "due": "YYYY-MM-DD (optional)", "replaces": "${exampleId} (optional)", "entry": "e-id", "quote": "..." }
   ],
   "topic": "what this chat is about overall, 1-3 sentences",
   "episodes": ["YYYY-MM-DD: what happened or was decided", "..."],
@@ -259,7 +266,7 @@ const QUOTE_ROLES = Object.freeze({
 
 // Checks one proposed change against the summarized messages and the current notebook.
 // Returns { op } for the ledger, or { rejected: reason }.
-function checkNote(note, state, byShortId, { at }) {
+function checkNote(note, state, byShortId, { at, subject = '' }) {
     if (!object(note)) return { rejected: 'not an object' };
     const sources = byShortId.get(String(note.entry ?? '').replace(/^e:/, '').slice(0, 8));
     if (!sources) return { rejected: 'unknown entry' };
@@ -274,8 +281,9 @@ function checkNote(note, state, byShortId, { at }) {
     if (!candidates.length) return { rejected: sources.some(source => fold(source.text).includes(quote)) ? 'quote from the wrong speaker' : 'quote not found' };
     let matching = candidates[0], raw;
     if (note.op === 'add') {
-        const text = fold(note.text);
-        if (state.items.some(item => item.status === 'active' && item.kind === note.kind && fold(item.text) === text)) return { rejected: 'already noted' };
+        const text = fold(note.text), noteSubject = state.scope === 'buddy' ? (note.subject ?? subject) : undefined;
+        const sameSubject = item => state.scope !== 'buddy' || fold(item.subject || '') === fold(noteSubject || '');
+        if (state.items.some(item => item.status === 'active' && item.kind === note.kind && fold(item.text) === text && sameSubject(item))) return { rejected: 'already noted' };
         // A note the user deleted does not come back from what was said before the deletion. A
         // message carried in a generation seed counts from when it was said (unknown: not newer);
         // when its original entry is unknown, any older deletion of the same kind bars it. Of
@@ -285,12 +293,13 @@ function checkNote(note, state, byShortId, { at }) {
             const origin = candidate.origin;
             const said = origin ? (origin.at ?? NaN) : Date.parse(candidate.entry.timestamp);
             const entries = [candidate.entry.id, origin?.entryId].filter(Boolean);
-            return state.items.some(item => item.status === 'deleted' && !(said > Date.parse(item.updatedAt)) && (item.hash === hash
+            return state.items.some(item => item.status === 'deleted' && !(said > Date.parse(item.updatedAt)) && (item.hash === hash && sameSubject(item)
                 || item.kind === note.kind && (entries.includes(item.source?.entryId) || entries.includes(item.source?.origin?.entryId) || Boolean(origin) && !origin.entryId)));
         };
         matching = candidates.find(candidate => !barred(candidate));
         if (!matching) return { rejected: 'deleted by the user' };
-        raw = { op: 'add', kind: note.kind, text: note.text, due: note.due || null, supersedes: note.replaces || undefined };
+        raw = { op: 'add', kind: note.kind, text: note.text, due: note.due || null, supersedes: note.replaces || undefined,
+            ...(noteSubject !== undefined ? { subject: noteSubject } : {}) };
     } else if (note.op === 'update') raw = { op: 'update', id: note.id, text: note.text, due: note.due || undefined };
     else if (note.op === 'done' || note.op === 'cancel') raw = { op: 'status', id: note.id, status: note.op === 'done' ? 'done' : 'cancelled' };
     else return { rejected: 'unknown op' };
@@ -325,9 +334,11 @@ function indexSources(chunk, sessionId) {
     return byShortId;
 }
 
-function summaryText(sections, state, now) {
+function summaryText(sections, state, now, shared = false) {
     const lines = ['[Chat memory, maintained by OhMyBuddy. Earlier messages of this chat were condensed into this.]', '', '## What this chat is about',
-        sections.topic || '(not stated yet)', '', '## Notebook', ledger.renderLedger(state, { now }), '', '## What happened (oldest first)'];
+        sections.topic || '(not stated yet)', '', '## Notebook', shared
+            ? 'This Buddy has one shared notebook, maintained separately from this chat summary. Use buddy_notes for its current items and status.'
+            : ledger.renderLedger(state, { now }), '', '## What happened (oldest first)'];
     lines.push(...(sections.episodes.length ? sections.episodes.map(item => `- ${item}`) : ['- (nothing yet)']));
     lines.push('', '## Where things stand');
     lines.push(`- Doing: ${sections.now.doing || '—'}`, `- Next: ${sections.now.next || '—'}`, `- Waiting for the user: ${sections.now.waiting || '—'}`);
@@ -339,11 +350,12 @@ function summaryText(sections, state, now) {
 // Returns { summary, details, usage } or throws (the caller falls back to Pi's native summary).
 // includeKept: the window moves to a new generation right after this summary (D-033), so the
 // part Pi keeps verbatim is read too; it is reconciled with the notebook here or never.
-async function structuredCompaction({ branch, projection, firstKeptEntryId, previousSummary, sessionId, model, now, complete, signal, reason, includeKept = false }) {
+async function structuredCompaction({ branch, projection, firstKeptEntryId, previousSummary, sessionId, model, now, complete, signal, reason, includeKept = false, sharedNotebook = null, subject = '' }) {
     const messages = summarizedEntries(projection, includeKept ? null : firstKeptEntryId, { branch, sessionId });
     if (!messages.length) throw new Error('Nothing to summarize');
     if (!branch.some(entry => entry.id === firstKeptEntryId)) throw new Error('The kept part is not on this branch');
-    let state = ledger.replay(branch);
+    let state = sharedNotebook ? ledger.readSnapshot(sharedNotebook) : ledger.replay(branch);
+    if (!state) throw new Error('Shared notebook snapshot is invalid');
     let earlier = earlierSections(branch);
     const nativeSummary = previousSummary && !branch.some(entry => entry.type === 'compaction' && entry.summary === previousSummary
         && entry.details?.pivaneBot) ? previousSummary : '';
@@ -354,25 +366,26 @@ async function structuredCompaction({ branch, projection, firstKeptEntryId, prev
     const ops = [], rejected = [], usage = [];
     let sections = null;
     for (const [index, chunk] of chunks.entries()) {
-        const text = requestText({ earlier, nativeSummary: index === 0 ? nativeSummary : '', state, chunk, today: now.slice(0, 10) });
+        const text = requestText({ earlier, nativeSummary: index === 0 ? nativeSummary : '', state, chunk, today: now.slice(0, 10), subject });
         const response = await complete({ systemPrompt: SYSTEM_PROMPT, text, signal });
         if (response.usage) usage.push(response.usage);
         if (response.stopReason === 'length') throw new Error('The summary was cut off');
         if (response.stopReason === 'error' || response.stopReason === 'aborted') throw new Error(response.errorMessage || 'The summary request failed');
         const answer = readAnswer(parseJson(response.text), { earlier });
-        const applied = applyNotes(answer.notes, state, indexSources(chunk, sessionId), { at: now });
+        const applied = applyNotes(answer.notes, state, indexSources(chunk, sessionId), { at: now, subject });
         state = applied.state; ops.push(...applied.ops); rejected.push(...applied.rejected);
         sections = { topic: answer.topic, episodes: answer.episodes, now: answer.now };
         earlier = sections;
     }
     if (!ledger.storable(state)) throw new Error('The notebook could not be stored');
-    const summary = summaryText(sections, state, now);
+    const summary = summaryText(sections, state, now, Boolean(sharedNotebook));
     return {
         summary,
+        ...(sharedNotebook ? { notebookOps: ops } : {}),
         usage: mergeUsage(usage),
         details: { pivaneBot: { v: SUMMARY_SCHEMA, kind: 'summary', reason, sections, chunks: chunks.length, ...(includeKept ? { includedKept: true } : {}),
             model: model ? { provider: model.provider, id: model.id } : null,
-            ledger: { ops, snapshot: state }, rejected: rejected.slice(0, 40) } }
+            ...(sharedNotebook ? { notebook: { scope: 'buddy' } } : { ledger: { ops, snapshot: state } }), rejected: rejected.slice(0, 40) } }
     };
 }
 

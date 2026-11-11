@@ -18,6 +18,8 @@
 
 `pi-profile-documents.js` 提供 USER/MEMORY 文档及双修订编辑，使用与 worker 写入相同的变更锁和代次。`profile-memory/document-index.js` 只同步旧／新 Markdown 对应的准确 SQLite 身份，保留不相关的扩展记忆。重复候选或冲突身份拒绝保存。待同步标记保护文件发布与索引间的中断；未发布计划只有在旧内容被验证后才可清除，已发布计划按当前修订修复，未知内容继续拒绝。文件保存、索引状态与失败结果分开返回，不能用 HTTP 超时推断回滚或自动重放修改。
 
+`profile-memory/knowledge-service.js` 将账本条目 ID 与当前文件位置分开：迁移后的技能按当前 scope／projectKey／name 规范目录及内容修订匹配，更新保留原 ID、历史和回执。发布前及临时文件替换前核对预期文件修订；创建、恢复与启用要求文件不存在。同范围同名账本记录不能重复认领；前置识别冲突不创建 pending。项目 cwd 哈希迁移仍需单独验证。回归见 `pi-profile-knowledge-relocation`。
+
 `profile-memory/management.js` 提供只读列表和按不透明 ID 读取的单条技能正文。来源说明表示受控的助手技能库位置，不推断实际作者；正文读取仍执行范围、描述符及预算检查。
 
 `pi-profile-authoring.js` 创建专用的无档案原生会话，`pi-profile-authoring-extension.ts` 仅在当前 ID 的有效起草会话中提供 `profile_draft`。工具只记录提案，不写档案或文档。网页创建后填入可见草稿，用户发送才调用模型；审核提案时核对服务端 `profileRevisions`，导入后仍需显式保存。普通会话、分叉和导入不会继承此工具权限。

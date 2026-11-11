@@ -350,7 +350,7 @@ const SELECT = { method: 'select', title: '保存这些设置？ / Save these se
             await edit();
             assert.deepEqual([await page.locator('[data-note-field="due"]').inputValue(), await page.locator('[data-note-field="time"]').inputValue()], ['2026-11-06', '17:30']);
             await page.locator('[data-note-field="text"]').fill('用户刚刚修改但还未保存的承诺');
-            for (const expected of [/正在回复，你的修改还在/, /没保存成功，你的修改还在/, /已刷新；你的修改还在/]) {
+            for (const expected of [/没保存成功，你的修改还在/, /没保存成功，你的修改还在/, /已刷新；你的修改还在/]) {
                 await page.locator('[data-note-action="edit-save"]').click();
                 await page.locator('.pi-bot-sheet-status').filter({ hasText: expected }).waitFor();
                 assert.equal(await page.locator('[data-note-field="text"]').inputValue(), '用户刚刚修改但还未保存的承诺', String(expected));

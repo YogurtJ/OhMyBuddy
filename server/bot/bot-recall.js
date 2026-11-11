@@ -51,7 +51,7 @@ function readVerified(file, directory, maxBytes) {
         if (offset !== size || stampOf(fs.fstatSync(fd, { bigint: true })) !== stampOf(opened)
             || stampOf(fs.lstatSync(file, { bigint: true })) !== stampOf(opened) || descriptorPathSync(fd) !== file
             || !io.sameIdentityAtPath(file, identity) || fs.realpathSync.native(file) !== file) throw changed();
-        return buffer.toString('utf8');
+        return new TextDecoder('utf-8', { fatal: true }).decode(buffer);
     } catch (error) {
         // Whatever ends the read after data came in, the bytes read are reported (recall's budget).
         if (offset && error && typeof error === 'object') error.bytesRead = offset;

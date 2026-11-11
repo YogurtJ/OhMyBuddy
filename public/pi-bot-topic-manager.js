@@ -277,7 +277,7 @@
             name.addEventListener('input', () => { confirm.disabled = name.value !== topic.title; confirm.dataset.unavailable = String(confirm.disabled); });
             confirm.addEventListener('click', () => { void mutate(`/windows/${topic.id}`, 'DELETE', { confirmed: true }); }); cancel.addEventListener('click', () => section.remove());
             const buttons = el('div', 'pi-bot-topic-actions'); buttons.append(cancel, confirm);
-            section.append(el('p', null, t('将永久删除整个话题、全部更早的聊天和记事本，无法恢复。伙伴记忆、技能和单独保存的文件或媒体仍在各自入口管理。')), field(t('输入话题名称确认删除'), name), buttons); row.append(section); name.focus();
+            section.append(el('p', null, t('将永久删除整个话题及全部更早的聊天，无法恢复。记事本中的事项和已保存的出处引文仍保留，可在“我记着的事”中单独删除。伙伴记忆、技能和文件或媒体仍在各自入口管理。')), field(t('输入话题名称确认删除'), name), buttons); row.append(section); name.focus();
         }
         paint(); sheet.showModal(); if (view === 'trash') void loadTrash(); return sheet;
     }

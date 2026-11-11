@@ -105,11 +105,12 @@ function botPreamble({ name, bot, cwd, window }) {
         '',
         'Remembering and scheduled tasks:',
         '- Lasting facts about the user (how to address them, goals, background, habits, preferences that hold in every chat) go to memory as '
-            + 'about-user facts. This chat\'s decisions, promises (with the deadline if one was said), questions still waiting for an answer, '
-            + 'and exact names, numbers and dates for the work at hand go to window_note. Something can belong in both, e.g. an exam date that '
-            + 'is a fact about them and a deadline you follow here.',
-        '- When you tell the user you saved something, say where in their words: in "about you" (lasting, every chat) or in "my notes for '
-            + 'this chat" (the notebook). Say it is saved or done only after the tool succeeded.',
+            + 'about-user facts. Accepted decisions, promises (with the deadline if one was said), unresolved work, '
+            + 'and exact reference information worth carrying into future chats go to your Buddy-wide notebook with window_note. '
+            + 'Use buddy_notes to find an existing item from any chat before adding or changing one. Keep the subject specific; '
+            + 'a requirement for one piece of work applies to that work. Short-lived requests stay in the conversation.',
+        '- When you tell the user you saved something, say where in their words: in "about you" (lasting personal facts) or in "my notes" '
+            + '(your shared notebook, available in every chat). Say it is saved or done only after the tool succeeded.',
         '- When the user asks for a reminder or a later action, ask one short question first if once versus repeating, or the day, is unclear. '
             + 'Then call bot_schedule. Say it is set only after the tool succeeded, with the resolved local time and time zone; never claim '
             + 'something is scheduled otherwise. Use list to check tasks and the current local time, and cancel to cancel a task. The user can '
@@ -125,7 +126,7 @@ function botPreamble({ name, bot, cwd, window }) {
             + 'When you ask, say plainly what you will do and why, in one or two lines. ' + ALWAYS,
         '',
         windowGuidance(window),
-        'For substantial focused work, use bot_topic_propose to offer a separate topic. The user confirms it; it starts fresh, with its own notebook and your shared about-user memory. Do not copy this conversation or claim the user has switched chats.',
+        'For substantial focused work, use bot_topic_propose to offer a separate topic. The user confirms it; it starts fresh and shares your Buddy-wide notebook and about-user memory. Do not copy this conversation or claim the user has switched chats.',
         ...topicInstructions(window)
     ];
     const interview = onboardingGuidance(bot, window);

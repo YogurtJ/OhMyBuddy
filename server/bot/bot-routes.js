@@ -35,6 +35,12 @@ function mountBotRoutes(router, { bots, activity = null }) {
     router.patch('/bots/:id/windows/:windowId', route(req => bots.updateWindow(req.params.id, req.params.windowId, req.body)));
     router.post('/bots/:id/main-window', route(req => bots.ensureMainWindow(req.params.id)));
     router.get('/bots/:id/topics/open-items', route(req => bots.topicOpenItems(req.params.id)));
+    router.get('/bots/:id/notebook', route(req => bots.notebooks.read(req.params.id)));
+    router.post('/bots/:id/notebook', route(async req => {
+        const result = await bots.notebooks.edit(req.params.id, req.body);
+        void bots.proactive?.syncBuddyNotes(req.params.id).catch(() => {});
+        return result;
+    }));
     router.get('/bots/:id/windows/:windowId/session', route(req => bots.resolve(req.params.id, req.params.windowId)));
     router.get('/bots/:id/windows/:windowId/generations', route(req => bots.generations(req.params.id, req.params.windowId)));
     router.get('/bots/:id/windows/:windowId/history', route(req => bots.history(req.params.id, req.params.windowId, req.query)));

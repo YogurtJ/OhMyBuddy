@@ -90,6 +90,7 @@ class BotService extends EventEmitter {
         this.catalog = catalog;
         this.getAgentDir = getAgentDir || (async () => fs.realpathSync.native((await getSdk()).getAgentDir()));
         this.windows = new BotWindowRegistry({ getAgentDir: this.getAgentDir });
+        this.notebooks = new (require('./bot-buddy-notebook').BuddyNotebook)(this);
         // Sessions that are moving, or have moved, to a newer generation (bounded). Channel
         // admission checks this synchronously right before a turn is handed to a worker.
         this.movedSessions = new Set();
@@ -487,9 +488,7 @@ class BotService extends EventEmitter {
     async openItems(worker) {
         const main = await this.assertTopicWorker(worker);
         if (main.kind !== 'main') fail('The topic index is available only in the main chat', 403);
-        const { state } = await this.windows.read(worker.loadedBot.profileId);
-        return require('./bot-topic-index').openItems({ windows: state.windows, profileId: worker.loadedBot.profileId,
-            cwd: main.cwd, directory: path.dirname(worker.sessionPath), supervisor: this.supervisor, pi: await getSdk() });
+        return this.topicOpenItems(worker.loadedBot.profileId);
     }
 
     // Owner UI reads the same bounded index without opening or starting the main chat.
@@ -498,10 +497,12 @@ class BotService extends EventEmitter {
         const cwd = this.store.resolveProject(bot.workspace);
         if (cwd !== bot.workspace) fail('Bot workspace identity changed', 409, 'BOT_WINDOW_STALE');
         const { state, revision } = await this.windows.read(profileId);
-        const pi = await getSdk();
-        const index = require('./bot-topic-index').openItems({ windows: state.windows, profileId, cwd,
-            directory: pi.SessionManager.create(cwd).getSessionDir(), supervisor: this.supervisor, pi });
-        return { ...index, windowsRevision: revision };
+        const notebook = await this.notebooks.read(profileId);
+        const topics = state.windows.filter(window => window.kind === 'topic' && !window.archivedAt && !window.trashedAt).map(window => {
+            const items = notebook.items.filter(item => item.source?.windowId === window.id && item.status === 'active' && ['open', 'commitment'].includes(item.kind));
+            return { windowId: window.id, title: window.title, state: 'ready', items: items.slice(0, 3).map(item => ({ title: item.text.slice(0, 120), kind: item.kind, ...(item.due ? { due: item.due } : {}) })), omitted: Math.max(0, items.length - 3) };
+        });
+        return { v: 1, topics, omittedTopics: 0, windowsRevision: revision };
     }
 
     // Idempotent repair: a Bot without a main window gets one (adopting a marked native
@@ -929,6 +930,8 @@ class BotService extends EventEmitter {
         const ops = input.ops.map(op => ({ op: op.op, id: op.id, text: op.text, status: op.status, due: op.due }));
         return this.profiles.reserve(async () => {
             const window = await this.windowRecord(profileId, windowId);
+            const { document: buddyNotebook } = await this.notebooks.document(profileId, window.cwd);
+            if (buddyNotebook.read().state.length > 1) fail('This Buddy uses the shared notebook; reopen “我记着的事” before editing', 409, 'NOTEBOOK_MOVED');
             if (window.archivedAt) fail('This topic is archived; restore it before editing', 409, 'BOT_WINDOW_ARCHIVED');
             if (window.rotation) fail(MOVING, 409, 'BOT_WINDOW_ROTATING');
             if (!window.current || window.current.generation !== input.expectedGeneration) fail('This chat moved on; reload the notebook', 409, 'BOT_WINDOW_STALE');

@@ -56,7 +56,7 @@
         const name = el('input', 'pi-bot-topic-name'); name.type = 'text'; name.maxLength = LIMITS.title; name.required = true; name.autocomplete = 'off';
         name.dataset.topicField = 'title'; name.placeholder = translateUi("给话题起个名字"); name.setAttribute('aria-label', translateUi("话题名"));
         const copy = el('div', 'pi-bot-topic-hero-copy');
-        copy.append(name, el('p', 'pi-bot-topic-hero-hint', translateUi("{0} 在这里只聊这件事，记事本单独记。", options.name || translateUi('伙伴'))));
+        copy.append(name, el('p', 'pi-bot-topic-hero-hint', translateUi("{0} 在这里专注这件事，重要事项在所有聊天中共享。", options.name || translateUi('伙伴'))));
         hero.append(slot, copy);
         function togglePanel(open = panel.hidden) {
             panel.hidden = !open; face.setAttribute('aria-expanded', String(open));
@@ -119,7 +119,7 @@
             trash = button('pi-bot-topic-lifecycle-button is-danger pi-bot-topic-trash'); trash.dataset.topicAction = 'trash';
             trash.append(icon('fa-trash-can'), el('span', null, translateUi("移到回收站"))); row.append(trash);
             manage.append(row, el('p', 'pi-bot-topic-lifecycle-note', options.window.archivedAt
-                ? translateUi("整个话题连同更早的聊天和记事本会进入回收站，可以恢复。")
+                ? translateUi("整个话题连同更早的聊天会进入回收站，可以恢复。记事本中的事项继续保留。")
                 : translateUi("归档会收起话题并保留记录；移到回收站可在整理话题里恢复。")));
             body.append(manage);
         }
@@ -239,7 +239,7 @@
             if (busy || gone) return;
             if (!trashArmed) {
                 trashArmed = true; archiveArmed = false; labels();
-                say(edited() ? translateUi("未保存的修改会放弃，完整聊天和记事本会保留在回收站。") : translateUi("完整聊天和记事本会保留在回收站，可以恢复。"), 'warn');
+                say(edited() ? translateUi("未保存的修改会放弃，完整聊天会保留在回收站，记事本中的事项不变。") : translateUi("完整聊天会保留在回收站，可以恢复。记事本中的事项不变。"), 'warn');
                 return;
             }
             say(translateUi("正在移到回收站…"));

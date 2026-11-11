@@ -44,7 +44,8 @@ function buildHandoff(manager, { now = new Date().toISOString() } = {}) {
             summary = sections ? '' : textOf(entry.content).split(TAIL_HEADING)[0].trim();
         }
     }
-    const state = ledger.replay(branch);
+    const sharedNotebook = branch.findLast(entry => entry.type === 'compaction')?.details?.pivaneBot?.notebook?.scope === 'buddy';
+    const state = sharedNotebook ? ledger.emptyLedger() : ledger.replay(branch);
     if (!ledger.storable(state)) throw Object.assign(new Error('The notebook of this chat cannot be carried over'), { status: 409 });
     // Read the model-visible projection, including edits. A carried tail keeps its
     // original entry, session and age through further manual generation changes.
@@ -89,7 +90,7 @@ function buildHandoff(manager, { now = new Date().toISOString() } = {}) {
         messages.unshift(item);
     }
     const sectionsText = [];
-    if (sections) sectionsText.push(summaryText(sections, state, now));
+    if (sections) sectionsText.push(summaryText(sections, state, now, sharedNotebook));
     else {
         if (summary) sectionsText.push('## Earlier conversation (summary)\n' + clip(summary.trim(), MAX_SUMMARY_CHARS));
         if (state.items.length) sectionsText.push('## Notebook\n' + ledger.renderLedger(state, { now }));

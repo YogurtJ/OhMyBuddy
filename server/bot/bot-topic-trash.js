@@ -129,6 +129,9 @@ function deleteTopic(service, profileId, windowId, input) {
         return service.archiveWindowLocked(profileId, window, async () => {
             verified = await verifyTopic(service, profileId, window, { deleting: Boolean(window.deleting) });
             activity(service, profileId, window, verified.plans);
+            // Saved Buddy items outlive their source chat. Preserve legacy notes before
+            // the first irreversible unlink; the original transcript is never rewritten.
+            await service.notebooks?.ensureLocked(profileId, window.cwd, snapshot.state.windows);
             const lifecycle = new SessionImageLifecycle();
             const imageDeletionId = lifecycle.prepare({ kind: 'buddy-topic', key: [profileId, windowId], name: window.title || '', refs: verified.imageRefs });
             if (!window.deleting) {

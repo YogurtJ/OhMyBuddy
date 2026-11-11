@@ -12,7 +12,7 @@ const MAX_PENDING = 32;
 const MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024;
 const STRUCTURED_TOOLS = new Set(['memory_add', 'memory_replace', 'memory_remove', 'skill_manage',
     'bot_setup_propose', 'bot_schedule', 'window_note', 'bot_topic_propose', 'deliver_files']);
-const READ_ONLY_TOOLS = new Set(['read', 'grep', 'find', 'ls', 'window_recall', 'window_read', 'web_search',
+const READ_ONLY_TOOLS = new Set(['read', 'grep', 'find', 'ls', 'window_recall', 'window_read', 'buddy_notes', 'web_search',
     'fetch_content', 'get_search_content', 'memory_search', 'session_search']);
 const shouldWatchTool = event => !event.parentToolCallId && typeof event.toolName === 'string'
     && !STRUCTURED_TOOLS.has(event.toolName) && !READ_ONLY_TOOLS.has(event.toolName);

@@ -228,3 +228,35 @@ test('carried messages: a statement made anew after the deletion counts, unknown
     assert.equal(compaction.checkNote(rephrase, state, new Map([['seed0001', [carried('对了，门牌改成 12 号了', { entryId: null, at: null })]]]), meta).rejected,
         'deleted by the user', 'no time: not newer than the deletion');
 });
+
+test('shared compaction returns verified Buddy operations without copying its notebook into the chat summary', async () => {
+    const { manager, ids } = await conversation();
+    const shared = ledger.prepareOps(ledger.emptyLedger('buddy'), [{ op: 'add', kind: 'commitment', text: '周五前整理三家报价', subject: '装修' }],
+        { at: '2026-03-01T00:00:00Z', by: 'bot' }).state;
+    const before = ledger.ledgerVersion(shared);
+    const result = await compaction.structuredCompaction({ sharedNotebook: shared, subject: '装修', branch: manager.getBranch(),
+        projection: manager.buildSessionProjection().entries, firstKeptEntryId: ids.kept, includeKept: true, sessionId: manager.getSessionId(),
+        model: { contextWindow: 32000 }, now: NOW, complete: async ({ text }) => {
+            assert.match(text, /\[b1\]/); assert.match(text, /needs to survive this conversation/);
+            return { text: answerWith([{ op: 'done', id: 'b1', entry: ids.user1.slice(0, 8), quote: '报价我已经整理好了' },
+                { op: 'add', kind: 'decision', text: '瓷砖 60×120 哑光灰', entry: ids.user1.slice(0, 8), quote: '瓷砖就定 60×120 哑光灰吧' }]), stopReason: 'stop' };
+        } });
+    assert.equal(result.details.pivaneBot.notebook.scope, 'buddy'); assert.equal(result.details.pivaneBot.ledger, undefined);
+    assert.equal(result.details.pivaneBot.includedKept, true);
+    assert.deepEqual(result.notebookOps.map(op => [op.op, op.id]), [['status', 'b1'], ['add', 'b2']]);
+    assert.equal(result.notebookOps[1].subject, '装修'); assert.equal(result.notebookOps[0].source.entryId, ids.user1);
+    assert.equal(ledger.ledgerVersion(shared), before, 'the journal is changed only by its CAS owner');
+    assert.doesNotMatch(result.summary, /周五前整理三家报价|\[b1\]|\[n1\]/);
+});
+
+test('shared summaries keep identical requirements for different work distinct, including deletion protection', () => {
+    const base = ledger.prepareOps(ledger.emptyLedger('buddy'), [{ op: 'add', kind: 'decision', text: '预算八千元', subject: '东京旅行' }],
+        { at: '2026-03-01T00:00:00Z', by: 'bot' }).state;
+    const entry = { id: 'entry0001', timestamp: '2026-03-02T00:00:00Z' };
+    const sources = new Map([['entry000', [{ entry, message: { role: 'user' }, text: '大阪旅行预算定为八千元', sessionId: 'source' }]]]);
+    const candidate = { op: 'add', kind: 'decision', text: '预算八千元', entry: 'entry0001', quote: '大阪旅行预算定为八千元' };
+    assert.equal(compaction.checkNote(candidate, base, sources, { at: NOW, subject: '大阪旅行' }).op.subject, '大阪旅行');
+    const deleted = ledger.prepareOps(base, [{ op: 'delete', id: 'b1' }], { at: NOW, by: 'user' }).state;
+    assert.equal(compaction.checkNote(candidate, deleted, sources, { at: NOW, subject: '大阪旅行' }).op.op, 'add');
+    assert.equal(compaction.checkNote(candidate, deleted, sources, { at: NOW, subject: '东京旅行' }).rejected, 'deleted by the user');
+});
