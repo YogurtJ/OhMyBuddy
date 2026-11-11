@@ -212,7 +212,9 @@ test('official executor retains cross-factory capacity until actual worker exit 
     }
 });
 
-test('executor subtracts queue wait from the script deadline before execution', { timeout: 5000 }, async () => {
+test('executor subtracts queue wait from the script deadline before execution', { timeout: 10000 }, async () => {
+    // Keep the same queue/deadline/tool ratios while allowing Windows VM startup.
+    const timingScale = process.platform === 'win32' ? 10 : 1;
     const savedLimit = process.env.PI_CODEMODE_MAX_WORKERS;
     process.env.PI_CODEMODE_MAX_WORKERS = '1';
     const entries = [], tools = await executors(2, (...entry) => entries.push(entry));
@@ -222,15 +224,15 @@ test('executor subtracts queue wait from the script deadline before execution', 
         tools: [{ name: 'fixture_wait', description: 'Synthetic bounded gate', parameters: { type: 'object', properties: {} } }],
         executeTool: async () => {
             if (++calls === 1) { entered.resolve(); await release.promise; }
-            else await new Promise(resolve => setTimeout(resolve, 200));
+            else await new Promise(resolve => setTimeout(resolve, 200 * timingScale));
             return { toolCall: { id: String(calls) }, result: { content: [] }, isError: false };
         } };
     let timer, first, second;
     try {
         first = tools[0].execute('holder', { code: 'await tools.fixture_wait({});' }, undefined, undefined, context);
         await entered.promise;
-        second = tools[1].execute('deadline', { code: '// @options: {"timeout_ms": 400}\nawait tools.fixture_wait({}); store("forbidden", true);' }, undefined, undefined, context);
-        timer = setTimeout(() => release.resolve(), 280);
+        second = tools[1].execute('deadline', { code: '// @options: ' + JSON.stringify({ timeout_ms: 400 * timingScale }) + '\nawait tools.fixture_wait({}); store("forbidden", true);' }, undefined, undefined, context);
+        timer = setTimeout(() => release.resolve(), 280 * timingScale);
         const result = await second;
         assert.equal(result.isError, true);
         assert.match(text(result), /Script timed out/);

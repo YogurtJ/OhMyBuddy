@@ -9,7 +9,7 @@ const { once } = require('node:events');
 const { buildFlux2Workflow } = require('../server/flux2-workflow');
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=', 'base64');
 
-test('isolated server preserves private adapter defaults, executes mock GPU/Flux/TTS through tickets, and separates media roots', { timeout: 30000 }, async t => {
+test('isolated server preserves private adapter defaults, executes mock GPU/Flux/TTS through tickets, and separates media roots', { timeout: process.platform === 'win32' ? 180000 : 30000 }, async t => {
     const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pi-lab-server-')));
     const source = path.join(__dirname, '..'), appDir = path.join(root, 'app'), configDir = path.join(root, 'profile'), dataDir = path.join(root, 'data');
     fs.mkdirSync(appDir); fs.mkdirSync(configDir); fs.mkdirSync(dataDir);
@@ -80,6 +80,7 @@ process.once('disconnect', () => process.emit('SIGTERM'));
 require('./server.js');
 `);
     const child = spawn(process.execPath, ['fixture-server.cjs'], { cwd: appDir, env: {
+        ...(process.platform === 'win32' ? { SystemRoot: process.env.SystemRoot, WINDIR: process.env.WINDIR, COMSPEC: process.env.COMSPEC, USERPROFILE: process.env.USERPROFILE, APPDATA: process.env.APPDATA, LOCALAPPDATA: process.env.LOCALAPPDATA, TEMP: process.env.TEMP, TMP: process.env.TMP } : {}),
         PATH: process.env.PATH, HOME: process.env.HOME, HOST: '127.0.0.1', PORT: '0', PI_CODING_AGENT_DIR: path.join(root, 'agent'), PI_PROJECT_ROOTS: root,
         OHMYBUDDY_HOME: path.join(root, 'private'), OHMYBUDDY_WORKSPACES_DIR: path.join(root, 'workspaces'),
         PI_MEDIA_CONFIG_DIR: configDir, PI_MEDIA_DATA_DIR: dataDir, PI_WEB_DEFERRED_FILE: path.join(root, 'queue.json'), PI_OFFLINE: '1',
@@ -91,11 +92,13 @@ require('./server.js');
         comfy.closeAllConnections(); await new Promise(resolve => comfy.close(resolve)); fs.rmSync(root, { recursive: true, force: true });
     });
     // Port 0 is deliberately reported using the actual bound port by server.js.
-    const deadline = Date.now() + 10000;
+    const startupStarted = Date.now();
+    const deadline = startupStarted + (process.platform === 'win32' ? 60000 : 10000);
     while (!/running at http:\/\/localhost:\d+/.test(output) && Date.now() < deadline) {
         if (child.exitCode !== null) throw new Error(output);
         await new Promise(resolve => setTimeout(resolve, 50));
     }
+    t.diagnostic(JSON.stringify({ startupMilliseconds: Date.now() - startupStarted, outputBytes: output.length, windowsPrivateEnvironment: process.platform === 'win32' }));
     const port = output.match(/running at http:\/\/localhost:(\d+)/)?.[1]; assert.ok(port && port !== '0', output);
     const base = `http://127.0.0.1:${port}`;
     const post = async (endpoint, body) => {

@@ -44,13 +44,13 @@ test('managed receipt append is idle-only, read state persists while busy, and n
     assert.throws(() => receiveTaskReturn(pi, ctx, { result: { ...result, session: { ...result.session, cwd: '/other' } } }), /identity/);
 });
 
-function catalogFixture(t) {
+function catalogFixture(t, limits = {}) {
     const fs = require('node:fs'), os = require('node:os'), path = require('node:path');
     const { TaskCatalog } = require('../server/pi-task-catalog');
     const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-task-returns-')));
     const cwd = path.join(root, 'project'), directory = path.join(root, 'sessions');
     fs.mkdirSync(cwd); fs.mkdirSync(directory);
-    const catalog = new TaskCatalog({ store: { resolveProject: value => { assert.equal(value, cwd); return cwd; } }, directory: () => directory });
+    const catalog = new TaskCatalog({ store: { resolveProject: value => { assert.equal(value, cwd); return cwd; } }, directory: () => directory, limits });
     const header = id => ({ type: 'session', version: 3, id, cwd });
     const write = (id, entries) => fs.writeFileSync(path.join(directory, `${id}.jsonl`), [header(id), ...entries].map(e => JSON.stringify(e)).join('\n') + '\n');
     const append = (id, entry) => fs.appendFileSync(path.join(directory, `${id}.jsonl`), JSON.stringify(entry) + '\n');
@@ -63,7 +63,7 @@ function catalogFixture(t) {
 }
 
 test('one pump shares a verified inventory across 20 workers and 200 native files, while public refresh stays fresh', async t => {
-    const f = catalogFixture(t), workers = new Map();
+    const f = catalogFixture(t, { refreshMilliseconds: process.platform === 'win32' ? 10000 : 2000 }), workers = new Map();
     for (let i = 0; i < 200; i++) f.write(`source-${i}`, []);
     for (let i = 0; i < 20; i++) workers.set(i, { cwd: f.cwd, sessionId: `source-${i}`, isIdle: () => true, taskReturn: () => assert.fail('no pending results') });
     assert.equal((await f.catalog.refresh(f.cwd)).complete, true);
