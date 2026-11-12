@@ -6,9 +6,15 @@
 
 后续完整包制作与发布前验收聚焦 macOS ARM64（Apple Silicon）、Windows x64 和 glibc Linux x64；暂停为新版本制作、验收和承诺更新 Linux ARM64 完整包。下方各版本的 ARM64 结果保留其历史适用范围，不自动转为后续版本的支持证明；源码兼容与实际分发范围分别记录。具体流程见[发布准备](development/RELEASING.md#后续发布平台)。
 
-## 1.13.0：发布准备
+## 1.13.0：已正式发布
 
-Pi 1.5.2 与伙伴统一记事本、头像、Mermaid、任务目录加固已完成源码和本机启用。正在对准确候选建立 macOS ARM64、Windows x64、glibc Linux x64 的 Node／Chromium、安装、正式 1.12.2 升级、正常停机与原路径恢复证据。结果与包 SHA256 在包外验收记录中绑定；本节不表示三端已经通过，当前公开正式版仍为 1.12.2。Windows 普通令牌和需要权限的符号链接专项分别记录，真实付费供应商及系统首次安全确认不由合成验收代替。
+2026-11-12 已[正式发布](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.13.0)并设为 Latest，Pi 1.5.2；macOS ARM64、Windows x64、glibc Linux x64 所需覆盖完成。冻结源码 `b7c4bd067c4292dedc3b695fd36bafd564dbf847`，源码包 SHA256 `45bbb7f927d878c57cadb9b16eb5e7cba3fc1b59490af3e455d9504eeeb55d49`（2,058 文件）。[验收 JSON](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.13.0/ohmybuddy-1.13.0.validation.json)、[验收说明](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.13.0/ohmybuddy-1.13.0.validation.md)与[最终校验和](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.13.0/SHA256SUMS-1.13.0.txt)绑定准确包，主分支发布后补记不改变标签和归档。
+
+Mac 首次 Node 1901 通过／5 失败／31 跳过，9 文件补验 61 通过／3 跳过；Linux 首次 Node 1929 通过／5 失败／3 跳过，10 文件补验 64 通过／1 跳过；Windows 首次 High Node 1940 项，1904 通过／4 失败／1 取消／31 跳过，相关问题解释后定向补齐，实际 Medium 核心 46/46。原 Chromium 首轮 Mac 144/148、Linux 147/148，相关补验退出 0 后完成 148 路径覆盖；Windows 实际 Medium 原全量 148/148。夹具修正保留原断言与原／修正 SHA，不相加重叠计数，不声称首轮全绿。冻结后仅 9 个测试文件变化，运行代码、依赖锁、UI 和原生组件未改；最新验证夹具 3ad4619，Windows 夹具另在 Mac 定向补验 17/17。
+
+三平台完整包新装、SDK/RPC/原生组件、281 网页资源、正常停机与配置重接入通过；Mac DMG 只读核对 22,308 文件和执行位，Windows 实际 Medium EXE 在私有桌面完成 prepare-only，不注册永久服务。三端从正式 1.12.2 经保留正式发行公钥与 TLS 的私有回环 HTTPS 单次签名升级，会话／媒体保持、停机备份与原路径恢复通过，原生恢复文件数 Mac 13／Linux 13／Windows 15，Linux/Windows 另验外置图片字节；Windows 源码升级与 20 文件恢复通过。源码启动等待首次失败、Mac 首轮恢复环境错误和收尾超时均有单独记录，续验没有重放已完成安装或更新。语法 903 文件、公开文档 95 份、生产审计 0 漏洞；临时服务、TLS 私钥和 Windows 24 个临时任务已收尾，原应用及隧道任务保持。
+
+Windows 普通令牌与需要权限的符号链接专项分列。macOS 未公证／Finder 首次打开、Windows 未代码签名／用户桌面可见首开、真实付费供应商/OAuth、微信、实体手机、Safari/Firefox、其他架构和网络文件系统不由合成验收代替。新 Linux ARM64 完整包继续暂停；公开发布不重启或切换既有用户实例。
 
 ## 1.12.2：已正式发布
 

@@ -13,9 +13,9 @@
 
 本目录随源码更新，可能包含尚未公开发布的功能；源码版本看 [package.json](../package.json)，实际能力看运行实例。正式公开版本、下载、校验和准确验收摘要以 [GitHub Releases](https://github.com/YogurtJ/OhMyBuddy/releases) 为准。公开发布不自动切换已有实例；升级前按[安装与恢复](INSTALL_RECOVERY.md)保存草稿、停机备份并保留数据路径。完整变化见 [CHANGELOG](../CHANGELOG.md)。
 
-[1.13.0 发布准备](releases/1.13.0.md)包含 Pi 1.5.2、缓存保温与费用补录、伙伴统一记事本、头像编辑器及任务目录加固；三平台验收进行中，尚未公开发布。
+当前正式版 [OhMyBuddy 1.13.0](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.13.0) 于 2026-11-12 发布并设为 Latest。[版本说明](releases/1.13.0.md)包含 Pi 1.5.2、缓存保温与费用补录、伙伴统一记事本、头像编辑器及任务目录加固；macOS ARM64、Windows x64、glibc Linux x64 的准确包与安装／升级／停机／恢复覆盖完成，首轮失败和解释后的补验分别记录。实际结果及范围见[平台验证说明](RELEASE_INSTALL_VALIDATION.md)。
 
-[1.12.2 版本说明](releases/1.12.2.md)涵盖伙伴身份术语统一、浏览器设置页改版、伙伴做事方式重构、侧聊临时附件及微信启动提示与回复恢复改进。当前正式版 [OhMyBuddy 1.12.2](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.12.2) 于 2026-11-08 发布并设为 Latest，八份发行附件匿名完整回下载摘要一致。三端实际执行、基线复用和限制见[平台验证范围](RELEASE_INSTALL_VALIDATION.md)。
+[1.12.2 版本说明](releases/1.12.2.md)涵盖伙伴身份术语统一、浏览器设置页改版、伙伴做事方式重构、侧聊临时附件及微信启动提示与回复恢复改进。[OhMyBuddy 1.12.2](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.12.2) 于 2026-11-08 发布，八份发行附件匿名完整回下载摘要一致。三端实际执行、基线复用和限制见[平台验证范围](RELEASE_INSTALL_VALIDATION.md)。
 
 [1.12.1 版本说明](releases/1.12.1.md)涵盖自定义服务商一步接入与模型探测、伙伴话题界面改版及工作台用户消息气泡样式优化。上一正式版 [OhMyBuddy 1.12.1](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.12.1) 于 2026-11-04 发布，八份发行附件匿名完整回下载摘要一致。三端实际执行、基线复用和限制见[平台验证范围](RELEASE_INSTALL_VALIDATION.md)。
 
@@ -83,7 +83,7 @@ OhMyBuddy 原名 Pivane。上一正式版 [1.11.0 版本说明](releases/1.11.0.
 |---|---|
 | REST/WebSocket 字段、错误与并发语义 | [API 任务索引](API.md#按任务查接口) |
 | 找实现、测试与系统边界 | [模块导航](development/MODULES.md) · [架构](development/ARCHITECTURE.md) · [实现细节](development/RUNTIME.md) |
-| 版本变化 | [CHANGELOG](../CHANGELOG.md) · [1.13.0（准备）](releases/1.13.0.md) · [1.12.2](releases/1.12.2.md) · [1.12.1](releases/1.12.1.md) · [1.12.0](releases/1.12.0.md) · [1.11.1](releases/1.11.1.md) · [1.11.0](releases/1.11.0.md) · [1.10.2](releases/1.10.2.md) · [1.10.1](releases/1.10.1.md) · [1.10.0](releases/1.10.0.md) · [1.9.1](releases/1.9.1.md) · [1.9.0](releases/1.9.0.md) · [1.8.0](releases/1.8.0.md) · [1.7.0](releases/1.7.0.md) · [1.6.2](releases/1.6.2.md) · [1.6.1](releases/1.6.1.md) · [1.6.0](releases/1.6.0.md) · [1.5.0](releases/1.5.0.md) · [1.4.0](releases/1.4.0.md) · [1.3.0](releases/1.3.0.md) · [1.2.0](releases/1.2.0.md) · [1.1.0](releases/1.1.0.md) · [1.0.0](releases/1.0.0.md)；RC 版本说明保留在对应 Git 标签 |
+| 版本变化 | [CHANGELOG](../CHANGELOG.md) · [1.13.0](releases/1.13.0.md) · [1.12.2](releases/1.12.2.md) · [1.12.1](releases/1.12.1.md) · [1.12.0](releases/1.12.0.md) · [1.11.1](releases/1.11.1.md) · [1.11.0](releases/1.11.0.md) · [1.10.2](releases/1.10.2.md) · [1.10.1](releases/1.10.1.md) · [1.10.0](releases/1.10.0.md) · [1.9.1](releases/1.9.1.md) · [1.9.0](releases/1.9.0.md) · [1.8.0](releases/1.8.0.md) · [1.7.0](releases/1.7.0.md) · [1.6.2](releases/1.6.2.md) · [1.6.1](releases/1.6.1.md) · [1.6.0](releases/1.6.0.md) · [1.5.0](releases/1.5.0.md) · [1.4.0](releases/1.4.0.md) · [1.3.0](releases/1.3.0.md) · [1.2.0](releases/1.2.0.md) · [1.1.0](releases/1.1.0.md) · [1.0.0](releases/1.0.0.md)；RC 版本说明保留在对应 Git 标签 |
 | 各版本平台验收范围 | [平台验证范围](RELEASE_INSTALL_VALIDATION.md) |
 | 产品方向 | [路线图](ROADMAP.md) |
 
