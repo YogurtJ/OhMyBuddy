@@ -312,6 +312,7 @@
                             <div class="pi-composer-actions right">
                                 <button id="pi-mobile-context-trigger" class="pi-mobile-context-trigger" type="button" aria-haspopup="dialog" aria-controls="pi-mobile-session-dialog" aria-label="上下文用量暂无统计"><span id="pi-mobile-context-percent">--</span></button>
                                 <button id="pi-transcribe-button" class="icon-btn subtle" type="button" disabled hidden><i class="fa-solid fa-microphone" aria-hidden="true"></i></button>
+                                <button id="pi-realtime-voice-button" class="icon-btn subtle pi-realtime-voice-btn" type="button" aria-haspopup="dialog" aria-controls="pi-realtime-voice-dialog" disabled hidden><i class="fa-solid fa-headset" aria-hidden="true"></i></button>
                                 <button id="pi-send-button" class="pi-send-button" type="button" title="发送" aria-label="发送" disabled data-i18n-title="s255" data-i18n-aria-label="s255">
                                     <i class="fa-solid fa-arrow-up"></i>
                                 </button>
@@ -598,12 +599,18 @@
         <div id="mc-speech-tabs" class="mc-speech-tabs" role="tablist" aria-label="语音能力" data-i18n-aria-label="s3561" hidden>
             <button id="mc-tts-tab" type="button" role="tab" aria-selected="true" aria-controls="mc-content" tabindex="0" data-speech-tab="tts"><i class="fa-solid fa-volume-high" aria-hidden="true"></i><span><!--i18n:s3562-->语音合成（TTS）</span></button>
             <button id="mc-asr-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-speech" tabindex="-1" data-speech-tab="asr"><i class="fa-solid fa-microphone" aria-hidden="true"></i><span><!--i18n:s3563-->语音转录（ASR）</span></button>
+            <button id="mc-realtime-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-realtime-voice" tabindex="-1" data-speech-tab="realtime"><i class="fa-solid fa-headset" aria-hidden="true"></i><span><!--i18n-->实时对话</span></button>
         </div>
         <div id="mc-content" class="lab-dialog-scroll"></div>
         <section id="settings-speech" class="lab-dialog-scroll settings-speech" role="tabpanel" aria-labelledby="mc-asr-tab" hidden>
             <div class="transcription-heading"><h3 id="settings-transcription-title"><!--i18n:s3533-->语音转文字（ASR）</h3><button id="settings-transcription-refresh" class="icon-btn subtle" type="button" title="刷新转录模型" aria-label="刷新转录模型" data-i18n-title="s3534" data-i18n-aria-label="s3534"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button></div>
             <p class="lab-muted"><!--i18n:s3535-->接入转录模型，或复用现有语音服务；录音转为可编辑草稿。</p>
             <div id="settings-transcription-body"></div>
+        </section>
+        <section id="settings-realtime-voice" class="lab-dialog-scroll settings-speech" role="tabpanel" aria-labelledby="mc-realtime-tab" hidden>
+            <div class="transcription-heading"><h3><!--i18n-->实时语音对话</h3><button id="settings-realtime-voice-refresh" class="icon-btn subtle" type="button" aria-label="刷新实时语音模型" data-i18n-aria-label><i class="fa-solid fa-rotate" aria-hidden="true"></i></button></div>
+            <p class="lab-muted"><!--i18n-->复用语音服务和凭据，配置双工语音对话模型。</p>
+            <div id="settings-realtime-voice-body"></div>
         </section>
         <footer id="mc-footer"></footer>
     </dialog>
@@ -699,7 +706,7 @@
                             <div class="mc-settings-kinds">
                                 <button type="button" data-media-settings-kind="image"><i class="fa-regular fa-image settings-media-kind-icon" aria-hidden="true"></i><span class="settings-media-kind-copy"><strong><!--i18n:s109-->图像</strong><span><!--i18n:s4281-->图像生成与编辑</span></span><i class="fa-solid fa-chevron-right settings-media-chevron" aria-hidden="true"></i></button>
                                 <button type="button" data-media-settings-kind="video"><i class="fa-solid fa-film settings-media-kind-icon" aria-hidden="true"></i><span class="settings-media-kind-copy"><strong><!--i18n:s108-->视频</strong><span><!--i18n:s4282-->文字、图片生成视频</span></span><i class="fa-solid fa-chevron-right settings-media-chevron" aria-hidden="true"></i></button>
-                                <button type="button" id="settings-speech-open" data-media-settings-kind="tts"><i class="fa-solid fa-volume-high settings-media-kind-icon" aria-hidden="true"></i><span class="settings-media-kind-copy"><strong><!--i18n:s107-->语音</strong><span><!--i18n:s3530-->朗读与语音转文字</span></span><i class="fa-solid fa-chevron-right settings-media-chevron" aria-hidden="true"></i></button>
+                                <button type="button" id="settings-speech-open" data-media-settings-kind="tts"><i class="fa-solid fa-volume-high settings-media-kind-icon" aria-hidden="true"></i><span class="settings-media-kind-copy"><strong><!--i18n:s107-->语音</strong><span><!--i18n-->朗读、转录与实时对话</span></span><i class="fa-solid fa-chevron-right settings-media-chevron" aria-hidden="true"></i></button>
                             </div>
                             <section id="settings-media-chat-execution" aria-labelledby="settings-media-chat-execution-title" aria-describedby="settings-media-chat-execution-description">
                                 <div class="settings-media-heading">
@@ -1032,6 +1039,9 @@
         <div id="pi-template-body"></div>
     </dialog>
     <script src="pi-composer-tools.js"></script>
+    <dialog id="pi-realtime-voice-dialog" class="pi-realtime-voice-dialog" aria-labelledby="pi-rtv-title"></dialog>
+    <link rel="stylesheet" href="pi-realtime-voice.css">
+    <script src="pi-realtime-voice.js"></script>
     <script src="pi-composer-voice.js"></script>
     <script src="pi-session-tree.js"></script>
     <script src="pi-session-search.js"></script>

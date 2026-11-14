@@ -16,15 +16,21 @@ function transcriptionModels(models, available) {
         if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) continue;
         const baseUrl = url.href.replace(/\/+$/, '');
         const mimo = url.protocol === 'https:' && ['api.xiaomimimo.com', 'token-plan-cn.xiaomimimo.com', 'token-plan-sgp.xiaomimimo.com', 'token-plan-ams.xiaomimimo.com'].includes(url.hostname);
-        const remoteModels = mimo ? ['mimo-v2.5-asr'] : /^(whisper-1|gpt-4o(?:-mini)?-transcribe(?:-[\w-]+)?)$/.test(model.id) ? [model.id]
+        const qwen = url.protocol === 'https:' && (url.hostname === 'dashscope.aliyuncs.com' || url.hostname === 'dashscope-intl.aliyuncs.com'
+            || url.hostname === 'token-plan.maas.qianwenaiapi.com' || /^[a-z0-9-]+\.(?:cn-beijing|ap-southeast-1)\.maas\.aliyuncs\.com$/i.test(url.hostname));
+        const qwenBaseUrl = qwen ? url.origin : baseUrl;
+        const remoteModels = mimo ? ['mimo-v2.5-asr']
+            : qwen ? (/^qwen-audio-\d+\.\d+-asr-flash$/i.test(model.id) ? [model.id] : ['qwen-audio-3.0-asr-flash'])
+            : /^(whisper-1|gpt-4o(?:-mini)?-transcribe(?:-[\w-]+)?)$/.test(model.id) ? [model.id]
             : url.origin === 'https://api.openai.com' && model.provider === 'openai' ? ['whisper-1', 'gpt-4o-mini-transcribe'] : [];
         for (const remoteModel of remoteModels) {
             const id = JSON.stringify([model.provider, remoteModel]);
             found.set(id, { id, provider: model.provider, modelId: remoteModel, name: `${model.provider} / ${remoteModel}`,
-                protocol: mimo ? 'mimo' : 'openai', baseUrl });
+                protocol: mimo ? 'mimo' : qwen ? 'qwen-asr' : 'openai', baseUrl: qwen ? qwenBaseUrl : baseUrl });
         }
     }
-    return [...found.values()].sort((a, b) => Number(b.protocol === 'mimo') - Number(a.protocol === 'mimo') || a.name.localeCompare(b.name));
+    return [...found.values()].sort((a, b) => Number(b.protocol === 'mimo') - Number(a.protocol === 'mimo')
+        || Number(b.protocol === 'qwen-asr') - Number(a.protocol === 'qwen-asr') || a.name.localeCompare(b.name));
 }
 function audioBytes(audio) {
     if (!audio || !['wav', 'mp3'].includes(audio.format) || typeof audio.data !== 'string'
@@ -36,6 +42,34 @@ function audioBytes(audio) {
     const mp3 = bytes.toString('ascii', 0, 3) === 'ID3' || bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0;
     if (audio.format === 'wav' ? !wav : !mp3) fail('录音内容与文件格式不符');
     return bytes;
+}
+function qwenAsrBaseUrl(baseUrl) {
+    const url = new URL(baseUrl);
+    if (/\/compatible-mode\/v1$/i.test(url.pathname)) url.pathname = url.pathname.replace(/\/compatible-mode\/v1$/i, '') || '/';
+    return url.href.replace(/\/+$/, '');
+}
+function qwenAsrRequest(model, audio, language) {
+    const mimeType = audio.format === 'wav' ? 'audio/wav' : 'audio/mpeg';
+    const parameters = { format: audio.format, ...(language === 'auto' ? {} : { language_hints: [language] }) };
+    return {
+        type: 'application/json',
+        extraHeaders: { 'X-DashScope-SSE': 'disable' },
+        body: JSON.stringify({
+            model,
+            input: { messages: [{ role: 'user', content: [{ type: 'input_audio', input_audio: { data: `data:${mimeType};base64,${audio.data}` } }] }] },
+            parameters
+        })
+    };
+}
+function qwenAsrText(result) {
+    if (typeof result?.output?.text === 'string' && result.output.text.trim()) return result.output.text;
+    if (typeof result?.output?.sentence?.text === 'string' && result.output.sentence.text.trim()) return result.output.sentence.text;
+    if (Array.isArray(result?.output?.sentences)) {
+        const joined = result.output.sentences.map(item => typeof item?.text === 'string' ? item.text : '').join('');
+        if (joined.trim()) return joined;
+    }
+    if (typeof result?.text === 'string' && result.text.trim()) return result.text;
+    return null;
 }
 function multipart(model, audio, bytes, language) {
     const boundary = `ohmybuddy-${randomUUID()}`;
@@ -140,18 +174,24 @@ class PiTranscriptionService {
     async upload(input, bytes, model, headers) {
         if (this.closed || this.blocked()) fail('配置正在变更或服务正在关闭，录音未上传', 409);
         const mimo = model.protocol === 'mimo';
-        const request = mimo ? { type: 'application/json', body: JSON.stringify({ model: model.modelId, messages: [{ role: 'user', content: [{ type: 'input_audio', input_audio: { format: input.audio.format, data: input.audio.data } }] }], asr_options: { language: input.language }, stream: false }) }
+        const qwen = model.protocol === 'qwen-asr';
+        const request = mimo
+            ? { type: 'application/json', body: JSON.stringify({ model: model.modelId, messages: [{ role: 'user', content: [{ type: 'input_audio', input_audio: { format: input.audio.format, data: input.audio.data } }] }], asr_options: { language: input.language }, stream: false }) }
+            : qwen ? qwenAsrRequest(model.modelId, input.audio, input.language)
             : multipart(model.modelId, input.audio, bytes, input.language);
+        const target = qwen
+            ? endpoint(qwenAsrBaseUrl(model.baseUrl), '/api/v1/services/aigc/multimodal-generation/generation')
+            : endpoint(model.baseUrl, mimo ? '/chat/completions' : '/audio/transcriptions');
         const signal = AbortSignal.timeout(this.timeoutMs);
         try {
-            const response = await this.fetch(endpoint(model.baseUrl, mimo ? '/chat/completions' : '/audio/transcriptions'), {
-                method: 'POST', headers: { 'Content-Type': request.type, ...headers },
+            const response = await this.fetch(target, {
+                method: 'POST', headers: { 'Content-Type': request.type, ...(request.extraHeaders || {}), ...headers },
                 body: request.body, redirect: 'error', size: 1024 * 1024, signal
             });
             if (!response.ok) { response.body?.destroy?.(); fail(`语音服务返回 HTTP ${response.status}；未自动重试`, 502); }
             const result = await readJson(response, 1024 * 1024);
             const choice = result.choices?.[0];
-            const text = mimo ? choice?.finish_reason === 'stop' && choice.message?.content : result.text;
+            const text = mimo ? choice?.finish_reason === 'stop' && choice.message?.content : qwen ? qwenAsrText(result) : result.text;
             if (typeof text !== 'string' || !text.trim() || text.length > MAX_TEXT) fail('语音服务未返回完整有效的文字；未自动重试', 502);
             return { text: text.trim(), model: { provider: model.provider, id: model.modelId } };
         } catch (error) {

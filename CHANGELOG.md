@@ -4,6 +4,9 @@
 
 ## 未发布
 
+- 语音转录新增 DashScope 原生协议，可接入 `qwen-audio-3.0-asr-flash` 并复用录音、媒体服务凭据与草稿转录流程。
+- 新增实时语音对话：支持 `qwen-audio-3.0-realtime-plus`，语音设置提供独立页签，输入区耳机按钮可发起双工通话；支持自动／手动轮次、静音、打断、字幕及选取记录加入草稿。Key 留在服务端，通话计入维护活动，断线不自动重连。源码功能尚未部署。
+
 ## 1.13.0（2026-11-12）
 
 [1.13.0 版本说明](docs/releases/1.13.0.md)汇总 Pi 1.5.2、提示缓存保温与费用补录、伙伴统一记事本、头像编辑器、Mermaid 和任务目录加固。已[正式发布](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.13.0)并设为 Latest，macOS ARM64、Windows x64、glibc Linux x64 的准确包、安装、正式 1.12.2 升级、正常停机与原路径恢复覆盖完成；首轮失败与解释后的补验在包外附件分别记录。冻结源码 b7c4bd0，源码包 SHA256 `45bbb7f927d878c57cadb9b16eb5e7cba3fc1b59490af3e455d9504eeeb55d49`；发布后补记不改变标签与归档。

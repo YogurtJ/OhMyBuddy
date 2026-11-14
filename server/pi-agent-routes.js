@@ -93,6 +93,11 @@ function createPiAgentGateway(options = {}) {
         providerService: options.mediaLabService?.providerService,
         blocked: () => settingsService.mutating || maintenance?.locked || maintenance?.referenceLocked
     });
+    const realtimeVoice = options.realtimeVoiceService || new (require('./pi-realtime-voice-service').PiRealtimeVoiceService)({
+        createModelRuntime: () => settingsService.createModelRuntime(),
+        providerService: options.mediaLabService?.providerService,
+        blocked: () => settingsService.mutating || maintenance?.locked || maintenance?.referenceLocked
+    });
     const titles = new (require('./pi-session-title-service').PiSessionTitleService)({ preferences,
         createModelRuntime: () => settingsService.createModelRuntime() });
     let learning;
@@ -180,7 +185,7 @@ function createPiAgentGateway(options = {}) {
             && !profiles.busy && !bots.notebooks.busy && !agentThreads.jobs.size && !agentThreads.catalogIndex.busy && !agentThreads.returns.busy && !agentThreads.messages.busy
             && !settingsService.mutating && !settingsService.loginService.busy && !nativeService.busy && !mcpSettingsService.busy
             && !sessionTransfer.running && !sessionMoves.running && !store.taskWorkspaces.busy && !auxiliaryModels.busy
-            && !titles.jobs.size && !titles.savingModel && !transcription.active && !learning?.busy && !cron.busy && !deferred.running
+            && !titles.jobs.size && !titles.savingModel && !transcription.active && !realtimeVoice.active && !learning?.busy && !cron.busy && !deferred.running
             && !sideChat.connections.size && !sideChat.tickets.size && ![...sideChat.parents.values()].some(parent => parent.preparing)
             && !supervisor.queueStore?.operations && supervisor.isIdle()
             && !options.mediaLabService?.inFlight && !options.mediaLabService?.chatRequests?.preparing && !options.mediaLabService?.chatRequests?.waiting?.length
@@ -394,6 +399,7 @@ function createPiAgentGateway(options = {}) {
             historyPresentation: true,
             composerTools: true,
             transcription: true,
+            realtimeVoice: true,
             documentUploads: descriptorBackendAvailable(),
             attachmentUploads: descriptorBackendAvailable(),
             attachmentUploadLimits: { fileBytes: 100 * 1024 * 1024, batchBytes: 200 * 1024 * 1024, files: 8 },
@@ -589,7 +595,7 @@ function createPiAgentGateway(options = {}) {
 
     router.get('/activity', (req, res) => {
         res.set('Cache-Control', 'no-store');
-        res.json({ browserBusy: browser.busy, browserRunning: browser.running, directoryPickerBusy: directoryPicker.busy, channelBusy: channels.busy, cronBusy: cron.busy, agentThreadLaunches: agentThreads.jobs.size, agentTaskIndexing: agentThreads.catalogIndex.busy, agentTaskReturns: agentThreads.returns.busy, agentMessages: agentThreads.messages.busy, learningBusy: learning.busy, learningRuns: learning.active.size, archives: archives(), titleRevision: titles.revisionId, titleGenerations: titles.jobs.size, transcriptionActive: transcription.active, documentOperations: documents.active, artifactOperations: artifacts.jobs.size, runtimes: supervisor.getActivity(), profilesBusy: profiles.busy || bots.notebooks.busy, nativeSettingsBusy: nativeService.busy || settingsService.mutating || Boolean(titles.savingModel) || auxiliaryModels.busy, sessionTransfers: sessionTransfer.running, sessionMoves: sessionMoves.running, taskWorkspacesBusy: store.taskWorkspaces.busy, pinnedProjects: pinnedProjects(), hiddenProjects: hiddenProjects(), replyNotices: replyNotices(), deferred: deferred.summary() });
+        res.json({ browserBusy: browser.busy, browserRunning: browser.running, directoryPickerBusy: directoryPicker.busy, channelBusy: channels.busy, cronBusy: cron.busy, agentThreadLaunches: agentThreads.jobs.size, agentTaskIndexing: agentThreads.catalogIndex.busy, agentTaskReturns: agentThreads.returns.busy, agentMessages: agentThreads.messages.busy, learningBusy: learning.busy, learningRuns: learning.active.size, archives: archives(), titleRevision: titles.revisionId, titleGenerations: titles.jobs.size, transcriptionActive: transcription.active, realtimeVoiceActive: realtimeVoice.active, documentOperations: documents.active, artifactOperations: artifacts.jobs.size, runtimes: supervisor.getActivity(), profilesBusy: profiles.busy || bots.notebooks.busy, nativeSettingsBusy: nativeService.busy || settingsService.mutating || Boolean(titles.savingModel) || auxiliaryModels.busy, sessionTransfers: sessionTransfer.running, sessionMoves: sessionMoves.running, taskWorkspacesBusy: store.taskWorkspaces.busy, pinnedProjects: pinnedProjects(), hiddenProjects: hiddenProjects(), replyNotices: replyNotices(), deferred: deferred.summary() });
     });
 
     router.patch('/projects/pin', (req, res) => {
@@ -775,6 +781,7 @@ function createPiAgentGateway(options = {}) {
         || [...sideChat.parents.values()].some(parent => parent.preparing));
 
     require('./pi-transcription-service').mountTranscriptionRoutes(router, transcription, store);
+    require('./pi-realtime-voice-service').mountRealtimeVoiceRoutes(router, realtimeVoice, store);
     require('./routes/settings').mountSettingsRoutes(router, { settingsService, nativeService, auxiliaryModels, titles, preferences, usage, store });
 
     require('./routes/media').mountMediaRoutes(router, { mediaAgentService, mediaLabService: options.mediaLabService, preferences, store });
@@ -816,6 +823,9 @@ function createPiAgentGateway(options = {}) {
             let ephemeralWorker = null;
             let sideConnection = null;
             let sideSocket = false;
+            let realtimeConnection = null;
+            let realtimeSocket = false;
+            const realtimeAbort = new AbortController();
             let unsubscribe = null;
             let authenticated = false;
             let socketClosed = false;
@@ -902,8 +912,9 @@ function createPiAgentGateway(options = {}) {
             async function dispatchSocketMessage(message) {
                 if (socketClosed) return;
                 if (opening) throw Object.assign(new Error('会话正在打开，请等待快照完成'), { code: 'SESSION_OPEN_PENDING' });
-                if (!['open_session', 'open_ephemeral', 'open_side_chat'].includes(message.type)) return handleSocketMessage(message);
-                if (sideSocket || message.type === 'open_side_chat' && worker) throw new Error('侧聊必须使用独立的新连接');
+                if (!['open_session', 'open_ephemeral', 'open_side_chat', 'open_realtime_voice'].includes(message.type)) return handleSocketMessage(message);
+                if (sideSocket || message.type === 'open_side_chat' && (worker || realtimeSocket)) throw new Error('侧聊必须使用独立的新连接');
+                if (realtimeSocket || message.type === 'open_realtime_voice' && (worker || sideSocket)) throw new Error('实时语音对话必须使用独立的新连接');
                 // Own acquisition, snapshot and cleanup before any await; a rejected
                 // concurrent open must not change the admitted connection's identity.
                 opening = true;
@@ -937,7 +948,7 @@ function createPiAgentGateway(options = {}) {
                 if (!authenticated) {
                     let identity;
                     try { identity = access.authenticate(req, message.token); } catch { socket.close(4401, 'Authentication failed'); return; }
-                    if (!['open_session', 'open_ephemeral', 'open_side_chat'].includes(message.type) || !identity || !access.csrf(req, identity)) {
+                    if (!['open_session', 'open_ephemeral', 'open_side_chat', 'open_realtime_voice'].includes(message.type) || !identity || !access.csrf(req, identity)) {
                         socket.close(4401, 'Authentication failed');
                         return;
                     }
@@ -948,6 +959,30 @@ function createPiAgentGateway(options = {}) {
                     clearTimeout(authTimer);
                 }
                 if (!access.validIdentity(socket.workspaceIdentity)) { socket.close(4401, 'Access expired or revoked'); return; }
+
+                if (message.type === 'open_realtime_voice') {
+                    if (worker || sideSocket || realtimeSocket) throw new Error('实时语音对话必须使用独立的新连接');
+                    if (message.cwd !== undefined && message.cwd !== '') store.resolveProject(message.cwd);
+                    realtimeSocket = true;
+                    try {
+                        realtimeConnection = await realtimeVoice.openSession(message, event => {
+                            if (!safeSend(socket, event)) realtimeAbort.abort();
+                        }, realtimeAbort.signal);
+                        if (socketClosed) { void realtimeConnection.ready.catch(() => {}); await realtimeConnection.dispose(); return; }
+                        const data = await realtimeConnection.ready;
+                        if (socketClosed) { await realtimeConnection.dispose(); return; }
+                        safeSend(socket, { type: 'response', id: message.id, command: message.type, success: true, data });
+                    } catch (error) { await realtimeConnection?.dispose(); throw error; }
+                    return;
+                }
+                if (realtimeSocket) {
+                    if (!realtimeConnection) throw new Error('实时语音连接已失效，请重新发起');
+                    const data = await realtimeConnection.handle(message);
+                    const closing = message.type === 'close_realtime_voice' ? { code: 1000, reason: 'Realtime voice ended' } : undefined;
+                    if (message.type !== 'realtime_voice_audio' || message.id) safeSend(socket, { type: 'response', id: message.id, command: message.type, success: true, data }, closing);
+                    if (closing) socket.close(closing.code, closing.reason);
+                    return;
+                }
 
                 if (message.type === 'open_side_chat') {
                     if (worker || sideSocket) throw new Error('侧聊必须使用独立的新连接');
@@ -1249,12 +1284,16 @@ function createPiAgentGateway(options = {}) {
                 socketClosed = true;
                 clearTimeout(authTimer);
                 void sideConnection?.dispose();
+                realtimeAbort.abort();
+                void realtimeConnection?.dispose();
                 void releaseCurrentWorker(false);
             });
             socket.on('error', () => {
                 socketClosed = true;
                 clearTimeout(authTimer);
                 void sideConnection?.dispose();
+                realtimeAbort.abort();
+                void realtimeConnection?.dispose();
                 void releaseCurrentWorker(false);
             });
         });
@@ -1274,6 +1313,7 @@ function createPiAgentGateway(options = {}) {
         const stoppingAuxiliaryModels = auxiliaryModels.dispose();
         const stoppingTitles = titles.dispose();
         const stoppingTranscription = transcription.dispose();
+        const stoppingRealtimeVoice = realtimeVoice.dispose();
         const stoppingDocuments = documents.dispose();
         cron.stopping = true;
         const stoppingProactive = proactive?.dispose();
@@ -1291,12 +1331,12 @@ function createPiAgentGateway(options = {}) {
         await profiles.dispose();
         await usage.dispose();
         await stoppingThreads;
-        await Promise.all([stoppingBrowser, stoppingDirectoryPicker, stoppingChannels, stoppingFileRoots, stoppingDeferred, stoppingTitles, stoppingAuxiliaryModels, stoppingMoves, stoppingTranscription, stoppingDocuments]);
+        await Promise.all([stoppingBrowser, stoppingDirectoryPicker, stoppingChannels, stoppingFileRoots, stoppingDeferred, stoppingTitles, stoppingAuxiliaryModels, stoppingMoves, stoppingTranscription, stoppingRealtimeVoice, stoppingDocuments]);
         await stoppingProactive;
         await cron.dispose();
         await settingsService.dispose();
         store.taskWorkspaces.supervisor = null;
-    }, browser, directoryPicker, store, supervisor, bots, channels, cron, deferred, sideChat, titles, auxiliaryModels, learning, knowledgeService, agentThreads, sessionMoves, transcription, documents, sessionImageStorage, artifacts };
+    }, browser, directoryPicker, store, supervisor, bots, channels, cron, deferred, sideChat, titles, auxiliaryModels, learning, knowledgeService, agentThreads, sessionMoves, transcription, realtimeVoice, documents, sessionImageStorage, artifacts };
 }
 
 module.exports = { createPiAgentGateway };

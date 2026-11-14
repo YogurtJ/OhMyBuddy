@@ -83,7 +83,10 @@
                 auth.wrap.hidden = Boolean(selected); authView();
                 if (selected && !protocolEdited) {
                     const host = new URL(selected.baseUrl).hostname;
-                    protocol.input.value = ['api.xiaomimimo.com', 'token-plan-cn.xiaomimimo.com', 'token-plan-sgp.xiaomimimo.com', 'token-plan-ams.xiaomimimo.com'].includes(host) ? 'mimo' : 'openai';
+                    const mimo = ['api.xiaomimimo.com', 'token-plan-cn.xiaomimimo.com', 'token-plan-sgp.xiaomimimo.com', 'token-plan-ams.xiaomimimo.com'].includes(host);
+                    const qwen = host === 'dashscope.aliyuncs.com' || host === 'dashscope-intl.aliyuncs.com' || host === 'token-plan.maas.qianwenaiapi.com' || /^[a-z0-9-]+\.(?:cn-beijing|ap-southeast-1)\.maas\.aliyuncs\.com$/i.test(host);
+                    protocol.input.value = mimo ? 'mimo' : qwen ? 'qwen-asr' : 'openai';
+                    if (qwen && !remote.input.value.trim()) remote.input.value = 'qwen-audio-3.0-asr-flash';
                 }
                 hint.textContent = selected ? t("复用此服务已保存的地址和凭据；管理语音服务可修改共享配置。") : t("服务地址、模型 ID 和协议由你的语音服务提供；保存不会发送录音。");
             }
@@ -93,6 +96,9 @@
                 let host; try { host = new URL(url.input.value).hostname; } catch { return; }
                 if (['api.xiaomimimo.com', 'token-plan-cn.xiaomimimo.com', 'token-plan-sgp.xiaomimimo.com', 'token-plan-ams.xiaomimimo.com'].includes(host)) {
                     protocol.input.value = 'mimo'; auth.input.value = 'header'; header.input.value = 'api-key'; authView();
+                } else if (host === 'dashscope.aliyuncs.com' || host === 'dashscope-intl.aliyuncs.com' || host === 'token-plan.maas.qianwenaiapi.com' || /^[a-z0-9-]+\.(?:cn-beijing|ap-southeast-1)\.maas\.aliyuncs\.com$/i.test(host)) {
+                    protocol.input.value = 'qwen-asr'; auth.input.value = 'bearer'; authView();
+                    if (!remote.input.value.trim()) remote.input.value = 'qwen-audio-3.0-asr-flash';
                 }
             });
             const save = action(t("保存转录模型"), async () => {

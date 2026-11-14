@@ -8,7 +8,10 @@
 .settings-speech button:disabled { opacity: .55; cursor: default; }
 #settings-transcription-body { min-width: 0; margin-top: 14px; }
 .transcription-default label, .transcription-form > label { display: flex; flex-direction: column; gap: 7px; font-size: .82rem; min-width: 0; }
-.transcription-default select, .transcription-form input, .transcription-form select { box-sizing: border-box; width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--text-main); background: var(--surface-1); font: inherit; font-size: 16px; }
+.transcription-default select, .transcription-form input, .transcription-form select, .transcription-form textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--text-main); background: var(--surface-1); font: inherit; font-size: 16px; }
+.transcription-form textarea { min-height: 96px; resize: vertical; }
+.transcription-form label.boolean { flex-direction: row; align-items: center; }
+.transcription-form label.boolean input { width: 18px; height: 18px; padding: 0; margin: 0; }
 .transcription-model-row { display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 12px 0; border-top: 1px solid var(--line); }
 .transcription-model-row > div { min-width: 0; }
 .transcription-model-row strong, .transcription-model-row small { display: block; overflow-wrap: anywhere; }

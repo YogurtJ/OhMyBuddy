@@ -13,6 +13,11 @@ async function run(browser, viewport, legacy = false) {
     // Advance the native Web Audio clock on CI hosts without an output device;
     // the fake microphone, ScriptProcessor PCM and upload assertions remain real.
     await page.addInitScript(() => {
+        Object.defineProperty(window, 'PiComposerVoice', { configurable: true, set(Class) {
+            Object.defineProperty(window, 'PiComposerVoice', { value: class extends Class {
+                constructor(...args) { super(...args); window.composerVoiceFixture = this; }
+            } });
+        } });
         const NativeAudioContext = window.AudioContext;
         if (NativeAudioContext && 'setSinkId' in NativeAudioContext.prototype) {
             window.AudioContext = class extends NativeAudioContext {
@@ -209,6 +214,9 @@ async function run(browser, viewport, legacy = false) {
     assert.equal(await page.locator('#pi-voice-bar').getByRole('button', { name: '开始录音', exact: true }).count(), 0);
     await page.locator('#pi-transcribe-button').click();
     await page.waitForFunction(() => document.querySelector('#pi-transcribe-button').dataset.recording === 'true' && document.querySelector('#pi-voice-bar').textContent.includes('1 秒'));
+    // Wait for actual microphone PCM as well as the timer: an output clock can
+    // advance before the fake capture device delivers its first frame on macOS.
+    await page.waitForFunction(() => window.composerVoiceFixture.samples >= window.composerVoiceFixture.rate / 4);
     await page.locator('#pi-transcribe-button').click();
     await page.waitForFunction(() => document.querySelector('#pi-transcribe-button').disabled);
     while (!pendingTranscription) await page.waitForTimeout(10);
@@ -223,6 +231,7 @@ async function run(browser, viewport, legacy = false) {
     pendingTranscription = null;
     await page.locator('#pi-transcribe-button').click();
     await page.waitForFunction(() => document.querySelector('#pi-transcribe-button').dataset.recording === 'true' && document.querySelector('#pi-voice-bar').textContent.includes('1 秒'));
+    await page.waitForFunction(() => window.composerVoiceFixture.samples >= window.composerVoiceFixture.rate / 4);
     await page.locator('#pi-transcribe-button').click();
     while (!pendingTranscription) await page.waitForTimeout(10);
     views.get('a').stopping = false;

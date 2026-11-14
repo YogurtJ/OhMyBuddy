@@ -80,6 +80,8 @@ When a connection cannot keep up with queued output, the server closes that slow
 
 ### Voice input
 
+The headset button opens realtime voice calls when the backend supports them. Configure a Qwen realtime model under **Models & capabilities → Speech → Realtime**. Calls stream microphone audio through the server, show live captions, and support mute, interruption and manual turns. Add selected captions to your main draft to keep them. Changing threads, hiding the page or closing the call stops audio and disconnects. Calls use a separate model context and do not run workspace tools. See [realtime voice](../COMPOSER_TOOLS.md#实时语音对话).
+
 Tap the microphone to record and again to stop and transcribe. Text enters an editable draft for you to send. Recording lasts up to two minutes and requires HTTPS or localhost plus browser permission. Audio goes to the selected service and may incur a charge; failures are not retried automatically. The setup link opens **Models & capabilities → Speech → ASR**. See [transcription](../COMPOSER_TOOLS.md#语音转录).
 
 ## Task progress
