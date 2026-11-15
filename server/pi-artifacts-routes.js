@@ -1,8 +1,10 @@
 'use strict';
 const { ArtifactsService } = require('./pi-artifacts');
+const { takeHttpOperationCompletion } = require('./pi-maintenance-client');
 function mountArtifacts(router, options) {
     const service = new ArtifactsService(options);
     const route = action => async (req, res) => {
+        const complete = takeHttpOperationCompletion(req);
         const controller = new AbortController();
         const cancel = () => { if (!res.writableEnded) controller.abort(); };
         res.on('close', cancel);
@@ -11,7 +13,7 @@ function mountArtifacts(router, options) {
         try { const data = await action(req, controller.signal); if (!controller.signal.aborted) res.json(data); }
         catch (error) {
             if (!controller.signal.aborted) res.status(error.status || 500).json({ error: error.code && /^(ARTIFACT|DELIVERY|FILE)_/.test(error.code) ? error.message : '成果暂时无法读取，请刷新目录', code: error.code || 'ARTIFACT_READ' });
-        } finally { res.off('close', cancel); }
+        } finally { res.off('close', cancel); complete(); }
     };
     router.get('/artifacts', route((req, signal) => service.list(req.query, signal)));
     router.get('/artifacts/library', route((req, signal) => service.job(() => service.library.list(req.query, cwd => { try { service.qualify({ cwd }); return true; } catch { return false; } }), signal)));

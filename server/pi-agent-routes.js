@@ -14,6 +14,7 @@ const { mountSessionWorkflows } = require('./pi-session-workflows');
 const { INTERNAL_COMMAND_PATTERN } = require('./ohmybuddy-compat');
 const { descriptorBackendAvailable } = require('./pi-file-descriptor');
 const { PiSideChatService } = require('./pi-side-chat');
+const { takeHttpOperationCompletion } = require('./pi-maintenance-client');
 
 const ALLOWED_RPC_COMMANDS = new Set([
     'prompt',
@@ -476,13 +477,14 @@ function createPiAgentGateway(options = {}) {
 
     require('./pi-session-images-routes').mountSessionImages(router, { store });
     router.get('/sessions/search', async (req, res) => {
+        const complete = takeHttpOperationCompletion(req);
         res.set('Cache-Control', 'no-store');
         const controller = new AbortController();
         const cancel = () => { if (!res.writableEnded) controller.abort(); };
         res.on('close', cancel);
         try { const data = await sessionSearch.search(req.query, controller.signal); if (!controller.signal.aborted) res.json(data); }
         catch (error) { if (!controller.signal.aborted) res.status(error.status || 500).json({ error: error.message }); }
-        finally { res.off('close', cancel); }
+        finally { res.off('close', cancel); complete(); }
     });
     router.get('/files/content', async (req, res) => {
         res.set({ 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
@@ -491,6 +493,7 @@ function createPiAgentGateway(options = {}) {
     });
 
     for (const kind of ['list', 'search']) router.get(`/files/${kind}`, async (req, res) => {
+        const complete = takeHttpOperationCompletion(req);
         res.set({ 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
         const controller = new AbortController();
         const cancel = () => { if (!res.writableEnded) controller.abort(); };
@@ -500,7 +503,7 @@ function createPiAgentGateway(options = {}) {
             if (!controller.signal.aborted) res.json(data);
         } catch (error) {
             if (!controller.signal.aborted) res.status(error.status || 500).json({ error: error.message, code: error.code });
-        } finally { res.off('close', cancel); }
+        } finally { res.off('close', cancel); complete(); }
     });
 
     const composerRoute = action => async (req, res) => {

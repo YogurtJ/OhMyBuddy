@@ -3,6 +3,7 @@ const fs = require('node:fs/promises');
 const { fileScope, fail, fileError } = require('./pi-file-scope');
 const { windowsPath, withinCanonical: within } = require('./pi-platform-path');
 const policy = require('../public/pi-file-policy');
+const { takeHttpOperationCompletion } = require('./pi-maintenance-client');
 
 function fields(input, keys) {
     if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some(key => !keys.includes(key))) throw fail('文件目录参数无效', 400, 'FILE_PATH');
@@ -94,13 +95,14 @@ class PiFileRoots {
 
 function mountFileRoots(router, service) {
     const route = action => async (req, res) => {
+        const complete = takeHttpOperationCompletion(req);
         res.set({ 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
         const controller = new AbortController();
         const cancel = () => { if (!res.writableEnded) controller.abort(); };
         res.on('close', cancel);
         try { const result = await action(req, controller.signal); if (!controller.signal.aborted) res.json(result); }
         catch (error) { if (!controller.signal.aborted) { const e = fileError(error); res.status(e.status || 500).json({ error: e.message, code: e.code }); } }
-        finally { res.off('close', cancel); }
+        finally { res.off('close', cancel); complete(); }
     };
     router.get('/files/roots', route(req => service.list(req.query)));
     router.post('/files/roots', route(req => service.change(req.body)));

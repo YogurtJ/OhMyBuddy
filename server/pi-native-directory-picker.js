@@ -4,6 +4,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { spawn } = require('node:child_process');
 const { isIP } = require('node:net');
+const { takeHttpOperationCompletion } = require('./pi-maintenance-client');
 const fail = (message, status = 400) => Object.assign(new Error(message), { status });
 function loopback(input) {
     const host = String(input || '').replace(/^::ffff:/, '').replace(/^\[|\]$/g, '').toLowerCase();
@@ -97,6 +98,7 @@ class NativeDirectoryPicker {
 function mountNativeDirectoryPicker(router, { store, picker }) {
     router.get('/directories/picker', (req, res) => res.set('Cache-Control', 'no-store').json(picker.capabilities(req)));
     router.post('/directories/picker', async (req, res) => {
+        const complete = takeHttpOperationCompletion(req);
         res.set('Cache-Control', 'no-store'); const controller = new AbortController();
         const cancel = () => { if (!res.writableEnded) controller.abort(); }; res.on('close', cancel);
         try {
@@ -107,7 +109,7 @@ function mountNativeDirectoryPicker(router, { store, picker }) {
             const chosen = await picker.pick(initial, controller.signal);
             if (!controller.signal.aborted) res.json(chosen ? { cancelled: false, cwd: store.resolveProject(chosen) } : { cancelled: true });
         } catch (error) { if (!controller.signal.aborted) res.status(error.status || 400).json({ error: error.message }); }
-        finally { res.off('close', cancel); }
+        finally { res.off('close', cancel); complete(); }
     });
 }
 module.exports = { NativeDirectoryPicker, mountNativeDirectoryPicker, commandFor, guiEnvironment, localRequest };
