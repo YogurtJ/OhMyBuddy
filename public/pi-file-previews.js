@@ -288,6 +288,29 @@
         dispose.captureView = captureView; dispose.resize = resize;
         return dispose;
     }
+    function htmlDocument(text, { interactive = false, media = false } = {}) {
+        const doc = new DOMParser().parseFromString(String(text || '').replace(/^\ufeff/, ''), 'text/html');
+        // Static previews must not navigate via refresh/base/forms or send network
+        // navigations from an opaque frame. A srcdoc base before CSP base-uri 'none'
+        // keeps #section anchors inside this document instead of resolving against
+        // the parent OhMyBuddy URL.
+        doc.querySelectorAll('base, meta[http-equiv], iframe, frame, object, embed' + (interactive ? '' : ', script, form')).forEach(n => n.remove());
+        for (const el of doc.querySelectorAll('*')) {
+            for (const attr of [...el.attributes]) {
+                if (!interactive && /^on/i.test(attr.name)) { el.removeAttribute(attr.name); continue; }
+                if (!/^(?:href|xlink:href)$/i.test(attr.name)) continue;
+                const value = attr.value.trim();
+                if (value.startsWith('#')) { if (['a', 'area'].includes(el.localName)) el.removeAttribute('target'); }
+                else if (!interactive) el.removeAttribute(attr.name);
+            }
+        }
+        const csp = `default-src 'none'; script-src ${interactive ? "'unsafe-inline'" : "'none'"}; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src ${media ? 'data: blob:' : "'none'"}; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'`;
+        const charset = doc.createElement('meta'); charset.setAttribute('charset', 'utf-8');
+        const base = doc.createElement('base'); base.setAttribute('href', 'about:srcdoc');
+        const policy = doc.createElement('meta'); policy.setAttribute('http-equiv', 'Content-Security-Policy'); policy.setAttribute('content', csp);
+        doc.head.prepend(charset, base, policy);
+        return '<!doctype html>' + doc.documentElement.outerHTML;
+    }
     function render(body, data, context) {
         try {
             if (data.kind === 'table') table(body, data, context);
@@ -298,5 +321,5 @@
         } catch (error) { note(body, error.message); }
         return () => {};
     }
-    window.PiFilePreviews = { render, parseTable };
+    window.PiFilePreviews = { render, parseTable, htmlDocument };
 })();

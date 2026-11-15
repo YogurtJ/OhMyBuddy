@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, '../..'), cwd = '/projects/delivery-fixture
 const id = 'a'.repeat(64), model = { provider: 'fixture', id: 'fixture', name: 'Fixture', input: ['text'], contextWindow: 128000 };
 // Use the existing brand PNG as a known browser-decodable fixture.
 const image = fs.readFileSync(path.join(root, 'public/brand/logo-192.png'));
-const html = '<!doctype html><html><head><style>body{font:18px sans-serif}button{padding:15px}</style></head><body><h1>Preview</h1><img src="https://invalid.test/remote-image"><iframe src="https://invalid.test/frame"></iframe><meta http-equiv="refresh" content="0;url=https://invalid.test/refresh"><button id="counter" onclick="this.textContent=\'Clicked\'">Click</button><script>try{parent.document.body.dataset.escaped="yes"}catch{};try{localStorage.setItem("escaped","yes")}catch{};fetch("https://invalid.test/leak").catch(()=>{});</script></body></html>';
+const html = '<!doctype html><html><head><style>body{font:18px sans-serif}button{padding:15px}</style></head><body><h1>Preview</h1><a id="toc" href="#chapter" target="_blank">Chapter</a><img src="https://invalid.test/remote-image"><iframe src="https://invalid.test/frame"></iframe><meta http-equiv="refresh" content="0;url=https://invalid.test/refresh"><button id="counter" onclick="this.textContent=\'Clicked\'">Click</button><script>try{parent.document.body.dataset.escaped="yes"}catch{};try{localStorage.setItem("escaped","yes")}catch{};fetch("https://invalid.test/leak").catch(()=>{});</script><div style="height:1800px"></div><h2 id="chapter">Chapter target</h2><a id="back" href="#">Back</a><div style="height:1000px"></div></body></html>';
 const { pdf, wav } = require('../file-preview-fixtures.cjs');
 const { representation } = require('../../server/pi-file-types');
 const documents = [
@@ -121,6 +121,12 @@ async function run(browser, base, width, locale = 'zh-CN') {
     await page.locator('.pi-file-html').waitFor();
     const frame = page.frameLocator('.pi-file-html'); await frame.locator('#counter').click();
     assert.equal(await frame.locator('#counter').textContent(), 'Click', 'scripts disabled until explicit action');
+    const hostUrl = page.url();
+    await frame.locator('#toc').click(); await frame.locator('#chapter:target').waitFor();
+    assert.ok(await frame.locator('#chapter').evaluate(() => scrollY > 1000), 'static HTML click scrolls within the document');
+    assert.equal(page.url(), hostUrl);
+    await frame.locator('#back').click();
+    await frame.locator('html').evaluate(() => { if (scrollY !== 0) throw new Error('Back-to-top link did not scroll'); });
     await page.locator('#pi-file-run-html').click();
     const interactiveFrame = page.frameLocator('.pi-file-html[sandbox="allow-scripts"]');
     // Confirm native pointer routing into the newly created isolated frame.
@@ -130,6 +136,9 @@ async function run(browser, base, width, locale = 'zh-CN') {
     // Input dispatch can finish before the isolated frame processes the event.
     await interactiveFrame.locator('#counter').filter({ hasText: /^Clicked$/ }).waitFor();
     assert.equal(await interactiveFrame.locator('#counter').textContent(), 'Clicked');
+    await interactiveFrame.locator('#toc').click(); await interactiveFrame.locator('#chapter:target').waitFor();
+    assert.ok(await interactiveFrame.locator('#chapter').evaluate(() => scrollY > 1000), 'interactive HTML click scrolls within the document');
+    assert.equal(page.url(), hostUrl);
     assert.equal(await page.evaluate(() => document.body.dataset.escaped), undefined);
     assert.equal(await page.evaluate(() => localStorage.getItem('escaped')), null);
     assert.equal(await page.locator('.pi-file-html').getAttribute('sandbox'), 'allow-scripts');

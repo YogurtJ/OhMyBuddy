@@ -206,12 +206,7 @@
                 const note = node('p', null, 'artifacts-preview-note'); note.append(icon('fa-shield-halved'), node('span', tr('安全静态预览：已禁用脚本、外部资源和表单。下载后可在本地完整运行。', 'Safe static preview: scripts, external resources and forms are disabled. Download to run it locally.')));
                 const frame = node('iframe'); frame.title = this.file.name; frame.setAttribute('sandbox', ''); frame.setAttribute('credentialless', ''); frame.referrerPolicy = 'no-referrer';
                 frame.setAttribute('allow', "camera 'none'; microphone 'none'; geolocation 'none'; payment 'none'; clipboard-read 'none'; clipboard-write 'none'");
-                const template = document.createElement('template'); template.innerHTML = data.content;
-                template.content.querySelectorAll('script,base,meta[http-equiv],iframe,frame,object,embed,form').forEach(n => n.remove());
-                // Static links must not navigate an opaque frame to remote pages.
-                template.content.querySelectorAll('[href],[xlink\\:href]').forEach(n => { for (const attr of ['href', 'xlink:href']) if (n.hasAttribute(attr) && !n.getAttribute(attr).startsWith('#')) n.removeAttribute(attr); });
-                const csp = "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'";
-                frame.srcdoc = '<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="' + csp + '">' + template.innerHTML;
+                frame.srcdoc = window.PiFilePreviews.htmlDocument(data.content, { media: true });
                 this.body.append(note, frame); return;
             }
             if (data.kind === 'markdown') {

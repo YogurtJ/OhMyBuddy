@@ -471,12 +471,7 @@
                 const frame = document.createElement('iframe'); frame.className = 'pi-file-html'; frame.title = translateUi('HTML 隔离预览');
                 frame.setAttribute('sandbox', this.runHtml ? 'allow-scripts' : ''); frame.referrerPolicy = 'no-referrer'; frame.setAttribute('credentialless', '');
                 frame.setAttribute('allow', "camera 'none'; microphone 'none'; geolocation 'none'; clipboard-read 'none'; clipboard-write 'none'; fullscreen 'none'");
-                const csp = `default-src 'none'; script-src ${this.runHtml ? "'unsafe-inline'" : "'none'"}; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; connect-src 'none'; frame-src 'none'; worker-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'`;
-                const template = document.createElement('template'); template.innerHTML = text;
-                // Static previews must not navigate via refresh/base. Scripts, when
-                // explicitly enabled, remain confined to the opaque iframe.
-                template.content.querySelectorAll('base, meta[http-equiv], iframe, object, embed').forEach(n => n.remove());
-                frame.srcdoc = '<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="' + csp + '">' + template.innerHTML;
+                frame.srcdoc = window.PiFilePreviews.htmlDocument(text, { interactive: Boolean(this.runHtml) });
                 body.append(note, frame); return;
             }
             if (this.preview) {
