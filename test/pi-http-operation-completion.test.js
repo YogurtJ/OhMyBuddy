@@ -6,6 +6,7 @@ const express = require('express');
 const root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pi-http-completion-')));
 const cwd = path.join(root, 'project'); fs.mkdirSync(cwd);
 Object.assign(process.env, { PI_CODING_AGENT_DIR: path.join(root, 'agent'), PI_PROJECT_ROOTS: root, PI_OFFLINE: '1',
+    OHMYBUDDY_HOME: path.join(root, 'app'), OHMYBUDDY_WORKSPACES_DIR: path.join(root, 'workspaces'), PI_MEDIA_DATA_DIR: path.join(root, 'media'),
     PI_WEB_TOKEN: 'http-completion-fixture', PI_WEB_DEFERRED_FILE: path.join(root, 'deferred.json') });
 const { MaintenanceClient } = require('../server/pi-maintenance-client');
 const { createPiAgentGateway } = require('../server/pi-agent-routes');
