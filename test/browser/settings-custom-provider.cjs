@@ -5,7 +5,7 @@ const cwd = '/srv/custom-provider-fixture';
 const fields = 'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]),textarea,select';
 
 function discovered(added = []) {
-    const chat = (id, extra = {}) => ({ id, name: id, kind: 'chat', kindSource: 'default', contextWindow: 128000, maxTokens: 16384, imageInput: false, reasoning: false, metadata: 'default', ...extra });
+    const chat = (id, extra = {}) => ({ id, name: id, kind: 'chat', kindSource: 'default', contextWindow: 500000, maxTokens: 128000, imageInput: false, reasoning: false, metadata: 'default', ...extra });
     const models = [
         chat('gpt-5.4-mini', { kindSource: 'catalog', contextWindow: 400000, maxTokens: 128000, imageInput: true, reasoning: true, metadata: 'catalog' }),
         ...Array.from({ length: 180 }, (_, index) => chat(`relay-model-${index}`)),
@@ -38,6 +38,7 @@ async function run(browser, viewport, locale) {
         if (req.method() !== 'GET') {
             const body = req.postData() ? req.postDataJSON() : null;
             writes.push({ path, body });
+            if (path === '/api/pi/settings/models/metadata') return route.fulfill({ json: { models: body.modelIds.map(id => ({ id, kind:'chat', contextWindow:500000, maxTokens:128000, imageInput:false, reasoning:false, metadata:'default' })) } });
             if (path === '/api/pi/settings/custom-providers/discover-models') {
                 if (draftFailures-- > 0) return route.fulfill({ json: { ok: false, reason: 'auth', httpStatus: 401, detail: 'Invalid key ***', endpoint: 'https://relay.example.com/v1/models' } });
                 return route.fulfill({ json: { ...discovered(), providerId: null, keyUsed: true } });
@@ -150,6 +151,7 @@ async function run(browser, viewport, locale) {
     assert.ok((await rows.filter({ has: page.locator('code:text-is("gpt-image-2")') }).textContent()).includes(english ? 'Default values' : '默认值'));
     await form.locator('.cps-manual input').fill('manual-model');
     await form.locator('.cps-manual input').press('Enter');
+    await rows.filter({ has: page.locator('code:text-is("manual-model")') }).waitFor();
     assert.equal(await rows.count(), 3);
     await rows.filter({ has: page.locator('code:text-is("gpt-image-2")') }).locator('.icon-btn').click();
     assert.equal(await rows.count(), 2);
@@ -169,7 +171,7 @@ async function run(browser, viewport, locale) {
     assert.deepEqual(writes.at(-1), { path: '/api/pi/settings/custom-providers/setup', body: {
         name: 'Browser Relay', baseUrl: 'https://relay.example.com/v1', api: 'openai-completions', apiKey: 'sk-browser-fixture', authHeader: false,
         models: [{ id: 'gpt-5.4-mini', contextWindow: 272000, maxTokens: 128000, imageInput: true, reasoning: true },
-            { id: 'manual-model', contextWindow: 128000, maxTokens: 16384, imageInput: false, reasoning: false }] } });
+            { id: 'manual-model', contextWindow: 500000, maxTokens: 128000, imageInput: false, reasoning: false }] } });
     await page.locator('.pi-toast').filter({ hasText: 'Browser Relay' }).first().waitFor();
     const group = page.locator('.settings-model-group').filter({ has: page.locator('summary[data-provider="browser-relay"]') });
     await group.locator('.model-row').first().waitFor();
@@ -187,7 +189,7 @@ async function run(browser, viewport, locale) {
     await page.locator('#settings-add-models-form [type=submit]').click();
     await page.locator('#workspace-settings-editor').waitFor({ state: 'hidden' });
     assert.deepEqual(writes.at(-1), { path: '/api/pi/settings/custom-providers/browser-relay/models/batch',
-        body: { models: [{ id: 'relay-model-1', contextWindow: 128000, maxTokens: 16384, imageInput: false, reasoning: false }] } });
+        body: { models: [{ id: 'relay-model-1', contextWindow: 500000, maxTokens: 128000, imageInput: false, reasoning: false }] } });
     await group.locator('.model-row[data-model-id="relay-model-1"]').waitFor();
     assert.deepEqual(errors, []);
     console.log(JSON.stringify({ viewport, locale, writes: writes.length, errors }));

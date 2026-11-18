@@ -15,7 +15,13 @@
 .cps-selected { min-width: 0; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .cps-selected-row { min-width: 0; display: flex; align-items: flex-start; gap: 6px; padding: 7px 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); }
 .cps-selected-row details { flex: 1; min-width: 0; }
-.cps-selected-row summary { min-width: 0; cursor: pointer; list-style: none; }
+.cps-selected-row summary { min-width: 0; display: flex; align-items: flex-start; gap: 7px; cursor: pointer; list-style: none; }
+.cps-selected-row .cps-sel-main { flex: 1; }
+.cps-edit-label { flex: 0 0 auto; font-size: 0.62rem; color: var(--primary); white-space: nowrap; }
+.cps-pricing { min-width: 0; padding-top: 10px; margin-top: 4px; border-top: 1px solid var(--line); }
+.cps-pricing > strong { font-size: 0.72rem; }
+.cps-pricing > .cps-help { margin: 5px 0 10px; }
+#settings-model-reference p { margin: 7px 0; }
 .cps-selected-row summary::-webkit-details-marker { display: none; }
 .cps-sel-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .cps-sel-main code { font-size: 0.7rem; overflow-wrap: anywhere; }

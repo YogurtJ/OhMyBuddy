@@ -97,26 +97,31 @@ function modelInputs(value) {
 // Basic editor fields; other existing definition fields, prices and unknown data are kept.
 function customModelEntry(current, input, official) {
     const id = cleanModelId(input.id);
+    if (Object.hasOwn(input, 'cost')) {
+        if (input.cost === null) throw new Error('价格必须是对象');
+        require('./pi-model-advanced').validateCost(input.cost);
+    }
     return {
         ...current,
         id,
         name: String(input.name || id).trim().slice(0, 200) || id,
         reasoning: Boolean(input.reasoning),
         input: input.imageInput ? ['text', 'image'] : ['text'],
-        contextWindow: numberInRange(input.contextWindow, 128000, 1024, 4000000),
-        maxTokens: numberInRange(input.maxTokens, 16384, 1, 1000000),
-        cost: current.cost || official?.rates || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+        contextWindow: numberInRange(input.contextWindow, current.contextWindow ?? discovery.DEFAULTS.contextWindow, 1024, 4000000),
+        maxTokens: numberInRange(input.maxTokens, current.maxTokens ?? discovery.DEFAULTS.maxTokens, 1, 1000000),
+        cost: { ...(current.cost || official?.rates || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }), ...input.cost }
     };
 }
 
 // User edits are mirrored into modelOverrides so extension registrations cannot replace them.
-function storeCustomModel(provider, model) {
+function storeCustomModel(provider, model, costChanges) {
     const models = Array.isArray(provider.models) ? provider.models : [];
     const index = models.findIndex(item => item.id === model.id);
     if (index >= 0) models[index] = model; else models.push(model);
     provider.models = models;
     const override = { ...(provider.modelOverrides?.[model.id] || {}) };
     for (const field of CUSTOM_MODEL_OVERRIDE_FIELDS) override[field] = model[field];
+    if (costChanges) override.cost = { ...override.cost, ...costChanges };
     provider.modelOverrides = { ...(provider.modelOverrides || {}), [model.id]: override };
 }
 
@@ -543,7 +548,8 @@ class PiSettingsService {
                     thinkingLevelMap: model.thinkingLevelMap || {},
                     input: Array.isArray(model.input) ? model.input : ['text'],
                     contextWindow: model.contextWindow || 128000,
-                    maxTokens: model.maxTokens || 16384
+                    maxTokens: model.maxTokens || 16384,
+                    cost: { ...model.cost, ...override?.cost }
                 };
             })
         })).sort((a, b) => a.id.localeCompare(b.id));
@@ -601,6 +607,13 @@ class PiSettingsService {
         return this.catalogPromise;
     }
 
+    async getModelMetadata(input = {}) {
+        if (!Array.isArray(input.modelIds) || !input.modelIds.length || input.modelIds.length > MAX_BATCH_MODELS) throw new Error('请提供 1–200 个模型 ID');
+        const ids = input.modelIds.map(cleanModelId);
+        const { catalog } = await this.builtinCatalog();
+        return { models: ids.map(id => discovery.describeModel(id, {}, catalog)) };
+    }
+
     // One GET to the service's model list. Drafts send their typed key only to their own
     // URL; saved providers resolve the key server-side, and no key is returned or stored.
     async discoverCustomModels(input = {}) {
@@ -655,7 +668,7 @@ class PiSettingsService {
             if (taken(id)) throw Object.assign(new Error('服务商 ID 已被使用，请换一个'), { statusCode: 409 });
         } else id = discovery.providerIdFor(name, baseUrl, taken);
         const provider = { name, baseUrl, api, authHeader: Boolean(input.authHeader), models: [] };
-        for (const item of inputs) storeCustomModel(provider, customModelEntry({}, item, official.get(item.id)));
+        for (const item of inputs) storeCustomModel(provider, customModelEntry({}, item, official.get(item.id)), item.cost);
         data.providers[id] = provider;
         await this.writeModelsFile(data);
         const result = { ok: true, providerId: id, modelCount: provider.models.length, credential: 'none', requiresRuntimeRestart: true };
@@ -675,7 +688,7 @@ class PiSettingsService {
         const provider = data.providers[providerId];
         if (!provider || typeof provider !== 'object') throw new Error('Custom provider not found');
         const models = Array.isArray(provider.models) ? provider.models : [];
-        for (const item of inputs) storeCustomModel(provider, customModelEntry(models.find(model => model.id === item.id) || {}, item, official.get(item.id)));
+        for (const item of inputs) storeCustomModel(provider, customModelEntry(models.find(model => model.id === item.id) || {}, item, official.get(item.id)), item.cost);
         await this.writeModelsFile(data);
         return { ok: true, providerId, modelCount: inputs.length, requiresRuntimeRestart: true };
     }
@@ -706,7 +719,7 @@ class PiSettingsService {
         } else if (Object.hasOwn(input, 'api')) {
             delete model.api;
         }
-        storeCustomModel(provider, model);
+        storeCustomModel(provider, model, input.cost);
         await this.writeModelsFile(data);
         return { ok: true, providerId, modelId: id, requiresRuntimeRestart: true };
     }

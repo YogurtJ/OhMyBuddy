@@ -45,7 +45,7 @@ test('OpenAI-compatible discovery classifies models and fills chat metadata with
     const prefixed = result.models.find(model => model.id === 'vendor/gpt-5.4-mini');
     assert.equal(prefixed.contextWindow, 400000, 'official catalog wins over relay catalogs for a prefixed exact suffix');
     const unknown = result.models.find(model => model.id === 'mystery-model');
-    assert.deepEqual([unknown.contextWindow, unknown.maxTokens, unknown.metadata, unknown.kindSource], [128000, 16384, 'default', 'default']);
+    assert.deepEqual([unknown.contextWindow, unknown.maxTokens, unknown.metadata, unknown.kindSource], [500000, 128000, 'default', 'default']);
     assert.equal(result.models.some(model => 'selected' in model), false);
 });
 
@@ -135,6 +135,44 @@ test('generated provider IDs avoid built-in and existing IDs', () => {
     assert.equal(discovery.providerIdFor('', 'http://127.0.0.1:8080/v1', has), 'custom-127-0-0-1');
 });
 
+test('new GPT-6 minor versions use a same-tier official reference and never copy its price', () => {
+    const catalog = discovery.buildCatalog([
+        { provider: 'openai', id: 'gpt-6-sol', contextWindow: 272000, maxTokens: 128000, input: ['text','image'], reasoning: true, cost: { input: 5, output: 25 } },
+        { provider: 'openai', id: 'gpt-6.1-sol', contextWindow: 400000, maxTokens: 128000, input: ['text','image'], reasoning: true, cost: { input: 6, output: 30 } },
+        { provider: 'openai', id: 'gpt-6-astra', contextWindow: 272000, maxTokens: 128000, input: ['text','image'], reasoning: true, cost: { input: 10, output: 50 } },
+        { provider: 'relay', id: 'gpt-6.1-astra', contextWindow: 1000000, maxTokens: 500000, input: ['text'], reasoning: false },
+        { provider: 'relay', id: 'gpt-6.2-sol', name:'GPT-6.2 Sol', contextWindow:128000, maxTokens:16384, input:['text'], reasoning:false }
+    ]);
+    const sol = discovery.describeModel('gpt-6.2-sol', {}, catalog);
+    assert.deepEqual([sol.contextWindow,sol.maxTokens,sol.imageInput,sol.reasoning,sol.metadata,sol.referenceModel], [500000,128000,true,true,'default','openai/gpt-6.1-sol']);
+    assert.equal(sol.metadataSources.contextWindow,'default');
+    assert.equal(sol.cost,undefined, 'new model pricing cannot be inferred from a predecessor');
+    const astra = discovery.describeModel('relay/gpt-6.2-astra', {}, catalog);
+    assert.deepEqual([astra.contextWindow,astra.maxTokens,astra.referenceModel], [500000,128000,'openai/gpt-6-astra']);
+    assert.equal(discovery.describeModel('gpt-7.2-astra', {}, catalog).metadata,'default');
+    assert.equal(discovery.describeModel('gpt-6.2-astra-special', {}, catalog).metadata,'default');
+    const explicit = discovery.describeModel('gpt-6.2-sol', { context_window:1000000, maxTokens:200000, imageInput:false, reasoning:false }, catalog);
+    assert.deepEqual([explicit.contextWindow,explicit.maxTokens,explicit.imageInput,explicit.reasoning], [1000000,200000,false,false]);
+    assert.deepEqual(explicit.metadataSources,{contextWindow:'service',maxTokens:'service',imageInput:'service',reasoning:'service',cost:'unknown'});
+    const partial = discovery.describeModel('gpt-6.2-sol', { contextWindow:900000 }, catalog);
+    assert.deepEqual([partial.metadataSources.contextWindow,partial.metadataSources.maxTokens,partial.maxTokens],['service','family',128000]);
+    const exact = discovery.describeModel('gpt-6-sol', {}, catalog);
+    assert.equal(exact.metadata,'catalog');assert.equal(exact.contextWindow,272000,'confirmed smaller model limits are retained');assert.equal(exact.cost.input,5);
+    const unknown = discovery.describeModel('totally-unknown',{},catalog);
+    assert.equal(unknown.metadataSources.reasoning,'unknown');assert.equal(unknown.metadataSources.imageInput,'unknown');
+});
+
+test('model discovery handles explicit capabilities and documented USD/token pricing', () => {
+    const known = discovery.buildCatalog([{provider:'openai',id:'known',input:['text','image'],reasoning:true,contextWindow:400000,maxTokens:128000,cost:{input:1,output:2,cacheRead:0.1,cacheWrite:0}}]);
+    const model = discovery.describeModel('known',{pricing:{prompt:'0.000005',completion:'0.00002',input_cache_read:'0',currency:'USD'},input:['text'],thinking:false},known);
+    assert.deepEqual(model.cost,{input:5,output:20,cacheRead:0,cacheWrite:0});
+    assert.equal(model.imageInput,false);assert.equal(model.reasoning,false);
+    const remote = discovery.describeModel('m',{capabilities:{vision:true,reasoning:true},cost:{input:3,output:12}},known);
+    assert(remote.imageInput&&remote.reasoning);assert.deepEqual(remote.cost,{input:3,output:12});
+    assert.equal(discovery.describeModel('unknown',{pricing:{prompt:'',completion:'-1'}},known).cost,undefined);
+    assert.equal(discovery.describeModel('unknown',{pricing:{prompt:'1',currency:'CNY'}},known).cost,undefined);
+});
+
 function providerFetch(models) {
     const calls = [];
     const fetch = async (url, options) => { calls.push({ url, headers: options.headers }); return reply(200, { data: models.map(id => ({ id })) }); };
@@ -185,6 +223,44 @@ test('one-step setup writes provider, models and key; existing providers discove
     assert.deepEqual([after.models[0].cost.input, after.models[0].futureField], [9, 'keep'], 'batch add keeps existing models untouched');
     await assert.rejects(service.addCustomModels('missing-provider', { models: [{ id: 'x' }] }), /not found/);
     await assert.rejects(service.addCustomModels('openai-custom', { models: Array.from({ length: 201 }, (_, i) => ({ id: `m-${i}` })) }), /200/);
+});
+
+test('metadata lookup is read-only and manual IDs use the same family reference as discovery', async () => {
+    const service = new PiSettingsService({cwd:agentDir});
+    const metadata = await service.getModelMetadata({modelIds:['gpt-6.2-sol','gpt-6.2-astra']});
+    assert.deepEqual(metadata.models.map(model=>[model.id,model.maxTokens,model.imageInput,model.reasoning,model.metadata]),
+        [['gpt-6.2-sol',128000,true,true,'default'],['gpt-6.2-astra',128000,true,true,'default']]);
+    await assert.rejects(service.getModelMetadata({modelIds:[]}),/1–200/);
+    await assert.rejects(service.getModelMetadata({modelIds:['bad id']}),/Invalid model ID/);
+});
+
+test('custom model prices are editable, validated and preserved together with tier and override fields', async () => {
+    const service = new PiSettingsService({cwd:agentDir});
+    const provider = await service.createCustomProvider({name:'Price test',baseUrl:'https://price.example/v1',api:'openai-completions',models:[{id:'priced',cost:{input:2,output:8,cacheRead:0.2,cacheWrite:0}}]});
+    const {modelsPath}=await service.paths();
+    let data=service.readModelsFile(modelsPath),config=data.providers[provider.providerId];
+    config.models[0].cost.tiers=[{inputTokensAbove:200000,input:4,output:16}];
+    config.models[0].cost.futureRate=99;
+    config.modelOverrides.priced.cost={...config.modelOverrides.priced.cost,output:9,futureOverride:7};
+    await service.writeModelsFile(data);
+    await service.upsertCustomModel(provider.providerId,{id:'priced',contextWindow:272000,maxTokens:128000,cost:{input:3,output:0}});
+    config=service.readModelsFile(modelsPath).providers[provider.providerId];
+    assert.equal(config.models[0].cost.input,3);assert.equal(config.models[0].cost.output,0);
+    assert.equal(config.models[0].cost.futureRate,99);assert.equal(config.models[0].cost.tiers[0].input,4);
+    assert.equal(config.modelOverrides.priced.cost.output,0);assert.equal(config.modelOverrides.priced.cost.futureOverride,7);
+    const listed=(await service.listCustomProviders()).find(p=>p.id===provider.providerId);
+    assert.deepEqual([listed.models[0].cost.input,listed.models[0].cost.output,listed.models[0].cost.cacheRead],[3,0,0.2]);
+    await service.addCustomModels(provider.providerId,{models:[{id:'second',cost:{input:1,output:4}}]});
+    assert.equal(service.readModelsFile(modelsPath).providers[provider.providerId].models[1].cost.input,1);
+    await service.upsertCustomModel(provider.providerId,{id:'second',cost:{input:2}});
+    assert.deepEqual([service.readModelsFile(modelsPath).providers[provider.providerId].models[1].contextWindow,service.readModelsFile(modelsPath).providers[provider.providerId].models[1].maxTokens],[500000,128000]);
+    const before=fs.readFileSync(modelsPath);
+    for(const cost of [{input:-1},{input:'5'},{input:Infinity},{input:100001},{currency:'USD'},null]) {
+        await assert.rejects(service.upsertCustomModel(provider.providerId,{id:'priced',cost}),/价格/);
+        assert.deepEqual(fs.readFileSync(modelsPath),before,'invalid prices cannot change configuration');
+    }
+    await service.upsertCustomModel(provider.providerId,{id:'priced',contextWindow:300000,maxTokens:128000});
+    assert.equal(service.readModelsFile(modelsPath).providers[provider.providerId].models[0].cost.input,3,'omitting prices preserves existing rates');
 });
 
 test('a failed key save is reported after the provider is written and never echoes the key', async () => {

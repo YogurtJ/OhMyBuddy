@@ -35,6 +35,7 @@ function mountSettingsRoutes(router, { settingsService, nativeService, auxiliary
     route('post', '/settings/models/refresh', () => settingsService.refreshModels(), { errorStatus: 502, serviceStatus: false });
     route('post', '/settings/models/preferences', req => settingsService.setModelPreferences(req.body));
     route('patch', '/settings/media-agent', req => settingsService.setMediaAgentModel(req.body), { serviceStatus: false });
+    route('post', '/settings/models/metadata', req => settingsService.getModelMetadata(req.body));
     route('post', '/settings/models/test', req => settingsService.testModel(req.body), { errorStatus: 502, serviceStatus: false });
     route('post', '/settings/custom-providers', req => settingsService.upsertCustomProvider(req.body));
     route('post', '/settings/custom-providers/setup', req => settingsService.createCustomProvider(req.body));

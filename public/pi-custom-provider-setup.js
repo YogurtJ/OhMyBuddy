@@ -4,9 +4,6 @@
     'use strict';
     const translateUi = globalThis.PiI18n?.t || ((text, ...values) => text.replace(/\{(\d+)\}/g, (_, index) => values[index] ?? `{${index}}`));
     const APIS = [['openai-completions', 'OpenAI Chat Completions'], ['openai-responses', 'OpenAI Responses'], ['anthropic-messages', 'Anthropic Messages'], ['google-generative-ai', 'Google Gemini']];
-    const LIMITS = { contextWindow: [1024, 4000000], maxTokens: [1, 1000000] };
-    const DEFAULTS = { contextWindow: 128000, maxTokens: 16384 };
-    const PREFERRED = ['openai', 'anthropic', 'google', 'xai', 'deepseek', 'mistral', 'moonshotai', 'zai', 'minimax', 'xiaomi'];
     const PAGE = 150;
     const GROUPS = [
         ['chat', ['chat'], translateUi("对话模型")], ['image', ['image'], translateUi("图像")], ['video', ['video'], translateUi("视频")],
@@ -15,7 +12,6 @@
     ];
     const KINDS = { image: translateUi("图像生成"), video: translateUi("视频生成"), tts: translateUi("语音合成"), asr: translateUi("语音识别"),
         embedding: translateUi("向量"), rerank: translateUi("重排序"), moderation: translateUi("内容审核"), realtime: translateUi("实时音频") };
-    const SOURCES = { service: translateUi("服务商提供"), catalog: translateUi("参考内置目录"), default: translateUi("默认值，请核对"), edited: translateUi("已手动修改") };
 
     function node(tag, className = '', text = '') {
         const element = document.createElement(tag);
@@ -83,28 +79,20 @@
     function create(host) {
         const { apiFetch, toast } = host;
 
-        // Exact IDs from the local built-in catalog; the last segment covers relay prefixes.
-        function catalogLookup(id) {
-            const models = host.snapshot()?.models || [];
-            const rank = model => { const index = PREFERRED.indexOf(model.provider); return index < 0 ? PREFERRED.length : index; };
-            const pick = list => list.sort((a, b) => rank(a) - rank(b))[0];
-            const suffix = id.split('/').pop();
-            const model = pick(models.filter(item => item.id === id)) || pick(models.filter(item => item.id.split('/').pop() === suffix));
-            if (!model) return null;
-            const contextWindow = Math.min(LIMITS.contextWindow[1], Math.max(LIMITS.contextWindow[0], Number(model.contextWindow) || DEFAULTS.contextWindow));
-            return { contextWindow, maxTokens: Math.min(contextWindow, Math.max(1, Number(model.maxTokens) || DEFAULTS.maxTokens)),
-                imageInput: Array.isArray(model.input) && model.input.includes('image'), reasoning: Boolean(model.reasoning) };
-        }
+        const configuration = window.PiModelConfiguration;
         function chatEntry(model) {
-            if (model.kind === 'chat' && model.contextWindow) return { id: model.id, name: model.name !== model.id ? model.name : '',
-                contextWindow: model.contextWindow, maxTokens: model.maxTokens, imageInput: Boolean(model.imageInput), reasoning: Boolean(model.reasoning), metadata: model.metadata || 'default' };
-            const known = catalogLookup(model.id);
-            return { id: model.id, name: model.name && model.name !== model.id ? model.name : '', ...(known || { ...DEFAULTS, imageInput: false, reasoning: false }), metadata: known ? 'catalog' : 'default' };
+            return { id: model.id, name: model.name !== model.id ? model.name || '' : '',
+                contextWindow: model.contextWindow || 500000, maxTokens: model.maxTokens || 128000,
+                imageInput: Boolean(model.imageInput), reasoning: Boolean(model.reasoning), metadata: model.metadata || 'default',
+                metadataSources: model.metadataSources || {}, referenceModel: model.referenceModel,
+                ...(model.cost ? { cost: { ...model.cost } } : {}) };
         }
         function metaText(entry) {
             const parts = [translateUi("上下文 {0}", formatTokens(entry.contextWindow)), translateUi("最大输出 {0}", formatTokens(entry.maxTokens))];
             if (entry.imageInput) parts.push(translateUi("图片输入"));
             if (entry.reasoning) parts.push(translateUi("推理"));
+            if (entry.metadataSources?.imageInput === 'unknown') parts.push(translateUi("图片能力未知"));
+            if (entry.metadataSources?.reasoning === 'unknown') parts.push(translateUi("推理能力未知"));
             return parts.join(' · ');
         }
 
@@ -171,8 +159,8 @@
                 box.addEventListener('change', () => { if (box.checked) chosen.add(model.id); else chosen.delete(model.id); renderCounts(); });
                 const main = node('span', 'cps-row-main');
                 main.append(node('code', '', model.id));
-                const info = [model.name && model.name !== model.id ? model.name : '',
-                    model.contextWindow ? formatTokens(model.contextWindow) : '', model.imageInput ? translateUi("图片输入") : '', model.reasoning ? translateUi("推理") : ''].filter(Boolean).join(' · ');
+                const info = [model.name && model.name !== model.id ? model.name : '', metaText(chatEntry(model)),
+                    configuration.sourceText(model)].filter(Boolean).join(' · ');
                 if (info) main.append(node('small', '', info));
                 row.append(box, main);
                 if (model.added) row.append(node('span', 'settings-badge', translateUi("已添加")));
@@ -251,10 +239,10 @@
             const setStatus = (text, tone = '') => { status.textContent = text; status.dataset.tone = tone; };
 
             function numberField(parent, label, entry, key) {
-                const control = field(parent, label, 'number', { min: LIMITS[key][0], max: LIMITS[key][1], step: 1, value: entry[key] });
+                const control = field(parent, label, 'number', { min: key === 'contextWindow' ? 1024 : 1, max: key === 'contextWindow' ? 4000000 : 1000000, step: 1, value: entry[key], help: configuration.sourceText(entry, key) });
                 control.addEventListener('change', () => {
                     const value = Number(control.value);
-                    if (Number.isSafeInteger(value) && value >= LIMITS[key][0] && value <= LIMITS[key][1]) entry[key] = value;
+                    if (control.checkValidity() && Number.isSafeInteger(value)) entry[key] = value;
                     else control.value = entry[key];
                 });
                 return control;
@@ -265,9 +253,9 @@
                 const summary = node('summary');
                 const main = node('span', 'cps-sel-main');
                 const meta = node('small');
-                const refresh = () => { meta.textContent = [entry.name, metaText(entry), SOURCES[entry.metadata]].filter(Boolean).join(' · '); };
+                const refresh = () => { meta.textContent = [entry.name, metaText(entry), configuration.sourceText(entry)].filter(Boolean).join(' · '); };
                 main.append(node('code', '', entry.id), meta);
-                summary.append(main);
+                summary.append(main, node('span', 'cps-edit-label', translateUi("参数与价格")));
                 const fields = node('div', 'cps-sel-fields settings-form-grid');
                 const name = field(fields, translateUi("显示名称"), 'text', { value: entry.name, maxLength: 200, placeholder: translateUi("默认使用模型 ID"), wide: true });
                 name.addEventListener('input', () => { entry.name = name.value.trim(); refresh(); });
@@ -279,7 +267,15 @@
                     box.addEventListener('change', () => { entry[key] = box.checked; refresh(); });
                     wrapper.append(box, node('span', '', label)); fields.append(wrapper);
                 }
-                fields.addEventListener('change', () => { entry.metadata = 'edited'; refresh(); });
+                configuration.priceFields(fields, entry.cost, () => {
+                    const prices = {};
+                    for (const input of fields.querySelectorAll('[data-price]')) if (input.value.trim() && input.checkValidity()) prices[input.dataset.price] = Number(input.value);
+                    entry.cost = prices;
+                });
+                fields.addEventListener('change', event => {
+                    if (event.target.dataset.price) return;
+                    entry.metadata = 'edited'; refresh();
+                });
                 details.append(summary, fields);
                 const remove = iconButton('fa-xmark', translateUi("移除 {0}", entry.id));
                 remove.addEventListener('click', () => { selected.delete(entry.id); render(); input.focus(); });
@@ -293,17 +289,35 @@
                 list.hidden = empty.hidden = false;
                 if (selected.size) empty.hidden = true; else list.hidden = true;
             }
+            let manualInFlight = null;
             function addManual() {
+                if (!manualInFlight) manualInFlight = performManual().finally(() => { manualInFlight = null; });
+                return manualInFlight;
+            }
+            async function performManual() {
                 const id = input.value.trim();
                 if (!id) return true;
                 if (!validModelId(id)) { setStatus(translateUi("模型 ID 不能包含空格或控制字符，且不超过 500 个字符。"), 'error'); input.focus(); return false; }
                 if (existingIds.has(id)) { setStatus(translateUi("“{0}”已在此服务商中。", id), 'error'); input.focus(); return false; }
-                if (!selected.has(id)) selected.set(id, chatEntry({ id, name: '', kind: 'manual' }));
+                const result = await performManualLookup(id);
+                if (!result) return false;
                 input.value = ''; setStatus(''); render();
                 return true;
             }
-            input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); addManual(); } });
-            add.addEventListener('click', () => { addManual(); input.focus(); });
+            async function performManualLookup(id) {
+                if (!selected.has(id)) {
+                    input.disabled = add.disabled = true;
+                    try {
+                        const result = await apiFetch('/api/pi/settings/models/metadata', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modelIds: [id] }) });
+                        if (!root.isConnected) return false;
+                        selected.set(id, chatEntry(result.models[0]));
+                    } catch (error) { if (root.isConnected) setStatus(error.message, 'error'); return false; }
+                    finally { input.disabled = add.disabled = false; }
+                }
+                return true;
+            }
+            input.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); void addManual(); } });
+            add.addEventListener('click', async () => { await addManual(); if (root.isConnected) input.focus(); });
             function showPicker() {
                 openPicker(lastResult, { selectedIds: new Set(selected.keys()), returnFocus: fetchButton, onConfirm(picked, listed) {
                     if (!root.isConnected) return;
@@ -340,7 +354,8 @@
                 // Changed connection fields make an earlier list or in-flight result stale.
                 invalidate() { token++; lastResult = null; reopen.hidden = true; if (status.dataset.tone !== 'error' || status.textContent) setStatus(''); },
                 collect: () => [...selected.values()].map(entry => ({ id: entry.id, ...(entry.name ? { name: entry.name } : {}),
-                    contextWindow: entry.contextWindow, maxTokens: entry.maxTokens, imageInput: entry.imageInput, reasoning: entry.reasoning }))
+                    contextWindow: entry.contextWindow, maxTokens: entry.maxTokens, imageInput: entry.imageInput, reasoning: entry.reasoning,
+                    ...(Object.keys(entry.cost || {}).length ? { cost: { ...entry.cost } } : {}) }))
             };
         }
 
@@ -392,7 +407,7 @@
             form.addEventListener('submit', async event => {
                 event.preventDefault(); error.textContent = '';
                 if (!id.checkValidity()) advanced.open = true;
-                if (!form.reportValidity() || !section.addManual()) return;
+                if (!form.reportValidity() || !await section.addManual()) return;
                 const models = section.collect();
                 if (!models.length) { error.textContent = translateUi("请至少添加一个模型：点击“获取可用模型”，或手动输入模型 ID。"); return; }
                 const payload = { name: name.value.trim(), baseUrl: baseUrl.value.trim(), api: api.value, apiKey: key.value, authHeader: auth.checked, models,
@@ -431,7 +446,7 @@
             host.body().append(form);
             form.addEventListener('submit', async event => {
                 event.preventDefault(); error.textContent = '';
-                if (!section.addManual()) return;
+                if (!await section.addManual()) return;
                 const models = section.collect();
                 if (!models.length) { error.textContent = translateUi("请至少选择一个模型：点击“获取可用模型”，或手动输入模型 ID。"); return; }
                 host.setBusy(submit, true, translateUi("保存"));

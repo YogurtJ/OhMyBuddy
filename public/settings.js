@@ -424,7 +424,7 @@ function start() {
                         ${state.modelSnapshot.modelSpeed && model.speedSupported ? `<button type="button" data-action="speed">${translateUi('速度')}</button>` : ''}
                         <button type="button" data-action="test" ${model.available ? '' : 'disabled'}><i class="fa-solid fa-vial"></i> ${translateUi("测试")}</button>
                         ${isDefault ? '' : `<button type="button" data-action="default"><i class="fa-solid fa-star"></i> ${translateUi("设为默认")}</button>`}
-                        ${editable ? `<button type="button" data-action="edit" aria-label="${translateUi("编辑模型")}"><i class="fa-solid fa-pen"></i></button><button type="button" class="danger" data-action="delete" aria-label="${translateUi("删除模型")}"><i class="fa-solid fa-trash"></i></button>` : ''}
+                        ${editable ? `<button type="button" data-action="edit" aria-label="${translateUi("编辑模型")}"><i class="fa-solid fa-pen" aria-hidden="true"></i> ${translateUi("参数与价格")}</button><button type="button" class="danger" data-action="delete" aria-label="${translateUi("删除模型")}"><i class="fa-solid fa-trash"></i></button>` : ''}
                     </div>
                 </article>`;
         }).join('') + (!models.length ? `<p class="settings-empty">${translateUi("此服务商暂无匹配模型。完成连接后可点击“刷新目录”。")}</p>` : '') + (pages > 1 ? `
@@ -759,15 +759,51 @@ function start() {
                     <label><span>${translateUi("服务商")}</span><select name="providerId">${customProviders.map(provider => `<option value="${escapeHtml(provider.id)}">${escapeHtml(provider.name || provider.id)}</option>`).join('')}</select></label>
                     <label><span>Model ID</span><input name="id" value="${escapeHtml(model?.id || '')}" required maxlength="500" ${model ? 'readonly' : ''}></label>
                     <label class="wide"><span>${translateUi("显示名称")}</span><input name="name" value="${escapeHtml(model?.name || '')}" placeholder="${translateUi("默认使用 Model ID")}"></label>
-                    <label><span>Context Window</span><input name="contextWindow" type="number" min="1024" max="4000000" value="${model?.contextWindow || 128000}" required></label>
-                    <label><span>${translateUi("最大输出 Tokens")}</span><input name="maxTokens" type="number" min="1" max="1000000" value="${model?.maxTokens || 16384}" required></label>
+                    <label><span>${translateUi("上下文窗口")}</span><input name="contextWindow" type="number" min="1024" max="4000000" value="${model?.contextWindow || 500000}" required></label>
+                    <label><span>${translateUi("最大输出 Tokens")}</span><input name="maxTokens" type="number" min="1" max="1000000" value="${model?.maxTokens || 128000}" required></label>
                     <label class="settings-checkbox-field"><input name="reasoning" type="checkbox" ${model?.reasoning ? 'checked' : ''}><span>${translateUi("支持 reasoning")}</span></label>
                     <label class="settings-checkbox-field"><input name="imageInput" type="checkbox" ${model?.input?.includes('image') ? 'checked' : ''}><span>${translateUi("支持图片输入")}</span></label>
                 </div>
+                <div id="settings-model-reference"></div>
+                <div id="settings-model-pricing"></div>
                 <div class="settings-form-actions"><button type="button" data-editor-cancel>${translateUi("取消")}</button><button class="settings-primary-button" type="submit">${translateUi("保存模型")}</button></div>
             </form>
         `);
         const form = $('settings-model-form');
+        const epoch = state.editorEpoch;
+        const prices = window.PiModelConfiguration.priceFields($('settings-model-pricing'), model?.cost);
+        const reference = document.createElement('button'); reference.type = 'button'; reference.className = 'settings-secondary-button';
+        reference.textContent = translateUi("读取参考参数");
+        const info = document.createElement('p'); info.className = 'cps-help'; info.setAttribute('role', 'status');
+        const apply = document.createElement('button'); apply.type = 'button'; apply.className = 'settings-secondary-button'; apply.hidden = true;
+        apply.textContent = translateUi("应用参考参数");
+        $('settings-model-reference').append(reference, info, apply);
+        let suggestion;
+        reference.addEventListener('click', async () => {
+            const id = form.elements.id.value.trim();
+            if (!id) { form.elements.id.reportValidity(); return; }
+            setBusy(reference, true, translateUi("正在读取"));
+            try {
+                const result = await apiFetch('/api/pi/settings/models/metadata', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ modelIds: [id] }) });
+                if (epoch !== state.editorEpoch || form.elements.id.value.trim() !== id) return;
+                suggestion = result.models[0];
+                info.textContent = [translateUi("上下文 {0} · 最大输出 {1}", formatTokens(suggestion.contextWindow), formatTokens(suggestion.maxTokens)),
+                    suggestion.imageInput ? translateUi("图片输入") : '', suggestion.reasoning ? translateUi("推理") : '', window.PiModelConfiguration.sourceText(suggestion)].filter(Boolean).join(' · ');
+                apply.hidden = false;
+            } catch (error) { if (epoch === state.editorEpoch) info.textContent = error.message; }
+            finally { setBusy(reference, false); }
+        });
+        apply.addEventListener('click', () => {
+            if (!suggestion || suggestion.id !== form.elements.id.value.trim()) return;
+            form.elements.contextWindow.value = suggestion.contextWindow;
+            form.elements.maxTokens.value = suggestion.maxTokens;
+            form.elements.imageInput.checked = suggestion.imageInput;
+            form.elements.reasoning.checked = suggestion.reasoning;
+            // Rates are provider-specific and stay as entered when applying capability suggestions.
+            info.textContent = translateUi("参考参数已填入，价格保持原值；保存后生效。");
+            apply.hidden = true;
+        });
+        form.elements.id.addEventListener('input', () => { suggestion = null; info.textContent = ''; apply.hidden = true; });
         form.elements.providerId.value = providerId || customProviders[0].id;
         if (model) form.elements.providerId.disabled = true;
         form.addEventListener('submit', async event => {
@@ -776,6 +812,8 @@ function start() {
             const data = Object.fromEntries(new FormData(form));
             data.reasoning = form.elements.reasoning.checked;
             data.imageInput = form.elements.imageInput.checked;
+            const cost = prices.read();
+            if (cost) data.cost = cost;
             const targetProvider = form.elements.providerId.value;
             try {
                 await apiFetch(`/api/pi/settings/custom-providers/${encodeURIComponent(targetProvider)}/models`, {

@@ -8,7 +8,8 @@ const MAX_MODELS = 3000;
 const MAX_PAGES = 5;
 const REQUEST_TIMEOUT_MS = 15000;
 const TOTAL_TIMEOUT_MS = 40000;
-const DEFAULTS = { contextWindow: 128000, maxTokens: 16384 };
+const DEFAULTS = { contextWindow: 500000, maxTokens: 128000 };
+const LEGACY_DEFAULTS = { contextWindow: 128000, maxTokens: 16384 };
 const LIMITS = { contextWindow: [1024, 4000000], maxTokens: [1, 1000000] };
 // Built-in catalog entries from these providers describe the original model best.
 const PREFERRED_CATALOG = ['openai', 'anthropic', 'google', 'xai', 'deepseek', 'mistral', 'moonshotai', 'zai', 'minimax', 'xiaomi', 'meta', 'qwen-token-plan'];
@@ -77,15 +78,46 @@ function serviceKind(item) {
 function catalogKind(model) {
     return model.type === 'image' ? 'image' : model.type === 'classifier' ? 'moderation' : 'chat';
 }
-// Exact IDs only; the last path segment covers relays that add or drop a vendor prefix.
+function rates(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+    const result = {};
+    for (const key of ['input', 'output', 'cacheRead', 'cacheWrite']) {
+        const price = value[key];
+        if (typeof price === 'number' && Number.isFinite(price) && price >= 0 && price <= 100000) result[key] = price;
+    }
+    return Object.keys(result).length ? result : undefined;
+}
+function serviceRates(item) {
+    // pi-style cost is USD/million tokens. OpenRouter pricing is USD/token.
+    const direct = rates(item.cost);
+    if (direct) return direct;
+    const pricing = item.pricing;
+    if (!pricing || typeof pricing !== 'object' || pricing.currency && pricing.currency !== 'USD') return undefined;
+    const result = {};
+    for (const [key, field] of [['input','prompt'], ['output','completion'], ['cacheRead','input_cache_read'], ['cacheWrite','input_cache_write']]) {
+        const value = pricing[field];
+        if (typeof value !== 'number' && (typeof value !== 'string' || !value.trim())) continue;
+        const number = Number(value);
+        if (Number.isFinite(number) && number >= 0 && number * 1e6 <= 100000) result[key] = number * 1e6;
+    }
+    return rates(result);
+}
+function familyId(id) {
+    const match = /^gpt-(6)(?:\.(\d{1,2}))?-(sol|astra|terra|luna)$/.exec(id);
+    return match ? { major: Number(match[1]), minor: Number(match[2] || 0), tier: match[3] } : null;
+}
+// Exact IDs first. A new GPT-6 minor version can reference an older official model
+// in the SAME tier; its price is never inferred from that family reference.
 function buildCatalog(models, providerIds = []) {
     const rank = provider => { const index = PREFERRED_CATALOG.indexOf(provider); return index < 0 ? PREFERRED_CATALOG.length : index; };
-    const byId = new Map(), bySuffix = new Map();
+    const byId = new Map(), bySuffix = new Map(), families = [];
     for (const model of models) {
         if (!model || typeof model.id !== 'string') continue;
-        const entry = { provider: model.provider, kind: catalogKind(model), name: typeof model.name === 'string' ? model.name : model.id,
-            contextWindow: positive(model.contextWindow), maxTokens: positive(model.maxTokens),
+        const entry = { id: model.id, provider: model.provider, kind: catalogKind(model), name: typeof model.name === 'string' ? model.name : model.id,
+            contextWindow: positive(model.contextWindow), maxTokens: positive(model.maxTokens), cost: rates(model.cost),
             imageInput: Array.isArray(model.input) && model.input.includes('image'), reasoning: Boolean(model.reasoning) };
+        const family = familyId(model.id);
+        if (family && model.provider === 'openai' && entry.kind === 'chat') families.push({ ...family, entry });
         for (const [map, key] of [[byId, model.id], [bySuffix, model.id.split('/').pop()]]) {
             const previous = map.get(key);
             if (!previous || rank(entry.provider) < rank(previous.provider)) map.set(key, entry);
@@ -93,7 +125,17 @@ function buildCatalog(models, providerIds = []) {
     }
     return {
         providers: new Set(providerIds),
-        lookup(id) { return byId.get(id) || bySuffix.get(id.split('/').pop()) || null; }
+        lookup(id) {
+            const exact = byId.get(id) || bySuffix.get(id.split('/').pop());
+            const target = familyId(id.split('/').pop());
+            const genericEntry = exact && exact.provider !== 'openai' && exact.kind === 'chat'
+                && exact.contextWindow === LEGACY_DEFAULTS.contextWindow && exact.maxTokens === LEGACY_DEFAULTS.maxTokens && !exact.imageInput && !exact.reasoning;
+            if (exact && !genericEntry) return exact;
+            if (!target) return exact || null;
+            const reference = families.filter(item => item.major === target.major && item.tier === target.tier && item.minor <= target.minor)
+                .sort((a,b) => b.minor - a.minor)[0]?.entry;
+            return reference ? { ...reference, name: exact?.name || id, cost: undefined, family: true } : exact || null;
+        }
     };
 }
 
@@ -102,16 +144,31 @@ function chatMetadata(item, entry) {
     const remoteContext = firstPositive(item.context_length, item.context_window, item.contextWindow, item.max_context_length,
         item.max_model_len, item.inputTokenLimit, item.input_token_limit, item.max_input_tokens, top.context_length);
     const remoteOutput = firstPositive(top.max_completion_tokens, item.max_completion_tokens, item.max_output_tokens,
-        item.outputTokenLimit, item.output_token_limit);
-    const inputs = lowerList(item.architecture?.input_modalities ?? item.input_modalities ?? item.modalities?.input);
+        item.outputTokenLimit, item.output_token_limit, item.maxTokens);
+    const inputs = lowerList(item.architecture?.input_modalities ?? item.input_modalities ?? item.modalities?.input ?? item.input);
     const parameters = lowerList(item.supported_parameters);
-    const contextWindow = clamp(remoteContext ?? entry?.contextWindow ?? DEFAULTS.contextWindow, LIMITS.contextWindow);
+    const explicitImage = [item.imageInput, item.supports_vision, item.capabilities?.vision].find(value => typeof value === 'boolean')
+        ?? (inputs.length ? inputs.includes('image') : undefined);
+    const explicitReasoning = [item.reasoning, item.thinking, item.supports_reasoning, item.capabilities?.reasoning].find(value => typeof value === 'boolean')
+        ?? (parameters.length ? parameters.includes('reasoning') || parameters.includes('include_reasoning') : undefined);
+    const known = entry?.family ? 'family' : 'catalog';
+    // A family match confirms neither the new model's context nor the relay's cap.
+    // Apply the operator's default to that field and keep the family reference for capabilities.
+    const exactContext = entry?.family ? undefined : entry?.contextWindow;
+    const contextWindow = clamp(remoteContext ?? exactContext ?? DEFAULTS.contextWindow, LIMITS.contextWindow);
     const maxTokens = clamp(Math.min(remoteOutput ?? entry?.maxTokens ?? DEFAULTS.maxTokens, contextWindow), LIMITS.maxTokens);
-    const imageInput = inputs.length ? inputs.includes('image') : Boolean(entry?.imageInput);
-    const reasoning = parameters.length ? parameters.includes('reasoning') || parameters.includes('include_reasoning')
-        : typeof item.thinking === 'boolean' ? item.thinking : Boolean(entry?.reasoning);
-    const metadata = remoteContext ? 'service' : entry?.contextWindow ? 'catalog' : 'default';
-    return { contextWindow, maxTokens, imageInput, reasoning, metadata };
+    const imageInput = explicitImage ?? Boolean(entry?.imageInput);
+    const reasoning = explicitReasoning ?? Boolean(entry?.reasoning);
+    const remoteCost = serviceRates(item), cost = { ...entry?.cost, ...remoteCost };
+    const metadata = remoteContext ? 'service' : exactContext ? 'catalog' : 'default';
+    const metadataSources = { contextWindow: remoteContext ? 'service' : exactContext ? 'catalog' : 'default',
+        maxTokens: remoteOutput ? 'service' : entry?.maxTokens ? known : 'default',
+        imageInput: explicitImage !== undefined ? 'service' : entry ? known : 'unknown',
+        reasoning: explicitReasoning !== undefined ? 'service' : entry ? known : 'unknown',
+        cost: remoteCost ? 'service' : entry?.cost ? 'catalog' : 'unknown' };
+    return { contextWindow, maxTokens, imageInput, reasoning, metadata, metadataSources,
+        ...(entry?.family ? { referenceModel: `${entry.provider}/${entry.id}` } : {}),
+        ...(Object.keys(cost).length ? { cost } : {}) };
 }
 
 function describeModel(id, item, catalog) {
@@ -126,7 +183,7 @@ function describeModel(id, item, catalog) {
     const label = [item.display_name, item.displayName, typeof item.name === 'string' && item.name !== id && !item.name.startsWith('models/') ? item.name : null, entry?.name]
         .find(value => typeof value === 'string' && value.trim() && value.length <= 200);
     const model = { id, name: label ? label.trim() : id, kind, kindSource };
-    return kind === 'chat' ? { ...model, ...chatMetadata(item, entry || {}) } : model;
+    return kind === 'chat' ? { ...model, ...chatMetadata(item, entry) } : model;
 }
 
 function itemsOf(data) {

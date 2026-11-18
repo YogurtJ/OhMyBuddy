@@ -11918,5 +11918,27 @@
         ["删除此实时语音模型？共享服务和凭据会保留。","Delete this realtime voice model? Shared services and credentials are retained."],
         ["正在进行的实时语音通话","Active voice call"]
     );
+    // Model metadata references and editable channel pricing.
+    rows.push(
+        ["同系列参考", "Same-family reference"],
+        ["参考 {0}，尚未经此渠道确认", "Based on {0}; not yet confirmed for this channel"],
+        ["输入单价", "Input price"],
+        ["输出单价", "Output price"],
+        ["缓存读取单价", "Cache read price"],
+        ["缓存写入单价", "Cache write price"],
+        ["已有阶梯计价保留；此处只修改基础单价。", "Existing pricing tiers are kept; only base rates are edited here."],
+        ["模型价格 · USD / 百万 tokens", "Model prices · USD / million tokens"],
+        ["用于费用估算，请填写此渠道的实际单价；留空保留原值，0 表示免费。历史费用不重新计算。", "For cost estimates. Enter this channel’s actual prices; leave blank to keep existing values, or enter 0 for free. Historical costs are not recalculated."],
+        ["请填写有效的模型价格", "Enter a valid model price"],
+        ["图片能力未知", "Image capability unknown"],
+        ["推理能力未知", "Reasoning capability unknown"],
+        ["参数与价格", "Parameters & pricing"],
+        ["读取参考参数", "Read reference parameters"],
+        ["应用参考参数", "Apply reference parameters"],
+        ["上下文 {0} · 最大输出 {1}", "Context {0} · Max output {1}"],
+        ["参考参数已填入，价格保持原值；保存后生效。", "Reference parameters applied. Prices were kept unchanged. Save to take effect."],
+        ["请提供 1–200 个模型 ID", "Provide 1–200 model IDs"]
+    );
+    rows.push(['上下文使用默认值；能力参考 {0}，请核对渠道限制', 'Context uses the default; capabilities reference {0}. Check the channel limits.']);
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();
