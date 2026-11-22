@@ -49,6 +49,14 @@ Pi 1.5.2 审查新增：MCP 命名 `createMcpToolName`／`mcpNamespace` 改从 `
 
 受管 RPC 关闭优先发送 stdin EOF，最多等待 60 秒；强制终止只在实际退出后以 `RPC_SHUTDOWN_FORCED` 拒绝，不报告清理成功。运行宿主与侧聊 await 原生 runtime.dispose；子会话关闭及主服务设置 ModelRuntime 等待公开 `settleCredentialWrites()`。设置服务用弱引用跟踪 runtime，并在停机前拒绝新的创建、等待已受理创建及凭据写入，不保留第二份凭据。合成用例覆盖旋转 OAuth、EOF 清理、强制退出、threads 回退、缓存取消和费用补录；不代表真实服务商或其他系统实机验收。
 
+Pi 1.6 审查新增：恢复工具的 pending 集合只在撤销原恢复集合中的工具时清除；扩展只撤销自身默认工具不得清掉尚在连接的 MCP 工具。SDK 的空 `bindExtensions({})` 同样在 reload 后重新发出 session_start；RPC 新建／切换／分叉只绑定一次，并在绑定前订阅，保留启动追加条目的事件。取消工具批次为每个尚未开始的调用记录错误结果，跳过后续权限钩子和执行，不由宿主补写结果。现有子 Agent 授权和 reload 选择 wrapper 继续保留。
+
+受管启动通过公开 `takeUnreportedDiagnostics()` 一次性取得诊断，并在原生替换读取时投影；移除每次工厂创建时的重复 stderr 输出。诊断经脱敏、有界私有帧交给所属 worker，当前运行实例仅保留可丢弃展示快照，未知／迟到私有帧不广播。网页只读原消息中的服务商 input transformations，不新增上下文或改写历史。
+
+Codex 的 leading developer 前缀、configuration_update 思考切换及 max_output_tokens 由原生 provider 处理，图片流包装继续保留 runtime 认证身份。GPT-6.2 的上下文和 Thinking 按 provider/model/API 读取，不用自定义模型的 500k 缺省值替换精确目录。高级 compat 继续自动投影公开 schema，包括 Mistral supportsStrictMode。官方 OpenAI GPT-6.2 Ultrafast 的 3倍促销截至2027-02-28太平洋时间，2027-03-01 00:00 PST起6倍；请求开始时捕获能力，完成和历史费用不因跨期而改价。
+
+TUI render 返回值按只读缓存处理；find 含路径的 glob 相对搜索目录锚定，任意深度使用 `**/src/*.ts`。undici 的主锁、隔离记忆锁和真实依赖解析一同固定8.12.4，安装检查覆盖旧8.12.2／8.12.3副本。未改变会话格式或迁移原生JSONL。
+
 ## 原生 Codemode 与 SDK 启动适配
 
 Codemode 输出直接使用官方 executor／sandbox，已移除旧的输出合并子类与精确 import 重定向。原生沙箱拥有 16 Mi 字符／100000 条输出限制、取消及 store；官方 executor 拥有目录／嵌套权限、用量、截断与私有完整输出文件。Pi 1.4 的结果、finished 或 close 完成只表示已请求 VM 停止，真实退出可更晚；官方工厂默认两个存活 VM 额度按单 Pi 进程共享，`PI_CODEMODE_MAX_WORKERS` 可设为正整数并按调用读取。容量耗尽时 FIFO 等待，最多 60 秒或更短的调用期限，等待计入执行期限；取消后仍占额度至实际退出。OhMyBuddy 不把它描述为整个工作台的并发上限。Node 专项通过公开 acquireWorker/onWorkerStarted 观测实际退出，并覆盖官方工厂间 FIFO、取消、等待超时与迟到启动保护；RPC 进程退出、已派发工具和维护生命周期继续由各自所有者核实。OhMyBuddy 工厂继续约束模型注册表与媒体确认权限。验证覆盖 100001 条压力、文本／console／返回值及图片顺序、完整输出文件、失败 store、取消与不重放。

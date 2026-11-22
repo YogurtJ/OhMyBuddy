@@ -46,6 +46,7 @@ class AgentWorker extends EventEmitter {
         this.compaction = null;
         this.live = new (require('./pi-live-state').PiLiveState)();
         this.progress = null;
+        this.diagnostics = new (require('./pi-runtime-diagnostics').PiRuntimeDiagnostics)(this);
         this.controls = new PiRuntimeControls();
         this.queueStore = options.queueStore || null;
         this.referenceGuard = options.referenceGuard;
@@ -204,7 +205,7 @@ class AgentWorker extends EventEmitter {
                     Object.defineProperty(result, 'webSnapshot', { value: {
                         controls: structuredClone(this.controls.snapshot()), pendingUi: structuredClone(this.getPendingUi()),
                         webCompaction: structuredClone(this.compaction), webShell: this.shell.snapshot(), webNavigation: this.navigation.snapshot(),
-                        mcpAuthorization: structuredClone(this.mcpControl.authorization)
+                        mcpAuthorization: structuredClone(this.mcpControl.authorization), webDiagnostics: this.diagnostics.snapshot()
                     } });
                     return result;
                 }
@@ -223,7 +224,7 @@ class AgentWorker extends EventEmitter {
                 if (checkingUncertainControl && this.controlUncertain && controlGeneration === this.controlGeneration
                     && !data.isStreaming && !data.isCompacting && !data.pendingMessageCount
                     && !this.activity.snapshot().busy && !this.compactPending) this.finishControl();
-                return { ...data, webSpeed: structuredClone(this.modelSpeed.value), webNavigation: this.navigation.snapshot(), webShell: this.shell.snapshot(), webQueueModes: this.queueModes(data), webCompaction: this.compaction, webOperation: Boolean(this.operation || this.controlPending || this.shell.busy), webControls: this.controls.snapshot() };
+                return { ...data, webDiagnostics: this.diagnostics.snapshot(), webSpeed: structuredClone(this.modelSpeed.value), webNavigation: this.navigation.snapshot(), webShell: this.shell.snapshot(), webQueueModes: this.queueModes(data), webCompaction: this.compaction, webOperation: Boolean(this.operation || this.controlPending || this.shell.busy), webControls: this.controls.snapshot() };
             }
             if (type === 'get_commands') return { ...data, commands: data.commands.filter(command => !isInternalCommand(command.name)) };
             return data;
@@ -780,6 +781,7 @@ class AgentWorker extends EventEmitter {
     }
 
     _handleEvent(event) {
+        if (this.diagnostics.handle(event)) return;
         if (event.type === 'response' && this.queueClearResponseIds.delete(event.id)) return;
         if (event.type === 'pivane_queue') { this.handleQueueEvent(event); return; }
         if (event.type === 'pivane_run_startup') {

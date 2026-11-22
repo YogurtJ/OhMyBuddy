@@ -20,7 +20,12 @@ const OFFICIAL = {
     'gpt-6.1-sol': { fast: { serviceTier: 'fast', costMultiplier: 2 }, ultrafast: { serviceTier: 'ultrafast', costMultiplier: 6 } },
     'gpt-6.1-terra': { fast: { serviceTier: 'fast', costMultiplier: 2 } },
     'gpt-6-astra': { fast: { serviceTier: 'fast', costMultiplier: 2 }, ultrafast: { serviceTier: 'ultrafast', costMultiplier: 6 } },
+    'gpt-6.2-sol': { fast: { serviceTier: 'fast', costMultiplier: 2 }, ultrafast: { serviceTier: 'ultrafast', costMultiplier: 6 } },
+    'gpt-6.2-astra': { fast: { serviceTier: 'fast', costMultiplier: 2 }, ultrafast: { serviceTier: 'ultrafast', costMultiplier: 6 } },
 };
+// https://developers.openai.com/api/docs/pricing: 3x through Feb 28, 2027
+// Pacific time, then 6x. Capture the capability when each request starts.
+const GPT62_ULTRA_PROMOTION_END = Date.UTC(2027, 2, 1, 8);
 function readSpeedConfig(agentDir) {
     try {
         const data = JSON.parse(fs.readFileSync(path.join(agentDir, 'models.json'), 'utf8'));
@@ -48,7 +53,10 @@ function validateSpeed(value) {
 function officialModes(model) {
     if (model?.provider !== 'openai' || !['openai-responses', 'openai-completions'].includes(model.api)) return {};
     try { if (new URL(model.baseUrl).origin !== 'https://api.openai.com') return {}; } catch { return {}; }
-    const modes = OFFICIAL[model.id] || {};
+    let modes = OFFICIAL[model.id] || {};
+    if (['gpt-6.2-sol', 'gpt-6.2-astra'].includes(model.id) && Date.now() < GPT62_ULTRA_PROMOTION_END) {
+        modes = { ...modes, ultrafast: { ...modes.ultrafast, costMultiplier: 3 } };
+    }
     return model.api === 'openai-completions' ? Object.fromEntries(Object.entries(modes).filter(([level]) => level !== 'ultrafast')) : modes;
 }
 function speedCapability(model, config = {}) {

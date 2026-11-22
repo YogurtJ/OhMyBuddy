@@ -2857,6 +2857,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state.compaction = null;
         state.runtimeRevision++;
         state.pendingUi.clear();
+        window.PiRuntimeDiagnostics?.runtime($('pi-runtime-diagnostics'), []);
         state.renderedCompletion = null;
         closeRequestDialog();
         renderPendingUi();
@@ -3315,6 +3316,7 @@ document.addEventListener('DOMContentLoaded', () => {
             error.textContent = message.errorMessage || translateUi("回复失败");
             body.appendChild(error);
         }
+        window.PiRuntimeDiagnostics?.appendMessage(body, message);
         article.appendChild(body);
         if (subagentNotice) window.PiSubagentNotices.collapse(article, header, body, messageText(message.content), renderMarkdown);
         if (responseText && showReplyActions) {
@@ -3814,6 +3816,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 toast(event.trashed === true ? translateUi('会话已移入回收站') : event.trashed === false ? translateUi('会话已永久删除') : translateUi('会话已删除'), 'success');
                 break;
             }
+            case 'gateway_runtime_diagnostics':
+                state.runtimeRevision++;
+                window.PiRuntimeDiagnostics?.runtime($('pi-runtime-diagnostics'), event.diagnostics);
+                break;
             case 'gateway_model_speed':
                 modelSpeed.apply(event.speed);
                 break;
@@ -4380,6 +4386,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateRuntimeState(runtime = {}) {
+        window.PiRuntimeDiagnostics?.runtime($('pi-runtime-diagnostics'), runtime.webDiagnostics);
         state.model = runtime.model || state.model;
         if (Object.hasOwn(runtime, 'webSpeed')) modelSpeed.apply(runtime.webSpeed);
         state.thinkingLevel = runtime.thinkingLevel || state.thinkingLevel;

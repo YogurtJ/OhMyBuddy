@@ -29,6 +29,7 @@
     }
     function update(row) {
         const name = row.dataset.toolName || 'tool', args = row._piToolArgs || {}, result = row._piResult;
+        globalThis.PiRuntimeDiagnostics?.readResult(row, result);
         const raw = result?.details?.pivaneToolProvenance ?? result?.details?.pi5ToolProvenance;
         const meta = raw?.version === 1 && raw.toolName === name && raw.toolCallId === row.dataset.toolId ? raw : null;
         const source = meta?.source && text(meta.source.source, 1000) && text(meta.source.path) ? meta.source : null;

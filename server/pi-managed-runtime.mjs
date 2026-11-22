@@ -15,6 +15,7 @@ import { createAgentSessionWithSelectionPreflight } from './pi-model-selection-p
 import { installImageCompatibility } from './pi-image-runtime.mjs';
 import imageContext from './pi-session-image-context.js';
 import { bindCacheWarmingSession } from './pi-cache-warming.js';
+import { installRuntimeDiagnostics } from './pi-runtime-diagnostics.js';
 
 let runtime;
 try {
@@ -71,10 +72,11 @@ try {
         installRunStartupAdapter(created.session, { token: process.env.PI_WEB_NAVIGATION_TOKEN,
             sessionId: sessionManager.getSessionId(), emit: record => writeRawStdout(JSON.stringify(record) + '\n') });
         if (model && (parsed.thinking !== undefined || selected.thinkingLevel !== undefined)) created.session.setThinkingLevel(created.session.thinkingLevel);
-        for (const diagnostic of diagnostics) process.stderr.write(`${diagnostic.message}\n`);
         return { ...created, services, diagnostics };
     };
     runtime = await createAgentSessionRuntime(createRuntime, { cwd, agentDir, sessionManager });
+    installRuntimeDiagnostics(runtime, { token: process.env.PI_WEB_NAVIGATION_TOKEN,
+        emit: record => writeRawStdout(JSON.stringify(record) + '\n') });
     initTheme(runtime.services.settingsManager.getTheme(), false);
     await runRpcMode(runtime);
 } catch (error) {

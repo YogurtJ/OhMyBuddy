@@ -32,6 +32,7 @@
     <link rel="stylesheet" href="pi-chat-knowledge.css">
     <link rel="stylesheet" href="pi-mobile-header.css">
     <link rel="stylesheet" href="pi-native-controls.css">
+    <link rel="stylesheet" href="pi-runtime-diagnostics.css">
     <link rel="stylesheet" href="pi-shell.css">
     <link rel="stylesheet" href="pi-task-progress.css">
     <link rel="stylesheet" href="pi-task-results.css">
@@ -246,6 +247,7 @@
                     <div id="pi-chat-knowledge" hidden></div>
                     <div class="pi-transcript-viewport">
                         <div id="pi-transcript" class="pi-transcript" tabindex="0" role="region" aria-label="会话消息" data-i18n-aria-label="s1354">
+                            <div id="pi-runtime-diagnostics" class="pi-runtime-diagnostics" role="status" hidden></div>
                             <section id="pi-transcript-archive" class="pi-transcript-archive" hidden></section>
                             <div id="pi-transcript-content" class="pi-transcript-content" aria-live="polite">
                                 <div class="pi-transcript-loading" role="status" aria-live="polite" aria-busy="true" data-placeholder="boot"><span class="pi-transcript-loading-label"><span class="pi-spinner" aria-hidden="true"></span><span data-loading-label><!--i18n:s477-->正在连接 Agent</span></span><div class="pv-skeleton pv-skeleton--chat" aria-hidden="true"><span class="pv-skel-turn is-user"><span class="pv-skel-line is-tag"></span><span class="pv-skel-bubble"></span></span><span class="pv-skel-turn"><span class="pv-skel-line is-tag"></span><span class="pv-skel-line" style="--w:96%"></span><span class="pv-skel-line" style="--w:82%"></span><span class="pv-skel-line" style="--w:68%"></span></span><span class="pv-skel-turn is-user"><span class="pv-skel-line is-tag"></span><span class="pv-skel-bubble"></span></span><span class="pv-skel-turn"><span class="pv-skel-line is-tag"></span><span class="pv-skel-line" style="--w:72%"></span><span class="pv-skel-line" style="--w:78%"></span><span class="pv-skel-line" style="--w:52%"></span></span></div></div>
@@ -1061,6 +1063,7 @@
     <link rel="stylesheet" href="pi-workbench.css">
     <script src="pi-workbench.js"></script>
     <script src="pi-request-stats.js"></script>
+    <script src="pi-runtime-diagnostics.js"></script>
     <link rel="stylesheet" href="pi-transcript-activity.css">
     <script src="pi-transcript-activity.js"></script>
     <link rel="stylesheet" href="pi-bot.css">

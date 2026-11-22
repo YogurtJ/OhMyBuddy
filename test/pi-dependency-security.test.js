@@ -25,7 +25,7 @@ function fixture(t, fix, { nested, hoisted = fix.fixed, override = fix.fixed, ex
 }
 test('undici removes affected old reviewed copies and rejects residual affected copies outside its owner', t => {
     const fix = SHRINKWRAP_FIXES.find(item => item.name === 'undici');
-    for (const version of ['8.11.2', '8.12.1']) {
+    for (const version of ['8.11.2', '8.12.1', '8.12.2', '8.12.3']) {
         const base = fixture(t, fix, { nested: version });
         assert.deepEqual(enforceShrinkwrapFixes(base, [fix]), [`undici@${version}`]);
         assert.throws(() => enforceShrinkwrapFixes(fixture(t, fix, { extra: version }), [fix]), /Vulnerable undici remains/);

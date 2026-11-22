@@ -53,6 +53,28 @@ test('Terra Fast and Sol Ultrafast follow exact official API capability and pric
     }
 });
 
+test('GPT-6.2 official modes use the Pacific promotion boundary and retain the request-time rate', async t => {
+    const { finalizeSpeedUsage } = await import('../server/pi-model-speed-runtime.mjs');
+    const end = Date.UTC(2027, 2, 1, 8);
+    t.mock.timers.enable({ apis: ['Date'], now: end - 1 });
+    for (const id of ['gpt-6.2-sol', 'gpt-6.2-astra']) {
+        const model = { id, provider: 'openai', api: 'openai-responses', baseUrl: 'https://api.openai.com/v1',
+            cost: { input: 2, output: 10, cacheRead: 0.1, cacheWrite: 2.5 } };
+        const promotional = speed.speedCapability(model);
+        assert.deepEqual(promotional.levels, ['auto', 'standard', 'fast', 'ultrafast']);
+        assert.equal(speed.tierMultiplier('fast', promotional), 2);
+        assert.equal(speed.tierMultiplier('ultrafast', promotional), 3);
+        t.mock.timers.setTime(end);
+        assert.equal(speed.tierMultiplier('ultrafast', speed.speedCapability(model)), 6);
+        const message = { usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: { total: 0 } } };
+        assert.equal(finalizeSpeedUsage(message, model, promotional, 'ultrafast', 'ultrafast').pivaneSpeed.costMultiplier, 3);
+        assert.deepEqual(speed.speedCapability({ ...model, provider: 'openai-codex', api: 'openai-codex-responses' }).levels, []);
+        assert.deepEqual(speed.speedCapability({ ...model, baseUrl: 'https://proxy.invalid/v1' }).levels, []);
+        assert.ok(!speed.speedCapability({ ...model, api: 'openai-completions' }).levels.includes('ultrafast'));
+        t.mock.timers.setTime(end - 1);
+    }
+});
+
 test('provider-reported totals, including zero bills, survive speed pricing without a second multiplier', async () => {
     const { finalizeSpeedUsage } = await import('../server/pi-model-speed-runtime.mjs');
     const model = { cost: { input: 2, output: 10, cacheRead: .2, cacheWrite: 0 } };

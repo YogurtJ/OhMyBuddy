@@ -941,7 +941,7 @@ function createPiAgentGateway(options = {}) {
                 const live = messages.webLive, boundary = messages.webSnapshot;
                 if (!session.ephemeral) messages = { ...messages, messages: require('./pi-session-images-routes').displayMessages(messages.messages, session.cwd, session.id) };
                 return { session, state: { ...state, ...(live ? { isStreaming: live.running, isCompacting: live.compacting,
-                    webCompaction: boundary.webCompaction, webShell: boundary.webShell, webNavigation: boundary.webNavigation } : {}) },
+                    webCompaction: boundary.webCompaction, webShell: boundary.webShell, webNavigation: boundary.webNavigation, webDiagnostics: boundary.webDiagnostics } : {}) },
                     messages, stats, models, thinkingLevels, commands, completion,
                     pendingUi: boundary?.pendingUi || source.getPendingUi(), controls: boundary?.controls || source.controls.snapshot(),
                     mcpAuthorization: boundary?.mcpAuthorization || null };

@@ -1,0 +1,21 @@
+.pi-runtime-diagnostics {
+    margin: 0 0 12px;
+    padding: 8px 10px;
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--amber);
+    border-radius: 8px;
+    background: var(--surface-1);
+    color: var(--text-muted);
+    font-size: .78rem;
+    overflow-wrap: anywhere;
+}
+.pi-runtime-diagnostics[hidden] { display: none; }
+.pi-runtime-diagnostics summary, .pi-provider-diagnostic summary { cursor: pointer; }
+.pi-runtime-diagnostics ul { margin: 8px 0 0; padding-left: 18px; max-height: 200px; overflow: auto; }
+.pi-runtime-diagnostics li { white-space: pre-wrap; }
+.pi-runtime-diagnostics [data-severity="error"] { color: var(--danger); }
+.pi-provider-diagnostic { margin-top: 8px; color: var(--text-muted); font-size: .78rem; overflow-wrap: anywhere; }
+.pi-provider-diagnostic p { margin: 6px 0 0; }
+.pi-tool-image-warning { color: var(--amber); font-size: .72rem; overflow-wrap: anywhere; }
+.pi-runtime-diagnostics summary:focus-visible, .pi-provider-diagnostic summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }

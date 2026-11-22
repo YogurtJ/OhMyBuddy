@@ -34,6 +34,8 @@
 
 最近使用最多保留 5 项，仍属于当前浏览器，记录打开会话或成功切换后的可用模型。常用与最近都不修改全局默认模型、认证或原生会话历史。暂不可用的收藏不会加入可选列表，恢复可用后重新显示；当前会话模型仍保留名称。模型刷新、会话忙碌或断开时关闭面板并禁用切换，失败或迟到结果不会记为新选择。手机／触控设备打开面板时焦点在关闭按钮，点击搜索框后才聚焦输入；桌面保留自动聚焦搜索。
 
+GPT-6.2 的上下文长度按渠道区分：Pi 1.6.0 内置目录的 OpenAI API 为272k，Codex Sol为500k、Astra为272k，Azure为1.05M；已明确的服务商元数据优先于未知自定义模型的500k缺省值。Thinking选项与映射同样取自实际模型，不能假设都有off。上游默认模型更新只影响原生自动选择，已有线程与明确保存的默认值不自动改写。
+
 ## 设置入口
 
 “服务商与模型”默认显示全部 Pi 原生服务商及本地自定义配置，已配置者排在前面。服务商默认折叠，展开后在同一处登录、移除凭据、浏览模型、测试、设置默认模型与 Thinking。搜索覆盖完整服务商名称/ID/模型目录，模型按服务商每页 20 项；“仅已配置”和“仅可用”均为可选筛选，初始关闭。无模型服务商仍显示登录入口，登录后可显式刷新远端目录。
@@ -104,7 +106,9 @@ Kimi Coding 内置模型使用 OpenAI Chat Completions，默认地址为 `https:
 
 速度与思考等级分别选择。服务商已实报的费用总额（包括零值）原样保留，不重复乘速度倍率；其他费用继续按目录与档位估算，来源在[用量统计](USAGE.md#费用来源)中区分。桌面输入区在有加速能力的模型旁显示“速度”，手机从上下文圆环进入模型面板选择；未声明 Fast/Ultrafast 的模型隐藏速度入口。选择器提供跟随服务商（auto，不增加请求参数）、标准（standard，发送 default）和该渠道实际支持的 Fast/Ultrafast。选项显示相对于模型标准价格的费用倍率；加速不改变 Thinking。
 
-设置 → 服务商与模型 → 模型行“速度”保存此模型默认速度，也可在高级区域声明渠道能力、Fast 的 fast/priority 参数和费用倍率。档位支持只按精确服务商、模型 ID、API 和官方连接判断；同名中转模型不会自动获得官方能力。当前内置目录覆盖官方 OpenAI API 的 gpt-5.4、gpt-5.5、gpt-5.6-sol/terra/luna、gpt-6-sol/luna、gpt-6.1-terra 的 Fast，以及 gpt-6.1-sol 与 gpt-6-astra 的 Fast/Ultrafast；官方 Ultrafast 只在 Responses API 显示。GPT-5.6 与 GPT-6 系列内置 Fast 费用按对应 Standard 价格的 2 倍估算；“最高 2.5 倍更快”指速度，不是费用倍率。GPT-5.6 Sol 当前促销价至少持续到 2026-11-21；服务商或官方改价后需更新倍率。Terra Fast 使用 `service_tier:fast`，按 Standard 的 2 倍估算，不提供内置 Ultrafast；Sol Ultrafast 使用 `service_tier:ultrafast`，按 Standard 的 6 倍估算。依据 2026-11-03 核对的官方[价格表](https://developers.openai.com/api/docs/pricing)、[Fast](https://developers.openai.com/api/docs/guides/fast-mode) 与 [Ultrafast](https://developers.openai.com/api/docs/guides/ultrafast-mode) 指南。账号权限与远端可用性仍由服务商判定。其他 OpenAI Responses、Chat Completions 或 Codex Responses 渠道需要明确配置。
+设置 → 服务商与模型 → 模型行“速度”保存此模型默认速度，也可在高级区域声明渠道能力、Fast 的 fast/priority 参数和费用倍率。档位支持只按精确服务商、模型 ID、API 和官方连接判断；同名中转模型不会自动获得官方能力。当前内置目录覆盖官方 OpenAI API 的 gpt-5.4、gpt-5.5、gpt-5.6-sol/terra/luna、gpt-6-sol/luna、gpt-6.1-terra 的 Fast，以及 gpt-6.1-sol、gpt-6-astra、gpt-6.2-sol 与 gpt-6.2-astra 的 Fast/Ultrafast；官方 Ultrafast 只在 Responses API 显示。GPT-5.6 与 GPT-6 系列内置 Fast 费用按对应 Standard 价格的 2 倍估算；“最高 2.5 倍更快”指速度，不是费用倍率。GPT-5.6 Sol 当前促销价至少持续到 2026-11-21；服务商或官方改价后需更新倍率。Terra Fast 使用 `service_tier:fast`，按 Standard 的 2 倍估算，不提供内置 Ultrafast；Sol Ultrafast 使用 `service_tier:ultrafast`，按 Standard 的 6 倍估算。依据 2026-11-03 核对的官方[价格表](https://developers.openai.com/api/docs/pricing)、[Fast](https://developers.openai.com/api/docs/guides/fast-mode) 与 [Ultrafast](https://developers.openai.com/api/docs/guides/ultrafast-mode) 指南。账号权限与远端可用性仍由服务商判定。其他 OpenAI Responses、Chat Completions 或 Codex Responses 渠道需要明确配置。
+
+GPT-6.2 Sol／Astra 的官方 API Fast按Standard的2倍估算；Ultrafast按官方[价格表](https://developers.openai.com/api/docs/pricing)的促销期限：2027-02-28（太平洋时间）结束前3倍，2027-03-01 00:00 PST起6倍。每次请求开始时确定倍率，跨过期限的在途请求及已保存费用仍保留当次倍率；服务商实报总额继续优先。该声明不自动授予Codex订阅或同名中转模型加速能力。
 
 渠道覆盖保存在原生 models.json 的 custom model 或 modelOverrides 条目的 `pivaneSpeed`；没有覆盖时使用内置声明。保存保留其他能力、认证、价格和未知字段，采用现有修订与原子保存。高级区域全部取消加速会隐藏会话入口；“恢复内置速度配置”删除该模型覆盖。只保存配置不请求模型，也不默认开启加速。运行中的实例通过空闲刷新模型目录或重开加载新配置。示例：
 

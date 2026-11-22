@@ -11940,5 +11940,13 @@
         ["请提供 1–200 个模型 ID", "Provide 1–200 model IDs"]
     );
     rows.push(['上下文使用默认值；能力参考 {0}，请核对渠道限制', 'Context uses the default; capabilities reference {0}. Check the channel limits.']);
+    rows.push(
+        ['运行提示 · {0}', 'Runtime notices · {0}'],
+        ['{0} 未沿用 {1} 段历史思考', '{0} did not reuse {1} historical reasoning items'],
+        ['服务商未将这些思考内容用于本次请求，原始记录仍保留。', 'The provider excluded this reasoning from this request. The original records are retained.'],
+        ['原因：{0}', 'Reasons: {0}'],
+        ['图片未输入', 'Image not sent'],
+        ['读取时的模型 {0} 不支持图片，本次收到的是占位提示；原图保留。', 'The model selected when reading, {0}, does not support images and received a placeholder. The original image is retained.']
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();
