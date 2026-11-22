@@ -9,6 +9,8 @@ const diagnostic = reason => ({ type: 'openai_input_transformations', details: {
 async function run(browser, base, width, language) {
     const context = await browser.newContext({ locale: language, viewport: { width, height: 900 }, isMobile: width < 900, hasTouch: width < 900 });
     const page = await context.newPage(), errors = [], calls = [];
+    let holdState = false, releaseState, stateHeld;
+    const held = new Promise(resolve => { stateHeld = resolve; });
     let sessionId = 'one', socket, messages = [
         { role: 'user', timestamp: 1, content: 'Synthetic image question' },
         { role: 'assistant', timestamp: 2, stopReason: 'toolUse', content: [{ type: 'toolCall', id: 'read-1', name: 'read', arguments: { path: 'fixture.png' } }] },
@@ -40,7 +42,13 @@ async function run(browser, base, width, language) {
             let data = {};
             if (command.type === 'open_session') data = { session: { cwd, id: sessionId, name: sessionId }, state,
                 messages: { messages: sessionId === 'one' ? messages : [] }, models: { models: [model] }, stats: {}, thinkingLevels: { levels: ['off'] }, commands: { commands: [] } };
-            else if (command.type === 'get_state') data = state;
+            else if (command.type === 'get_state') {
+                data = state;
+                if (holdState) {
+                    releaseState = () => ws.send(JSON.stringify({ type: 'response', id: command.id, command: command.type, success: true, data }));
+                    stateHeld(); return;
+                }
+            }
             else if (command.type === 'get_messages') data = { messages: sessionId === 'one' ? messages : [] };
             ws.send(JSON.stringify({ type: 'response', id: command.id, command: command.type, success: true, data }));
         });
@@ -61,8 +69,14 @@ async function run(browser, base, width, language) {
         assert.equal(await page.locator('.pi-tool-image-warning').count(), 1);
         assert.match(await page.locator('.pi-tool-image-warning').getAttribute('title'), /text-only-fixture/);
         await page.locator('#pi-input').fill('Keep this draft');
+        holdState = true;
+        socket.send(JSON.stringify({ type: 'agent_settled' }));
+        await held;
         socket.send(JSON.stringify({ type: 'gateway_runtime_diagnostics', diagnostics: [{ type: 'error', message: 'A new runtime warning' }] }));
         await page.waitForFunction(() => document.querySelector('#pi-runtime-diagnostics').textContent.includes('A new runtime warning'));
+        holdState = false; releaseState();
+        await page.waitForTimeout(100);
+        assert.match(await panel.textContent(), /A new runtime warning/, 'an older state response cannot erase a newer diagnostic');
         assert.equal(await page.locator('#pi-input').inputValue(), 'Keep this draft');
         const final = { role: 'assistant', timestamp: 10, stopReason: 'stop', content: [{ type: 'text', text: 'Live answer' }],
             diagnostics: [diagnostic('model_mismatch'), { type: 'unknown', details: { transformations: [{ type: 'reasoning', reason: '<script>BAD</script>' }] } }] };

@@ -229,9 +229,10 @@ test('one-step setup writes provider, models and key; existing providers discove
 
 test('metadata lookup is read-only and manual IDs use the same family reference as discovery', async () => {
     const service = new PiSettingsService({cwd:agentDir});
-    const metadata = await service.getModelMetadata({modelIds:['gpt-6.2-sol','gpt-6.2-astra']});
-    assert.deepEqual(metadata.models.map(model=>[model.id,model.maxTokens,model.imageInput,model.reasoning,model.metadata]),
-        [['gpt-6.2-sol',128000,true,true,'default'],['gpt-6.2-astra',128000,true,true,'default']]);
+    const metadata = await service.getModelMetadata({modelIds:['gpt-6.2-sol','gpt-6.2-astra','gpt-6.99-sol']});
+    assert.deepEqual(metadata.models.map(model=>[model.id,model.contextWindow,model.maxTokens,model.imageInput,model.reasoning,model.metadata]),
+        [['gpt-6.2-sol',272000,128000,true,true,'catalog'],['gpt-6.2-astra',272000,128000,true,true,'catalog'],
+            ['gpt-6.99-sol',500000,128000,true,true,'default']]);
     await assert.rejects(service.getModelMetadata({modelIds:[]}),/1–200/);
     await assert.rejects(service.getModelMetadata({modelIds:['bad id']}),/Invalid model ID/);
 });

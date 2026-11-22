@@ -8,7 +8,7 @@ const path = require('node:path');
 const scope = require('../server/profile-memory/scope');
 
 function fixture() {
-    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-profile-memory-'));
+    const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-profile-memory-')));
     const agent = path.join(base, 'agent');
     const sessionsRoot = path.join(agent, 'sessions');
     fs.mkdirSync(path.join(sessionsRoot, 'project'), { recursive: true });
