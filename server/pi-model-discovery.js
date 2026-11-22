@@ -115,7 +115,8 @@ function buildCatalog(models, providerIds = []) {
         if (!model || typeof model.id !== 'string') continue;
         const entry = { id: model.id, provider: model.provider, kind: catalogKind(model), name: typeof model.name === 'string' ? model.name : model.id,
             contextWindow: positive(model.contextWindow), maxTokens: positive(model.maxTokens), cost: rates(model.cost),
-            imageInput: Array.isArray(model.input) && model.input.includes('image'), reasoning: Boolean(model.reasoning) };
+            imageInput: Array.isArray(model.input) && model.input.includes('image'), reasoning: Boolean(model.reasoning),
+            ...(model.thinkingLevelMap ? { thinkingLevelMap: { ...model.thinkingLevelMap } } : {}) };
         const family = familyId(model.id);
         if (family && model.provider === 'openai' && entry.kind === 'chat') families.push({ ...family, entry });
         for (const [map, key] of [[byId, model.id], [bySuffix, model.id.split('/').pop()]]) {
@@ -167,6 +168,7 @@ function chatMetadata(item, entry) {
         reasoning: explicitReasoning !== undefined ? 'service' : entry ? known : 'unknown',
         cost: remoteCost ? 'service' : entry?.cost ? 'catalog' : 'unknown' };
     return { contextWindow, maxTokens, imageInput, reasoning, metadata, metadataSources,
+        ...(reasoning && entry?.thinkingLevelMap ? { thinkingLevelMap: { ...entry.thinkingLevelMap } } : {}),
         ...(entry?.family ? { referenceModel: `${entry.provider}/${entry.id}` } : {}),
         ...(Object.keys(cost).length ? { cost } : {}) };
 }

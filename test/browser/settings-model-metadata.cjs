@@ -3,8 +3,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const { buildCatalog, describeModel } = require('../../server/pi-model-discovery');
 const baseUrl = process.env.PI_MODEL_METADATA_TEST_URL || 'http://127.0.0.1:3001';
 const referenceCatalog = buildCatalog([
-    { provider:'openai', id:'gpt-6.1-sol', contextWindow:272000, maxTokens:128000, input:['text','image'], reasoning:true, cost:{input:5,output:25} },
-    { provider:'openai', id:'gpt-6-astra', contextWindow:272000, maxTokens:128000, input:['text','image'], reasoning:true, cost:{input:10,output:50} }
+    { provider:'openai', id:'gpt-6.1-sol', contextWindow:272000, maxTokens:128000, input:['text','image'], reasoning:true, thinkingLevelMap:{off:null,minimal:null,low:'low',medium:'medium',high:'high',xhigh:'xhigh',max:'max'}, cost:{input:5,output:25} },
+    { provider:'openai', id:'gpt-6-astra', contextWindow:272000, maxTokens:128000, input:['text','image'], reasoning:true, thinkingLevelMap:{off:null,minimal:null,low:'low',medium:'medium',high:'high',xhigh:'xhigh',max:'max'}, cost:{input:10,output:50} }
 ]);
 const metadata = id => describeModel(id, {}, referenceCatalog);
 async function run(browser,width,locale) {
@@ -44,6 +44,7 @@ async function run(browser,width,locale) {
     assert.equal(await price('input').inputValue(),'2');assert.equal(await price('cacheWrite').inputValue(),'0');
     await page.locator('#settings-model-reference button').first().click();
     await page.locator('#settings-model-reference p').filter({hasText:'openai/gpt-6.1-sol'}).waitFor();
+    assert.match(await page.locator('#settings-model-reference p').textContent(),/low \/ medium \/ high \/ xhigh \/ max/);
     assert.equal(await form.locator('[name=contextWindow]').inputValue(),'128000','reading a suggestion must not replace saved values');
     await page.locator('#settings-model-reference button').last().click();
     assert.deepEqual(await form.locator('[name=contextWindow], [name=maxTokens]').evaluateAll(nodes=>nodes.map(n=>n.value)),['500000','128000']);
@@ -55,6 +56,7 @@ async function run(browser,width,locale) {
     await form.locator('[type=submit]').click();
     await page.locator('#workspace-settings-editor').waitFor({state:'hidden'});
     assert.deepEqual(writes.at(-1).body.cost,{input:3.5,output:0,cacheRead:0.125,cacheWrite:1});
+    assert.deepEqual(writes.at(-1).body.thinkingLevelMap,metadata(stored.id).thinkingLevelMap);
     assert.deepEqual([writes.at(-1).body.contextWindow,writes.at(-1).body.maxTokens,writes.at(-1).body.imageInput,writes.at(-1).body.reasoning],['500000','128000',true,true]);
     const group=page.locator('.settings-model-group').filter({has:page.locator('summary[data-provider="relay"]')});
     if(!await group.evaluate(el=>el.open))await group.locator('summary').click();
@@ -88,6 +90,8 @@ async function run(browser,width,locale) {
     await addForm.locator('[type=submit]').click();await page.locator('#workspace-settings-editor').waitFor({state:'hidden'});
     const models=writes.at(-1).body.models;assert.equal(models[0].id,'gpt-6.2-astra');assert.deepEqual(models[0].cost,{input:7,output:28});
     assert.deepEqual([models[0].contextWindow,models[0].maxTokens,models[0].imageInput,models[0].reasoning],[500000,128000,true,true]);
+    assert.deepEqual(models[0].thinkingLevelMap,metadata('gpt-6.2-astra').thinkingLevelMap);
+    assert.deepEqual(models[1].thinkingLevelMap,metadata('gpt-6.3-sol').thinkingLevelMap);
     assert.equal(models[1].maxTokens,128000);assert.equal(models[1].cost,undefined);
     assert.deepEqual(errors,[]);console.log(JSON.stringify({width,locale,passed:true,writes:writes.length}));await context.close();
 }

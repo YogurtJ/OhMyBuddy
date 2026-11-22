@@ -778,7 +778,7 @@ function start() {
         const apply = document.createElement('button'); apply.type = 'button'; apply.className = 'settings-secondary-button'; apply.hidden = true;
         apply.textContent = translateUi("应用参考参数");
         $('settings-model-reference').append(reference, info, apply);
-        let suggestion;
+        let suggestion, appliedThinkingMap;
         reference.addEventListener('click', async () => {
             const id = form.elements.id.value.trim();
             if (!id) { form.elements.id.reportValidity(); return; }
@@ -788,7 +788,8 @@ function start() {
                 if (epoch !== state.editorEpoch || form.elements.id.value.trim() !== id) return;
                 suggestion = result.models[0];
                 info.textContent = [translateUi("上下文 {0} · 最大输出 {1}", formatTokens(suggestion.contextWindow), formatTokens(suggestion.maxTokens)),
-                    suggestion.imageInput ? translateUi("图片输入") : '', suggestion.reasoning ? translateUi("推理") : '', window.PiModelConfiguration.sourceText(suggestion)].filter(Boolean).join(' · ');
+                    suggestion.imageInput ? translateUi("图片输入") : '', suggestion.reasoning ? translateUi("推理") : '',
+                    window.PiModelConfiguration.thinkingText(suggestion), window.PiModelConfiguration.sourceText(suggestion)].filter(Boolean).join(' · ');
                 apply.hidden = false;
             } catch (error) { if (epoch === state.editorEpoch) info.textContent = error.message; }
             finally { setBusy(reference, false); }
@@ -799,11 +800,12 @@ function start() {
             form.elements.maxTokens.value = suggestion.maxTokens;
             form.elements.imageInput.checked = suggestion.imageInput;
             form.elements.reasoning.checked = suggestion.reasoning;
+            appliedThinkingMap = suggestion.thinkingLevelMap ? { ...suggestion.thinkingLevelMap } : undefined;
             // Rates are provider-specific and stay as entered when applying capability suggestions.
             info.textContent = translateUi("参考参数已填入，价格保持原值；保存后生效。");
             apply.hidden = true;
         });
-        form.elements.id.addEventListener('input', () => { suggestion = null; info.textContent = ''; apply.hidden = true; });
+        form.elements.id.addEventListener('input', () => { suggestion = null; appliedThinkingMap = undefined; info.textContent = ''; apply.hidden = true; });
         form.elements.providerId.value = providerId || customProviders[0].id;
         if (model) form.elements.providerId.disabled = true;
         form.addEventListener('submit', async event => {
@@ -812,6 +814,7 @@ function start() {
             const data = Object.fromEntries(new FormData(form));
             data.reasoning = form.elements.reasoning.checked;
             data.imageInput = form.elements.imageInput.checked;
+            if (appliedThinkingMap) data.thinkingLevelMap = appliedThinkingMap;
             const cost = prices.read();
             if (cost) data.cost = cost;
             const targetProvider = form.elements.providerId.value;

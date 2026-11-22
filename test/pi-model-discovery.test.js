@@ -138,7 +138,7 @@ test('generated provider IDs avoid built-in and existing IDs', () => {
 test('new GPT-6 minor versions use a same-tier official reference and never copy its price', () => {
     const catalog = discovery.buildCatalog([
         { provider: 'openai', id: 'gpt-6-sol', contextWindow: 272000, maxTokens: 128000, input: ['text','image'], reasoning: true, cost: { input: 5, output: 25 } },
-        { provider: 'openai', id: 'gpt-6.1-sol', contextWindow: 400000, maxTokens: 128000, input: ['text','image'], reasoning: true, cost: { input: 6, output: 30 } },
+        { provider: 'openai', id: 'gpt-6.1-sol', contextWindow: 400000, maxTokens: 128000, input: ['text','image'], reasoning: true, thinkingLevelMap: {off:null,minimal:null,low:'low',medium:'medium',high:'high',xhigh:'xhigh',max:'max'}, cost: { input: 6, output: 30 } },
         { provider: 'openai', id: 'gpt-6-astra', contextWindow: 272000, maxTokens: 128000, input: ['text','image'], reasoning: true, cost: { input: 10, output: 50 } },
         { provider: 'relay', id: 'gpt-6.1-astra', contextWindow: 1000000, maxTokens: 500000, input: ['text'], reasoning: false },
         { provider: 'relay', id: 'gpt-6.2-sol', name:'GPT-6.2 Sol', contextWindow:128000, maxTokens:16384, input:['text'], reasoning:false }
@@ -147,6 +147,8 @@ test('new GPT-6 minor versions use a same-tier official reference and never copy
     assert.deepEqual([sol.contextWindow,sol.maxTokens,sol.imageInput,sol.reasoning,sol.metadata,sol.referenceModel], [500000,128000,true,true,'default','openai/gpt-6.1-sol']);
     assert.equal(sol.metadataSources.contextWindow,'default');
     assert.equal(sol.cost,undefined, 'new model pricing cannot be inferred from a predecessor');
+    assert.deepEqual(sol.thinkingLevelMap,{off:null,minimal:null,low:'low',medium:'medium',high:'high',xhigh:'xhigh',max:'max'});
+    assert.equal(discovery.describeModel('gpt-6.2-sol',{reasoning:false},catalog).thinkingLevelMap,undefined);
     const astra = discovery.describeModel('relay/gpt-6.2-astra', {}, catalog);
     assert.deepEqual([astra.contextWindow,astra.maxTokens,astra.referenceModel], [500000,128000,'openai/gpt-6-astra']);
     assert.equal(discovery.describeModel('gpt-7.2-astra', {}, catalog).metadata,'default');
@@ -232,6 +234,27 @@ test('metadata lookup is read-only and manual IDs use the same family reference 
         [['gpt-6.2-sol',128000,true,true,'default'],['gpt-6.2-astra',128000,true,true,'default']]);
     await assert.rejects(service.getModelMetadata({modelIds:[]}),/1–200/);
     await assert.rejects(service.getModelMetadata({modelIds:['bad id']}),/Invalid model ID/);
+});
+
+test('new custom models retain reference thinking maps through setup, batch and individual addition', async () => {
+    const service = new PiSettingsService({cwd:agentDir});
+    const created = await service.createCustomProvider({name:'Thinking map fixture',baseUrl:'http://127.0.0.1:65530/v1',api:'openai-responses',models:[{id:'gpt-6.2-sol',reasoning:true}]});
+    const id=created.providerId,{modelsPath}=await service.paths();
+    let config=service.readModelsFile(modelsPath).providers[id];
+    assert.equal(config.models[0].thinkingLevelMap.off,null);assert.equal(config.models[0].thinkingLevelMap.minimal,null);
+    await service.addCustomModels(id,{models:[{id:'gpt-6.2-astra',reasoning:true},{id:'explicit-map',reasoning:true,thinkingLevelMap:{off:null,low:'small'}}]});
+    await service.upsertCustomModel(id,{id:'gpt-6.3-sol',reasoning:true});
+    config=service.readModelsFile(modelsPath).providers[id];
+    assert.equal(config.models.find(m=>m.id==='gpt-6.2-astra').thinkingLevelMap.off,null);
+    assert.equal(config.models.find(m=>m.id==='gpt-6.3-sol').thinkingLevelMap.off,null);
+    assert.deepEqual(config.models.find(m=>m.id==='explicit-map').thinkingLevelMap,{off:null,low:'small'});
+    await service.upsertCustomModel(id,{id:'gpt-6.2-sol',reasoning:true,thinkingLevelMap:{off:'none',minimal:'tiny',high:null}});
+    await service.upsertCustomModel(id,{id:'gpt-6.2-sol',reasoning:true,name:'Renamed'});
+    assert.deepEqual(service.readModelsFile(modelsPath).providers[id].models[0].thinkingLevelMap,{off:'none',minimal:'tiny',high:null},'ordinary editing preserves explicit mappings');
+    const before=fs.readFileSync(modelsPath);
+    await assert.rejects(service.addCustomModels(id,{models:[{id:'bad-map',reasoning:true,thinkingLevelMap:{surprise:'low'}}]}),/Invalid thinking/);
+    await assert.rejects(service.addCustomModels(id,{models:[{id:'disabled-map',reasoning:true,thinkingLevelMap:{off:null,minimal:null,low:null,medium:null,high:null,xhigh:null,max:null}}]}),/At least one/);
+    assert.deepEqual(fs.readFileSync(modelsPath),before);
 });
 
 test('custom model prices are editable, validated and preserved together with tier and override fields', async () => {

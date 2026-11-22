@@ -10,6 +10,10 @@
             return t('上下文使用默认值；能力参考 {0}，请核对渠道限制', model.referenceModel);
         return source === 'family' && model.referenceModel ? t('参考 {0}，尚未经此渠道确认', model.referenceModel) : SOURCES[source] || '';
     }
+    function thinkingText(model) {
+        const levels = Object.entries(model.thinkingLevelMap || {}).filter(([, value]) => value !== null).map(([level]) => level);
+        return levels.length ? `${t('思考等级')} ${levels.join(' / ')}` : '';
+    }
     function priceFields(parent, value = {}, onChange = () => {}) {
         const section = document.createElement('section'); section.className = 'cps-pricing wide';
         const title = document.createElement('strong'); title.textContent = t('模型价格 · USD / 百万 tokens');
@@ -47,5 +51,5 @@
             section
         };
     }
-    window.PiModelConfiguration = { sourceText, priceFields };
+    window.PiModelConfiguration = { sourceText, thinkingText, priceFields };
 })();

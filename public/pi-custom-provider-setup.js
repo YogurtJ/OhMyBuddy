@@ -85,12 +85,15 @@
                 contextWindow: model.contextWindow || 500000, maxTokens: model.maxTokens || 128000,
                 imageInput: Boolean(model.imageInput), reasoning: Boolean(model.reasoning), metadata: model.metadata || 'default',
                 metadataSources: model.metadataSources || {}, referenceModel: model.referenceModel,
+                ...(model.thinkingLevelMap ? { thinkingLevelMap: { ...model.thinkingLevelMap } } : {}),
                 ...(model.cost ? { cost: { ...model.cost } } : {}) };
         }
         function metaText(entry) {
             const parts = [translateUi("上下文 {0}", formatTokens(entry.contextWindow)), translateUi("最大输出 {0}", formatTokens(entry.maxTokens))];
             if (entry.imageInput) parts.push(translateUi("图片输入"));
             if (entry.reasoning) parts.push(translateUi("推理"));
+            const thinking = configuration.thinkingText(entry);
+            if (thinking) parts.push(thinking);
             if (entry.metadataSources?.imageInput === 'unknown') parts.push(translateUi("图片能力未知"));
             if (entry.metadataSources?.reasoning === 'unknown') parts.push(translateUi("推理能力未知"));
             return parts.join(' · ');
@@ -355,6 +358,7 @@
                 invalidate() { token++; lastResult = null; reopen.hidden = true; if (status.dataset.tone !== 'error' || status.textContent) setStatus(''); },
                 collect: () => [...selected.values()].map(entry => ({ id: entry.id, ...(entry.name ? { name: entry.name } : {}),
                     contextWindow: entry.contextWindow, maxTokens: entry.maxTokens, imageInput: entry.imageInput, reasoning: entry.reasoning,
+                    ...(entry.thinkingLevelMap ? { thinkingLevelMap: { ...entry.thinkingLevelMap } } : {}),
                     ...(Object.keys(entry.cost || {}).length ? { cost: { ...entry.cost } } : {}) }))
             };
         }

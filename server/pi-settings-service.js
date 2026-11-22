@@ -95,13 +95,13 @@ function modelInputs(value) {
 }
 
 // Basic editor fields; other existing definition fields, prices and unknown data are kept.
-function customModelEntry(current, input, official) {
+async function customModelEntry(current, input, official, reference) {
     const id = cleanModelId(input.id);
     if (Object.hasOwn(input, 'cost')) {
         if (input.cost === null) throw new Error('价格必须是对象');
         require('./pi-model-advanced').validateCost(input.cost);
     }
-    return {
+    const model = {
         ...current,
         id,
         name: String(input.name || id).trim().slice(0, 200) || id,
@@ -111,6 +111,16 @@ function customModelEntry(current, input, official) {
         maxTokens: numberInRange(input.maxTokens, current.maxTokens ?? discovery.DEFAULTS.maxTokens, 1, 1000000),
         cost: { ...(current.cost || official?.rates || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }), ...input.cost }
     };
+    if (Object.hasOwn(input, 'thinkingLevelMap')) {
+        const map = thinkingMap(input.thinkingLevelMap);
+        if (map === undefined) delete model.thinkingLevelMap;
+        else model.thinkingLevelMap = map;
+    } else if (!current.id && model.reasoning && reference?.thinkingLevelMap) {
+        model.thinkingLevelMap = thinkingMap(reference.thinkingLevelMap);
+    }
+    const { getSupportedThinkingLevels } = await aiPromise;
+    if (!getSupportedThinkingLevels(model).length) throw new Error('At least one thinking level must remain supported');
+    return model;
 }
 
 // User edits are mirrored into modelOverrides so extension registrations cannot replace them.
@@ -432,12 +442,18 @@ class PiSettingsService {
         const model = runtime.getModel(provider, modelId);
         if (!model) throw new Error('Model not found');
         const startedAt = Date.now();
+        const { getSupportedThinkingLevels } = await aiPromise;
+        const levels = getSupportedThinkingLevels(model);
+        // Omitted reasoning makes Responses send "none". Prefer a small supported
+        // reasoning budget; this probe never changes defaults or the current session.
+        const reasoning = levels.includes('low') ? 'low' : levels.find(level => level !== 'off') || 'off';
         const { completeWithSpeed } = await import('./pi-model-speed-runtime.mjs');
         const { agentDir } = await this.paths();
         const response = await completeWithSpeed(runtime, model, {
             messages: [{ role: 'user', content: prompt, timestamp: Date.now() }]
         }, {
             maxTokens: 64,
+            reasoning,
             signal: AbortSignal.timeout(90000),
             sessionId: `pi-web-model-test-${Date.now()}`
         }, agentDir);
@@ -657,7 +673,7 @@ class PiSettingsService {
         const apiKey = typeof input.apiKey === 'string' ? input.apiKey.trim() : '';
         if (apiKey.length > 32768) throw new Error('API Key 过长');
         const inputs = modelInputs(input.models);
-        const { providerIds } = await this.builtinCatalog();
+        const { providerIds, catalog } = await this.builtinCatalog();
         const official = await require('./pi-usage-pricing').officialPrices();
         const { modelsPath } = await this.paths();
         const data = this.readModelsFile(modelsPath);
@@ -668,7 +684,7 @@ class PiSettingsService {
             if (taken(id)) throw Object.assign(new Error('服务商 ID 已被使用，请换一个'), { statusCode: 409 });
         } else id = discovery.providerIdFor(name, baseUrl, taken);
         const provider = { name, baseUrl, api, authHeader: Boolean(input.authHeader), models: [] };
-        for (const item of inputs) storeCustomModel(provider, customModelEntry({}, item, official.get(item.id)), item.cost);
+        for (const item of inputs) storeCustomModel(provider, await customModelEntry({}, item, official.get(item.id), catalog.lookup(item.id)), item.cost);
         data.providers[id] = provider;
         await this.writeModelsFile(data);
         const result = { ok: true, providerId: id, modelCount: provider.models.length, credential: 'none', requiresRuntimeRestart: true };
@@ -688,7 +704,8 @@ class PiSettingsService {
         const provider = data.providers[providerId];
         if (!provider || typeof provider !== 'object') throw new Error('Custom provider not found');
         const models = Array.isArray(provider.models) ? provider.models : [];
-        for (const item of inputs) storeCustomModel(provider, customModelEntry(models.find(model => model.id === item.id) || {}, item, official.get(item.id)), item.cost);
+        const { catalog } = await this.builtinCatalog();
+        for (const item of inputs) storeCustomModel(provider, await customModelEntry(models.find(model => model.id === item.id) || {}, item, official.get(item.id), catalog.lookup(item.id)), item.cost);
         await this.writeModelsFile(data);
         return { ok: true, providerId, modelCount: inputs.length, requiresRuntimeRestart: true };
     }
@@ -704,14 +721,9 @@ class PiSettingsService {
         const index = models.findIndex(model => model.id === id);
         const current = index >= 0 ? models[index] : {};
         const official = (await require('./pi-usage-pricing').officialPrices()).get(id);
-        const model = customModelEntry(current, { ...input, id }, official);
-        if (Object.hasOwn(input, 'thinkingLevelMap')) {
-            const map = thinkingMap(input.thinkingLevelMap);
-            if (map === undefined) delete model.thinkingLevelMap;
-            else model.thinkingLevelMap = map;
-            const { getSupportedThinkingLevels } = await aiPromise;
-            if (!getSupportedThinkingLevels(model).length) throw new Error('At least one thinking level must remain supported');
-        }
+        const reference = !current.id && input.reasoning && !Object.hasOwn(input, 'thinkingLevelMap')
+            ? (await this.builtinCatalog()).catalog.lookup(id) : undefined;
+        const model = await customModelEntry(current, { ...input, id }, official, reference);
         if (input.api) {
             const api = String(input.api).trim();
             if (!CUSTOM_APIS.has(api)) throw new Error('Unsupported model API');
