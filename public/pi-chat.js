@@ -470,6 +470,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     const workflows = new window.PiSessionWorkflows({
         getContext: () => ({ cwd: state.cwd, session: state.session, connected: state.connected, model: state.model, generation: state.socketGeneration, botMode: state.botMode,
+            topicTitle: state.botMode ? botUi?.window()?.title : null,
             busy: state.shellBusy || state.streaming || state.compacting || state.compactRequested || state.controlRequested || state.controlsStopping || state.pendingUi.size > 0,
             draftBusy: state.attachmentReads > 0 || state.submittingDrafts.has(state.composerSessionKey) }),
         apiFetch, toast, prepareDocumentUpload: current => documentAttachments.prepareUpload(current), preserveImages: () => documentAttachments.generic, documentCard: reference => documentAttachments.card(reference),
@@ -495,6 +496,14 @@ document.addEventListener('DOMContentLoaded', () => {
         openFork: async (result, navigation) => {
             if (!isCurrentNavigation(navigation, result.session.cwd)) return;
             invalidateSessionList(result.session.cwd);
+            if (result.session.botWindow) {
+                const { profileId, windowId } = result.session.botWindow;
+                const key = JSON.stringify([result.session.cwd, result.session.id]);
+                if (result.draft && !state.composerDrafts.has(key)) state.composerDrafts.set(key, attachments.fromPayload(result.draft));
+                botUi.focusNextOpen = windowId;
+                if (window.PiWorkspaceRoute.navigate('bot', { profileId, windowId }) === false) throw new Error(translateUi('导航已改变；会话未打开'));
+                return;
+            }
             await loadSessions(result.session.cwd);
             upsertSession(result.session);
             if (!await navigateToSession(result.session, navigation)) return;
@@ -1142,7 +1151,7 @@ document.addEventListener('DOMContentLoaded', () => {
             state.manualUnread = status.manualUnread === true;
             state.archiveEnabled = status.archives === true;
             conversationSearch.setArchivesEnabled(state.archiveEnabled);
-            workflows.setEnabled(status.sessionWorkflows === true, status.sessionForkRequests === true);
+            workflows.setEnabled(status.sessionWorkflows === true, status.sessionForkRequests === true, status.buddyTopicForks === true);
             sideChat.setEnabled(status.sideChat === true, status.sideChatContext === true, status.sideChatRetention === true, status.sideChatTools === true, status.sideChatModels === true, status.sideChatLifecycle === true, status.sideChatAttachments !== false && status.documentUploads !== false);
             window.PiReplyTts.setEnabled(status.replyTts === true);
             elements.tokenDialog.classList.add('hidden');
@@ -2608,7 +2617,25 @@ document.addEventListener('DOMContentLoaded', () => {
             state.cwd = session.cwd; state.session = null; state.sessions = [];
             clearSessionView();
         }
-        return openSession(session, navigation);
+        const opened = await openSession(session, navigation);
+        const source = botUi?.sourceEntry;
+        if (opened && isCurrentNavigation(navigation) && source?.sessionId === session.id) {
+            botUi.sourceEntry = null;
+            let node = timeline?.nodeFor(source.entryId) || await archive?.revealEntry(source.entryId);
+            if (!node && source.entryId && isCurrentNavigation(navigation)) {
+                const record = await requestRpc('get_history_entry', { entryId: source.entryId, offset: 0, view: 'body' });
+                const matches = [...elements.transcript.querySelectorAll('article')].filter(article => {
+                    const message = record.kind === 'assistant' ? article._piAssistantMessage : record.kind === 'user' ? article._piUserMessage : null;
+                    return message && message.timestamp === record.timestamp;
+                });
+                if (matches.length === 1) node = matches[0];
+            }
+            if (isCurrentNavigation(navigation) && source.entryId && !locateTranscriptNode(node, true)) {
+                await window.PiChatNavigation.openSession({ cwd: session.cwd, sessionId: session.id });
+                if (state.cwd === session.cwd && state.session?.id === session.id) historyView.show(source.entryId, 'body');
+            }
+        }
+        return opened;
     }
 
     // Reconnect the open conversation. A Bot window is resolved again on the server every
@@ -4696,7 +4723,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (name === 'hotkeys') { toast(translateUi("输入 / 搜索命令、Skill 或模板，@ 搜索项目文件；↑↓ 选择，Tab/Enter 填入，Esc 关闭；加号内可添加附件、延迟发送或创建定时任务，Shift+Enter 换行。"), 'info', 12000); return true; }
         if (!state.connected) throw new Error(translateUi("请先打开会话"));
-        if ((name === 'fork' || name === 'clone') && state.botMode) throw new Error(translateUi("伙伴聊天不能分叉；以后可以为伙伴另开话题"));
         if (name === 'fork' || name === 'clone') {
             if (!workflows.enabled) throw new Error(translateUi("当前后端尚未支持会话分叉"));
             if (name === 'fork') await workflows.openList('history'); else await workflows.openClone(); return true;
@@ -5370,6 +5396,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!await navigateToSession(session)) return;
                     await workflows.openClone();
                 }, { disabled: session.ephemeral })] : []),
+                ...(workflows.buddyTopicForks && session.botWindow ? [command(translateUi('在伙伴中打开'), 'fa-comment', () => {
+                    window.PiWorkspaceRoute.navigate('bot', { profileId: session.botWindow.profileId, windowId: session.botWindow.windowId });
+                })] : []),
+                ...(workflows.buddyTopicForks && session.buddyForkCandidate ? [command(translateUi('收录为伙伴话题…'), 'fa-comment-medical', async () => {
+                    if (!await navigateToSession(session)) return;
+                    await workflows.openAdopt();
+                }, { disabled: session.ephemeral })] : []),
                 ...(!session.agentProfile && transfer.movesEnabled
                     ? [command(translateUi("移动到项目…"), 'fa-folder-open', () => transfer.openMove(session, cwd), { disabled: session.ephemeral })] : []),
                 ...(state.manualUnread ? [command(translateUi("标记为未读"), 'fa-envelope', () => markThreadUnread(session, cwd),
@@ -5617,7 +5650,17 @@ document.addEventListener('DOMContentLoaded', () => {
         return true;
     };
     botUi = window.PiBot?.create({ api: apiFetch, toast, open: openBotWindow, say: botSay, pane: $('pi-bot-pane'), header: $('pi-bot-header'), input: elements.input,
-        draft: botDraft, focusComposer: () => { if (!elements.input.disabled) elements.input.focus({ preventScroll: true }); },
+        draft: botDraft, openSource: async origin => {
+            const bot = botUi.bot(), source = bot?.windows.find(item => item.id === origin.windowId);
+            if (!source || source.archivedAt || source.trashedAt) { toast(translateUi('来源聊天不可用，请先在话题列表中核对或恢复'), 'info'); return; }
+            if (source.sessionId === origin.sessionId) {
+                botUi.sourceEntry = origin; botUi.go(bot.id, source.id);
+            } else {
+                const cwd = state.cwd;
+                await window.PiChatNavigation.openSession({ cwd, sessionId: origin.sessionId });
+                if (state.cwd === cwd && state.session?.id === origin.sessionId && origin.entryId) historyView.show(origin.entryId, 'body');
+            }
+        }, focusComposer: () => { if (!elements.input.disabled) elements.input.focus({ preventScroll: true }); },
         sideChat: options => sideChat.run(() => sideChat.open(options)),
         sideAvailable: () => sideChat.enabled && state.connected,
         focusAttention: key => {

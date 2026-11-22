@@ -11948,5 +11948,25 @@
         ['图片未输入', 'Image not sent'],
         ['读取时的模型 {0} 不支持图片，本次收到的是占位提示；原图保留。', 'The model selected when reading, {0}, does not support images and received a placeholder. The original image is retained.']
     );
+    rows.push(
+        ['从这里另开话题', 'Continue in a new topic'],
+        ['当前服务尚不支持从伙伴聊天另开话题', 'This server does not support branching Buddy chats yet'],
+        ['分支', 'Branch'],
+        ['新话题保留到所选位置的上下文，共用这个伙伴的记忆和文件。', 'The new topic keeps context up to the selected point and shares this Buddy’s memory and files.'],
+        ['收录为伙伴话题', 'Add as a Buddy topic'],
+        ['收录为伙伴话题…', 'Add as a Buddy topic…'],
+        ['收录并打开', 'Add and open'],
+        ['来源聊天', 'Source chat'],
+        ['收录到 {0} 的话题列表，继续使用这个伙伴的做事方式。', 'Add to {0}’s topics and continue with this Buddy’s working style.'],
+        ['创建话题', 'Create topic'],
+        ['复制为新话题', 'Copy to a new topic'],
+        ['正在收录…', 'Adding topic…'],
+        ['已收录为伙伴话题', 'Added as a Buddy topic'],
+        ['已创建新话题', 'New topic created'],
+        ['来源聊天不可用，请先在话题列表中核对或恢复', 'The source chat is unavailable. Check or restore it in the topic list first.'],
+        ['从「{0}」继续，查看来源', 'Continued from “{0}”. View source'],
+        ['从「{0}」继续', 'Continued from “{0}”'],
+        ['在伙伴中打开', 'Open in Buddy']
+    );
     globalThis.PiI18nCatalog = Object.freeze(rows.map(row => Object.freeze(row)));
 })();

@@ -15,8 +15,17 @@ function validTopicSeed(value) {
     try { require('./bot-topic').topicFields(value); return true; } catch { return false; }
 }
 
-function windowMarker({ sessionId, profileId, windowId, kind, generation, predecessor = null, topicSeed }) {
-    return { version: 1, sessionId, profileId, windowId, kind, generation, predecessor, ...(topicSeed ? { topicSeed } : {}) };
+function validForkOrigin(value) {
+    return value && typeof value === 'object' && !Array.isArray(value)
+        && Object.keys(value).every(key => ['windowId', 'sessionId', 'entryId', 'title'].includes(key))
+        && typeof value.windowId === 'string' && UUID.test(value.windowId)
+        && typeof value.sessionId === 'string' && value.sessionId.length > 0 && value.sessionId.length <= 128
+        && (value.entryId === null || typeof value.entryId === 'string' && value.entryId.length > 0 && value.entryId.length <= 160)
+        && typeof value.title === 'string' && value.title.length <= 80 && !/[\x00-\x1f\x7f]/.test(value.title);
+}
+
+function windowMarker({ sessionId, profileId, windowId, kind, generation, predecessor = null, topicSeed, forkOrigin }) {
+    return { version: 1, sessionId, profileId, windowId, kind, generation, predecessor, ...(topicSeed ? { topicSeed } : {}), ...(forkOrigin ? { forkOrigin } : {}) };
 }
 
 function validPredecessor(value) {
@@ -37,11 +46,12 @@ function readWindowBinding(manager) {
         || typeof data.windowId !== 'string' || !UUID.test(data.windowId) || !['main', 'topic'].includes(data.kind)
         || !Number.isSafeInteger(data.generation) || data.generation < 0 || data.generation > MAX_GENERATION
         || !validPredecessor(data.predecessor ?? null) || data.generation > 0 && !data.predecessor
-        || data.topicSeed !== undefined && (data.kind !== 'topic' || data.generation !== 0 || !validTopicSeed(data.topicSeed))) return null;
+        || data.topicSeed !== undefined && (data.kind !== 'topic' || data.generation !== 0 || !validTopicSeed(data.topicSeed))
+        || data.forkOrigin !== undefined && (data.kind !== 'topic' || data.generation !== 0 || !validForkOrigin(data.forkOrigin))) return null;
     // The window marker never overrides the immutable profile identity of the session.
     if (readProfileBinding(manager)?.profileId !== data.profileId) return null;
     return { sessionId, profileId: data.profileId, windowId: data.windowId, kind: data.kind, generation: data.generation, predecessor: data.predecessor ?? null,
-        ...(data.topicSeed ? { topicSeed: data.topicSeed } : {}) };
+        ...(data.topicSeed ? { topicSeed: data.topicSeed } : {}), ...(data.forkOrigin ? { forkOrigin: data.forkOrigin } : {}) };
 }
 
-module.exports = { WINDOW_ENTRY, windowMarker, readWindowBinding, validTopicSeed };
+module.exports = { WINDOW_ENTRY, windowMarker, readWindowBinding, validTopicSeed, validForkOrigin };

@@ -42,8 +42,8 @@
     };
 
     class PiBotUi {
-        constructor({ api, toast, open, say, pane, header, input, onChange, draft, focusComposer, focusAttention, sideChat, sideAvailable }) {
-            Object.assign(this, { api, toast, open, say, pane, header, input, onChange, draft, focusComposer, focusAttention, sideChat, sideAvailable });
+        constructor({ api, toast, open, say, pane, header, input, onChange, draft, openSource, focusComposer, focusAttention, sideChat, sideAvailable }) {
+            Object.assign(this, { api, toast, open, say, pane, header, input, onChange, draft, openSource, focusComposer, focusAttention, sideChat, sideAvailable });
             this.bots = []; this.revision = null; this.profileId = null; this.windowId = null;
             this.active = false; this.epoch = 0; this.loaded = false; this.creating = false; this.error = null;
             this.statusKind = 'connecting';
@@ -194,6 +194,14 @@
                 const wanted = params.get('profileId') || localStorage.getItem(LAST_KEY);
                 let bot = this.bots.find(item => item.id === wanted && item.enabled) || this.bots.find(item => item.enabled) || this.bots[0];
                 if (!bot.enabled) throw new Error(translateUi("这个伙伴已停用，请在设置中重新启用"));
+                const requested = bot.windows.find(item => item.id === params.get('windowId'));
+                if (requested?.generation === null && requested.forkOrigin) {
+                    // Complete only a fork whose native ownership marker already exists.
+                    await this.api(`/api/pi/bots/${encodeURIComponent(bot.id)}/windows/${encodeURIComponent(requested.id)}/session`);
+                    await this.load();
+                    if (epoch !== this.epoch) return;
+                    bot = this.bots.find(item => item.id === bot.id);
+                }
                 let main = bot.windows.find(item => item.kind === 'main' && item.generation !== null);
                 if (!main) {
                     await this.api(`/api/pi/bots/${encodeURIComponent(bot.id)}/main-window`, { method: 'POST' });
@@ -847,7 +855,13 @@
                 const settings = button('pi-bot-settings'); settings.dataset.botAction = 'settings';
                 settings.append(icon('fa-sliders'), el('span', null, translateUi("{0} 的设置", bot.name)));
                 foot.append(settings);
-                side.append(head, notebookNav, list, foot);
+                const origin = this.window()?.forkOrigin;
+                if (origin) {
+                    const source = button('pi-bot-origin', translateUi('从「{0}」继续，查看来源', origin.title));
+                    source.append(icon('fa-code-branch'), el('span', null, translateUi('从「{0}」继续', origin.title)));
+                    source.addEventListener('click', () => { void Promise.resolve(this.openSource?.(origin)).catch(error => this.toast(error.message, 'error')); });
+                    side.append(head, source, notebookNav, list, foot);
+                } else side.append(head, notebookNav, list, foot);
             } else if (!this.loaded) {
                 side.append(el('p', 'pi-bot-side-state', translateUi("正在读取…")));
             } else if (this.error) {

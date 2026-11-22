@@ -46,7 +46,7 @@ function workflowSnapshot(snapshot) {
     };
 }
 
-function mountSessionWorkflows(router, { store, supervisor, deferred, preferences, assertDeferredSendable }) {
+function mountSessionWorkflows(router, { store, supervisor, deferred, preferences, assertDeferredSendable, bots }) {
     const forks = new (require('./pi-session-fork-requests').ForkRequests)(store);
     const sessionWorker = async (cwd, id) => {
         const session = await store.getSession(cwd, id);
@@ -84,12 +84,21 @@ function mountSessionWorkflows(router, { store, supervisor, deferred, preference
                 const snapshot = await rpc('get_entries');
                 validateLeaf(snapshot, req.body.expectedLeafId);
                 if (req.body.entryId !== undefined && typeof req.body.entryId !== 'string') throw new Error('分叉位置无效');
-                start();
-                return store.forkSession(session, snapshot, req.body.entryId, req.body.position);
+                const execute = options => store.forkSession(session, snapshot, req.body.entryId, req.body.position, options);
+                if (bots) return bots.forkSession(session, snapshot, req.body, execute, start);
+                start(); return execute();
             });
         };
         const result = req.body.requestId === undefined ? await create(() => {}) : await forks.run(session, req.body, create);
         res.status(201).json(result);
+    }));
+    router.get('/sessions/:id/buddy-topic', endpoint(async (req, res) => {
+        if (!bots) throw new Error('Buddy topics are unavailable');
+        res.json(await bots.previewForkTopic(await store.getSession(req.query.cwd, req.params.id)));
+    }));
+    router.post('/sessions/:id/buddy-topic', endpoint(async (req, res) => {
+        if (!bots) throw new Error('Buddy topics are unavailable');
+        res.json(await bots.adoptForkTopic(await store.getSession(req.body.cwd, req.params.id), req.body));
     }));
     router.post('/sessions/:id/retry', endpoint(async (req, res) => {
         const payload = validateMessage(req.body, { plain: true });

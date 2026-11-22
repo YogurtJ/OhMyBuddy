@@ -76,7 +76,8 @@ function notebookView(state, branch, current) {
 function publicWindow(window) {
     const { id, kind, title, emoji, focus, instructions = '', groupId = null, trashedAt = null, createdAt, updatedAt, archivedAt, current, generations } = window;
     return { id, kind, title, emoji, focus, instructions, groupId, trashedAt, deleting: Boolean(window.deleting), createdAt, updatedAt, archivedAt,
-        generation: current?.generation ?? null, sessionId: current?.sessionId ?? null, generations: generations.length };
+        generation: current?.generation ?? null, sessionId: current?.sessionId ?? null, generations: generations.length,
+        ...(window.forkOrigin ? { forkOrigin: window.forkOrigin } : {}) };
 }
 
 class BotService extends EventEmitter {
@@ -300,6 +301,17 @@ class BotService extends EventEmitter {
     restoreTrashedTopic(profileId, windowId, input) { return require('./bot-topic-trash').restoreTopic(this, profileId, windowId, input); }
     deleteTopic(profileId, windowId, input) { return require('./bot-topic-trash').deleteTopic(this, profileId, windowId, input); }
 
+    forkSession(session, snapshot, input, execute, start) {
+        return require('./bot-topic-fork').fork(this, session, snapshot, input, execute, start);
+    }
+
+    async previewForkTopic(session) {
+        const forks = require('./bot-topic-fork');
+        return forks.publicPreview(await forks.preview(this, session));
+    }
+
+    adoptForkTopic(session, input) { return require('./bot-topic-fork').adopt(this, session, input); }
+
     createTopic(profileId, input) {
         const fields = topicFields(input, { revision: true, withInstructions: true, withGroups: true });
         return this.profiles.reserve(async () => {
@@ -397,6 +409,7 @@ class BotService extends EventEmitter {
             .filter(marker => marker.windowId === record.id && marker.kind === record.kind && marker.generation === 0);
         if (matches.length > 1) fail('Multiple native conversations claim this topic; recovery is required', 409, 'BOT_TOPIC_CONFLICT');
         let session = matches[0] && { id: matches[0].sessionId, path: matches[0].path };
+        if (!session && record.forkOrigin) fail('分叉创建尚未完成，请核对线程列表；不会创建空话题或重复分叉', 409, 'BOT_FORK_UNCERTAIN');
         if (!session) session = await this.store.createSession(record.cwd, '', { agentProfileId: profileId,
             autoTitle: record.kind === 'topic' && (!record.title || defaultTopicTitle(record.title) || !record.focus),
             initializeSession: manager => manager.appendCustomEntry(WINDOW_ENTRY,
@@ -538,7 +551,7 @@ class BotService extends EventEmitter {
         const now = new Date().toISOString();
         const saved = await this.windows.mutate(profileId, revision, windowState => {
             for (const marker of chosen) windowState.windows.push({ id: marker.windowId, kind: marker.kind, title: marker.topicSeed?.title ?? '', emoji: marker.topicSeed?.emoji ?? '', focus: marker.topicSeed?.focus ?? '',
-                ...(marker.topicSeed ? { topicSeed: marker.topicSeed } : {}),
+                ...(marker.topicSeed ? { topicSeed: marker.topicSeed } : {}), ...(marker.forkOrigin ? { forkOrigin: marker.forkOrigin } : {}),
                 cwd: bot.workspace, createdAt: now, updatedAt: now, archivedAt: null,
                 current: { generation: 0, sessionId: marker.sessionId, sessionPath: marker.path },
                 generations: [{ generation: 0, sessionId: marker.sessionId, sessionPath: marker.path, startedAt: now, endedAt: null, reason: 'initial' }],
@@ -990,6 +1003,8 @@ class BotService extends EventEmitter {
         if ((state.deletedTopicIds || []).includes(binding.windowId)) fail('This topic was permanently deleted', 410, 'BOT_TOPIC_DELETED');
         if (window?.trashedAt) fail('Restore this topic from trash first', 409, 'BOT_TOPIC_TRASHED');
         if (window?.archivedAt) fail('This topic is archived; restore it before sending', 409, 'BOT_WINDOW_ARCHIVED');
+        if ((binding.forkOrigin || window?.forkOrigin) && !window?.current)
+            fail('分叉话题的归属尚未完整登记，请先核对创建结果', 409, 'BOT_FORK_UNCERTAIN');
         const profile = (await this.profiles.state()).state.profiles.find(item => item.id === binding.profileId);
         const bot = settings.readBot(profile);
         if (!settings.isBot(profile) || bot.workspace !== cwd) return null;

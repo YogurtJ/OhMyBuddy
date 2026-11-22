@@ -109,7 +109,8 @@
         }
         async createFork(mode) {
             const body = { entryId: mode === 'clone' ? undefined : this.entryId,
-                position: mode === 'reply-fork' ? 'at' : undefined, expectedLeafId: this.expectedLeafId };
+                position: mode === 'reply-fork' ? 'at' : undefined, expectedLeafId: this.expectedLeafId,
+                ...(this.buddyFork() ? { topicTitle: $('pi-workflow-topic-title').value.trim() } : {}) };
             let record = this.pendingFork();
             if (!this.forkRequestsSupported) {
                 if (record) { this.offerForkReset(); throw new Error(translateUi('当前服务无法查询上次创建结果，请先核对线程列表')); }
@@ -136,7 +137,7 @@
             if (next === this.storeError) return;
             this.storeError = next; this.update();
         }
-        setEnabled(enabled, forkRequests = false) { this.enabled = enabled; this.forkRequestsSupported = forkRequests; this.update(); }
+        setEnabled(enabled, forkRequests = false, buddyTopicForks = false) { this.enabled = enabled; this.forkRequestsSupported = forkRequests; this.buddyTopicForks = buddyTopicForks; this.update(); }
         update() {
             const key = this.identity();
             if (key !== this.key) {
@@ -232,7 +233,7 @@
                 const actions = article.querySelector('.pi-message-actions');
                 if (!actions) return;
                 const canFork = this.forkable() && this.usable() && this.matchReplies(article._piAssistantMessage).length === 1;
-                this.updateMessageAction(actions, 'reply-fork', translateUi("从此回复后分叉"), 'fa-code-branch', canFork);
+                this.updateMessageAction(actions, 'reply-fork', this.buddyFork() ? translateUi('从这里另开话题') : translateUi("从此回复后分叉"), 'fa-code-branch', canFork);
             });
         }
 
@@ -240,17 +241,31 @@
             return `<section class="pi-workflow-source"><div class="pi-workflow-source-label"><i class="fa-regular fa-file-lines" aria-hidden="true"></i>${escape(label)}</div><pre class="pi-workflow-preview" tabindex="0">${escape(text)}</pre></section>`;
         }
 
-        // A Bot chat is one continuous conversation: it is never forked or copied into an ordinary
-        // thread, whichever entry is used (reply action, history list, menu, slash command) (UAT-06).
-        forkable() { return !this.context().botMode; }
-        assertForkable() { if (!this.forkable()) throw new Error(translateUi("伙伴聊天不能分叉；以后可以为伙伴另开话题")); }
+        buddyFork() { return this.buddyTopicForks && Boolean(this.context().botMode || this.context().session?.botWindow); }
+        forkable() { return !this.context().botMode || this.buddyTopicForks; }
+        assertForkable() { if (!this.forkable()) throw new Error(translateUi('当前服务尚不支持从伙伴聊天另开话题')); }
+        forkDetails() {
+            if (!this.buddyFork()) return this.warning(translateUi("新线程与原线程共享项目文件，不复制目录。"));
+            const title = `${this.context().topicTitle || this.context().session?.name || translateUi('主聊天')} · ${translateUi('分支')}`.slice(0, 80);
+            return `<label class="pi-workflow-field">${translateUi('话题名')}<input id="pi-workflow-topic-title" maxlength="80" required value="${escape(title)}"></label>${this.warning(translateUi('新话题保留到所选位置的上下文，共用这个伙伴的记忆和文件。'))}`;
+        }
+        async openAdopt() {
+            if (this.busy()) throw new Error(translateUi("请等待会话空闲后操作"));
+            if (!this.show('adopt-topic', translateUi('收录为伙伴话题'), translateUi('收录并打开'))) return;
+            const preview = await this.loadPanel(() => this.get('buddy-topic'));
+            if (!preview) return;
+            this.adoptPreview = preview; this.submit.disabled = false;
+            this.content.innerHTML = this.sourcePreview(preview.origin?.title || preview.window?.title || translateUi('主聊天'), translateUi('来源聊天'))
+                + `<p>${escape(translateUi('收录到 {0} 的话题列表，继续使用这个伙伴的做事方式。', preview.name))}</p>`
+                + `<label class="pi-workflow-field">${translateUi('话题名')}<input id="pi-workflow-topic-title" maxlength="80" required value="${escape(preview.title || preview.window?.title)}"></label>`;
+        }
 
         openReplyFork(reply, message, navigation) {
             this.assertForkable();
             if (this.busy()) throw new Error(translateUi("请等待会话空闲后操作"));
             this.entryId = reply.entryId; this.expectedLeafId = this.snapshot.leafId;
-            if (!this.show('reply-fork', translateUi("从此回复后分叉"), translateUi("创建分叉"), navigation)) return;
-            this.content.innerHTML = `${this.warning(translateUi("新线程与原线程共享项目文件，不复制目录。"))}${this.sourcePreview(message ? this.messageText(message, '\n') : reply.text, translateUi('原回复 · 分叉将保留到此处'))}`;
+            if (!this.show('reply-fork', this.buddyFork() ? translateUi('从这里另开话题') : translateUi("从此回复后分叉"), this.buddyFork() ? translateUi('创建话题') : translateUi("创建分叉"), navigation)) return;
+            this.content.innerHTML = `${this.forkDetails()}${this.sourcePreview(message ? this.messageText(message, '\n') : reply.text, translateUi('原回复 · 分叉将保留到此处'))}`;
             this.offerForkRecovery();
         }
 
@@ -262,7 +277,7 @@
             this.mode = mode;
             this.editor = null; this.loadingFiles = null;
             this.target = { ...this.context() };
-            if (['clone', 'fork', 'reply-fork'].includes(mode)) this.target.navigation = navigation || this.host.beginNavigation();
+            if (['clone', 'fork', 'reply-fork', 'adopt-topic'].includes(mode)) this.target.navigation = navigation || this.host.beginNavigation();
             this.targetKey = this.identity();
             $('pi-workflow-title').textContent = title;
             this.error.hidden = true;
@@ -432,25 +447,25 @@
         async openPrompt(entryId, mode, navigation) {
             if (mode !== 'retry') this.assertForkable();
             if (this.busy()) throw new Error(translateUi("请等待会话空闲后操作"));
-            if (!this.show(mode, mode === 'retry' ? translateUi("编辑并重试") : translateUi("从此处分叉"), mode === 'retry' ? translateUi("回退并发送") : translateUi("创建分叉"), navigation)) return;
+            if (!this.show(mode, mode === 'retry' ? translateUi("编辑并重试") : translateUi("从此处分叉"), mode === 'retry' ? translateUi("回退并发送") : this.buddyFork() ? translateUi('创建话题') : translateUi("创建分叉"), navigation)) return;
             const payload = await this.loadPanel(() => this.get(`prompt/${encodeURIComponent(entryId)}`));
             if (!payload) return;
             this.entryId = entryId; this.expectedLeafId = payload.leafId;
             this.submit.disabled = false;
             if (mode === 'retry') this.editorFields(payload, false);
             else {
-                this.content.innerHTML = `${this.warning(translateUi("新线程与原线程共享项目文件，不复制目录。"))}${this.sourcePreview(payload.message || translateUi("图片消息"), translateUi('原问题 · 将填入新线程草稿'))}`;
+                this.content.innerHTML = `${this.forkDetails()}${this.sourcePreview(payload.message || translateUi("图片消息"), translateUi('原问题 · 将填入新线程草稿'))}`;
                 this.offerForkRecovery();
             }
         }
         async openClone() {
             this.assertForkable();
             if (this.busy()) throw new Error(translateUi("请等待会话空闲后操作"));
-            if (!this.show('clone', translateUi("复制为新线程"), translateUi("创建线程"))) return;
+            if (!this.show('clone', this.buddyFork() ? translateUi('复制为新话题') : translateUi("复制为新线程"), this.buddyFork() ? translateUi('创建话题') : translateUi("创建线程"))) return;
             if (!await this.loadPanel(async () => { await this.refresh(true); return this.snapshot; })) return;
             this.expectedLeafId = this.snapshot.leafId;
             this.submit.disabled = false;
-            this.content.innerHTML = this.warning(translateUi("新线程与原线程共享项目文件，不复制目录。"));
+            this.content.innerHTML = this.forkDetails();
             this.offerForkRecovery();
         }
         async openList(mode, navigation) {
@@ -514,7 +529,7 @@
             const mode = this.mode, panelSequence = this.panelSequence, editor = this.editor;
             const label = ['clone', 'fork', 'reply-fork'].includes(mode) && this.submit.textContent === translateUi('查看创建结果') ? translateUi('正在查询…') : ({
                 schedule: translateUi("正在预约…"), 'schedule-edit': translateUi("正在保存预约…"),
-                retry: translateUi("正在回退并发送…"), restore: translateUi("正在恢复…"),
+                retry: translateUi("正在回退并发送…"), restore: translateUi("正在恢复…"), 'adopt-topic': translateUi('正在收录…'),
                 clone: translateUi("正在创建线程…"), fork: translateUi("正在创建分叉…"), 'reply-fork': translateUi("正在创建分叉…"),
                 'job-send': translateUi("正在发送…"), 'job-cancel': translateUi("正在取消…")
             })[mode];
@@ -549,10 +564,15 @@
                     completed = true;
                     if (panelSequence === this.panelSequence && this.targetKey === this.identity()
                         && this.host.isCurrentNavigation(this.target.navigation, this.target.cwd)) await this.host.openFork(result, this.target.navigation);
+                } else if (mode === 'adopt-topic') {
+                    const result = await this.post('buddy-topic', { ...this.adoptPreview, title: $('pi-workflow-topic-title').value.trim() });
+                    completed = true;
+                    if (this.host.isCurrentNavigation(this.target.navigation, this.target.cwd))
+                        await this.host.openFork({ session: { ...this.target.session, cwd: this.target.cwd, botWindow: { profileId: result.profileId, windowId: result.window.id } } }, this.target.navigation);
                 } else if (mode === 'restore') await this.post('restore', { entryId: this.entryId, expectedLeafId: this.expectedLeafId });
                 else if (mode.startsWith('job-')) await this.post(`deferred/${this.job.id}`, { action: mode.slice(4), revision: this.job.revision, confirmUncertain }, 'PATCH');
                 completed = true;
-                this.host.toast(mode === 'retry' ? translateUi("已回退并提交新问题") : mode === 'restore' ? translateUi("已恢复历史版本") : ['clone', 'fork', 'reply-fork'].includes(mode) ? translateUi("已创建新线程") : mode === 'schedule' ? translateUi("已预约发送") : translateUi("延迟消息已更新"), 'success');
+                this.host.toast(mode === 'retry' ? translateUi("已回退并提交新问题") : mode === 'restore' ? translateUi("已恢复历史版本") : mode === 'adopt-topic' ? translateUi('已收录为伙伴话题') : ['clone', 'fork', 'reply-fork'].includes(mode) ? this.target.botMode || this.target.session?.botWindow ? translateUi('已创建新话题') : translateUi("已创建新线程") : mode === 'schedule' ? translateUi("已预约发送") : translateUi("延迟消息已更新"), 'success');
             } catch (error) {
                 if (completed) this.host.toast(translateUi("新线程已创建，打开失败，请在线程列表中查看"), 'info');
                 else {

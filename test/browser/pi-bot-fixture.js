@@ -88,10 +88,11 @@ async function botPage(browser, base, world, { width, height = 860, reducedMotio
                 world.opened.push(command.sessionId);
                 data = { session: { id: command.sessionId, cwd: WORKSPACE, path: `${WORKSPACE}/${command.sessionId}.jsonl` }, state,
                     messages: { messages: world.messages(command.sessionId) }, stats: {}, models: { models: [state.model] },
-                    thinkingLevels: { levels: ['off'] }, commands: { commands: [] } };
+                    thinkingLevels: { levels: ['off'] }, commands: { commands: world.commands || [] } };
             } else if (command.type === 'get_state') data = state;
             // The stored conversation of the session this socket opened, as after a re-sync.
             else if (command.type === 'get_messages') data = { messages: world.messages(world.opened.at(-1)) };
+            else if (command.type === 'get_history_entry') data = world.historyEntries?.[command.entryId] || {};
             if (command.type === 'prompt') world.prompts.push(command.message);
             ws.send(JSON.stringify({ type: 'response', id: command.id, command: command.type, success: true, data }));
         });
@@ -138,4 +139,4 @@ async function settingsPage(sheet, id) {
     await sheet.locator(`.pi-bot-sheet-page[data-page="${id}"]`).waitFor();
 }
 
-module.exports = { BOT, MAIN, BOT2, MAIN2, APPROVAL, say, serve, botRecord, windowRecord, botPage, newWorld, layout, bottomBar, settledShot, settingsPage };
+module.exports = { BOT, MAIN, BOT2, MAIN2, WORKSPACE, APPROVAL, say, serve, botRecord, windowRecord, botPage, newWorld, layout, bottomBar, settledShot, settingsPage };

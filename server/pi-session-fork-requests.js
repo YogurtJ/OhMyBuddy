@@ -76,8 +76,11 @@ class ForkRequests {
         const key = this.key(session, input.requestId);
         if (input.expectedLeafId !== null && (typeof input.expectedLeafId !== 'string' || input.expectedLeafId.length > 160)
             || input.entryId !== undefined && (typeof input.entryId !== 'string' || !input.entryId || input.entryId.length > 160)
-            || !['before', 'at'].includes(input.position === undefined ? 'before' : input.position)) throw failure('分叉请求参数无效', 'FORK_REQUEST_INVALID', 400);
-        const fingerprint = hash(JSON.stringify([session.cwd, session.id, session.created, input.expectedLeafId, input.entryId ?? null, input.position ?? 'before']));
+            || !['before', 'at'].includes(input.position === undefined ? 'before' : input.position)
+            || input.topicTitle !== undefined && (typeof input.topicTitle !== 'string' || !input.topicTitle.trim() || input.topicTitle.length > 80 || /[\x00-\x1f\x7f]/.test(input.topicTitle))) throw failure('分叉请求参数无效', 'FORK_REQUEST_INVALID', 400);
+        const fields = [session.cwd, session.id, session.created, input.expectedLeafId, input.entryId ?? null, input.position ?? 'before'];
+        if (input.topicTitle !== undefined) fields.push(input.topicTitle);
+        const fingerprint = hash(JSON.stringify(fields));
         const active = this.running.get(key);
         if (active) return active.fingerprint === fingerprint ? active.promise : Promise.reject(failure('此请求标识已用于不同分叉参数', 'FORK_REQUEST_CONFLICT'));
         // Reserve before any await, including receipt directory discovery.

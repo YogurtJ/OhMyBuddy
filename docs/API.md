@@ -277,6 +277,10 @@
 
 ### Bot 模式
 
+`/status.buddyTopicForks=true` 表示伙伴分叉话题已启用。会话行新增 `botWindow`（匹配当前原生会话 ID 的窗口标记或 null）及展示用 `buddyForkCandidate`；不能仅据展示候选推断归属。主聊天／话题经 `POST /sessions/:id/fork` 分叉后返回的新 `session.botWindow` 指向同一伙伴的新话题；可选 `topicTitle`（非空、80 字符内、无控制字符）参与创建请求去重指纹。窗口行可含 `forkOrigin {windowId,sessionId,entryId:null|string,title}`，换代后窗口继续保留来源。
+
+`GET /sessions/:id/buddy-topic?cwd=...` 返回旧分叉收录预览 `{existing:false,profileId,name,title,expectedLeafId,windowsRevision,origin}`；已登记则返回 `{existing:true,profileId,name,window}`。`POST /sessions/:id/buddy-topic` 接收 `{cwd,profileId,expectedLeafId,windowsRevision,title}`，在原生来源核验、话题 CAS、档案及空闲会话编辑预占内收录并返回已登记形状。只接受可证明来自同一伙伴、同一工作目录的原生分叉；普通身份项目线程不能据身份标签收录。冲突、忙碌或无法证明来源为 409，回收站／归档及停用沿用伙伴错误；`BOT_FORK_UNCERTAIN` 表示预备分叉缺少完整原生证明，拒绝新建空聊天或自动重放。
+
 界面中显示为“伙伴”（英文 Buddy），接口、字段和错误信息保留 `bot` 命名。
 
 `GET /status.bots=true` 表示 Bot 接口已装配，用户行为见 [Bot 模式](BOT_MODE.md)。Bot 是带 `bot` 段的助手档案；档案写入沿用注册表 CAS（`expectedRevision` 为 `GET /bots` 的 `revision`），窗口元数据写入使用该 Bot 的 `windowsRevision`，修订冲突返回 409，所有响应 `Cache-Control: no-store`，失败不自动重试。

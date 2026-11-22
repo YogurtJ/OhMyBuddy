@@ -10,7 +10,7 @@ const path = require('node:path');
 const { safeFile } = require('../pi-native-service');
 const privateFiles = require('../pi-private-files');
 const { PrivateJsonDocument } = require('./bot-json-store');
-const { validTopicSeed } = require('./bot-window-state');
+const { validTopicSeed, validForkOrigin } = require('./bot-window-state');
 const { validInstructions } = require('./bot-topic');
 const { validGroups, validGroupId } = require('./bot-topic-management');
 
@@ -59,6 +59,7 @@ function validWindow(value) {
     if (value.trashedAt !== undefined && (value.kind !== 'topic' || value.trashedAt !== null && !iso(value.trashedAt))) return false;
     if (value.deleting !== undefined && (!value.trashedAt || !validDeletion(value.deleting, value.generations))) return false;
     if (value.topicSeed !== undefined && (value.kind !== 'topic' || !validTopicSeed(value.topicSeed))) return false;
+    if (value.forkOrigin !== undefined && (value.kind !== 'topic' || !validForkOrigin(value.forkOrigin))) return false;
     // Topics only; records written before topic instructions have none (read as '').
     if (value.instructions !== undefined && (value.kind !== 'topic' || !validInstructions(value.instructions))) return false;
     const last = value.generations.at(-1);

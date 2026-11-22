@@ -340,6 +340,11 @@ class PiSessionStore {
             const item = this._serializeSession(session, manager && profiles ? await profiles.describe(manager, profileState) : null,
                 manager ? require('./pi-profile-authoring').readProfileAuthoring(manager) : null);
             // The manager is already parsed for bindings; summarizing its current branch adds no extra file read.
+            if (manager) {
+                item.botWindow = require('./bot/bot-window-state').readWindowBinding(manager);
+                item.buddyForkCandidate = !item.botWindow && manager.getEntries().some(entry => entry.type === 'custom'
+                    && entry.customType === 'pivane-bot-window' && entry.data?.profileId === item.agentProfile?.id);
+            }
             const stats = manager ? sessionStats(manager) : null;
             if (stats) item.stats = stats;
             this.sessionRows.set(session, { revision, profiles, item });
@@ -373,8 +378,10 @@ class PiSessionStore {
         try {
             const agentProfile = this.profiles ? await this.profiles.describe(read.manager()) : null;
             read.validate();
-            const manager = read.manager();
-            const session = { ...this._serializeSession(candidate, agentProfile), path: canonical,
+            const manager = read.manager(), botWindow = require('./bot/bot-window-state').readWindowBinding(manager);
+            const session = { ...this._serializeSession(candidate, agentProfile), path: canonical, botWindow,
+                buddyForkCandidate: !botWindow && manager.getEntries().some(entry => entry.type === 'custom'
+                    && entry.customType === 'pivane-bot-window' && entry.data?.profileId === agentProfile?.id),
                 assistant: require('./pi-extension-assistant').assistantProfile(manager),
                 profileAuthoring: require('./pi-profile-authoring').readProfileAuthoring(manager) };
             await this.sessionMoves?.assertAvailable(cwd, id);
@@ -443,11 +450,12 @@ class PiSessionStore {
         };
     }
 
-    forkSession(session, snapshot, entryId, position = 'before') {
-        return this.withWorkspaceUse(session.cwd, () => this._forkSession(session, snapshot, entryId, position));
+    forkSession(session, snapshot, entryId, position = 'before', options = {}) {
+        return this.withWorkspaceUse(session.cwd, () => this._forkSession(session, snapshot, entryId, position, options));
     }
 
-    async _forkSession(session, snapshot, entryId, position = 'before') {
+    async _forkSession(session, snapshot, entryId, position = 'before', { initializeSession } = {}) {
+        if (initializeSession !== undefined && typeof initializeSession !== 'function') throw new Error('Session initializer must be a server function');
         if (!['before', 'at'].includes(position)) throw new Error('分叉位置无效');
         if (entryId !== undefined && (typeof entryId !== 'string' || !entryId)) throw new Error('分叉消息无效');
         const { SessionManager } = await getSdk();
@@ -481,6 +489,7 @@ class PiSessionStore {
             if (this.profiles) source.appendCustomEntry(require('./pi-profile-state').PROFILE_ENTRY,
                 { version: 1, sessionId: source.getSessionId(), profileId: inheritedProfileId });
             source.appendSessionInfo(`${session.name || '会话'} · 分叉`.slice(0, 120));
+            if (initializeSession) initializeSession(source);
             publishAccess(source);
             this.sessionLists.delete(session.cwd);
             result = await this.getSession(session.cwd, source.getSessionId());
@@ -494,6 +503,7 @@ class PiSessionStore {
                 { version: 1, sessionId: source.getSessionId(), profileId: inheritedProfileId });
             source.appendSessionInfo(`${session.name || '会话'} · 分叉`.slice(0, 120));
             source.appendCustomEntry('pivane-web-fork-origin', { sessionId: session.id, entryId: targetId });
+            if (initializeSession) initializeSession(source);
             if (!fs.existsSync(source.getSessionFile())) {
                 const privateFiles = require('./pi-private-files');
                 const temporary = fs.mkdtempSync(path.join(source.getSessionDir(), '.pivane-fork-'));
@@ -514,7 +524,7 @@ class PiSessionStore {
             result = await this.getSession(session.cwd, source.getSessionId());
         } else {
             result = await this.createSession(session.cwd, `${session.name || '会话'} · 分叉`,
-                { inheritedProfileId });
+                { inheritedProfileId, initializeSession });
             const empty = this.profileManager(result, SessionManager);
             empty.appendCustomEntry('pivane-web-fork-origin', { sessionId: session.id, entryId: targetId });
             publishAccess(empty);

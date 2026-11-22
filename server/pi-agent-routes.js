@@ -427,6 +427,7 @@ function createPiAgentGateway(options = {}) {
             extensionStatus: true,
             sessionWorkflows: true,
             sessionForkRequests: true,
+            buddyTopicForks: true,
             replyFork: true,
             sideChat: true,
             sideChatContext: true,
@@ -770,7 +771,7 @@ function createPiAgentGateway(options = {}) {
         } finally { workspacePreparation?.close(); }
     });
 
-    mountSessionWorkflows(router, { store, supervisor, deferred, preferences, assertDeferredSendable: session => bots.assertNativeSendable(session) });
+    mountSessionWorkflows(router, { store, supervisor, deferred, preferences, bots, assertDeferredSendable: session => bots.assertNativeSendable(session) });
     const sessionTransfer = require('./pi-session-transfer').mountSessionTransfer(router, { store, supervisor, preferences });
     const sessionMoves = require('./pi-session-moves').mountSessionMoves(router, { store, supervisor, preferences, usage, deferred, cron, sideChat, channels,
         isSuspended: () => maintenance.locked || maintenance.referenceLocked,
