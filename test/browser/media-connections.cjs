@@ -7,6 +7,8 @@ const schema = connectionSchema(), copy = value => JSON.parse(JSON.stringify(val
 async function run(browser, viewport, theme) {
     const context = await browser.newContext({ locale: 'zh-CN', viewport, isMobile: viewport.width < 900, hasTouch: viewport.width < 900 });
     const page = await context.newPage(); page.setDefaultTimeout(12000);
+    // The isolated fixture uses local fallback fonts and does not require the font CDN.
+    await page.route(/^https:\/\/(?:fonts\.googleapis\.com|fonts\.gstatic\.com)\//, route => route.abort());
     const errors = [], writes = [], stored = new Map(); let providers = [], transcriptionModels = [], revision = 0, counter = 0, holdPlan, resolveStarted, rejectWrite = false, unsupported = false, wrongKindDraft = false;
     const snapshot = () => ({ ...copy(schema), revision: String(revision), transcriptionModels: copy(transcriptionModels), providers: providers.map(provider => ({ ...copy(provider), keyConfigured: stored.has(provider.id) && stored.get(provider.id).origin === new URL(provider.baseUrl).origin, keyNeedsRebind: stored.has(provider.id) && stored.get(provider.id).origin !== new URL(provider.baseUrl).origin })) });
     const builtin = { id: 'builtin-fixture', name: 'Built-in Fixture', kind: 'image', adapter: 'manual', configured: false, executable: false, parameters: { prompt: { type: 'textarea', label: '提示词', required: true } } };
