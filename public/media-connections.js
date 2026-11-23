@@ -29,15 +29,13 @@
             if (!response.ok) throw new Error(translateUi(data.error || `HTTP ${response.status}`));
             return data;
         }
-        const speechApi = async (url, options = {}) => {
+        window.PiTranscriptionSettings?.create({ apiFetch: async (url, options = {}) => {
             const token = sessionStorage.getItem('pi.web.token');
             const response = await (window.WorkspaceAccess?.fetch || fetch)(url, { ...options, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...options.headers } });
             const data = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(translateUi(data.error || `HTTP ${response.status}`));
             return data;
-        };
-        window.PiTranscriptionSettings?.create({ apiFetch: speechApi });
-        window.PiRealtimeVoiceSettings?.create({ apiFetch: speechApi });
+        } });
         function changed(modelId) { window.dispatchEvent(new CustomEvent('media-lab:configured', { detail: { modelId } })); }
         function shell(heading, onBack) {
             content.querySelectorAll('input[type="password"]').forEach(input => { input.value = ''; });
@@ -153,7 +151,6 @@
                 const card = node('article', 'mc-card'); card.append(node('h3', '', provider.name), node('p', 'mc-url', provider.baseUrl), node('p', 'mc-key-status', keyLabel(provider)));
                 const categories = [...new Set(provider.models.map(model => labels[model.kind]))];
                 if ((snapshot.transcriptionModels || []).some(model => model.providerId === provider.id)) categories.push(translateUi("语音转录"));
-                if ((snapshot.realtimeModels || []).some(model => model.providerId === provider.id)) categories.push(translateUi("实时语音对话"));
                 card.append(node('p', 'lab-muted', categories.length ? translateUi("已配置：{0}", categories.join(' / ')) : translateUi("尚未添加模型")));
                 const actions = node('div', 'mc-actions');
                 actions.append(button(translateUi("编辑服务"), () => editProvider(provider.id)), button(translateUi("使用此服务"), () => editModel(provider.id, null, {}, '', '', chooseProvider), true));
@@ -432,19 +429,19 @@
             footer.append(button(translateUi("取消"), returnTo), save);
         }
         function selectSection(section, modelId) {
-            const speechSection = kind === 'tts' && ['asr', 'realtime'].includes(section) ? section : null;
+            const asr = kind === 'tts' && section === 'asr';
             epoch++; tabs.hidden = kind !== 'tts';
-            content.hidden = footer.hidden = Boolean(speechSection);
+            content.hidden = footer.hidden = asr;
             if (kind === 'tts') { content.setAttribute('role', 'tabpanel'); content.setAttribute('aria-labelledby', 'mc-tts-tab'); }
             else { content.removeAttribute('role'); content.removeAttribute('aria-labelledby'); }
             for (const tab of tabs.querySelectorAll('[data-speech-tab]')) {
-                const selected = tab.dataset.speechTab === (speechSection || 'tts');
+                const selected = tab.dataset.speechTab === (asr ? 'asr' : 'tts');
                 tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1;
             }
             // Changing sections invalidates pending views and clears unsaved credentials.
             content.querySelectorAll('input[type="password"]').forEach(input => { input.value = ''; });
-            window.dispatchEvent(new CustomEvent('media-connections:section', { detail: { section: speechSection || kind } }));
-            if (speechSection) { shell(headings.tts); }
+            window.dispatchEvent(new CustomEvent('media-connections:section', { detail: { section: asr ? 'asr' : kind } }));
+            if (asr) { shell(headings.tts); }
             else void showOverview(modelId);
         }
         for (const tab of tabs.querySelectorAll('[data-speech-tab]')) {
@@ -452,10 +449,8 @@
             tab.addEventListener('keydown', event => {
                 if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
                 event.preventDefault();
-                const choices = [...tabs.querySelectorAll('[data-speech-tab]')];
-                const index = choices.indexOf(tab);
-                const next = choices[event.key === 'Home' ? 0 : event.key === 'End' ? choices.length - 1
-                    : (index + (event.key === 'ArrowLeft' ? -1 : 1) + choices.length) % choices.length];
+                const next = event.key === 'Home' ? tabs.firstElementChild : event.key === 'End' ? tabs.lastElementChild
+                    : tab === tabs.firstElementChild ? tabs.lastElementChild : tabs.firstElementChild;
                 next.focus(); selectSection(next.dataset.speechTab);
             });
         }

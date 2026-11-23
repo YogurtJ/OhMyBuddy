@@ -2,7 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const translateUi = globalThis.PiI18n?.t || ((text, ...values) => text.replace(/\{(\d+)\}/g, (_, index) => values[index] ?? `{${index}}`));
     const $ = id => document.getElementById(id);
     const attachments = window.PiAttachments;
-    let voice = null, realtimeVoice = null;
+    let voice = null;
     const LOCAL_COMMANDS = [
         { name: 'tree', description: translateUi("查看会话分支，选择从哪里继续"), source: 'web' },
         { name: 'trust', description: translateUi("管理当前项目的信任"), source: 'web' },
@@ -840,19 +840,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }) : null;
 
-    realtimeVoice = window.PiRealtimeVoice ? new window.PiRealtimeVoice({
-        api: apiFetch, toast, token: () => state.token,
-        context: () => ({ cwd: state.cwd, key: state.composerSessionKey, generation: state.socketGeneration, connected: state.connected,
-            submitting: state.submittingDrafts.has(state.composerSessionKey) }),
-        beforeStart: () => voice?.cancel(),
-        append: text => {
-            if (!state.connected || state.submittingDrafts.has(state.composerSessionKey)) return false;
-            const draft = elements.input.value + (elements.input.value ? '\n\n' : '') + text;
-            attachments.validateDraft(draft, state.attachmentFiles);
-            elements.input.value = draft; autoResizeInput(); return true;
-        }
-    }) : null;
-
     if (window.marked) {
         window.marked.setOptions({ gfm: true, breaks: true });
     }
@@ -1124,7 +1111,6 @@ document.addEventListener('DOMContentLoaded', () => {
             composer.setEnabled(status.composerTools === true);
             state.composerTools = status.composerTools === true;
             voice?.setEnabled(status.transcription === true);
-            realtimeVoice?.setEnabled(status.realtimeVoice === true);
             documentAttachments.enabled = status.documentUploads === true;
             documentAttachments.generic = status.attachmentUploads === true;
             state.documentStorageSupported = status.documentStorage === true && Boolean(documentStorage);
@@ -4936,7 +4922,6 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.stopButton.classList.toggle('hidden', !showStop);
         elements.sendButton.classList.toggle('hidden', showStop);
         voice?.sync();
-        realtimeVoice?.sync();
         elements.sendButton.title = shellInput ? translateUi("执行 Shell 命令") : state.streaming ? elements.deliveryMode.value === 'follow_up' ? translateUi("发送后续消息") : translateUi("发送引导消息") : translateUi("发送");
         elements.sendButton.setAttribute('aria-label', elements.sendButton.title);
         elements.sendButton.querySelector('i').className = shellInput ? 'fa-solid fa-terminal' : 'fa-solid fa-arrow-up';
@@ -6014,7 +5999,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const withFiles = drafts.filter(([, draft]) => draft.files?.length).length;
             if (withFiles) blockers.push(translateUi('{0} 个未发送草稿中的附件', withFiles));
             if (state.attachmentReads) blockers.push(translateUi('正在读取的附件'));
-            if (realtimeVoice?.isCallActive()) blockers.push(translateUi('正在进行的实时语音通话'));
             if (state.submittingDrafts.size) blockers.push(translateUi('正在发送的消息'));
             if (state.session?.ephemeral) blockers.push(translateUi('当前临时会话（刷新后结束）'));
             const sides = sideChat.liveCount?.() || 0;

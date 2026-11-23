@@ -827,39 +827,13 @@ gateway 当前白名单：
 
 `/api/pi/status.transcription=true` 启用主输入区麦克风。接口复用 `/api/pi` 的身份／Origin 检查，响应 `Cache-Control: no-store`，不启动 worker，不写媒体历史或会话正文。
 
-- `GET /api/pi/composer/transcription` 返回 `{revision,models:[{id,provider,modelId,name,protocol,baseUrl,managedModelId?,configurationRevision?}],maximumBytes:7500000,maximumSeconds:120}`。合并已有原生目录与独立接入的可用转录模型；协议为 `mimo`（音频消息 JSON）、`openai`（multipart 音频转录）或 `qwen-asr`（DashScope 原生 JSON、音频 Data URI、`parameters.format/language_hints`、`output.text`）。托管模型选择 ID 为 `asr:<providerId>:<modelId>`。
+- `GET /api/pi/composer/transcription` 返回 `{revision,models:[{id,provider,modelId,name,protocol,baseUrl,managedModelId?,configurationRevision?}],maximumBytes:7500000,maximumSeconds:120}`。合并已有原生目录与独立接入的可用转录模型；协议为 `mimo`（音频消息 JSON）或 `openai`（multipart 音频转录）。托管模型选择 ID 为 `asr:<providerId>:<modelId>`。
 - `GET /api/pi/composer/transcription/settings` 返回 `{revision,providers,transcriptionModels,transcriptionProtocols,availableModels}`。服务和凭据状态复用媒体连接快照；不回显 Key。`transcriptionModels` 为 `{id,providerId,name,remoteModel,protocol}`，协议选项从服务端返回。
 - `POST /api/pi/composer/transcription/models` 接受 `{confirmed:true,expectedRevision,model,provider?,apiKey?}`。现有服务只引用 `model.providerId`；新服务在同一互斥中创建已验证的 `provider` 与模型，并通过公开 ModelRuntime 保存凭据。新服务认证为 `none` 时省略 Key，其余认证必须提供 Key；复用服务的地址与 Key 在共享服务管理中修改。返回新的连接快照及 `modelId`。模型 ID 可填写该协议下服务端实际 ID，无须添加聊天模型。
 - `DELETE /api/pi/composer/transcription/models/:id` 接受 `{confirmed:true,expectedRevision}`，只删除转录定义，保留共享服务与凭据。最多 60 个转录定义；接入和删除受媒体服务修订与占用互斥保护。
 - `POST /api/pi/composer/transcription` 接受 `{cwd,requestId,modelId,revision,language:'auto'|'zh'|'en',audio:{format:'wav'|'mp3',data:<base64>},confirmed:true}`。`modelId` 是目录返回的选择 ID，`requestId` 为 16–80 个字母／数字／连字符；配置修订、项目范围、音频签名及最大 7.5MB 在上传前校验。返回 `{text,model:{provider,id}}`，文字最大 65536 字符。
 - 最多两项并发；同一进程保留最多 32 项请求，已结束记录 15 分钟后可回收。相同标识／音频／选择共享同一结果或失败，标识对应不同请求返回 409；没有自动重试。配置变化返回 409，繁忙返回 429，远端失败或超时返回 502，认证不可用返回 503。请求超时不证明远端取消，收起浏览器面板不取消已上传音频。
 - `/api/pi/activity.transcriptionActive` 计入正在读取目录／配置或处理转录的数量；维护空闲判定和异步关闭等待正在处理的转录。托管转录在读取 Key 前占用共享服务，配置变更或来源重新绑定会在上传前拒绝。页面按线程及连接代次核对结果，最新草稿保留；迟到或超限结果留在面板由用户检查。完整行为见[语音转录](COMPOSER_TOOLS.md#语音转录)。
-
-### 实时语音 REST 与 WebSocket
-
-`/api/pi/status.realtimeVoice=true` 启用输入区实时通话入口。沿用工作区身份、Origin 和项目范围检查；不启动 Pi worker，不写聊天或媒体历史。
-
-- `GET /api/pi/composer/realtime-voice` 返回 `{revision,models,maximumSeconds:600,inputSampleRate:16000,outputSampleRate:24000,nativeCatalogUnavailable}`。托管选择 ID 为 `realtime:<providerId>:<modelId>`；目录同时识别已认证官方 Qwen 服务地址，托管配置优先。
-- `GET /api/pi/composer/realtime-voice/settings` 返回媒体服务修订、`providers`、`realtimeProtocols`、`realtimeModels` 与 `availableModels`，不含 Key。
-- `POST /api/pi/composer/realtime-voice/models` 接受 `{confirmed:true,expectedRevision,model,provider?,apiKey?}`。模型字段为 `{id,providerId,name,remoteModel,protocol:'qwen-realtime',voice?,turnDetection?,instructions?,speechRate?,enableSearch?}`；轮次模式为 `smart_turn_v2`（默认）、`smart_turn`、`server_vad`、`push_to_talk`；语速 0.5–2，指令最多 4000 字符。新服务、现有服务与凭据生命周期和 ASR 相同，最多 60 个实时定义。
-- `DELETE /api/pi/composer/realtime-voice/models/:id` 接受 `{confirmed:true,expectedRevision}`，保留共享服务和凭据。
-
-在**独立** `/api/pi/ws` 连接中，第一条发送 `{id,type:'open_realtime_voice',token?,cwd?,confirmed:true,modelId,revision,session?:{voice,turnDetection,instructions,speechRate,enableSearch}}`。先验证身份、配置修订和并发容量，再读取凭据、连接上游；收到 `session.updated` 后返回标准 `{type:'response',id,command,success,data}`，data 含模型、最终请求配置、采样率及十分钟上限。不得在主会话／侧聊连接上打开实时通话，实时连接不能打开 Pi 会话或执行其命令。
-
-后续命令：
-
-| type | 输入与行为 |
-|---|---|
-| `realtime_voice_audio` | `{audio:<base64 PCM>}`；16kHz 16-bit 单声道，单帧 base64 最多 131072 字符；可不带 id，此时不发送逐帧成功回包 |
-| `realtime_voice_commit` | 手动模式提交缓冲并触发 `response.create`，自动模式显式请求回复 |
-| `realtime_voice_clear` | 手动模式清除未提交音频 |
-| `realtime_voice_interrupt` | 取消当前推理，浏览器同时清除播放队列 |
-| `realtime_voice_text` | `{text,respond?:true}`，非空且最多 8000 字符，插入上游用户文本并可触发回复 |
-| `close_realtime_voice` | 结束上游连接后关闭实时 WebSocket |
-
-服务器以 `{type:'gateway_realtime_voice',event}` 投影语音起止、输入转录 delta/completed、回复音频／字幕增量及 response.done；字段使用 `itemId/responseId`，音频 delta 为 24kHz PCM base64。错误为 `gateway_realtime_voice_error`（含 `fatal` 与去敏消息），结束为 `gateway_realtime_voice_closed`。不投影凭据、函数执行权限或完整上游会话配置。
-
-实例最多两路实时连接；容量和共享服务占用在 await 前预留。取消、断线、握手失败及关闭清理均不重试；上游实际关闭后释放服务占用。准备及活动会话计入 `/api/pi/activity.realtimeVoiceActive` 和维护空闲判断，停机等待进行中的准备与关闭。前端页面隐藏、切线程或主连接变化会挂断，播放积压超过 15 秒或发送缓冲超限会停止通话。通话记录只保留页内并由用户选择加入草稿。完整用法见[实时语音对话](COMPOSER_TOOLS.md#实时语音对话)。
 
 ### 3.6 模型和思考
 

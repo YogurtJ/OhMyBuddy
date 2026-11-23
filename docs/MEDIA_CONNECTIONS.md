@@ -57,13 +57,11 @@ DashScope 的聊天兼容地址不等于TTS也兼容OpenAI `/audio/speech`。将
 
 ## 语音：朗读与转录
 
-设置 → **模型与能力** 的图像、视频、语音均打开同一风格的模型配置弹窗，每个入口仅显示自己的类别；服务卡片的模型数量不包含其他类别或 ASR。**语音** 弹窗默认打开“语音合成（TTS）”页签，可新增、编辑 TTS 模型，并单独打开“朗读默认配置”选择模型、音色和参数；“语音转录（ASR）”页签管理转录模型，“实时对话”页签管理 Qwen 双工语音模型。切换页签和关闭弹窗会清除未保存的凭据草稿；关闭后立即重开保留新页面，不受上一窗口迟到关闭事件影响。朗读沿用既有模型、音色、参数和生成票据；转录可新增实际模型 ID，并填写服务地址与 Key，或复用现有媒体服务。两者共用服务与凭据管理，Key 继续通过公开 ModelRuntime 生命周期保存，不回显。
+设置 → **模型与能力** 的图像、视频、语音均打开同一风格的模型配置弹窗，每个入口仅显示自己的类别；服务卡片的模型数量不包含其他类别或 ASR。**语音** 弹窗默认打开“语音合成（TTS）”页签，可新增、编辑 TTS 模型，并单独打开“朗读默认配置”选择模型、音色和参数；“语音转录（ASR）”页签管理转录模型。切换页签和关闭弹窗会清除未保存的凭据草稿；关闭后立即重开保留新页面，不受上一窗口迟到关闭事件影响。朗读沿用既有模型、音色、参数和生成票据；转录可新增实际模型 ID，并填写服务地址与 Key，或复用现有媒体服务。两者共用服务与凭据管理，Key 继续通过公开 ModelRuntime 生命周期保存，不回显。
 
-ASR 使用独立的转录定义：音频转录接口向 `/audio/transcriptions` 提交 multipart WAV；音频消息接口向 `/chat/completions` 提交 `input_audio` JSON；**千问原生语音识别**（`qwen-asr`）向 `/api/v1/services/aigc/multimodal-generation/generation` 提交 `model`、`input.messages[].content[].input_audio.data`（WAV／MP3 Data URI）及 `parameters.format`，指定语言时附带 `language_hints`，读取 `output.text`。后者适用于 `qwen-audio-3.0-asr-flash`，原生路径会去掉 Base URL 末尾的 `/compatible-mode/v1`；不发送 OpenAI multipart。其他协议接口路径追加到 Base URL 的前缀，认证沿用服务配置。保存模型不执行录音或转录，不将其当作聊天或实验室生成模型。来源变化后重新保存 Key；使用期间共享服务配置禁止变更。删除转录定义保留服务、Key 与已有媒体记录。
+ASR 使用独立的转录定义：音频转录接口向 `/audio/transcriptions` 提交 multipart WAV；音频消息接口向 `/chat/completions` 提交 `input_audio` JSON。接口路径追加到 Base URL 的前缀，认证沿用服务配置。保存模型不执行录音或转录，不将其当作聊天或实验室生成模型。来源变化后重新保存 Key；使用期间共享服务配置禁止变更。删除转录定义保留服务、Key 与已有媒体记录。
 
 配置完成后，主输入框麦克风直接开始录音，再点结束并将文字追加到可编辑草稿。未配置时通过提示右侧“去配置”进入同一语音部分；默认录音模型只保存在当前浏览器。录音最长两分钟，不提供音频文件上传入口，详见[输入区语音转录](COMPOSER_TOOLS.md#语音转录)。
-
-实时对话使用独立 `realtimeModels` 定义，与 TTS、ASR 复用 Provider 和原生私有凭据。`qwen-realtime` 连接相同服务来源的 `/api-ws/v1/realtime?model=...`，HTTPS 转为 WSS；去除聊天兼容后缀，握手不跟随重定向。支持服务端选择的音色、轮次检测、系统指令、语速及内置联网开关。浏览器只连接 OhMyBuddy，由服务端附加已保存的认证头。不会将实时模型加入实验室或 Pi 聊天模型目录。使用、音频规格和生命周期见[实时语音对话](COMPOSER_TOOLS.md#实时语音对话)。
 
 ## Agent 辅助接入
 
@@ -166,7 +164,7 @@ Agent 返回的草稿自动填入表单，用户可继续修改，再明确保�
 
 新增多图编辑、Gemini/Seedream 文本或多图输入、Seedance 首尾帧和图片/视频参考模板。模板只描述协议，模型 ID、最大图片数、视频时长和允许的组合须按具体模型文档核对；需要先上传至服务文件 API 再引用文件 ID/公网 URL 的两步协议仍需专门适配。模型配置可直接将已有参数改为图片/视频上传并选择多选，实际请求字段与嵌套映射保留在高级定义中。
 
-新增 OpenAI 兼容图像编辑、Gemini/Seedream 参考图、Seedance 首帧模板；使用前核对实际模型是否支持。旧模型不自动迁移接口。声明式 HTTP 媒体生成仍不支持流式 PCM、复杂请求签名、OAuth、多步骤上传或任意 ComfyUI workflow 导入；实时 PCM 由专用 `qwen-realtime` 桥接处理。参考视频由生成接口接收，辅助 Agent 当前不读取其内容。
+新增 OpenAI 兼容图像编辑、Gemini/Seedream 参考图、Seedance 首帧模板；使用前核对实际模型是否支持。旧模型不自动迁移接口。仍不支持流式 PCM、复杂请求签名、OAuth、多步骤上传或任意 ComfyUI workflow 导入。参考视频由生成接口接收，辅助 Agent 当前不读取其内容。
 
 ## API
 

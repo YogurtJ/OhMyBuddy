@@ -176,7 +176,7 @@ function start() {
         state.activeTab = tab;
         if (tab === 'media') { void subagentSettings.open(); void loadMediaChatExecution(); }
         else subagentSettings.close();
-        if (tab === 'media' && ['speech', 'realtime'].includes(metadata.section)) window.PiMediaConnections?.open({ kind: 'tts', section: metadata.section === 'realtime' ? 'realtime' : 'asr' });
+        if (tab === 'media' && metadata.section === 'speech') window.PiMediaConnections?.open({ kind: 'tts', section: 'asr' });
         if (tab === 'access') { window.WorkspaceAccess?.openSettings(); window.WorkspaceNetwork?.open(metadata.section); }
         else { window.WorkspaceAccess?.closeSettings(); window.WorkspaceNetwork?.close(); }
         void nativeSettings.open(tab, extensionTab ? { type: metadata.resourceType } : {});

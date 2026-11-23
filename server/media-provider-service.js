@@ -6,9 +6,7 @@ const { MediaProviderCredentials } = require('./media-provider-credentials');
 const { validateDefinition } = require('./media-lab-service');
 const { validateHttp, renderTemplate, endpoint, authHeaders, readJson, keys, fail } = require('./media-http-protocol');
 const clone = value => JSON.parse(JSON.stringify(value));
-const TRANSCRIPTION_PROTOCOLS = [{ id: 'openai', name: '音频转录接口' }, { id: 'mimo', name: '音频消息接口' }, { id: 'qwen-asr', name: '千问原生语音识别' }];
-const REALTIME_PROTOCOLS = [{ id: 'qwen-realtime', name: '千问实时语音对话（WebSocket）' }];
-const REALTIME_TURN_MODES = ['smart_turn_v2', 'smart_turn', 'server_vad', 'push_to_talk'];
+const TRANSCRIPTION_PROTOCOLS = [{ id: 'openai', name: '音频转录接口' }, { id: 'mimo', name: '音频消息接口' }];
 const id = value => { if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/.test(value)) fail('ID must use letters, numbers, dot, underscore or hyphen'); return value; };
 function text(value, label, maximum = 200) { if (typeof value !== 'string' || !value.trim() || value.length > maximum) fail(`Invalid ${label}`); return value.trim(); }
 function baseUrl(value) {
@@ -57,26 +55,6 @@ function normalizeTranscriptionModel(raw) {
     if (/[\r\n\0]/.test(remoteModel) || !TRANSCRIPTION_PROTOCOLS.some(protocol => protocol.id === raw.protocol)) fail('Invalid transcription model or protocol');
     return { id: id(raw.id), providerId: id(raw.providerId), name: text(raw.name || remoteModel, 'transcription model name'), remoteModel, protocol: raw.protocol };
 }
-function normalizeRealtimeModel(raw) {
-    keys(raw, ['id', 'providerId', 'name', 'remoteModel', 'protocol', 'voice', 'turnDetection', 'instructions', 'speechRate', 'enableSearch'], 'realtime voice model');
-    const remoteModel = text(raw.remoteModel, 'realtime model ID', 500);
-    if (/[\r\n\0]/.test(remoteModel) || !REALTIME_PROTOCOLS.some(protocol => protocol.id === raw.protocol)) fail('Invalid realtime voice model or protocol');
-    const voice = raw.voice === undefined || raw.voice === '' ? '' : text(raw.voice, 'realtime voice ID', 200);
-    if (/[\r\n\0]/.test(voice)) fail('Invalid realtime voice ID');
-    const turnDetection = raw.turnDetection ?? 'smart_turn_v2';
-    if (!REALTIME_TURN_MODES.includes(turnDetection)) fail('Invalid realtime turn detection mode');
-    const instructions = raw.instructions === undefined ? '' : raw.instructions;
-    if (typeof instructions !== 'string' || instructions.length > 4000 || /\0/.test(instructions)) fail('Invalid realtime instructions');
-    const speechRate = raw.speechRate === undefined || raw.speechRate === null || raw.speechRate === '' ? 1 : Number(raw.speechRate);
-    if (!Number.isFinite(speechRate) || speechRate < 0.5 || speechRate > 2) fail('Realtime speech rate must be between 0.5 and 2');
-    if (raw.enableSearch !== undefined && typeof raw.enableSearch !== 'boolean') fail('Invalid realtime search setting');
-    return {
-        id: id(raw.id), providerId: id(raw.providerId), name: text(raw.name || remoteModel, 'realtime model name'),
-        remoteModel, protocol: raw.protocol, ...(voice ? { voice } : {}), turnDetection,
-        ...(instructions.trim() ? { instructions: instructions.trim() } : {}),
-        speechRate: Math.round(speechRate * 100) / 100, enableSearch: Boolean(raw.enableSearch)
-    };
-}
 class MediaProviderService {
     constructor(options = {}) {
         this.directory = options.directory;
@@ -114,15 +92,6 @@ class MediaProviderService {
                 ids.add(model.id);
             }
         }
-        if (document.realtimeModels !== undefined) {
-            if (!Array.isArray(document.realtimeModels) || document.realtimeModels.length > 60) fail('Invalid realtime voice model collection', 500);
-            const ids = new Set();
-            for (const model of document.realtimeModels) {
-                normalizeRealtimeModel(model);
-                if (ids.has(model.id) || !providerIds.has(model.providerId)) fail('Invalid realtime voice model reference', 500);
-                ids.add(model.id);
-            }
-        }
         return { document, revision: createHash('sha256').update(content).update(String(this.epoch)).digest('hex') };
     }
     write(document) {
@@ -154,12 +123,10 @@ class MediaProviderService {
     find(document, providerId) { const provider = document.providers.find(item => item.id === providerId); if (!provider) fail('Media provider not found', 404); return provider; }
     async snapshot() {
         const state = this.read(), stored = await this.credentials.list();
-        return { revision: state.revision, transcriptionProtocols: clone(TRANSCRIPTION_PROTOCOLS), transcriptionModels: clone(state.document.transcriptionModels || []),
-            realtimeProtocols: clone(REALTIME_PROTOCOLS), realtimeModels: clone(state.document.realtimeModels || []),
-            providers: state.document.providers.map(({ credentialOrigin, ...provider }) => ({ ...clone(provider),
-                keyConfigured: stored.has(provider.id) && credentialOrigin === new URL(provider.baseUrl).origin,
-                keyNeedsRebind: stored.has(provider.id) && credentialOrigin !== new URL(provider.baseUrl).origin
-            })) };
+        return { revision: state.revision, transcriptionProtocols: clone(TRANSCRIPTION_PROTOCOLS), transcriptionModels: clone(state.document.transcriptionModels || []), providers: state.document.providers.map(({ credentialOrigin, ...provider }) => ({ ...clone(provider),
+            keyConfigured: stored.has(provider.id) && credentialOrigin === new URL(provider.baseUrl).origin,
+            keyNeedsRebind: stored.has(provider.id) && credentialOrigin !== new URL(provider.baseUrl).origin
+        })) };
     }
     saveProvider(input) {
         const provider = normalizeProvider(input.provider);
@@ -186,11 +153,10 @@ class MediaProviderService {
     removeProvider(providerId, input) {
         return this.mutate(input, async document => {
             const provider = this.find(document, providerId);
-            if ((provider.models.length || document.transcriptionModels?.some(model => model.providerId === providerId) || document.realtimeModels?.some(model => model.providerId === providerId)) && input.removeModels !== true) fail('Remove the provider models first or explicitly include them', 409);
+            if ((provider.models.length || document.transcriptionModels?.some(model => model.providerId === providerId)) && input.removeModels !== true) fail('Remove the provider models first or explicitly include them', 409);
             await this.credentials.remove(providerId);
             document.providers = document.providers.filter(item => item !== provider);
             if (document.transcriptionModels) document.transcriptionModels = document.transcriptionModels.filter(model => model.providerId !== providerId);
-            if (document.realtimeModels) document.realtimeModels = document.realtimeModels.filter(model => model.providerId !== providerId);
         });
     }
     saveTranscriptionModel(input) {
@@ -235,55 +201,6 @@ class MediaProviderService {
         this.active++;
         try { return await operation({ provider, key: await this.key(provider) }); }
         finally { this.active--; }
-    }
-    saveRealtimeModel(input) {
-        keys(input, ['confirmed', 'expectedRevision', 'model', 'provider', 'apiKey'], 'realtime voice settings');
-        const model = normalizeRealtimeModel(input.model);
-        const provider = input.provider ? normalizeProvider(input.provider) : null;
-        if (provider && provider.id !== model.providerId) fail('Realtime provider does not match the model');
-        const key = input.apiKey === undefined ? undefined : text(input.apiKey, 'API Key', 32768);
-        if (key && /[\r\n\0]/.test(key)) fail('API Key must be a single line');
-        return this.mutate(input, async document => {
-            const collection = document.realtimeModels ||= [];
-            const existing = collection.findIndex(item => item.id === model.id);
-            if (existing < 0 && collection.length >= 60) fail('Too many realtime voice models');
-            if (provider) {
-                if (document.providers.some(item => item.id === provider.id)) fail('Provider already exists; reload and select it', 409);
-                if (document.providers.length >= 40) fail('Too many media providers');
-                if (provider.auth.mode !== 'none' && !key) fail('Configure an API Key for the new speech service');
-                if (provider.auth.mode === 'none' && key) fail('This service does not use an API Key');
-                if (key) await this.credentials.save(provider.id, key);
-                document.providers.push({ ...provider, models: [], ...(key ? { credentialOrigin: new URL(provider.baseUrl).origin } : {}) });
-            } else {
-                this.find(document, model.providerId);
-                if (key !== undefined) fail('Manage an existing service Key in its shared service settings');
-            }
-            if (existing < 0) collection.push(model); else collection[existing] = model;
-        }).then(snapshot => ({ ...snapshot, modelId: `realtime:${model.providerId}:${model.id}` }));
-    }
-    removeRealtimeModel(modelId, input) {
-        keys(input, ['confirmed', 'expectedRevision'], 'realtime voice removal');
-        return this.mutate(input, document => {
-            if (!document.realtimeModels?.some(model => model.id === modelId)) fail('Realtime voice model not found', 404);
-            document.realtimeModels = document.realtimeModels.filter(model => model.id !== modelId);
-        });
-    }
-    async leaseRealtime(model) {
-        if (this.busy) fail('语音服务配置正在变更，请刷新后再开始对话', 409);
-        const state = this.read();
-        if (model.configurationRevision !== state.revision) fail('语音服务配置已变化，请重新选择模型', 409);
-        const provider = this.find(state.document, model.provider);
-        const definition = state.document.realtimeModels?.find(item => item.id === model.managedModelId && item.providerId === model.provider);
-        if (!definition) fail('实时语音模型已不存在，请重新选择', 409);
-        this.active++;
-        let released = false;
-        const release = () => { if (!released) { released = true; this.active--; } };
-        try {
-            return { provider: clone(provider), definition: clone(definition), key: await this.key(provider), release };
-        } catch (error) {
-            release();
-            throw error;
-        }
     }
     async saveModel(providerId, input) {
         const model = normalizeModel(input.model);

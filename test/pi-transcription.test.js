@@ -82,32 +82,6 @@ test('transcription routes validate the project and do not start a session worke
     } finally { server.close(); await f.service.dispose(); }
 });
 
-test('DashScope ASR sends native Data URI, format and language hints; reads output text without replay', async t => {
-    let calls = 0;
-    const f = managedFixture(t, async (url, options) => {
-        calls++;
-        assert.equal(String(url), 'https://speech.fixture.invalid/api/v1/services/aigc/multimodal-generation/generation');
-        assert.equal(options.headers.Authorization, 'Bearer synthetic-key');
-        assert.equal(options.headers['X-DashScope-SSE'], 'disable');
-        const body = JSON.parse(options.body);
-        assert.equal(body.model, 'qwen-audio-3.0-asr-flash');
-        assert.deepEqual(body.parameters, { format: 'wav', language_hints: ['zh'] });
-        assert.equal(body.input.messages[0].content[0].input_audio.data, 'data:audio/wav;base64,' + audio.data);
-        return response({ output: { text: ' 千问转录。 ' } });
-    });
-    await f.service.saveModel({ ...await f.stamp(), model: { ...f.model, remoteModel: 'qwen-audio-3.0-asr-flash', protocol: 'qwen-asr' }, provider: { ...f.provider, baseUrl: 'https://speech.fixture.invalid/compatible-mode/v1' }, apiKey: 'synthetic-key' });
-    const input = { ...await f.input('qwen-request-0001'), language: 'zh' };
-    assert.equal((await f.service.transcribe(input)).text, '千问转录。');
-    await f.service.transcribe(input); assert.equal(calls, 1);
-});
-
-test('Qwen native ASR discovery accepts known origins and strips the chat prefix', () => {
-    const qwen = { provider: 'qwen-token-plan-cn', id: 'qwen3.8-max', baseUrl: 'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1' };
-    const catalog = transcriptionModels([qwen, { ...qwen, provider: 'spoof', baseUrl: 'https://dashscope.aliyuncs.com.evil' }], [qwen, { provider: 'spoof' }]);
-    assert.equal(catalog.length, 1); assert.equal(catalog[0].protocol, 'qwen-asr');
-    assert.equal(catalog[0].baseUrl, 'https://token-plan.cn-beijing.maas.aliyuncs.com');
-});
-
 function managedFixture(t, fetch) {
     const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pivane-asr-settings-'));
