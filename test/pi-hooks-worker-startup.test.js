@@ -168,6 +168,7 @@ test('managed custom wake remains busy throughout a slow before_agent_start hook
         navigationToken: worker.navigationToken, sessionId: session.id, runtimeSessionId: session.id, runStartupCalls: new Set(), runStartupSequence: 0,
         _broadcast: () => { throw new Error('Private startup frame leaked'); },
     });
+    projection.diagnostics = new (require('../server/pi-runtime-diagnostics').PiRuntimeDiagnostics)(projection);
     const frame = { type: 'pivane_run_startup', token: worker.navigationToken, sessionId: session.id,
         id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', sequence: 1, phase: 'started' };
     projection._handleEvent({ ...frame, token: 'foreign-runtime' });
