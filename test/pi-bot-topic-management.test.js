@@ -235,3 +235,27 @@ test('Buddy trash and archived generations protect images; permanent topic delet
     snapshot = await f.sessionImageStorage.snapshot(root);
     assert.ok(snapshot.protectedIds.has(shared.pivaneImage.sha256), 'whole Buddy trash remains recoverable');
 });
+
+test('topic trash, restore and permanent delete handle ordinary and legacy media toolResult entries', async t => {
+    const f = await fixture(t), topic = await f.topic({ title: 'Tool History' }), session = (await f.bots.resolve(f.id, topic.id)).session;
+    const { SessionManager } = await import('@earendil-works/pi-coding-agent');
+    const manager = SessionManager.open(session.path);
+    const legacyPlanId = `plan-${randomUUID()}`, errorPlanId = `plan-${randomUUID()}`;
+    manager.appendMessage({ role: 'toolResult', toolCallId: 'tool-read-1', toolName: 'read', content: [{ type: 'text', text: 'ok' }], isError: false, timestamp: 1 });
+    manager.appendMessage({ role: 'toolResult', toolCallId: 'tool-media-err', toolName: 'media_generate', content: [{ type: 'text', text: 'failed' }], details: { plan: { id: errorPlanId } }, isError: true, timestamp: 2 });
+    f.media.entries.set(errorPlanId, { attempts: [{ status: 'running' }] });
+    const trashedPlain = await f.action('POST', `/windows/${topic.id}/trash`);
+    assert.equal(trashedPlain.status, 200, JSON.stringify(trashedPlain.data));
+    const restoredPlain = await f.action('POST', `/windows/${topic.id}/restore`);
+    assert.equal(restoredPlain.status, 200, JSON.stringify(restoredPlain.data));
+    manager.appendMessage({ role: 'toolResult', toolCallId: 'tool-media-legacy', toolName: 'media_plan_request', content: [{ type: 'text', text: 'planned' }], details: { plan: { id: legacyPlanId } }, isError: false, timestamp: 3 });
+    f.media.entries.set(legacyPlanId, { attempts: [{ status: 'running' }] });
+    const blocked = await f.action('POST', `/windows/${topic.id}/trash`);
+    assert.equal(blocked.status, 409, JSON.stringify(blocked.data));
+    assert.equal(blocked.data.code, 'BOT_TOPIC_MEDIA');
+    f.media.entries.get(legacyPlanId).attempts[0].status = 'done';
+    const trashedLegacy = await f.action('POST', `/windows/${topic.id}/trash`);
+    assert.equal(trashedLegacy.status, 200, JSON.stringify(trashedLegacy.data));
+    const deletedLegacy = await f.action('DELETE', `/windows/${topic.id}`, { confirmed: true });
+    assert.equal(deletedLegacy.status, 200, JSON.stringify(deletedLegacy.data));
+});

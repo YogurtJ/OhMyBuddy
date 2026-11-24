@@ -35,4 +35,4 @@ function mediaPlanEntries(entries, leafId) {
     }
     return branch.reverse().filter(entry => mediaPlanMessage(entry)).slice(-500);
 }
-module.exports = { MEDIA_PLAN_ENTRY, PLAN_KEY, mediaPlanRecord, branchPlans, mediaPlanMessage, mediaPlanEntries };
+module.exports = { MEDIA_PLAN_ENTRY, PLAN_KEY, MEDIA_TOOLS, mediaPlanRecord, branchPlans, mediaPlanMessage, mediaPlanEntries };
