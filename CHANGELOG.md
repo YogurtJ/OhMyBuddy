@@ -2,7 +2,7 @@
 
 本页概括用户可见变化与升级要点。安装步骤见[安装与恢复](docs/INSTALL_RECOVERY.md)；每版完整说明和验收附件见 [Releases](https://github.com/YogurtJ/OhMyBuddy/releases)。历史行为不代表当前功能，当前用法以[用户指南](docs/USER_GUIDE.md)为准。
 
-## 1.14.0-rc.1（候选版）
+## 1.14.0-rc.2（候选版）
 
 [候选版说明](docs/releases/1.14.0.md)汇总本次变更。
 
