@@ -92,7 +92,9 @@ async function build({ source, inputs, version, output, work }) {
     const receipt = { version, product: 'OhMyBuddy', platform, arch, nodeVersion: info.version, piVersion: manifest.piVersion, sourceCommit: manifest.sourceCommit, inputSha256: manifest.inputSha256, archive: path.basename(archive), ...hashFileSafe(archive, 512 * 1024 ** 2) };
     fs.writeFileSync(archive + '.sha256', `${receipt.sha256}  ${receipt.archive}\n`, { flag: 'wx' });
     if (platform === 'win32') {
-        const zip = path.join(work, 'installer-payload.zip'); execFileSync('tar.exe', ['--format', 'zip', '-cf', zip, '-C', work, name], { stdio: 'inherit', timeout: 300000 });
+        const zip = path.join(work, 'installer-payload.zip');
+        const tar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32/tar.exe');
+        execFileSync(tar, ['--format', 'zip', '-cf', zip, '-C', work, name], { stdio: 'inherit', timeout: 300000 });
         const exe = path.join(output, name + '.exe'); compileWindows(source, exe, 'OhMyBuddyInstaller', zip);
         receipt.installer = { file: path.basename(exe), kind: 'exe', codeSigned: false, ...hashFileSafe(exe, 512 * 1024 ** 2) };
     } else receipt.installer = { file: receipt.archive, kind: 'tar.gz', sha256: receipt.sha256, bytes: receipt.bytes };
