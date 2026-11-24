@@ -129,7 +129,8 @@ async function run(browser, base, width, locale = 'zh-CN') {
     await frame.locator('html').evaluate(() => { if (scrollY !== 0) throw new Error('Back-to-top link did not scroll'); });
     await page.locator('#pi-file-run-html').click();
     const interactiveFrame = page.frameLocator('.pi-file-html[sandbox="allow-scripts"]');
-    // Confirm native pointer routing into the newly created isolated frame.
+    // Leave the replaced frame before testing pointer routing into its replacement.
+    await page.mouse.move(0, 0);
     await interactiveFrame.locator('#counter').hover();
     await interactiveFrame.locator('#counter:hover').waitFor();
     await interactiveFrame.locator('#counter').click();

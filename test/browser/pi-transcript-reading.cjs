@@ -47,6 +47,8 @@ async function run(browser, size) {
     let streaming = false;
     const current = () => activeId === session.id ? messages : [];
     page.on('pageerror', error => errors.push(error.message));
+    // Keep font metrics stable while measuring scroll positions.
+    await page.route(/^https:\/\/(?:fonts\.googleapis\.com|fonts\.gstatic\.com)\//, route => route.abort());
     await page.addInitScript(({ cwd, id }) => {
         if (!localStorage.getItem('pi.web.transcriptMode')) localStorage.setItem('pi.web.transcriptMode', 'reading');
         if (!localStorage.getItem('pi.web.cwd')) {
