@@ -127,9 +127,12 @@ const sessionRow = (id, extra = {}) => ({ id, cwd: WORKSPACE, path: `${WORKSPACE
                     return { json: { profileId: BOT, window: { id: FORK } } };
                 }
             };
-            const old = await botPage(browser, base, legacyWorld, { width, mobile: width < 900, api: legacyApi, hash: `#/chat?cwd=${encodeURIComponent(WORKSPACE)}&sessionId=legacy` });
+            const old = await botPage(browser, base, legacyWorld, { width, mobile: width < 900, api: legacyApi, hash: '#/chat' });
             try {
-                await old.page.waitForFunction(() => Boolean(window.PiChatNavigation));
+                // Open through the shared navigation API after the initial project selection settles.
+                await old.page.waitForFunction(() => Boolean(window.PiChatNavigation)
+                    && Boolean(document.querySelector('#pi-project-button:not(:disabled)'))
+                    && Boolean(document.querySelector('[data-session-id="legacy"]')));
                 await old.page.evaluate(cwd => window.PiChatNavigation.openSession({ cwd, sessionId: 'legacy' }), WORKSPACE);
                 await old.page.waitForFunction(() => !document.querySelector('#pi-input').disabled);
                 await old.page.locator('#pi-current-thread-menu').click();
