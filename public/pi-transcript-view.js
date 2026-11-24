@@ -2,6 +2,7 @@
     const translateUi = globalThis.PiI18n?.t || ((text, ...values) => text.replace(/\{(\d+)\}/g, (_, index) => values[index] ?? `{${index}}`));
     const MODE_KEY = 'pi.web.transcriptMode';
     const PROCESS_SELECTOR = '.pi-thinking-block, .pi-tool-row, .pi-bash-message';
+    const DIAGNOSTIC_SELECTOR = '.pi-provider-diagnostic';
     const TURN_GROUP_SELECTOR = '.pi-turn-group';
     // Everything before a turn's final reply counts as its process: intermediate
     // replies, tool rows and bash executions (standalone or inside process groups),
@@ -170,7 +171,7 @@
             let run = [];
             const finish = () => { if (run.length) runs.push(run); run = []; };
             const visit = (node, key) => {
-                if (node.matches('.pi-process-group')) return;
+                if (node.matches(`.pi-process-group, ${DIAGNOSTIC_SELECTOR}`)) return;
                 if (!node.dataset.readingKey) node.dataset.readingKey = key;
                 if (node.matches(PROCESS_SELECTOR)) run.push(node);
                 else if (node.textContent.trim() || node.matches('img')) finish();
@@ -264,7 +265,7 @@
             if (!message || PENDING_STOP_REASONS.has(message.stopReason)) return false;
             const body = node.querySelector(':scope > .pi-message-body');
             if (!body) return false;
-            const blocks = [...body.children].filter(block => !block.matches('.pi-process-group'));
+            const blocks = [...body.children].filter(block => !block.matches(`.pi-process-group, ${DIAGNOSTIC_SELECTOR}`));
             if (blocks.some(block => block.matches('.pi-tool-row'))) return false;
             return blocks.some(block => !block.matches(PROCESS_SELECTOR) && (block.textContent.trim() || block.matches('img')));
         }
@@ -408,7 +409,7 @@
             }
             for (const article of region.nodes.filter(node => node.matches('.pi-message.assistant'))) {
                 const blocks = [...article.querySelector('.pi-message-body').children];
-                const hasText = blocks.some(node => !node.matches(`${PROCESS_SELECTOR}, .pi-process-group`) && (node.textContent.trim() || node.matches('img')));
+                const hasText = blocks.some(node => !node.matches(`${PROCESS_SELECTOR}, .pi-process-group, ${DIAGNOSTIC_SELECTOR}`) && (node.textContent.trim() || node.matches('img')));
                 article.classList.toggle('pi-process-only', collapseProcess && !hasText);
                 article.hidden = collapseProcess && !blocks.some(node => !node.hidden && (node.textContent.trim() || node.matches('img')));
             }

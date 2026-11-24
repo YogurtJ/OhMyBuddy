@@ -3329,7 +3329,7 @@ document.addEventListener('DOMContentLoaded', () => {
             error.textContent = message.errorMessage || translateUi("回复失败");
             body.appendChild(error);
         }
-        window.PiRuntimeDiagnostics?.appendMessage(body, message);
+        window.PiRuntimeDiagnostics?.appendMessage(body, message, options);
         article.appendChild(body);
         if (subagentNotice) window.PiSubagentNotices.collapse(article, header, body, messageText(message.content), renderMarkdown);
         if (responseText && showReplyActions) {
@@ -3603,9 +3603,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const editCards = turnEdits.refresh(messages, state.streaming, keep);
         const changed = [];
         const mediaSources = mediaRequests?.sources(messages);
+        let previousAssistant = null;
         for (let index = 0; index < records.length; index++) {
-            if (index < keep) { records[index].nodes = previous[index].nodes; continue; }
-            const element = createMessageElement(messages[index], finalReplies.has(index), true);
+            const message = messages[index];
+            if (['compactionSummary', 'branchSummary'].includes(message.role)) previousAssistant = null;
+            if (index < keep) {
+                records[index].nodes = previous[index].nodes;
+                if (window.PiRuntimeDiagnostics?.isDiagnosticBaseline(message)) previousAssistant = message;
+                continue;
+            }
+            const element = createMessageElement(message, finalReplies.has(index), true, { previousAssistant });
+            if (window.PiRuntimeDiagnostics?.isDiagnosticBaseline(message)) previousAssistant = message;
             if (element) {
                 element.dataset.transcriptIndex = String(index);
                 elements.transcript.appendChild(element); records[index].nodes.push(element); changed.push(element);
@@ -4134,6 +4142,16 @@ document.addEventListener('DOMContentLoaded', () => {
         scheduleLiveMessage();
     }
 
+    function previousDiagnosticBaseline(beforeNode) {
+        const isBaseline = window.PiRuntimeDiagnostics?.isDiagnosticBaseline;
+        if (!isBaseline) return null;
+        for (let node = beforeNode?.previousElementSibling; node; node = node.previousElementSibling) {
+            if (node.matches('.compactionSummary, .branchSummary')) return null;
+            if (node.matches('.pi-message.assistant') && isBaseline(node._piAssistantMessage)) return node._piAssistantMessage;
+        }
+        return null;
+    }
+
     function endLiveMessage(message) {
         if (message?.role === 'custom') {
             if (message.display === false) return;
@@ -4187,7 +4205,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (!message || message.role !== 'assistant' || !state.liveMessage) return;
         const readingPosition = transcriptScroll.capture({ roots: [state.liveMessage.article] });
-        const element = createMessageElement(message);
+        const element = createMessageElement(message, false, false, { previousAssistant: previousDiagnosticBaseline(state.liveMessage.article) });
         state.liveMessage.article.replaceWith(element);
         // The authoritative final message includes every buffered delta.
         discardLiveMessage();

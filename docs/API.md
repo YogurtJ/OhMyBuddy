@@ -876,7 +876,7 @@ Gateway 在响应或 timeout 时向订阅者发送 `{ "type": "gateway_ui_resolv
 
 受管主连接 `get_state.webDiagnostics` 和初始 `state.webDiagnostics` 为运行诊断数组 `[{type:"error"|"warning"|"info",message}]`；新增诊断广播 `{type:"gateway_runtime_diagnostics",diagnostics}`，带原有webRuntimeId/webSequence。打开快照在get_messages响应边界捕获诊断，避免启动事件遗漏。每worker最多50条、单条2000字符、JSON合计32KiB，经脱敏后只在内存保存；换线程／运行实例清除展示，不新增JSONL条目。原生`ohmybuddy_runtime_diagnostics`私有帧要求当前worker token与会话身份，未知／迟到帧一律截获。
 
-原生assistant消息的`diagnostics`保持原字段；网页只读`openai_input_transformations`／`anthropic_input_transformations`的有界transformations以展示未沿用思考及原因，不把展示提示写回模型上下文。read的可选`details.imageUnsupportedByModel`表示读取当时未输入图片的模型ID，工具原文与图片继续由Pi拥有。
+原生assistant消息的`diagnostics`保持原字段；网页只读`openai_input_transformations`／`anthropic_input_transformations`的有界transformations以展示未沿用思考及原因，并与上一条已完成的assistant响应去重（数量未增且未出现新ID或新原因时不重复展示；无诊断的error/aborted/pending不重置基线，compactionSummary/branchSummary重置基线），不把展示提示写回模型上下文。read的可选`details.imageUnsupportedByModel`表示读取当时未输入图片的模型ID，工具原文与图片继续由Pi拥有。
 
 `get_state` 及初始 snapshot 的 `state` 额外包含 `webCompaction`（null 或 object）：
 
