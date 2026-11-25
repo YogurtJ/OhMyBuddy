@@ -25,7 +25,7 @@ test('activity and pins are protected, root-checked and do not launch workers', 
         for (const socket of wss.clients) socket.terminate();
         await gateway.dispose();
         await new Promise(resolve => server.close(resolve));
-        fs.rmSync(root, { recursive: true, force: true });
+        fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     });
     const url = `http://127.0.0.1:${server.address().port}/api/pi`;
     const request = (endpoint, options = {}) => fetch(`${url}${endpoint}`, {

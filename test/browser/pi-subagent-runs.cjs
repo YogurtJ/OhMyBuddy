@@ -127,8 +127,13 @@ async function check(browser, base, width, language) {
     assert.equal(await panel.locator('.sa-run').count(), 1);
     assert.equal(await panel.locator('.sa-run-children > li').count(), 2);
     assert.equal(await panel.locator('img').count(), 0, 'labels are text');
-    assert.match(await panel.locator('.sa-run-time').textContent(), /^1:0\d$/);
-    assert.match(await panel.locator('.sa-run-time').getAttribute('title'), en ? /1m \d+s/ : /1 分 \d+ 秒/);
+    const runTime = await panel.locator('.sa-run-time').textContent();
+    const runTimeMatch = /^(\d+):(\d{2})$/.exec(runTime);
+    assert.ok(runTimeMatch, `expected m:ss run time, got ${runTime}`);
+    const shownSeconds = Number(runTimeMatch[1]) * 60 + Number(runTimeMatch[2]);
+    const expectedSeconds = Math.floor((Date.now() - running.runs[0].startedAt) / 1000);
+    assert.ok(Math.abs(shownSeconds - expectedSeconds) <= 2, `run time ${runTime} should match elapsed ${expectedSeconds}s`);
+    assert.match(await panel.locator('.sa-run-time').getAttribute('title'), en ? /\d+m \d+s/ : /\d+ 分 \d+ 秒/);
     assert.match(await panel.locator('.sa-run-meta').textContent(), en ? /Workflow · Using read · 3 turns · 7 tool calls/ : /工作流 · 正在使用 read · 3 轮 · 7 次工具/);
 
     // Role, model, thinking and the stall warning are on each lane row; there is no separate model dialog.

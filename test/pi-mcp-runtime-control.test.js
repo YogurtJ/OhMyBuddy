@@ -48,7 +48,7 @@ test('actual unique managed worker bridges native MCP status across ESM and web 
     fs.writeFileSync(path.join(agent, 'mcp.json'), JSON.stringify({ mcpServers: { fixture: { url: `http://127.0.0.1:${server.address().port}/mcp`, headers: { Authorization: 'synthetic-only' }, exposure: 'codemode' } } }));
     const { PiSessionStore } = require('../server/pi-session-store'), { PiAgentSupervisor } = require('../server/pi-agent-supervisor');
     const store = new PiSessionStore(), supervisor = new PiAgentSupervisor();
-    t.after(async () => { await supervisor.dispose(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); for (const [key, value] of Object.entries(prior)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } fs.rmSync(root, { recursive: true, force: true }); });
+    t.after(async () => { await supervisor.dispose(); server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); for (const [key, value] of Object.entries(prior)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } fs.rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); });
     const session = await store.createSession(cwd, 'fixture');
     const express = require('express'), app = express(), router = express.Router(); app.use(express.json()); app.use(router);
     const { PiMcpSettingsService } = require('../server/pi-mcp-settings-service');
