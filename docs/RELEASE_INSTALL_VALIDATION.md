@@ -6,6 +6,14 @@
 
 后续完整包制作与发布前验收聚焦 macOS ARM64（Apple Silicon）、Windows x64 和 glibc Linux x64；暂停为新版本制作、验收和承诺更新 Linux ARM64 完整包。下方各版本的 ARM64 结果保留其历史适用范围，不自动转为后续版本的支持证明；源码兼容与实际分发范围分别记录。具体流程见[发布准备](development/RELEASING.md#后续发布平台)。
 
+## 1.14.0：已正式发布
+
+2026-11-26 已[正式发布](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.14.0)并设为 Latest，Pi 1.6.0（`undici` 8.12.4）；macOS ARM64、Windows x64、glibc Linux x64 所需覆盖完成。冻结源码 `08ab7e7bb52dad41dc78dff4006ccbc10b4dbb6e`，源码包 SHA256 `787dac150806013e5c9784d98dfcf3724c057ac738c0f257b296b7a50d83b74c`（`10,401,305` 字节，2,073 文件）。[验收 JSON](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.14.0/ohmybuddy-1.14.0.validation.json)、[验收说明](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.14.0/ohmybuddy-1.14.0.validation.md)与[最终校验和](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.14.0/SHA256SUMS-1.14.0.txt)绑定准确包，主分支发布后补记不改变标签与归档。
+
+三端按范围复用 `rc.1`（`f6ad0d8`）全量与 `rc.2`（`8074da6`）定向回归基线，并在 `1.14.0` 冻结源码上完成修复测试、2,073 文件清单一致、原生正式包构建与隔离新装校验：macOS ARM64 完整包 `22,891` 文件、DMG 只读核验 `22,891` 项，复用 `rc.2` 同字节运行代码的正式 `1.13.0` 单次签名升级与 13 文件恢复；glibc Linux x64（UID 1002）完整包 `22,895` 文件，复用 `rc.2` 同字节运行代码的正式 `1.13.0` 单次签名升级与 13 文件恢复；Windows x64 在隔离 Hyper-V Windows 11 评估版 VM（标准非提权账号 `OMB-ACCEPT\ombaccept`、RID 8192、`WinSta0\Default`、`sacState=0`，不改动宿主机安全策略）完成 Medium Node 4 文件 19/19 通过（0 跳过，含真实 Edge 158 MCP 与 `pi-mcp-runtime-control`）、Edge 158 浏览器 5/5 通过（含 `pi-subagent-runs`）、完整包 `32,572` 文件构建与隔离新装、以及真实 `ohmybuddy-1.14.0-win32-x64.exe --prepare-only` 退出 `0`（不注册永久服务），复用 `rc.2` 同字节运行代码的正式 `1.13.0` 单次签名升级（14 文件恢复）与源码核心 16 项验收（20 文件恢复）。
+
+宿主机启用 Smart App Control（`VerifiedAndReputableDesktop`，CodeIntegrity 3033/3077）对未签名 `.node`/`.exe` 的拦截记录、VM 首轮 8.3 短路径 `TEMP` 日志以及 `test/pi-activity-api.test.js` 同步清理钩子 `EBUSY` 均单独保留在验收附件中。公开 31 份附件（GitHub 9 + 下载站 22）匿名完整回下载摘要一致；443／8443 四个 `stable`/`preview` 签名频道及下载页 1440／393／320px 零报错精确 CSP 核验通过。语法 916 文件、公开文档 96 份、生产依赖审计 0 漏洞；未部署的 Qwen DashScope ASR／实时语音未纳入本版。macOS DMG 未公证，Windows EXE 与原生组件未作 Authenticode 代码签名，新 Linux ARM64 完整包继续暂停；公开发布不重启或切换既有运行中实例。
+
 ## 1.13.0：已正式发布
 
 2026-11-12 已[正式发布](https://github.com/YogurtJ/OhMyBuddy/releases/tag/v1.13.0)并设为 Latest，Pi 1.5.2；macOS ARM64、Windows x64、glibc Linux x64 所需覆盖完成。冻结源码 `b7c4bd067c4292dedc3b695fd36bafd564dbf847`，源码包 SHA256 `45bbb7f927d878c57cadb9b16eb5e7cba3fc1b59490af3e455d9504eeeb55d49`（2,058 文件）。[验收 JSON](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.13.0/ohmybuddy-1.13.0.validation.json)、[验收说明](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.13.0/ohmybuddy-1.13.0.validation.md)与[最终校验和](https://github.com/YogurtJ/OhMyBuddy/releases/download/v1.13.0/SHA256SUMS-1.13.0.txt)绑定准确包，主分支发布后补记不改变标签和归档。
